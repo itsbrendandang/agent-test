@@ -92,7 +92,10 @@ export function BoardView() {
   )
 
   // One plain sentence about where the run is.
-  const headline = !runId ? "Pick a brief and convene the board."
+  const known = runs.some((r) => r.id === runId)
+  const headline = !status ? "Loading the board…"
+    : !runId ? "Pick a brief and convene the board."
+    : runs.length > 0 && !known && events.length === 0 ? `Run ${runId} was not found. Pick another run from the list.`
     : failed ? "The run stopped with an error."
     : done ? "The board has decided."
     : memoWritten ? "Writing the memo…"
@@ -105,6 +108,11 @@ export function BoardView() {
       <header className="board-banner card-surface">
         <h1>Drug Candidate Board</h1>
         {status?.mock && <span className="pill" data-kind="warning" title="No OPENROUTER_API_KEY set; scripted models">Demo mode</span>}
+        <select aria-label="Run" value={runId ?? ""} onChange={(e) => setRunId(e.target.value || undefined)}>
+          {runs.length === 0 && <option value="">No runs yet</option>}
+          {runId && !known && runs.length > 0 && <option value={runId}>{runId}</option>}
+          {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.status}</option>)}
+        </select>
         <select aria-label="Brief" value={brief} onChange={(e) => setBrief(e.target.value)}>
           {briefs.map((b) => <option key={b} value={b}>{b.replace(/\.md$/, "").replace(/-/g, " ")}</option>)}
         </select>
@@ -114,14 +122,14 @@ export function BoardView() {
           <span>Show details</span>
         </label>
       </header>
-      {error && <p className="pill" data-kind="danger">{error}</p>}
+      {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
       <section className="card-surface summary" aria-label="Status">
         <div className="crew">
           {roster.map((m) => <span key={m.name} title={m.title}><Buddy seed={m.name} mood={mood(m)} size={m.role === "lead" ? 44 : 34} /></span>)}
         </div>
-        <p className="headline">{headline}</p>
-        {runId && !done && !failed && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
+        <p className="headline" role="status">{headline}</p>
+        {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
       </section>
 
@@ -152,10 +160,6 @@ export function BoardView() {
         <div className="board-grid">
           <section className="card-surface" aria-label="Roster">
             <h2>Board</h2>
-            <select aria-label="Run" value={runId ?? ""} onChange={(e) => setRunId(e.target.value || undefined)}>
-              {runs.length === 0 && <option value="">No runs yet</option>}
-              {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.status}</option>)}
-            </select>
             {runs.find((r) => r.id === runId)?.status === "paused" && (
               <button type="button" onClick={() => runId && post(`/api/runs/${runId}/resume`).then(refresh)}>Resume run</button>
             )}
@@ -174,6 +178,7 @@ export function BoardView() {
 
           <section className="card-surface" aria-label="Deliberation">
             <h2>Discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
+            {rounds.length === 0 && <p className="muted small">{runId ? "No replies yet." : "Nothing to show until the board is convened."}</p>}
             {rounds.map(([n, r]) => (
               <div key={n}>
                 <div className="round-head">

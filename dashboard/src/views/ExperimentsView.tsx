@@ -19,9 +19,22 @@ export function takeOpen(kind: "swarm" | "board"): string | undefined {
   return id
 }
 
+// The last answer is kept for the browser session, so coming back from a cited run does not cost a second model call.
+const ASKED = "experiments.ask"
+function lastAsked(): Asked {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(ASKED) ?? "null") as { question?: unknown; result?: unknown } | null
+    if (saved && typeof saved.question === "string" && isAnswer(saved.result)) return { state: "done", question: saved.question, result: saved.result }
+  } catch { /* unreadable: start empty */ }
+  return { state: "idle" }
+}
+const isAnswer = (x: unknown): x is Answer => {
+  const a = x as Answer | null
+  return !!a && typeof a.answer === "string" && Array.isArray(a.runs) && (a.mode === "ai" || a.mode === "keyword")
+}
+
 // Two ways to find an experiment. Ask: a question in plain words, answered by a model from an index of every
-// run, with the runs it used. Search: every word must appear.
-// Search over every experiment: swarm runs (task, model, claims, problems, reports) and drug board
+// run, with the runs it used. Search: over swarm runs (task, model, claims, problems, reports) and drug board
 // runs (brief, memo, checked claims). The engine does the matching; every word must appear.
 export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") => void }) {
   const [query, setQuery] = useState(() => sessionStorage.getItem("experiments.q") ?? "")
@@ -35,14 +48,14 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
     const timer = window.setTimeout(() => {
       fetch(`${ENGINE}/api/search?q=${encodeURIComponent(query)}`, { signal: stop.signal })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-        .then((h: Hit[]) => { setHits(h); setError(false) })
+        .then((h: unknown) => { if (!Array.isArray(h)) throw new Error("not a list"); setHits(h as Hit[]); setError(false) })
         .catch((e) => { if (e.name !== "AbortError") setError(true) })
     }, 200)
     return () => { window.clearTimeout(timer); stop.abort() }
   }, [query])
 
-  const [question, setQuestion] = useState("")
-  const [asked, setAsked] = useState<Asked>({ state: "idle" })
+  const [asked, setAsked] = useState<Asked>(lastAsked)
+  const [question, setQuestion] = useState(() => (asked.state === "done" ? asked.question : ""))
   const asking = useRef<AbortController | undefined>(undefined)
   useEffect(() => () => asking.current?.abort(), [])
   const ask = (e: FormEvent) => {
@@ -55,15 +68,26 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
     fetch(`${ENGINE}/api/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, kind }), signal: stop.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(body.error ?? `The engine answered ${r.status}.`)
-        setAsked({ state: "done", question: q, result: body as Answer })
+        if (!r.ok) throw new Error(typeof body.error === "string" ? body.error : `The engine answered ${r.status}.`)
+        if (!isAnswer(body)) throw new Error("The engine sent an answer this page cannot read.")
+        sessionStorage.setItem(ASKED, JSON.stringify({ question: q, result: body }))
+        setAsked({ state: "done", question: q, result: body })
       })
       .catch((err) => { if (err.name !== "AbortError") setAsked({ state: "error", question: q, message: err instanceof TypeError ? "Ask needs the engine. Start it with npm run engine." : String(err.message ?? err) }) })
   }
 
+  const clearAsked = () => {
+    asking.current?.abort()
+    sessionStorage.removeItem(ASKED)
+    setAsked({ state: "idle" }); setQuestion("")
+    document.getElementById("experiment-ask")?.focus()
+  }
+  const scope = kind === "swarm" ? "swarm runs only" : kind === "board" ? "drug board runs only" : ""
+
   const shown = (hits ?? []).filter((h) => kind === "all" || h.kind === kind)
   const open = (h: { kind: "swarm" | "board"; id: string }) => {
     sessionStorage.setItem(`open.${h.kind}`, h.id)
+    if (query.trim()) sessionStorage.setItem("experiments.q", query) // so Back returns to the same search
     onOpen(h.kind === "swarm" ? "Swarm" : "Board")
   }
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -84,42 +108,50 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
       <section className="exp-ask card-surface" aria-label="Ask about experiments">
         <form onSubmit={ask}>
           <label htmlFor="experiment-ask">Ask</label>
-          <input id="experiment-ask" type="text" name="experiment-ask" maxLength={500} value={question} onChange={(e) => setQuestion(e.currentTarget.value)}
+          <input id="experiment-ask" type="text" name="experiment-ask" maxLength={500} autoComplete="off" value={question} onChange={(e) => setQuestion(e.currentTarget.value)}
+            aria-describedby="experiment-ask-help"
             placeholder="Try: which runs found a table with a header and no rows? What did the board decide about hERG?" />
-          <button type="submit" className="primary" disabled={!question.trim() || asked.state === "loading"}>{asked.state === "loading" ? "Reading the runs…" : "Ask"}</button>
+          <button type="submit" className="exp-ask-go" disabled={!question.trim() || asked.state === "loading"}>{asked.state === "loading" ? "Asking…" : "Ask"}</button>
+          {(asked.state === "done" || asked.state === "error") && <button type="button" className="link-btn" onClick={clearAsked}>Clear</button>}
         </form>
-        {asked.state === "idle" && <p className="muted small">A model reads a summary of every run and answers from it, naming the runs it used. Open a run to check the answer.</p>}
-        {asked.state === "loading" && <p className="muted small" role="status">Reading the runs to answer “{asked.question}”…</p>}
-        {asked.state === "error" && <p role="alert" className="pill" data-kind="danger">{asked.message}</p>}
-        {asked.state === "done" && (
-          <div className="exp-answer" aria-live="polite">
-            <p className="exp-answer-head">
-              {asked.result.mode === "ai"
-                ? <span className="pill" data-kind="success">AI answer</span>
-                : <span className="pill" data-kind="warning">Keyword search, not an AI answer</span>}
-              <span className="muted small">“{asked.question}”</span>
-            </p>
-            <p>{asked.result.answer}</p>
-            {asked.result.note && <p className="muted small">{asked.result.note}</p>}
-            {asked.result.runs.length > 0 && (
-              <ul className="exp-list">
-                {asked.result.runs.map((r) => (
-                  <li key={`${r.kind}:${r.id}`}>
-                    <button type="button" className="exp-hit card-surface" onClick={() => open(r)}>
-                      <span className="exp-head"><b>{r.title}</b><span className="pill">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
-                      <span className="muted small">{r.id}</span>
-                      {r.why && <span className="exp-match small">{r.why}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {asked.result.mode === "ai" && <p className="muted small">Written by a model from the run records. It can be wrong; the linked runs are the source.</p>}
-          </div>
-        )}
+        <p id="experiment-ask-help" className="muted small" hidden={asked.state !== "idle"}>
+          A model reads a summary of {scope || "every run"} and answers from it, naming the runs it used. Open a run to check the answer. Press Enter to ask.
+        </p>
+        <div className="exp-answer" aria-live="polite" aria-busy={asked.state === "loading"}>
+          {asked.state === "loading" && <p className="muted small exp-loading"><span className="exp-spinner" aria-hidden="true" />Reading {scope || "the runs"} to answer “{asked.question}”. This can take up to a minute.</p>}
+          {asked.state === "error" && (
+            <p role="alert" className="exp-error">Could not answer “{asked.question}”: {asked.message}</p>
+          )}
+          {asked.state === "done" && (
+            <>
+              <p className="exp-answer-head">
+                {asked.result.mode === "ai"
+                  ? <span className="pill" data-kind="success">AI answer</span>
+                  : <span className="pill" data-kind="warning">Keyword search, not an AI answer</span>}
+                <span className="muted small">“{asked.question}”</span>
+              </p>
+              <p className="exp-answer-text">{asked.result.answer}</p>
+              {asked.result.note && <p className="muted small">{asked.result.note}</p>}
+              {asked.result.runs.length > 0 ? (
+                <ul className="exp-list exp-cited" aria-label="Runs the answer used">
+                  {asked.result.runs.map((r) => (
+                    <li key={`${r.kind}:${r.id}`}>
+                      <button type="button" className="exp-hit card-surface" onClick={() => open(r)}>
+                        <span className="exp-head"><b>{r.title}</b><span className="pill">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
+                        <span className="muted small">{r.id}</span>
+                        {r.why && <span className="exp-match small">{r.why}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="muted small">No runs were cited for this answer.</p>}
+              {asked.result.mode === "ai" && <p className="muted small">Written by a model from the run records. It can be wrong; the linked runs are the source.</p>}
+            </>
+          )}
+        </div>
       </section>
       <div className="exp-bar">
-        <input type="search" name="experiment-search" aria-label="Search experiments" autoFocus value={query}
+        <input type="search" name="experiment-search" aria-label="Search experiments by keyword" autoFocus autoComplete="off" value={query}
           placeholder="Try: demo, single agent, refuted, hERG, header rows…" onChange={(e) => setQuery(e.currentTarget.value)} />
         <div role="group" aria-label="Kind of experiment" className="exp-kinds">
           {(["all", "swarm", "board"] as const).map((k) => (
@@ -129,9 +161,10 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
           ))}
         </div>
       </div>
-      {error && <p role="alert" className="pill pill-warning">Search needs the engine. Start it with npm run engine.</p>}
+      {error && <p role="alert" className="exp-error">Search needs the engine. Start it with npm run engine.</p>}
+      {!hits && !error && <p className="muted small" role="status">Loading experiments…</p>}
       {hits && <p className="muted small">{shown.length} {shown.length === 1 ? "experiment" : "experiments"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>}
-      <ul className="exp-list">
+      <ul className="exp-list" aria-label="Experiments">
         {shown.map((h) => (
           <li key={`${h.kind}:${h.id}`}>
             <button type="button" className="exp-hit card-surface" onClick={() => open(h)}>
@@ -141,8 +174,8 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
                 {h.score !== undefined && <span className="exp-score">{h.score.toFixed(3)}</span>}
               </span>
               <span className="muted small">{mark(h.id)} · {new Date(h.startedAt).toLocaleString()}</span>
-              {h.matches.filter((m) => m.where !== "run").map((m) => (
-                <span key={m.where} className="exp-match small"><i>{m.where}:</i> {mark(m.text)}</span>
+              {h.matches.filter((m) => m.where !== "run").map((m, i) => (
+                <span key={i} className="exp-match small"><i>{m.where}:</i> {mark(m.text)}</span>
               ))}
             </button>
           </li>

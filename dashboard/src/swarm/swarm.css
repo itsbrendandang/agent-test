@@ -4,12 +4,14 @@
 .swarm-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 10px 14px; flex-shrink: 0; }
 .swarm-banner h1 { font-size: 18px; font-weight: 650; margin-right: auto; }
 .swarm-banner select, .swarm-banner button { border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; background: var(--surface); max-width: 320px; }
+.swarm-banner button { cursor: pointer; }
+.swarm-banner button:disabled { cursor: default; }
 .swarm-banner button.primary { background: var(--text); color: var(--surface); }
 .swarm-banner button:disabled { opacity: .55; }
 .swarm-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }
 .swarm-card { max-width: 920px; width: 100%; align-self: center; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
 .swarm-status { align-items: center; text-align: center; }
-.swarm-roles { display: flex; align-items: flex-end; justify-content: center; gap: 18px; }
+.swarm-roles { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 6px 18px; }
 .swarm-role { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px; border-radius: 14px; font-size: 12px; color: var(--text-muted); }
 .swarm-role[data-active] { background: #fff4d6; color: var(--text); font-weight: 650; }
 .swarm-role[data-done] { color: var(--text); }
@@ -58,7 +60,13 @@
 .swarm-offline code { background: #f3efe3; padding: 2px 6px; border-radius: 6px; }
 @media (max-width: 1100px) { .swarm-grid { grid-template-columns: 1fr; } }
 
-.swarm-search { display: flex; }
+.swarm-search { display: flex; gap: 8px; flex-shrink: 0; }
+.swarm-search button { padding: 0 16px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); font: inherit; font-size: 13px; cursor: pointer; }
+.swarm-search input:focus-visible, .swarm-search button:focus-visible, .swarm-banner select:focus-visible, .swarm-banner button:focus-visible,
+.swarm-toggle input:focus-visible, .swarm-link:focus-visible, .swarm-cell:focus-visible { outline: 2px solid #3f7cc4; outline-offset: 2px; }
+.swarm-cell { border-radius: 6px; }
+.swarm-scroll { overflow-x: auto; }
+.swarm-scroll .swarm-table { min-width: 560px; }
 .swarm-search input { flex: 1; padding: 10px 14px; font: inherit; border: 1px solid var(--border, #d9d5c8); border-radius: 12px; background: #fffdf6; color: inherit; }
 
 /* scoreboard cells */

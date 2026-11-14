@@ -13,3 +13,7 @@ dashboard/src-tauri/gen/
 
 glhf/runs/
 glhf/bixbench/runs/
+
+# Benchmark data and run outputs (never commit)
+glhf/data/
+glhf/bixbench_v1/runs/

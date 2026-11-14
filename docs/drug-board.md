@@ -8,7 +8,7 @@ The pattern follows IndyDevDan's "CEO and board" video (brief in, memo out, cons
 
 The Board view shows a plain summary (progress, recommendation, how many claims checked out, open questions, next steps). Tick **Show details** for the full roster, discussion with per-claim verdicts, evidence pool and memo ([screenshot](board-details.png)).
 
-> **Skeleton.** It runs end to end today on scripted mock models (no keys). Add keys to `.env` to make it live.
+> **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
 brief.md ──▶ Lead Scientist ──converse──▶ 8 board members (parallel, each its own durable conversation)
@@ -21,10 +21,12 @@ brief.md ──▶ Lead Scientist ──converse──▶ 8 board members (paral
 ## Quick start
 
 ```bash
-npm run setup           # installs engine + dashboard
-npm run board           # one run in the terminal (mock models without keys)
-npm run engine          # backend for the dashboard, port 8787; resumes unfinished runs
-npm run dashboard       # http://localhost:5317 → "Board" (first icon)
+npm run setup           # installs the engine, the dashboard and the benchmark harness
+npm run board           # one run in the terminal (scripted models without keys)
+npm run runs            # list board runs
+npm run resume <run-id> # continue an unfinished run
+npm run engine          # backend for the dashboard, port 8787; continues unfinished runs
+npm run dashboard       # http://localhost:5317, then "Board" (second icon)
 npm run desktop         # same UI as a Tauri desktop app (needs Rust)
 ```
 
@@ -32,7 +34,7 @@ In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and
 
 ## Keys
 
-The only required key is **`OPENROUTER_API_KEY`**. It routes every board model *and* Jev (`typesafe/jev-1.14`), so you don't need a key per model. Copy `.env.example` to `.env`:
+The only required key for a live run is **`OPENROUTER_API_KEY`**. Every board model and Jev (`typesafe/jev-1.14`) go through it, so you do not need a key per model. Without it, or with `DRUG_BOARD_MOCK=1`, the board uses scripted models. Copy `.env.example` to `.env`:
 
 | Key | Used for | Required |
 |---|---|---|
@@ -41,7 +43,7 @@ The only required key is **`OPENROUTER_API_KEY`**. It routes every board model *
 | `OPENAI_API_KEY` | Escalation checker for contested literature claims | optional |
 | `TYPESAFE_API_KEY` | Jev directly instead of through OpenRouter | optional |
 
-Claude Code (the computed-claim checker) uses your existing `claude` login.
+Claude Code (the checker for computed claims) uses your existing `claude` login. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools`, and without the other providers' keys (`engine/src/checkers.ts`).
 
 ## The board (`board/agents/*.md`)
 
@@ -64,14 +66,20 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
 1. **Jev before LLMs.** Every Exa result is triaged by Jev (relevant? reports results? study type?) before any agent reads it.
 2. **Jev checks claims.** Members end each reply with a `CLAIMS` section. Jev judges each claim against its cited evidence (`supports` / `contradicts` Nouls, one request per evidence source). Code holds the truth table:
    contradicts > 0.7 → contradicted · supports > 0.7 → verified · both < 0.3 → unsupported · otherwise → **escalate**.
-3. **Only the uncertain band escalates**: literature claims go to OpenAI, computed claims to Claude Code (Jev doesn't do math), capped per run.
-4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). Past a limit, the lead is told to wrap up.
+3. **Only uncertain claims go to a second checker**: literature claims go to OpenAI, computed claims to Claude Code (Jev does not do math). At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
+4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). Past a limit, the lead is told to finish. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
+
+Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
+
+## Memory
+
+With `memory.enabled: true`, each member's verified and contradicted claims are added to `board/expertise/<member>.md` after a run, under the heading `## From earlier runs`. The file is read into that member's instructions in the next run. Text above the heading is yours and is kept. Scripted runs write to the run folder, so made-up claims never reach `board/expertise/`.
 
 All Jev wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/jev.ts`.
 
 ## Durable over time (Pi Durable)
 
-The engine is built on [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi). Every model turn, tool call and member reply is committed to `board/runs/<run>/session.sqlite` before it's shown. Kill the process at any point (tested with `kill -9` mid-round), then run `npm run resume <run-id>` or restart the engine: the run continues where it stopped. Tools are replay-safe and member inputs carry stable request IDs, so nothing is asked or paid for twice.
+The engine is built on [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi). Every model turn, tool call and member reply is committed to `board/runs/<run>/session.sqlite` before it's shown. Kill the process at any point, then run `npm run resume <run-id>` or restart the engine: the run continues where it stopped. Tools are replay-safe and member inputs carry stable request IDs, so a finished model turn or claim check is not asked or paid for again. A check that was running when the process died runs again. A lock file keeps two processes off the same run.
 
 ## Guarding against multi-agent failure modes
 
@@ -89,18 +97,19 @@ These come from the failure-mode probes in [acyclic-labs/sdk `research/experimen
 ```
 board/                 config.yaml, agents/, briefs/ (+ _template.md), context/ (shared), expertise/, runs/
 engine/src/            board.ts (Pi Durable), jev.ts + questions.ts, exa.ts, checkers.ts, claims.ts,
-                       models.ts (OpenRouter / mock), mock.ts, server.ts (HTTP + SSE), cli.ts
-dashboard/             the hackathon Sim Lab UI (Tauri + React) with a new Board view
+                       models.ts (OpenRouter / scripted), mock.ts, server.ts (HTTP + SSE), http.ts, cli.ts
+engine/src/glhf/       not part of the board: the GLHF run tracker
+dashboard/             the web UI (Tauri + React); the board is dashboard/src/views/BoardView.tsx
 ```
 
 ## Next steps
 
 - [ ] Add keys; run the example brief live; tune Jev questions on real Exa results.
-- [ ] Watch mode: scheduled Exa re-queries reopen a run when new evidence changes a verdict (`watch:` in config).
-- [ ] Agents write to their `expertise/` files after each run.
+- [ ] Watch mode: scheduled Exa searches reopen a run when new evidence changes a verdict. The `watch:` keys exist in the config, but no code uses them yet.
+- [x] Members' checked claims are written to their `expertise/` files after each run (see Memory).
 - [ ] RDKit tool for the Medicinal Chemist and ADMET members (computed claims from code, not the model).
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
-- [ ] Hosting: Modal for always-on runs and cron watch mode.
+- [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.
 - [ ] Add OpenRouter, Exa and TypeSafe keys to the dashboard Settings (keychain) instead of `.env`.
 
 Decision support only. This doesn't replace expert review or regulatory judgment.

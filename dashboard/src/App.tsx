@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@ui-sdk/react/button"
 import { Input, InputClear, InputGroup } from "@ui-sdk/react/input"
 import { Slider, SliderControl, SliderIndicator, SliderThumb, SliderTrack, SliderValue } from "@ui-sdk/react/slider"
@@ -48,6 +48,11 @@ const rail = [
   { label: "Settings", icon: Settings, hint: "App preferences and model / API configuration." },
 ]
 
+const viewFromHash = () => {
+  const label = decodeURIComponent(window.location.hash.slice(1))
+  return rail.some((r) => r.label === label) ? label : undefined
+}
+
 export default function App() {
   const [simId, setSimId] = useState(simulations[0]?.id ?? emptySimulation.id)
   const sim = simulations.find((s) => s.id === simId) ?? simulations[0] ?? emptySimulation
@@ -59,10 +64,13 @@ export default function App() {
   const [tab, setTab] = useState("copilot")
   const [parade, setParade] = useState(0)
   const logoClicks = useRef(0)
-  const [view, setView] = useState(() => {
-    const fromHash = decodeURIComponent(window.location.hash.slice(1))
-    return rail.some((r) => r.label === fromHash) ? fromHash : "Swarm"
-  })
+  const [view, setView] = useState(() => viewFromHash() ?? "Swarm")
+  // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
+  useEffect(() => {
+    const sync = () => { const v = viewFromHash(); if (v) setView(v) }
+    window.addEventListener("hashchange", sync)
+    return () => window.removeEventListener("hashchange", sync)
+  }, [])
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<string[]>([])
   const idle = sim === emptySimulation
@@ -104,7 +112,7 @@ export default function App() {
         }}><Mark /></button>
         <div className="rail-items">
           {rail.map(({ label, icon: Icon }) => (
-            <Button key={label} aria-label={label} data-active={label === view || undefined}
+            <Button key={label} aria-label={label} title={label} data-active={label === view || undefined}
               aria-current={label === view ? "page" : undefined} onClick={() => go(label)}>
               <Icon size={18} aria-hidden="true" />
             </Button>

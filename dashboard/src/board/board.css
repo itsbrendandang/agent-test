@@ -19,9 +19,12 @@
 .decision-lists ul { padding-left: 18px; font-size: 13px; line-height: 1.5; list-style: disc; }
 .link-button { align-self: center; background: none; border: 0; font-size: 13px; text-decoration: underline; cursor: pointer; color: var(--text-muted); }
 .board h2 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
-.board-banner { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.board-banner { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; }
 .board-banner h1 { font-size: 18px; font-weight: 650; margin-right: auto; }
-.board-banner select, .board-banner button { border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; background: var(--surface); }
+.board-banner select, .board-banner button { border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; background: var(--surface); max-width: 320px; }
+.board-banner button { cursor: pointer; }
+.board-banner button:disabled { opacity: .55; cursor: default; }
+.board-banner select:focus-visible, .board-banner button:focus-visible, .toggle input:focus-visible, .link-button:focus-visible, .board-grid button:focus-visible { outline: 2px solid #3f7cc4; outline-offset: 2px; }
 .board-banner button.primary { background: var(--text); color: var(--surface); }
 .member { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; padding: 6px; border-radius: 12px; }
 .member strong { display: block; font-size: 13px; }

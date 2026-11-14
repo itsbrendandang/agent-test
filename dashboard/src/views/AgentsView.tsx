@@ -131,8 +131,6 @@ function SkillEditor({ member, onChange, onImport, onDownload }: {
   )
 }
 
-const GROUP = { planner: "planner", experimenter: "experimenter", critic: "critic", reporter: "reporter" } as const
-
 // The nine swarm roles in the crew's card layout: what each does, its share of the time, the model
 // it runs on in the latest run, and its instructions as the solver defines them (read-only).
 function SwarmTeam() {
@@ -167,7 +165,7 @@ function SwarmTeam() {
       <section className="cast">
         {ROLES.map((r, i) => {
           const spec = catalog?.roles.find((x) => x.key === r.key)
-          const model = spec && run ? run.roleModels?.[GROUP[spec.model_group]] ?? run.model : undefined
+          const model = spec && run ? run.roleModels?.[spec.model_group] ?? run.model : undefined
           const state = active === r.key ? "working now" : started.has(r.key) ? "ran in the latest run" : run ? "did not run in the latest run" : "no runs yet"
           return (
             <article key={r.key} className="cast-card card-surface team-card" data-active={active === r.key || undefined}>

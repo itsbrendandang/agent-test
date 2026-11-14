@@ -63,12 +63,12 @@ export const isLive = (r: GlhfRun) => r.phase !== "done" && r.phase !== "failed"
 /** Demo case or scripted model: never a benchmark result. */
 export const isDemo = (r: GlhfRun) => r.task === "demo" || r.model === "mock"
 
-/** Status, the run list and the selected run, polled every 2 s while a run is live and every 15 s otherwise. */
+/** Status, the run list, the scoreboard and the selected run, polled every 2 s while a run is live and every 15 s otherwise. */
 export function useSwarm(selected: string | undefined, nudge: number) {
   const [status, setStatus] = useState<GlhfStatus>()
   const [runs, setRuns] = useState<GlhfRun[]>()
   const [detail, setDetail] = useState<RunDetail>()
-  const [board, setBoard] = useState<ScoreRow[]>()
+  const [board, setBoard] = useState<ScoreRow[] | null>() // undefined: not loaded yet; null: the engine has no scoreboard
   const [offline, setOffline] = useState(false)
 
   useEffect(() => {
@@ -79,7 +79,7 @@ export function useSwarm(selected: string | undefined, nudge: number) {
       try {
         const [s, list, rows] = await Promise.all([
           get<GlhfStatus>("/api/glhf/status"), get<GlhfRun[]>("/api/glhf/runs"),
-          get<ScoreRow[]>("/api/glhf/scoreboard").catch(() => undefined), // an older engine has no scoreboard route
+          get<ScoreRow[]>("/api/glhf/scoreboard").catch(() => null), // an older engine has no scoreboard route
         ])
         if (stopped) return
         setStatus(s); setRuns(list); setBoard(rows); setOffline(false)

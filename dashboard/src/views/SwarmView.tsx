@@ -1,6 +1,6 @@
 // AI Scientist Swarm (GLHF). By default a plain summary: where the run is, what it scored, what was
 // rejected. "Show details" opens the timeline, every claim with its tests, the critic's issues and the reports.
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
 import {
@@ -25,7 +25,8 @@ function phases(ledger: Ledger | null) {
   return { started, current }
 }
 
-function headline(run: GlhfRun | undefined, current: string | undefined): string {
+function headline(run: GlhfRun | undefined, current: string | undefined, missing?: string): string {
+  if (!run && missing) return `Run ${missing} was not found. Pick another run from the list.`
   if (!run) return "No runs yet. Press Run demo to watch the team work on a small practice case."
   const who = run.solver === "glhf" ? "The swarm" : "The single agent"
   if (run.phase === "failed") return "This run stopped with an error."
@@ -72,8 +73,10 @@ const budget = (row: ScoreRow) => [
 /** One side of a scoreboard row: the score, a failed mark, the extras this run had, and a way to open it. */
 function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: (id: string) => void }) {
   if (!cell) return <span className="muted">no run</span>
+  const what = cell.phase === "failed" ? "failed" : cell.score === undefined ? "no score" : `score ${cell.score.toFixed(3)}`
   return (
-    <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open ${cell.id}`}>
+    <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open ${cell.id}`}
+      aria-label={`Open run ${cell.id}: ${[what, ...cell.extras].join(", ")}`}>
       <b>{cell.score === undefined ? "–" : cell.score.toFixed(3)}</b>
       {cell.phase === "failed" && <span className="pill" data-kind="danger">failed</span>}
       {cell.extras.map((e) => <span key={e} className="swarm-extra">{e}</span>)}
@@ -90,6 +93,9 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   const [details, setDetails] = useState(() => localStorage.getItem("swarm.details") === "1")
   useEffect(() => localStorage.setItem("swarm.details", details ? "1" : "0"), [details])
   const { status, runs, detail, offline, scoreboard } = useSwarm(picked, nudge)
+  const page = useRef<HTMLDivElement>(null)
+  // A scoreboard cell sits below the run it opens, so bring the run back into view.
+  const openRun = (id: string) => { setPicked(id); page.current?.scrollTo({ top: 0, behavior: "smooth" }) }
 
   if (offline && !runs) return (
     <div className="page"><div className="swarm-offline card-surface">
@@ -98,7 +104,9 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
     </div></div>
   )
 
-  const list = runs ?? []
+  if (!runs) return <div className="page"><p className="muted" role="status">Loading runs…</p></div>
+
+  const list = runs
   const runId = picked ?? list[0]?.id
   // The detail belongs to the selected run only once the poll for it has landed.
   const current = detail?.run.id === runId ? detail : undefined
@@ -118,7 +126,6 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   }
   const noKeys = status && !status.keys.ANTHROPIC_API_KEY && !status.keys.OPENAI_API_KEY
   const record = status?.record ?? 0.523
-  const rows = scoreboard ?? []
   // Only a local run blocks another demo; cloud runs take hours and run elsewhere.
   const anyLive = list.some((r) => isLive(r) && r.mode === "local")
   const stage = activeRole ? ROLES.findIndex((r) => r.key === activeRole) : -1
@@ -135,12 +142,13 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   }
 
   return (
-    <div className="page swarm">
+    <div className="page swarm" ref={page}>
       <form className="swarm-search" role="search" onSubmit={(e) => {
         e.preventDefault()
         onSearch?.(String(new FormData(e.currentTarget).get("q") ?? ""))
       }}>
-        <input type="search" name="q" aria-label="Search experiments" placeholder="Search experiments: task, model, claim, problem… then press Enter" />
+        <input type="search" name="q" aria-label="Search experiments" autoComplete="off" placeholder="Search experiments: task, model, claim, problem… then press Enter" />
+        <button type="submit">Search</button>
       </form>
       <header className="swarm-banner card-surface">
         <h1>AI Scientist Swarm</h1>
@@ -148,6 +156,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         {offline && <span className="pill" data-kind="danger">Engine offline</span>}
         <select aria-label="Run" value={runId ?? ""} onChange={(e) => setPicked(e.target.value || undefined)}>
           {list.length === 0 && <option value="">No runs yet</option>}
+          {runId && !list.some((r) => r.id === runId) && <option value={runId}>{runId} · {run ? run.phase : "not found"}</option>}
           {list.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.phase}</option>)}
         </select>
         <select aria-label="Who does the work" value={solver} onChange={(e) => setSolver(e.target.value as Solver)}>
@@ -162,7 +171,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
           <span>Show details</span>
         </label>
       </header>
-      {error && <p className="pill" data-kind="danger">{error}</p>}
+      {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
       <section className="card-surface swarm-card swarm-status" aria-label="Status">
         <div className="swarm-roles">
@@ -179,7 +188,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
             </div>
           ))}
         </div>
-        <p className="swarm-headline">{headline(run, activePhase)}</p>
+        <p className="swarm-headline" role="status">{headline(run, activePhase, runId)}</p>
         {run && live && <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {run && live && run.detail && <p className="swarm-note">{run.detail}</p>}
         {run && live && run.solver === "glhf" && (claims.length > 0 || issues.length > 0) && (
@@ -224,13 +233,17 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
 
       <section className="card-surface swarm-card" aria-label="Scoreboard">
         <h2>Scoreboard</h2>
-        {rows.length === 0 ? <p className="muted small">No finished runs yet.</p> : (
-          <table className="swarm-table">
+        {scoreboard === undefined ? <p className="muted small" role="status">Loading the scoreboard…</p>
+          : scoreboard === null ? <p role="alert" className="swarm-rownote">The engine did not return a scoreboard. Restart it with <code>npm run engine</code> to get the current version.</p>
+          : scoreboard.length === 0 ? <p className="muted small">No finished runs yet.</p> : (
+          <div className="swarm-scroll">
+          <table className="swarm-table" aria-label="Single agent against swarm, per task and settings">
             <thead><tr>
-              <th>Task and shared settings</th><th>Single agent</th><th>Swarm</th><th className="num">Difference</th><th className="num">Record to beat</th>
+              <th scope="col">Task and shared settings</th><th scope="col">Single agent</th><th scope="col">Swarm</th>
+              <th scope="col" className="num">Difference</th><th scope="col" className="num">Record to beat</th>
             </tr></thead>
             <tbody>
-              {rows.map((row) => {
+              {scoreboard.map((row) => {
                 const label = [row.task === "demo" && "demo case", row.model === "mock" && "scripted model"].filter(Boolean).join(", ")
                 return (
                   <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
@@ -239,8 +252,8 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
                       <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
                       {row.note && <div className="swarm-rownote">{row.note}</div>}
                     </td>
-                    <td><ScoreCellView cell={row.single} onOpen={setPicked} /></td>
-                    <td><ScoreCellView cell={row.swarm} onOpen={setPicked} /></td>
+                    <td><ScoreCellView cell={row.single} onOpen={openRun} /></td>
+                    <td><ScoreCellView cell={row.swarm} onOpen={openRun} /></td>
                     <td className="num">{row.diff === undefined ? "–" : `${row.diff >= 0 ? "+" : "−"}${Math.abs(row.diff).toFixed(3)}`}</td>
                     <td className="num">{row.task === "demo" ? <span className="muted">does not apply</span> : record.toFixed(3)}</td>
                   </tr>
@@ -248,6 +261,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               })}
             </tbody>
           </table>
+          </div>
         )}
         <p className="swarm-note">
           A difference is shown only when both runs had the same task, model, time limit and token budget. Each row shows the latest
@@ -291,9 +305,9 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               <dt>Time limit</dt><dd>{run.settings?.timeLimit ? duration(run.settings.timeLimit * 1000) : "benchmark default"}</dd>
               <dt>Token budget</dt><dd>{run.settings?.maxTokens ? run.settings.maxTokens.toLocaleString() : "none"}</dd>
               {run.solver === "glhf" && <><dt>Review rounds</dt><dd>{run.settings?.reviewRounds ?? 3}</dd></>}
-              {run.settings?.maxMessagesPerRole && <><dt>Messages per role</dt><dd>{run.settings.maxMessagesPerRole}</dd></>}
+              {run.settings?.maxMessagesPerRole !== undefined && <><dt>Messages per role</dt><dd>{run.settings.maxMessagesPerRole}</dd></>}
               {run.solver === "glhf" && <><dt>Exa search</dt><dd>{run.settings?.exa ? "on" : "off"}</dd><dt>Memory</dt><dd>{run.settings?.memory ? "on" : "off"}</dd></>}
-              {run.settings?.seed && <><dt>Seed</dt><dd>{run.settings.seed}</dd></>}
+              {run.settings?.seed !== undefined && <><dt>Seed</dt><dd>{run.settings.seed}</dd></>}
               <dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd>
               {run.finishedAt !== undefined && <><dt>Took</dt><dd>{duration(run.finishedAt - run.startedAt)}</dd></>}
             </dl>
@@ -301,7 +315,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               <>
                 <h2>Tokens used</h2>
                 <table className="swarm-table">
-                  <thead><tr><th>Model</th><th className="num">In</th><th className="num">Out</th></tr></thead>
+                  <thead><tr><th scope="col">Model</th><th scope="col" className="num">In</th><th scope="col" className="num">Out</th></tr></thead>
                   <tbody>
                     {Object.entries(run.usage).map(([model, u]) => (
                       <tr key={model}><td><code>{model}</code></td><td className="num">{u.input_tokens.toLocaleString()}</td><td className="num">{u.output_tokens.toLocaleString()}</td></tr>

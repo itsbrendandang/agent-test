@@ -1,0 +1,100 @@
+# Configuration
+
+## Keys (`.env`)
+
+Copy `.env.example` to `.env` and fill in the keys you have. `.env` is not in git. Never commit,
+print or log a key.
+
+Format rules (`engine/src/env.ts`): one `KEY=value` per line. Put comments on their own lines.
+A variable that is already set in your shell wins over `.env`.
+
+| Key | Used for | Needed |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude models as swarm agents. Also the Ask box in the dashboard. | For runs with Claude models. |
+| `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). The drug board's literature checker. | For every cloud run. |
+| `HF_TOKEN` | Access to the dataset `EdisonScientific/BixBench3` on Hugging Face. | For cloud runs. |
+| `EXA_API_KEY` | Exa search: the drug board's literature search and the swarm's `--exa`. | For `--exa` and for live board searches. |
+| `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). | Optional. Without it, memory is the file `glhf/memory/lessons.md`. |
+| `OPENROUTER_API_KEY` | All drug board models, and the Jev checker. | For a live drug board. Without it the board uses scripted models. |
+| `TYPESAFE_API_KEY` | Calls Jev directly, not through OpenRouter. | Optional. |
+
+No key is needed for `npm run demo` or for a scripted drug board run.
+
+## Ports
+
+| Port | Service | Change with |
+|---|---|---|
+| 8787 | Engine | `DRUG_BOARD_PORT` (on your machine), `GLHF_ENGINE_PORT` (Docker Compose, published port) |
+| 5317 | Dashboard | `GLHF_DASHBOARD_PORT` (Docker Compose, published port). The development server port is fixed in `dashboard/vite.config.ts`. |
+
+Both listen on `127.0.0.1` only.
+
+## Environment variables
+
+Set these in `.env` or in your shell. All are optional.
+
+### Engine
+
+| Variable | Default | Meaning | Code |
+|---|---|---|---|
+| `DRUG_BOARD_PORT` | `8787` | Engine port. The CLI also uses it to find the engine. | `engine/src/server.ts`, `engine/src/glhf/cli.ts` |
+| `HOST` | `127.0.0.1` | Address the engine listens on. Docker Compose sets `0.0.0.0` inside the container. | `engine/src/server.ts` |
+| `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
+| `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
+| `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
+| `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. | `engine/src/config.ts` |
+| `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
+
+### Run tracker
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GLHF_LOCAL_POLL_MS` | `2000` | Time between checks of a local run. |
+| `GLHF_LOCAL_MARGIN_MS` | 30 minutes, or a quarter of the time limit if that is more | Time a local run may go past its limit before the tracker stops it and marks it failed. |
+| `GLHF_LAUNCH_POLL_MS` | `5000` | Time between checks while a cloud run is launching. |
+| `GLHF_LAUNCH_TIMEOUT_MS` | 2 hours | Time `bixbench3 run` may take to launch. After this the launch counts as stuck. |
+| `GLHF_CLOUD_POLL_MS` | 5 minutes | Time between status checks of a cloud run. |
+| `GLHF_BIXBENCH3_CMD` | `uv run bixbench3` | The command for cloud runs. Tests can replace it. |
+| `GLHF_BIXBENCH3_RUNS` | `glhf/bixbench/runs` | Where the cloud runner writes run manifests. |
+
+All are read in `engine/src/glhf/task.ts`.
+
+### Sandbox and Docker
+
+| Variable | Default | Meaning | File |
+|---|---|---|---|
+| `GLHF_LOCAL_IMAGE` | `python:3.12-slim` | Image of the local sandbox. | `glhf/bixbench/sandbox/local-compose.yaml` |
+| `GLHF_ENGINE_PORT` | `8787` | Published engine port. | `docker-compose.yml` |
+| `GLHF_DASHBOARD_PORT` | `5317` | Published dashboard port. | `docker-compose.yml` |
+| `VITE_ENGINE_URL` | `http://localhost:8787` | Engine address built into the dashboard. | `Dockerfile`, `dashboard/src/board/api.ts` |
+| `PORT`, `DASHBOARD_DIR` | `5317`, `/srv/dashboard` | Used by the dashboard container only. | `docker/serve.mjs` |
+
+The local sandbox has no network and holds only Python 3.12. It has no bioinformatics tools.
+It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtime image.
+
+## Drug board: `board/config.yaml`
+
+| Key | Value in the file | Meaning |
+|---|---|---|
+| `meeting.max_minutes` | 15 | Time for one run. After this the lead is told to finish. |
+| `meeting.max_usd` | 5 | Spend limit for one run, all agents and checkers together. |
+| `meeting.max_rounds` | 4 | Rounds before final positions are forced. |
+| `meeting.daily_usd` | 20 | Limit for all runs started today. Past it, starts and resumes are refused. |
+| `meeting.lead_turns` | 20 | Model calls the lead may make in one run. |
+| `meeting.member_turns` | 6 | Model calls each member may make per question. |
+| `meeting.max_escalations` | 12 | OpenAI and Claude Code checks per run. |
+| `meeting.fallback_usd_per_mtok` | 15 | Price per million tokens that is assumed when a model reports tokens but no cost. The run is then marked as cost-estimated. |
+| `memory.enabled` | true | After a run, add each member's verified and contradicted claims to `board/expertise/<member>.md`. Scripted runs write to the run folder, not to `board/expertise/`. |
+| `memory.max_notes` | 40 | Newest notes kept per member. |
+| `watch.enabled`, `watch.every_hours` | false, 24 | **Not implemented.** No code uses these keys yet. |
+| `brief.required_sections` | 8 section names | A brief without one of these sections is rejected. |
+| `paths.*` | folders under `board/` | Where agents, briefs, context, expertise and runs are. |
+| `models.lead`, `models.strong`, `models.cheap`, `models.rival` | OpenRouter model ids | Model for each tier. |
+| `checkers.jev.model` | `typesafe/jev-1.14` | The first checker. |
+| `checkers.jev.yes`, `checkers.jev.no` | 0.7, 0.3 | Above `yes` reads as yes. Below `no` reads as no. Between them the claim goes to a second checker. |
+| `checkers.escalate.literature`, `checkers.escalate.computed` | `openai`, `claude-code` | Second checker for each kind of claim. |
+| `checkers.openai_model` | `gpt-5-mini` | Model for the OpenAI checker. |
+| `checkers.claude_code_cmd` | `claude -p --output-format json` | Command for the Claude Code checker. |
+| `checkers.claude_code_tools` | `Bash(python3:*) Bash(python:*) Write Read` | The only tools the Claude Code checker may use. It runs in an empty temporary folder, without the other providers' keys. |
+| `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
+| `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |
