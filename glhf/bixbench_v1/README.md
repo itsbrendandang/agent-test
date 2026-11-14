@@ -221,8 +221,8 @@ Seurat, msigdbr, ReactomePA. An x86-64 host would need emulation or its own buil
 ## Problems to know about
 
 - **Replicated is not the same as correct.** In the three-capsule pilot the analyst and the
-  critic agreed on four answers and all four were graded wrong; the critic had been shown the
-  analyst's route. The route hint is gone and same-method agreement is now flagged and
+  critic agreed on six answers; two were graded correct and four wrong (all four wrong ones in
+  one capsule). The critic had been shown the analyst's route. The route hint is gone and same-method agreement is now flagged and
   spot-checked, but none of this has been run with a real model yet. Two blind derivations by
   the same model can still make the same choice where a question leaves one open.
 - **The swarm costs more than one derivation.** Two full derivations plus the reconciler, which
