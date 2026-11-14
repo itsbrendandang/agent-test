@@ -8,7 +8,7 @@ case are defined in the [README](../README.md#words-used-in-these-documents).
 | Command | What it does |
 |---|---|
 | `npm run setup` | Installs the engine, the dashboard and the benchmark harness (`uv sync --locked`). |
-| `npm run doctor` | Checks tools and keys on this machine. It prints only "set" or "not set" for a key. |
+| `npm run doctor` | Checks tools and keys on this machine. It prints only "set" or "not set" for a key. It also says if paid calls are on or off. |
 | `npm run demo` | Runs the swarm on the demo case with the scripted model. Needs Docker. No keys. |
 | `npm run glhf -- <command>` | The run tracker CLI (see below). |
 | `npm run scoreboard` | Same as `npm run glhf -- scoreboard`. |
@@ -72,7 +72,7 @@ A settled run does not change any more (`settled` in `engine/src/glhf/types.ts`)
 |---|---|---|---|
 | `--mode local\|cloud` | | | Where to run. Default `local`. |
 | `--solver single\|glhf` | both | | Default `glhf`. |
-| `--model MODEL` | both | both | An Inspect model id such as `anthropic/claude-sonnet-5-5`, or `mock` (local only). Required. |
+| `--model MODEL` | both | both | An Inspect model id such as `anthropic/claude-sonnet-5-5`, or `mock` (local only). Required. Any model other than `mock` needs `NO_PAID_CALLS=0` (see [Paid calls](#paid-calls-no_paid_calls)). |
 | `--role-model ROLE=MODEL` | both | swarm | A different model for one group of roles. Can be repeated. Not with `mock`. |
 | `--review-rounds N` | both | swarm | Rounds of audit, critique and revise. 1 to 10. Default 3. |
 | `--follow` | both | both | Wait until the run ends. |
@@ -80,7 +80,7 @@ A settled run does not change any more (`settled` in `engine/src/glhf/types.ts`)
 | `--max-tokens N` | local | both | Token budget for the whole run. 1,000 to 500,000,000. **Required for a local run with a real model.** Optional with `mock`. |
 | `--max-messages-per-role N` | local | swarm | Message limit per phase. 2 to 5,000. A model call with one tool call is two messages. |
 | `--seed N` | local | both | Sent to model providers that support a seed. |
-| `--exa` | local | swarm | Gives the roles the `search_docs` tool. Needs `EXA_API_KEY`. |
+| `--exa` | local | swarm | Gives the roles the `search_docs` tool. Needs `EXA_API_KEY` and `NO_PAID_CALLS=0`. |
 | `--memory` | local | swarm | Reads approved lessons from earlier runs and queues new lessons for a person to approve. See below. |
 | `--case DIR` | local | both | A case folder other than the demo case. |
 | `--task T` | cloud | both | Task number or paper id. Required for cloud runs. |
@@ -221,6 +221,115 @@ API. Memory was not used in a run with a real model.
 `--exa` and `--memory` give the swarm help that the single agent does not have. Say so when
 you report a run that used them.
 
+## Paid calls (`NO_PAID_CALLS`)
+
+Code: `engine/src/paid.ts`. Tests: `engine/test/paid.test.ts` (the tests check that nothing
+reaches the network).
+
+The engine has one switch for everything that costs money. The switch is **on** (no paid
+calls) unless the variable `NO_PAID_CALLS` is exactly `0`.
+
+| Value of `NO_PAID_CALLS` | Paid calls |
+|---|---|
+| not set, empty, `1`, `true`, `off`, any other text | Refused. |
+| `0` | Allowed. |
+
+To allow paid calls, the person who pays writes `NO_PAID_CALLS=0` in `.env` and starts the
+engine again. A variable in your shell wins over `.env`. The engine reads the variable when
+it starts, so a change needs a restart (with Docker: stop and `docker compose up` again).
+
+### What is refused while the switch is on
+
+| Paid step | What happens | Code |
+|---|---|---|
+| A run with a real model (local or cloud), or with `--role-model` | Refused before anything starts. HTTP 400 with `field: "model"`. Only `mock` may run. | `checkRequest` in `engine/src/glhf/tracker.ts` |
+| A cloud run | Refused. HTTP 400 with `field: "mode"`. | same |
+| `--exa` (Exa documentation search in a run) | Refused. HTTP 400 with `field: "exa"`. | same |
+| A paid run that was accepted earlier (a queued partner, or a run left by an engine that allowed paid calls) | Not launched. It ends as `failed` with `not launched: ...`. | `paidRun` in `engine/src/glhf/task.ts` |
+| Ask (`POST /api/ask`) | No model call. The answer is the word search, and it says why. | `engine/src/ask.ts` |
+| Drug board models | The board runs on scripted models, also when keys are set. A board run that was started with real models is not continued (HTTP 403 on resume). | `mockMode` in `engine/src/config.ts`, `refusePaidRun` in `engine/src/board.ts`, `engine/src/models.ts` |
+| Drug board checkers: Jev, OpenAI, Claude Code | Refused before any call or process. | `engine/src/jev.ts`, `engine/src/checkers.ts` |
+| Drug board Exa search | Refused before the request. | `engine/src/exa.ts` |
+
+The CLI goes through the same checks: `npm run glhf -- run --model <real model> ...` prints
+the refusal and ends with status 1.
+
+### Keys are blanked in child processes
+
+While the switch is on, every process that the engine starts (the local runner, `bixbench3`,
+`uv`) gets an environment in which these keys are empty: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`OPENROUTER_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`. It also gets
+`NO_PAID_CALLS=1` (`childEnv` in `engine/src/paid.ts`). So if something further down tries a
+paid call by mistake, it has no key.
+
+The keys are set to empty, not removed, because the Python runner would read a removed key
+back from `.env`.
+
+Effect on memory (`--memory`): `PAST_API_KEY` is empty in the run, so the run does not ask
+past.dev. It reads the local file `glhf/memory/lessons.md`. A scripted run queues its lessons in
+its own run folder, as before.
+
+### How to see the state
+
+| Where | What you see |
+|---|---|
+| `npm run doctor` | A line `Paid calls: OFF (NO_PAID_CALLS). ...` or `Paid calls: ON (NO_PAID_CALLS=0). ...`. When the tools and keys for cloud runs are present but the switch is on, doctor says that cloud runs are refused. |
+| Start of the engine (`npm run engine`, or the Docker log) | The same line, as the second line of output. |
+| `GET /api/glhf/status` | `paidCalls`: false while the switch is on. `models`: only `["mock"]` while the switch is on. |
+| `GET /api/status` (drug board) | `paidCalls`: false while the switch is on. `mock`: true. |
+| The dashboard's New run form | It lists only the scripted model, because it takes its list from `models`. |
+
+### Turning the switch on while something is running
+
+"Turning on" means: remove `NO_PAID_CALLS=0` and start the engine again. A local run goes on
+by itself while the engine is down, so the engine deals with it at its next check.
+
+| What is running | What happens |
+|---|---|
+| A local run with a real model or Exa | The engine stops the runner (SIGTERM, then SIGKILL) and marks the run `failed` with `stopped: ...`. Its queued partner is not launched. Tokens used before the stop are spent. |
+| A cloud run that is still launching | The launcher is stopped and the run is marked `failed`. **A virtual machine may already exist and bill.** The error gives the command to check: `gcloud compute instances list --project <project>`. |
+| A cloud run that is already on its virtual machine | **It is not stopped.** Its keys are on the machine and the engine does not delete a machine by itself. The run's detail says so and gives the command: `uv run bixbench3 cancel --run <cloud-run-id> --project <project>` (from `glhf/bixbench`). |
+| A drug board run with real models | It stays paused. It is not continued while the switch is on. |
+
+### Python commands that you run yourself
+
+A Python command that you start yourself does not go through the engine.
+
+| Commit | State |
+|---|---|
+| `05600b1` (the commit that added the switch) | **Not covered.** The Python code has no check for `NO_PAID_CALLS`. With keys in `.env` or in your shell, `uv run bixbench3 run ...` or `uv run bixbench-v1 run ...` can spend. |
+| After it | A Python guard was added: `glhf/bixbench/src/bixbench3/paid.py` and `glhf/bixbench_v1/src/bixbench_v1/paid.py`. When this text was written the guard was new, not committed, and **had no automated tests**. Check that these two files exist in your clone (`git ls-files glhf/bixbench/src/bixbench3/paid.py`). If they do not, your clone is not covered. |
+
+What the Python guard does, as read from the code (not tested by us):
+
+| Command | While the switch is on |
+|---|---|
+| `uv run python -m bixbench3.glhf_local --model <real model> ...`, also with `--role-model` or `--exa` | Refused before anything is created (`refuse_run`). `--model mock` runs. |
+| `uv run bixbench3 run ...`, `uv run bixbench3 setup-runtime ...` | Refused (a cloud launch on a billed machine). `--dry-run`, `status`, `complete` and `cancel` still work. |
+| The `search_docs` tool inside a run | Refused before the key is read. |
+| past.dev: recall in a run, and sending on `memory approve` | Not done. The run reads the local `lessons.md`. `approve` still moves the lesson to `lessons.md` and prints that nothing was sent. |
+| `uv run bixbench-v1 run --model <real model> ...` and `bixbench-v1 grade` with the LLM judge | Refused. `--model mock`, `--no-judge`, `download`, `list`, `audit` and `report` work. |
+| Provider keys | Set to empty in the Python process, the same seven keys as in the engine. |
+
+The Python guard reads `NO_PAID_CALLS` from the environment first. If it is not set there, it
+reads that one line from the nearest `.env` above the working folder, then from the
+repository's `.env`. The rule is the same: on unless the value is exactly `0`.
+
+### What is still not covered
+
+| Case | Why |
+|---|---|
+| A clone or branch without the two `paid.py` files | The Python commands above are then not checked at all. |
+| `inspect eval` on the task file, or a script that calls the cloud runner class, `run_capsule` or the judge class itself | These do not pass through the guarded entry points. |
+| A key that is not in the list of seven | It is not blanked. |
+| A cloud run that is already on its virtual machine | See the table above. Its keys are on the machine. |
+| A coding agent (Pi, Claude Code) and its own model use | A separate program with its own account. |
+| The desktop app's Settings view (it tests provider keys that you type in) | It does not go through the engine. |
+
+So the switch protects against a mistake. It does not protect against a person or an agent
+who works around it. The rule for that is in [AGENTS.md](../AGENTS.md): an agent never makes a
+paid call and never sets `NO_PAID_CALLS=0`.
+
 ## Run control
 
 Code: `engine/src/glhf/tracker.ts`, `task.ts`, `routes.ts`. Tests:
@@ -311,7 +420,7 @@ A refused request gets a JSON body with `error`. Some have one more field.
 
 | Status | Body | When |
 |---|---|---|
-| 400 | `{"error", "field"?}` | The request is not valid. `field` names the input that the refusal is about, when there is one: `timeLimit`, `maxTokens`, `seed`, `reviewRounds`, `maxMessagesPerRole`, `model`, `exa`, `memory`, `mode`, `caseDir` or `solver`. |
+| 400 | `{"error", "field"?}` | The request is not valid, or it asks for a paid step while paid calls are off. `field` names the input that the refusal is about, when there is one: `timeLimit`, `maxTokens`, `seed`, `reviewRounds`, `maxMessagesPerRole`, `model`, `exa`, `memory`, `mode`, `caseDir` or `solver`. |
 | 404 | `{"error"}` | No such run. |
 | 409 | `{"error", "run"}` | A local run is still going. `run` is its id. |
 | 409 | `{"error"}` | A cloud run cannot be cancelled from here. |
@@ -412,7 +521,9 @@ The engine can start runs that cost money, so it checks each request (`engine/sr
 | The dashboard page (allowed `Origin`) | Local runs on the demo case, also with a real model, `--exa` or `--memory`. |
 | Any other caller | The scripted demo only. |
 
-For every caller, a local run with a real model needs a token budget (`maxTokens`).
+For every caller, a local run with a real model needs a token budget (`maxTokens`). And for
+every caller, also with the token, paid runs are refused while `NO_PAID_CALLS` is not `0`.
+This check comes first.
 
 ### Starting a run from the dashboard
 
@@ -476,7 +587,7 @@ starts the server and listens; the request handler is in `app.ts`, so tests can 
 | `GET /api/glhf/scoreboard` | Scoreboard rows. |
 | `GET /api/search?q=...` | Word search over all runs. Every word must appear. |
 | `POST /api/ask` | A question about the runs, answered by a small model. See below. |
-| `GET /api/status` | Drug board: scripted or live mode, keys present. |
+| `GET /api/status` | Drug board: scripted or live mode (`mock`), `paidCalls`, keys present. |
 | `GET /api/roster` | Drug board members. |
 | `GET /api/briefs` | Drug board briefs. |
 | `GET /api/runs`, `POST /api/runs` | Drug board runs: list, start. |
@@ -492,9 +603,10 @@ kept for 30 seconds.
 | `record` | The BixBench3 record to beat (0.523). |
 | `tools` | `docker`, `uv`, `gcloud`: true or false. |
 | `keys` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `HF_TOKEN`, `EXA_API_KEY`: true or false only. Never the key values. |
+| `paidCalls` | False while the `NO_PAID_CALLS` switch is on (the default). True only with `NO_PAID_CALLS=0`. |
 | `project` | The Google Cloud project selected in `gcloud`, or null. |
 | `limits` | The smallest and largest value a request may ask for: `timeLimit` [60, 86400] seconds, `maxTokens` [1000, 500000000], `reviewRounds` [1, 10], `maxMessagesPerRole` [2, 5000], `seed` [1, 2147483647]. From `LIMITS` in `engine/src/glhf/types.ts`, the same numbers the engine enforces. |
-| `models` | Model ids to offer in a form: `mock` first, then each of `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` and `openai/gpt-5.5` whose key is set. Any other model id can still be sent. |
+| `models` | Model ids to offer in a form: `mock` first, then each of `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` and `openai/gpt-5.5` whose key is set. While paid calls are off, only `mock`. With paid calls on, any other model id can still be sent. |
 
 The dashboard's New run form reads `limits`, `models` and `keys` from this route.
 
@@ -505,7 +617,8 @@ The dashboard's Experiments view has two tools.
 - **Search** (`GET /api/search`): finds runs that contain every word of the query.
 - **Ask** (`POST /api/ask`): a small model (`claude-haiku-5-5`; change with `ASK_MODEL`) reads a
   summary of the newest runs and answers. It names the runs it used. It needs
-  `ANTHROPIC_API_KEY`. Without the key, or on an error, the answer is a word search and says so.
+  `ANTHROPIC_API_KEY` and `NO_PAID_CALLS=0`. Without the key, with paid calls off, or on an
+  error, the answer is a word search and says so.
   At most 20 questions per minute.
 
 An Ask answer can be wrong. Open the runs it names to check.

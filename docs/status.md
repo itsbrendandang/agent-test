@@ -19,7 +19,7 @@ Do not present a demo-case result or a scripted-model result as a benchmark resu
 | Verdict rules: registered tests, mean of e-values | Automated tests, with a simulation of the error rate. **Not used in a real-model run.** The real-model run below used the older rules (product, no registration). | `glhf/bixbench/tests/unit/test_glhf_ledger.py`. |
 | Contract check with the grader's delimiter rules | Automated tests. | `glhf/bixbench/tests/unit/test_glhf_contract_and_budgets.py`. |
 | One review round in a default local run (1,800 seconds) | Automated tests of the time rule. Not checked in a real-model run. | Same file; `min_review_seconds` in `swarm/solver.py`. |
-| Documentation search (`--exa`): 9 sites, path rules, identifier refusal, 20 searches per run | Automated tests. Live searches were done. Not used on a real BixBench3 task. | `glhf/bixbench/tests/unit/test_glhf_memory_and_search.py`. |
+| Documentation search (`--exa`): 9 sites, path rules, identifier refusal, 20 searches per run | Automated tests. Tested live outside a run: 2 searches with the 9-site list (see "Sponsor tools"). Not used inside a run with the present list, and not on a real BixBench3 task. | `glhf/bixbench/tests/unit/test_glhf_memory_and_search.py`. |
 | Memory (`--memory`): pending lessons, approval by a person, filter | Automated tests and the scripted model. **Not used in a real-model run.** | Same file; [glhf/memory/README.md](../glhf/memory/README.md). |
 | Swarm on the demo case with a real model | Done. Score 1.0. | One run, `anthropic/claude-sonnet-5-5`, 284,532 tokens, `--exa` on, seed 7. |
 | Single agent on the demo case with a real model | Done. Score 1.0. | One run, same model, 18,644 tokens, seed 7. |
@@ -71,7 +71,27 @@ Known limits:
 
 | Tool | Status |
 |---|---|
-| Exa search | Tested live. Used by the drug board's literature search (`engine/src/exa.ts`) and by the swarm's `search_docs` tool (`swarm/tools.py`). The live searches were done before the site list was cut to 9 sites; we have no record of a live search with the new list. |
+| Exa search | Tested live. Used by the drug board's literature search (`engine/src/exa.ts`) and by the swarm's `search_docs` tool (`swarm/tools.py`). Details for the swarm's tool are in the next table. |
+
+Live test of the swarm's documentation search (the guard in `swarm/tools.py`, with the 9-site
+list):
+
+| Item | Value |
+|---|---|
+| What was called | The search with the 9-site list, and the result check on what came back. Outside a run. |
+| Searches | 2 |
+| Results returned by Exa | 10 for each search |
+| Dropped by the result check | About half. Examples: pages on the Bioconductor support forum (a subdomain of `bioconductor.org`), and a `readthedocs.io` project that is not on the list of named projects. |
+| Cost | $0.014 |
+| Not tested | The search inside a swarm run, with a real model that writes the queries. |
+
+What this shows: asking Exa for the listed domains is not enough by itself, because Exa also
+returns subdomains and other projects of a listed host. The second check in code
+(`result_block_reason`) is needed, and it worked on these results. Two searches are a small
+sample.
+
+| Tool | Status |
+|---|---|
 | past.dev memory | Sending lessons (ingest) and recalling them are tested against the live API (`swarm/past_memory.py`). Lessons are now sent only when a person approves them (`approve` command). Not used inside a full swarm run yet. |
 | Modal | Planned only. No code in this repository uses Modal. |
 
@@ -86,6 +106,8 @@ Known limits:
 | `--solvers` in the CLI | Automated test (same file). |
 | `GET /api/glhf/status`: limits, models, keys as true or false | Automated tests (same file). |
 | Refusals name the field (`{error, field}`) | Automated tests (same file). |
+| Paid-calls switch (`NO_PAID_CALLS`, `engine/src/paid.ts`): on unless the value is `0`; refuses real-model and cloud runs, Exa, the board's models and three checkers; Ask falls back to word search; keys blank in child processes; a paid local run in progress is stopped; `paidCalls` and `models` in the status; the doctor line | Automated tests (`engine/test/paid.test.ts`, 12 tests). The tests check that no request left the process. **Not tested:** a real cloud run that is already on its machine (none exists); the switch inside Docker Compose. |
+| Paid-calls switch for Python commands run directly (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`, `python -m bixbench3.glhf_local`) | **Not covered at commit `05600b1`.** A Python guard was added after it (`glhf/bixbench/src/bixbench3/paid.py`, `glhf/bixbench_v1/src/bixbench_v1/paid.py`). **No automated tests yet.** We checked by hand only that the on/off rule and the blanking of keys work on given inputs; no command was run against it. |
 | HTTP checks (Host, Origin, token, JSON bodies) | Automated tests that call the real request handler (`engine/test/app.test.ts`, `engine/test/board-http.test.ts`). The handler is in `engine/src/app.ts`; `server.ts` only listens. |
 | Scoreboard pairing rules (task, case, model, mode, effort, time limit, token budget) | Automated tests (`engine/test/glhf-scoreboard.test.ts`). |
 | Drug board run lock (`engine/src/runlock.ts`): survives a restart, and a process id that the system uses again | Automated tests (`engine/test/board-http.test.ts`, `engine/test/app.test.ts`). No test restarts a real container. |

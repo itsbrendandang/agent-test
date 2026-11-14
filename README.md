@@ -12,6 +12,26 @@ This repository holds two projects that share one backend and one web UI:
 2. **Drug candidate board** (the older project). A lead scientist agent and eight research agents
    that write a go / no-go memo. See [docs/drug-board.md](docs/drug-board.md).
 
+## Paid calls are off on a new clone
+
+A new clone can only do scripted runs (`--model mock`). They cost nothing. Everything that
+costs money is refused by the engine until a person writes this line in `.env` and starts the
+engine again:
+
+```
+NO_PAID_CALLS=0
+```
+
+| | |
+|---|---|
+| Who may set it | Only the person who pays for the API keys. A coding agent never sets it. |
+| When is the switch on | Always, unless the value is exactly `0`. No value, `1`, `true` or a typing mistake all mean: no paid calls. |
+| Refused while on | Runs with a real model, cloud runs, Exa search, the drug board's real models and its three checkers. The Ask box answers by word search, with no model. |
+| Still works | `npm run demo`, runs with `--model mock`, the scripted drug board, the dashboard, all tests. |
+| **Not covered at commit `05600b1`** | Python commands that you run yourself (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`, `python -m bixbench3...`). They do not go through the engine. A Python guard was added after that commit (`glhf/bixbench/src/bixbench3/paid.py`); it is new and has no automated tests yet. Do not rely on it: without `NO_PAID_CALLS=0`, use `--model mock` only. |
+
+Details: [docs/running.md](docs/running.md#paid-calls-no_paid_calls).
+
 ## Status
 
 Read this first. It says what was really done.
@@ -103,13 +123,14 @@ needs WSL2. Steps: [CONTRIBUTING.md](CONTRIBUTING.md#quick-start-with-docker-onl
 
 Run the engine in Docker or on your machine, not both at the same time.
 
-For real models, copy `.env.example` to `.env` and add your keys. Key list:
+For real models, copy `.env.example` to `.env`, add your keys, and set `NO_PAID_CALLS=0` (see
+[Paid calls are off on a new clone](#paid-calls-are-off-on-a-new-clone)). Key list:
 [docs/configuration.md](docs/configuration.md).
 
 ## How to run
 
 ```bash
-# Demo case with a real model, swarm and single agent. A real model needs a token budget.
+# Demo case with a real model, swarm and single agent. Needs NO_PAID_CALLS=0 in .env and a token budget.
 npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
 npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
 
@@ -126,6 +147,7 @@ Rules for local runs (details: [docs/running.md](docs/running.md#run-control)):
 | Rule | Detail |
 |---|---|
 | One local run at a time | A second start is refused until the first run ends or is cancelled. |
+| Paid calls | A run with a real model, a cloud run and `--exa` are refused unless `.env` has `NO_PAID_CALLS=0`. |
 | Token budget | A local run with a real model is refused without `--max-tokens`. |
 | Pair | One request can start the swarm and the single agent with the same settings, one after the other (`--solvers glhf,single`, or `solvers` in the HTTP API). |
 | Cancel | `cancel` stops a local run and a partner that is queued behind it. A cloud run is not cancelled this way; the command prints what to run. |
@@ -220,8 +242,19 @@ Known limits:
 npm test
 ```
 
-This runs 359 harness tests (pytest), the type checks for the engine and the dashboard, and 74
-engine tests. Some harness tests start a Docker sandbox; they are skipped when Docker is not running.
+This runs 359 harness tests (pytest), the type checks for the engine and the dashboard, and the
+engine tests.
+
+| Engine tests | Count |
+|---|---|
+| All test files in `engine/test/` | 159: 142 pass, 0 fail, 1 skipped, 16 marked "todo" |
+| The 8 committed test files only (at commit `77f7b75`) | 86, all pass |
+
+The other 73 tests are in three new files that were not committed when this was counted
+(`glhf-timeouts.test.ts`, `bixv1-api.test.ts`, `bixv1-stats.test.ts`). The 16 "todo" tests are
+in `glhf-timeouts.test.ts`. Each one describes a known problem in how the engine handles a
+run that passes its time limit. They do not count as failures, but the problems are real.
+ Some harness tests start a Docker sandbox; they are skipped when Docker is not running.
 
 `npm test` does not run the tests of the BixBench v1 adapter (102 tests). Run them with:
 
@@ -233,6 +266,9 @@ The dashboard has no automated tests.
 
 ## Limits
 
+- The `NO_PAID_CALLS` switch is tested for the engine only. The guard for Python commands that
+  you run yourself is new and has no automated tests. Some paths are not covered at all; see
+  [docs/running.md](docs/running.md#what-is-still-not-covered).
 - No BixBench3 task has been run. We do not know if the swarm is better than the single agent.
 - On the demo case the swarm cost about 15 times the tokens for the same score.
 - The budget flags (`--time-limit`, `--max-tokens`, `--max-messages-per-role`, `--seed`, `--exa`,

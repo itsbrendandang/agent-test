@@ -57,9 +57,13 @@ reviewer look at the last commit".
 These are in `AGENTS.md`, and they are the ones that cost real money or
 invalidate a result when broken:
 
-1. **Never run a real model without being asked.** The default everywhere is
-   the scripted model (`--model mock`). `AGENTS.md` states this rule for cloud
-   runs and for the BixBench v1 adapter; apply it to every paid run.
+1. **An agent never makes a paid call and never sets `NO_PAID_CALLS=0`.** Only
+   the person who pays may. The engine refuses paid calls unless `.env` has
+   `NO_PAID_CALLS=0`, so a new clone can only do scripted runs
+   (`--model mock`). The check for a Python command that an agent runs directly
+   (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`) is new and has no
+   automated tests, so the agent must follow the rule itself. Pi's own model use is separate: it
+   is paid by your Pi account, not by this repository's keys.
 2. **Never read the benchmark's answers.** That means the ground-truth bucket
    (`gs://bixbench3-ground-truth`) and the published results of a benchmark
    paper. Reading them voids the run. The grader's code is in this repository

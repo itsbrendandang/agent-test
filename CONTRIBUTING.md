@@ -38,7 +38,7 @@ Notes:
 - Items that `doctor` marks `[cloud runs]` are needed only for cloud runs.
 - Stop with Ctrl+C in the first terminal, or `docker compose down`.
 - Do not run `npm run engine` on your machine at the same time.
-- For real models, follow section 3 (Keys) and start the containers again.
+- For real models, follow section 3 (Keys and `NO_PAID_CALLS=0`) and start the containers again.
 
 The next section is the other path: tools installed on your machine.
 
@@ -71,6 +71,20 @@ cp .env.example .env
 Open `.env` and add the keys you have. You need no key for the scripted demo. The key list is in
 [docs/configuration.md](docs/configuration.md).
 
+**A key alone does not allow spending.** Paid calls are off until `.env` has the line
+`NO_PAID_CALLS=0` and the engine is started again.
+
+| Question | Answer |
+|---|---|
+| Who sets `NO_PAID_CALLS=0`? | Only the person who pays for the keys. Not a teammate on someone else's keys, and never a coding agent. |
+| What works without it? | The scripted demo, runs with `--model mock`, the scripted drug board, the dashboard, all tests. |
+| What is refused without it? | Real models, cloud runs, `--exa`, the drug board's real models and checkers. Ask answers by word search. |
+| How do I see the state? | `npm run doctor` prints `Paid calls: OFF ...` or `Paid calls: ON ...`. The engine prints the same line when it starts. |
+| What is not covered? | At commit `05600b1`: Python commands that you run yourself, for example `uv run bixbench3 run ...` or `uv run bixbench-v1 run ...`. They do not go through the engine. A Python guard was added after that commit, but it has no automated tests yet. Treat these commands as able to spend. |
+
+When you finish paid work, remove the line (or set `NO_PAID_CALLS=1`) and start the engine
+again. Details: [docs/running.md](docs/running.md#paid-calls-no_paid_calls).
+
 ## 4. Check that it works
 
 ```bash
@@ -99,7 +113,7 @@ npm test
 |---|---|---|
 | Everything below except the adapter | `npm test` | |
 | Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 359 |
-| Engine | `npm run test:engine` | 74 |
+| Engine | `npm run test:engine` | 159 with all test files (142 pass, 1 skipped, 16 marked "todo" for known problems). 86 in the committed files at commit `77f7b75`. |
 | Type checks (engine and dashboard) | `npm run typecheck` | |
 | BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 102 |
 
@@ -108,7 +122,8 @@ has no automated tests.
 
 ## 6. Add a run
 
-A local run with a real model costs money (tokens). Start small.
+A local run with a real model costs money (tokens). It needs `NO_PAID_CALLS=0` (section 3).
+Start small.
 
 ```bash
 # The swarm, then the single agent, with the same settings:
@@ -198,8 +213,9 @@ advisor, docs-writer, dashboard-qa).
 Whatever agent you use, hold it to the rules in `AGENTS.md`. The two that cost real money or
 invalidate a result:
 
-- Never start a real-model run unless you asked for one. The default everywhere is the
-  scripted mock model.
+- An agent never makes a paid call and never sets `NO_PAID_CALLS=0`. Only the person who pays
+  may. The engine refuses paid calls by default, but it cannot stop an agent that runs a paid
+  Python command directly, so the rule still matters.
 - Never let an agent read benchmark answers: the bucket `gs://bixbench3-ground-truth` or the
   published results of a benchmark paper. That voids the run. The grader's code may be read,
   but it must not be changed.

@@ -14,11 +14,33 @@ A variable that is already set in your shell wins over `.env`.
 | `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). The drug board's literature checker. | For every cloud run. |
 | `HF_TOKEN` | Access to the dataset `EdisonScientific/BixBench3` on Hugging Face. | For cloud runs. |
 | `EXA_API_KEY` | Exa search: the drug board's literature search and the swarm's `--exa`. | For `--exa` and for live board searches. |
-| `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). Approved lessons are sent there when a person runs the `approve` command, and runs ask past.dev for lessons first. | Optional. Without it, runs read the approved file `glhf/memory/lessons.md`. |
-| `OPENROUTER_API_KEY` | All drug board models, and the Jev checker. | For a live drug board. Without it the board uses scripted models. |
+| `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). Approved lessons are sent there when a person runs the `approve` command, and runs ask past.dev for lessons first. While paid calls are off, a run started by the engine does not get this key and reads the local file. | Optional. Without it, runs read the approved file `glhf/memory/lessons.md`. |
+| `OPENROUTER_API_KEY` | All drug board models, and the Jev checker. | For a live drug board. Without it, or while paid calls are off, the board uses scripted models. |
 | `TYPESAFE_API_KEY` | Calls Jev directly, not through OpenRouter. | Optional. |
 
 No key is needed for `npm run demo` or for a scripted drug board run.
+
+## Paid calls: `NO_PAID_CALLS`
+
+A key alone does not allow spending. The engine refuses every paid step unless this variable
+is exactly `0`.
+
+| Variable | Default | Meaning | Code |
+|---|---|---|---|
+| `NO_PAID_CALLS` | not set, which means **no paid calls** | `0` allows paid calls: real models, cloud runs, Exa, the drug board's models and checkers, the model behind Ask. Any other value, or no value, refuses them. Only the person who pays sets it. The engine reads it at start. | `engine/src/paid.ts` (the only place that reads it) |
+
+`.env.example` has the line as a comment (`# NO_PAID_CALLS=0`), so a copy of that file keeps
+paid calls off.
+
+While paid calls are off, the engine gives these keys as empty values to every process it
+starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`,
+`PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`.
+
+The switch covers the engine, the dashboard and the `npm run glhf` and `npm run board` CLIs;
+this part has automated tests. At commit `05600b1` it did **not** cover Python commands that
+you run yourself. A Python guard was added after that (`glhf/bixbench/src/bixbench3/paid.py`);
+it reads the same variable, also from `.env`, and has no automated tests yet. Full list:
+[running.md](running.md#python-commands-that-you-run-yourself).
 
 ## Ports
 
@@ -42,7 +64,7 @@ Set these in `.env` or in your shell. All are optional.
 | `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
-| `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. | `engine/src/config.ts` |
+| `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`) or when `OPENROUTER_API_KEY` is missing. | `mockMode` in `engine/src/config.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
 
 ### Run tracker

@@ -8,7 +8,7 @@ The pattern follows IndyDevDan's "CEO and board" video (brief in, memo out, cons
 
 The Board view shows a plain summary (progress, recommendation, how many claims checked out, open questions, next steps). Tick **Show details** for the full roster, discussion with per-claim verdicts, evidence pool and memo ([screenshot](board-details.png)).
 
-> **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
+> **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` and `NO_PAID_CALLS=0` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
 brief.md ──▶ Lead Scientist ──converse──▶ 8 board members (parallel, each its own durable conversation)
@@ -22,7 +22,7 @@ brief.md ──▶ Lead Scientist ──converse──▶ 8 board members (paral
 
 ```bash
 npm run setup           # installs the engine, the dashboard and the benchmark harness
-npm run board           # one run in the terminal (scripted models without keys)
+npm run board           # one run in the terminal (scripted models unless NO_PAID_CALLS=0 and keys are set)
 npm run runs            # list board runs
 npm run resume <run-id> # continue an unfinished run
 npm run engine          # backend for the dashboard, port 8787; continues unfinished runs
@@ -34,7 +34,20 @@ In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and
 
 ## Keys
 
-The only required key for a live run is **`OPENROUTER_API_KEY`**. Every board model and Jev (`typesafe/jev-1.14`) go through it, so you do not need a key per model. Without it, or with `DRUG_BOARD_MOCK=1`, the board uses scripted models. Copy `.env.example` to `.env`:
+**Paid calls are off by default.** While `NO_PAID_CALLS` is not exactly `0`, the board runs on scripted models, also when every key below is set (`mockMode` in `engine/src/config.ts`). A live run needs `NO_PAID_CALLS=0` in `.env`, set by the person who pays, and a restart of the engine. See [running.md](running.md#paid-calls-no_paid_calls).
+
+| While paid calls are off | What happens | Code |
+|---|---|---|
+| Board models (lead and members) | Scripted. No real provider is registered. | `engine/src/models.ts` |
+| Jev checker | Refused before any call. | `engine/src/jev.ts` |
+| OpenAI checker | Refused before any call. | `engine/src/checkers.ts` |
+| Claude Code checker | Refused before the process is started. | `engine/src/checkers.ts` |
+| Exa literature search | Refused before the request. | `engine/src/exa.ts` |
+| A run that was started with real models | Not continued, in the engine (HTTP 403 on resume) and in `npm run resume` (exit status 3). It stays paused. A finished run and a scripted run are not affected. | `refusePaidRun` in `engine/src/board.ts` |
+
+In a scripted run the checkers and the search give scripted answers, so nothing is refused; the refusals above are a second barrier for code paths that would reach a real service. Tested in `engine/test/paid.test.ts`, with no network.
+
+With paid calls allowed, the only required key for a live run is **`OPENROUTER_API_KEY`**. Every board model and Jev (`typesafe/jev-1.14`) go through it, so you do not need a key per model. Without it, or with `DRUG_BOARD_MOCK=1`, the board uses scripted models. Copy `.env.example` to `.env`:
 
 | Key | Used for | Required |
 |---|---|---|
