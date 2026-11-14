@@ -8,21 +8,29 @@ documents are in `docs/`.
 
 - `npm run setup`: install everything. `npm run doctor`: what is missing on this machine.
 - `npm run demo`: scripted swarm run on the demo case (needs Docker, no keys).
-- `npm test`: harness tests, type checks and engine tests. Run it before committing.
+- `npm test`: harness tests, type checks and engine tests. Run it before committing. It does
+  not run the adapter tests: `cd glhf/bixbench_v1 && uv run pytest -q tests`.
 - `npm run engine` (port 8787) and `npm run dashboard` (port 5317).
 - Harness only: `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests`.
 - Engine only: `npm run test:engine`. Type checks only: `npm run typecheck`.
+- Lessons that wait for approval (run from `glhf/bixbench`):
+  `uv run python -m bixbench3.inspect_harness.swarm.memory list`.
 
 ## Rules
 
 - Never read, download or reference `gs://bixbench3-ground-truth` or any published result of a
   benchmark paper while working on a solver, a prompt or a run. It holds the answers.
 - Benchmark agents get no open web search. The optional `search_docs` tool (`--exa`) is limited
-  to the documentation allow-list `DOC_DOMAINS` in
+  to the documentation allow-list `DOC_DOMAINS` (9 sites) in
   `glhf/bixbench/src/bixbench3/inspect_harness/swarm/tools.py`. Never add a journal, a preprint
-  server, a code host or a data repository to it.
-- `glhf/memory/lessons.md` holds process lessons only. Never write results, scores or answers
-  into it. Do not weaken the filter in `swarm/memory.py`.
+  server, a code host, a data repository, a package index or a forum to it. Do not loosen the
+  path rules (`_PATH_RULES`), the project list (`READTHEDOCS_PROJECTS`), the search limit
+  (`MAX_SEARCHES`) or the identifier checks in `swarm/guards.py`.
+- Memory: a run with `--memory` only queues lessons in `glhf/memory/lessons.pending.md`. Only a
+  person approves them into `glhf/memory/lessons.md`, the file later runs read. As a coding
+  agent, never run `approve` or `approve-all` and never write to `lessons.md` yourself, unless
+  the user asks for that. Both files hold process lessons only: no results, scores or answers.
+  Do not weaken the filter in `swarm/memory.py`. See `glhf/memory/README.md`.
 - Never start a cloud run (`--mode cloud`, `bixbench3 run`, `bixbench3 setup-runtime`) unless
   the user asks for that run. It creates a billed 32-core virtual machine.
 - Keys live in `.env` (not in git). Never print, log or commit a key. Never print `.env`.
@@ -33,8 +41,13 @@ documents are in `docs/`.
   `inspect_harness/swarm/` and `glhf_local.py`. We also changed `inspect_harness/tasks.py` and
   `cli.py` to select the solver.
 - Verdicts on claims are computed in `swarm/ledger.py`. Do not let a model decide a verdict.
-  If you change a constant there (`ALPHA`, `KAPPA`, `P_FLOOR`, `MAX_TESTS`), update
-  `docs/reading-results.md` and `glhf/docs/DESIGN.md`.
+  The rules: tests are registered before any result, the e-values of a claim are combined by
+  their arithmetic mean (not the product), and a registered test with no result blocks support.
+  Do not remove the registration step. If you change a rule or a constant there (`ALPHA`,
+  `KAPPA`, `P_FLOOR`, `MAX_TESTS`), update `docs/reading-results.md` and `glhf/docs/DESIGN.md`.
+- The drug board's Claude Code checker runs with `--restricted` by default and cannot run code
+  (`checkers.claude_code_cmd` in `board/config.yaml`). Do not remove the flag or add `Bash` to
+  `checkers.claude_code_tools`.
 - The engine's request checks (`engine/src/http.ts`, `checkRequest` in
   `engine/src/glhf/tracker.ts`) decide who may start a paid run. Do not loosen them.
 - Do not rename the types in `engine/src/glhf/types.ts`. The dashboard is built against them.
@@ -46,12 +59,17 @@ documents are in `docs/`.
 
 - Swarm solver: `glhf/bixbench/src/bixbench3/inspect_harness/swarm/`.
 - Local runner and scripted model: `glhf/bixbench/src/bixbench3/glhf_local.py`.
-- Adapter for the public BixBench dataset (in progress): `glhf/bixbench_v1/`.
+- Adapter for the public BixBench dataset (v1.5): `glhf/bixbench_v1/`, with its own README and
+  tests. Built; a pilot of 8 questions ran; the full run is not done. A run with a real model
+  costs money: start one only when the user asks.
+- Swarm memory: `glhf/memory/` (`lessons.pending.md`, `lessons.md`, `README.md`).
 - Run tracker (Pi Durable): `engine/src/glhf/`. Contract types: `engine/src/glhf/types.ts`.
-- Engine server and request checks: `engine/src/server.ts`, `engine/src/http.ts`.
+- Engine request handler and request checks: `engine/src/app.ts`, `engine/src/http.ts`.
+  `engine/src/server.ts` only listens. Board run lock: `engine/src/runlock.ts`.
 - Search and Ask over runs: `engine/src/search.ts`, `engine/src/ask.ts`.
 - Drug board: `engine/src/board.ts`, `board/config.yaml`.
-- Swarm view: `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/`.
+- Swarm view: `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/` (New run form:
+  `NewRun.tsx`).
 - Exa search tool (drug board): `engine/src/exa.ts`. Exa's own guidance is the installed skill
   at `.agents/skills/build-with-exa/`.
 

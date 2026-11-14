@@ -14,7 +14,7 @@ A variable that is already set in your shell wins over `.env`.
 | `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). The drug board's literature checker. | For every cloud run. |
 | `HF_TOKEN` | Access to the dataset `EdisonScientific/BixBench3` on Hugging Face. | For cloud runs. |
 | `EXA_API_KEY` | Exa search: the drug board's literature search and the swarm's `--exa`. | For `--exa` and for live board searches. |
-| `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). | Optional. Without it, memory is the file `glhf/memory/lessons.md`. |
+| `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). Approved lessons are sent there when a person runs the `approve` command, and runs ask past.dev for lessons first. | Optional. Without it, runs read the approved file `glhf/memory/lessons.md`. |
 | `OPENROUTER_API_KEY` | All drug board models, and the Jev checker. | For a live drug board. Without it the board uses scripted models. |
 | `TYPESAFE_API_KEY` | Calls Jev directly, not through OpenRouter. | Optional. |
 
@@ -38,7 +38,7 @@ Set these in `.env` or in your shell. All are optional.
 | Variable | Default | Meaning | Code |
 |---|---|---|---|
 | `DRUG_BOARD_PORT` | `8787` | Engine port. The CLI also uses it to find the engine. | `engine/src/server.ts`, `engine/src/glhf/cli.ts` |
-| `HOST` | `127.0.0.1` | Address the engine listens on. Docker Compose sets `0.0.0.0` inside the container. | `engine/src/server.ts` |
+| `HOST` | `127.0.0.1` | Address the engine listens on. Docker Compose sets `0.0.0.0` inside the container. | `bindHost` in `engine/src/app.ts` |
 | `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
@@ -94,7 +94,8 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `checkers.jev.yes`, `checkers.jev.no` | 0.7, 0.3 | Above `yes` reads as yes. Below `no` reads as no. Between them the claim goes to a second checker. |
 | `checkers.escalate.literature`, `checkers.escalate.computed` | `openai`, `claude-code` | Second checker for each kind of claim. |
 | `checkers.openai_model` | `gpt-5-mini` | Model for the OpenAI checker. |
-| `checkers.claude_code_cmd` | `claude -p --output-format json` | Command for the Claude Code checker. |
-| `checkers.claude_code_tools` | `Bash(python3:*) Bash(python:*) Write Read` | The only tools the Claude Code checker may use. It runs in an empty temporary folder, without the other providers' keys. |
+| `checkers.claude_code_cmd` | `claude -p --output-format json --restricted --strict-mcp-config` | Command for the Claude Code checker. `--restricted` removes the tools that run commands or code and the web fetch tool, keeps file tools inside the working folder, and ignores user and project settings. `--strict-mcp-config` loads no MCP servers. So by default the checker **cannot run code**: it checks a computed claim by reasoning, and answers "unsupported" when that is not enough. |
+| `checkers.claude_code_tools` | `Read Write` | Tools the checker may use without asking. It runs in an empty temporary folder. Its environment holds only a fixed list of variables (`CHILD_ENV` in `engine/src/checkers.ts`), so other providers' keys are not passed. |
 | `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
+| (warning for the two keys above) | | The checker is not in a container. It runs as your user. If you remove `--restricted` or add `Bash(python3:*)` to the tools, code that it writes can read any file you can read (also `.env`) and use the network. Do that only inside a container. The `--restricted` mode was not tested with a live call. |
 | `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |

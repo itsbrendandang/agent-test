@@ -16,6 +16,11 @@ Do not present a demo-case result or a scripted-model result as a benchmark resu
 | Feature | Status | Evidence |
 |---|---|---|
 | Nine roles, ledger, verdicts, budgets | Tested with the scripted model. | `glhf/bixbench/tests/unit/test_glhf_*.py`, `glhf/bixbench/tests/e2e/test_glhf_swarm_smoke.py` (needs Docker). |
+| Verdict rules: registered tests, mean of e-values | Automated tests, with a simulation of the error rate. **Not used in a real-model run.** The real-model run below used the older rules (product, no registration). | `glhf/bixbench/tests/unit/test_glhf_ledger.py`. |
+| Contract check with the grader's delimiter rules | Automated tests. | `glhf/bixbench/tests/unit/test_glhf_contract_and_budgets.py`. |
+| One review round in a default local run (1,800 seconds) | Automated tests of the time rule. Not checked in a real-model run. | Same file; `min_review_seconds` in `swarm/solver.py`. |
+| Documentation search (`--exa`): 9 sites, path rules, identifier refusal, 20 searches per run | Automated tests. Live searches were done. Not used on a real BixBench3 task. | `glhf/bixbench/tests/unit/test_glhf_memory_and_search.py`. |
+| Memory (`--memory`): pending lessons, approval by a person, filter | Automated tests and the scripted model. **Not used in a real-model run.** | Same file; [glhf/memory/README.md](../glhf/memory/README.md). |
 | Swarm on the demo case with a real model | Done. Score 1.0. | One run, `anthropic/claude-sonnet-5-5`, 284,532 tokens, `--exa` on, seed 7. |
 | Single agent on the demo case with a real model | Done. Score 1.0. | One run, same model, 18,644 tokens, seed 7. |
 | Token budget (`--max-tokens`) on the demo case, real model | Tried twice with the swarm. | 70,000 tokens: score 0.0. 200,000 tokens: score 1.0. |
@@ -23,7 +28,7 @@ Do not present a demo-case result or a scripted-model result as a benchmark resu
 | Cloud run (`--mode cloud`) | **Not done.** Google Cloud is not set up. | |
 | Tracking of a cloud run (launch, status, collect) | Parts are tested: a command is started only once, the tracker lock, and matching a run manifest to the right solver. No test follows a whole cloud run, also not with a stand-in. | `engine/test/glhf-tracker.test.ts`. |
 | Per-role models (`--role-model`) | **Not run.** Role models cannot be combined with the scripted model, and no real-model run used them. | |
-| Public BixBench dataset (`futurehouse/BixBench`, 205 questions, 64 data capsules) | In progress. | Adapter in `glhf/bixbench_v1/`. See [its README](../glhf/bixbench_v1/README.md). |
+| Public BixBench dataset (`futurehouse/BixBench` v1.5) | Adapter built. Pilot only. See the next section. | `glhf/bixbench_v1/`. |
 
 The real-model runs above are single runs on the demo case. The swarm used about 15 times the
 tokens of the single agent (284,532 against 18,644) for the same score. The swarm run had
@@ -33,12 +38,41 @@ show a difference between the solvers.
 The records of these runs are local files under `glhf/runs/` (not in git), so a new clone does
 not have them.
 
+## BixBench v1 adapter
+
+The adapter in `glhf/bixbench_v1/` runs the single agent and a three-role swarm (analyst, blind
+critic, reconciler) on the public dataset `futurehouse/BixBench` v1.5 (205 questions on 59 data
+capsules, in 64 zip files). It is not BixBench3 and not the nine-role swarm. Full text:
+[glhf/bixbench_v1/README.md](../glhf/bixbench_v1/README.md).
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Staging of data, integrity rules, both solvers, three grading profiles, report | Tested with the scripted model. | 102 automated tests in `glhf/bixbench_v1/tests/`. Run: `cd glhf/bixbench_v1 && uv run pytest -q tests`. Not part of `npm test`. |
+| Pilot with a real model | Done once. 3 capsules, 8 questions, `anthropic/claude-sonnet-5-5`. | Single agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). Report in `glhf/bixbench_v1/runs/pilot-sonnet-5-5/report.md` (local file, not in git). |
+| Full run (205 questions) | **Not done.** | |
+| One run per question (`--unit question`) | Not tried with a real model. | |
+| Multiple-choice mode (`--answer-mode mcq`) | Not tried with a real model. | |
+| Critic without hints (`--critic-hints none`) | Not tried with a real model. | |
+
+The pilot is too small to conclude anything. Both solvers answered the same 4 questions
+correctly, and the 95% interval for each is about 22% to 79%. It does not show that one solver
+is better or that they are equal.
+
+Known limits:
+
+| Limit | Effect |
+|---|---|
+| The sandbox has no network. | At least 17 of the 205 questions (in 6 capsules) name an online resource such as KEGG or Reactome. Neither solver can answer them as asked. The official harness leaves the network on. |
+| The official image (`futurehouse/bixbench:aviary-notebook-env`) lacks some R packages. | edgeR, limma, org.Mm.eg.db, Seurat, msigdbr and ReactomePA are not installed. Questions that need them are harder or cannot be done as asked. |
+| One run is one capsule with all its questions. | The official protocol is one question per run. Questions of a capsule can hint at each other, and one data-loading mistake can cost several questions. State this with any number. |
+| The image is published for linux/arm64 only. | Tested on Apple Silicon. An x86-64 machine needs emulation or its own build. |
+
 ## Sponsor tools
 
 | Tool | Status |
 |---|---|
-| Exa search | Tested live. Used by the drug board's literature search (`engine/src/exa.ts`) and by the swarm's `search_docs` tool (`swarm/tools.py`). |
-| past.dev memory | Sending lessons (ingest) and recalling them are tested against the live API (`swarm/past_memory.py`). Not used inside a full swarm run yet. |
+| Exa search | Tested live. Used by the drug board's literature search (`engine/src/exa.ts`) and by the swarm's `search_docs` tool (`swarm/tools.py`). The live searches were done before the site list was cut to 9 sites; we have no record of a live search with the new list. |
+| past.dev memory | Sending lessons (ingest) and recalling them are tested against the live API (`swarm/past_memory.py`). Lessons are now sent only when a person approves them (`approve` command). Not used inside a full swarm run yet. |
 | Modal | Planned only. No code in this repository uses Modal. |
 
 ## Engine and dashboard
@@ -46,11 +80,14 @@ not have them.
 | Feature | Status |
 |---|---|
 | Run tracker: no second launch after a restart | The parts are tested (start-once marker file, lock file, process check) in `engine/test/glhf-tracker.test.ts`. No automated test stops and restarts the engine during a run. |
-| HTTP checks (Host, Origin, token) | Automated tests (`engine/test/board-http.test.ts`). |
-| Scoreboard pairing rules | Automated tests (`engine/test/glhf-scoreboard.test.ts`). |
+| HTTP checks (Host, Origin, token, JSON bodies) | Automated tests that call the real request handler (`engine/test/app.test.ts`, `engine/test/board-http.test.ts`). The handler is in `engine/src/app.ts`; `server.ts` only listens. |
+| Scoreboard pairing rules (task, case, model, mode, effort, time limit, token budget) | Automated tests (`engine/test/glhf-scoreboard.test.ts`). |
+| Drug board run lock (`engine/src/runlock.ts`): survives a restart, and a process id that the system uses again | Automated tests (`engine/test/board-http.test.ts`, `engine/test/app.test.ts`). No test restarts a real container. |
+| Claude Code checker runs with `--restricted` by default and cannot run code | The command and the tool list are tested (`engine/test/board-core.test.ts`). **The `--restricted` mode was not tested with a live call.** Its behaviour is taken from `claude --help`. |
 | Ask (question answering over runs) | Automated tests with a stand-in for the model API (`engine/test/glhf-ask.test.ts`). |
-| Docker Compose setup | Built. We have no record of a test on Linux. |
+| Docker Compose setup | Tested by hand on macOS on a new clone: `docker compose up --build`, then `docker compose exec engine npm run demo` (score 1.000) and `npm run doctor`. Not tested on Linux or Windows. Windows needs WSL2. |
 | Dashboard | No automated tests. Type checks only (`npm run typecheck`). |
+| Dashboard: New run form (real models, with a confirm step) | No automated tests. The engine's checks on the request are tested (`engine/test/glhf-tracker.test.ts`). |
 
 ## Drug candidate board
 

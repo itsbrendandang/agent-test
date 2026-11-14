@@ -34,8 +34,8 @@ The icons on the left switch views. Each view also has a URL hash, for example `
 The first view is Swarm.
 
 - **Swarm** (`src/views/SwarmView.tsx`): swarm and single-agent runs from the run tracker: phase,
-  roles, claims, verdicts, issues, score, scoreboard. The start button starts the scripted demo
-  only. Start real-model runs from the CLI.
+  roles, claims, verdicts, issues, score, scoreboard. It also has a search box that opens the
+  Experiments view, and the **New run** button (see "New run form" below).
 - **Board** (`src/views/BoardView.tsx`): the drug candidate board. See `../docs/drug-board.md`.
 - **Experiments** (`src/views/ExperimentsView.tsx`): word search and the Ask box over all runs
   (engine routes `/api/search` and `/api/ask`).
@@ -51,6 +51,43 @@ The first view is Swarm.
 - **Settings**: connect and test API keys for OpenAI, Anthropic, xAI and Google Gemini. Keys are stored in
   the macOS keychain by the Rust side and never returned to the window. Desktop app only.
 - **Worlds**: an empty placeholder.
+
+## New run form
+
+`src/swarm/NewRun.tsx`. It starts a local run on the demo case (`POST /api/glhf/runs`). It needs
+Docker on the engine's machine.
+
+| Field | Values | Notes |
+|---|---|---|
+| Who does the work | Swarm (9 roles), Single agent, Both | "Both" starts two runs with the same model, time limit, token budget and seed, so the scoreboard can pair them. |
+| Model | `mock` (default, free), `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5`, or another model id | `mock` is the scripted model. It does no real analysis. |
+| Time limit | 1 to 1,440 minutes, default 30 | |
+| Token budget | 1,000 to 500,000,000 | Required for a real model. |
+| Seed | optional | |
+| Review rounds | 1 to 10, default 3 | Swarm only. |
+| Exa documentation search, Memory between runs | off by default | Swarm only. |
+
+A real model costs money, so the form adds these steps:
+
+1. A note says that the run costs money.
+2. A token budget is required.
+3. A second page, "Confirm a paid run", repeats the model, the number of runs, the time limit
+   and the token budget (also the total for two runs).
+4. The button "Start paid run" works only after you tick the box "I understand that this
+   spends money on the model provider's account".
+
+Other behaviour:
+
+- A warning appears when the engine has no key for an Anthropic or OpenAI model.
+- No new run starts while a local run is still going.
+- The engine checks every field again (`checkRequest` in `engine/src/glhf/tracker.ts`). Its
+  refusal is shown in the form, next to the field when possible.
+- If only the first of two runs starts, the form stays open and says why.
+
+Not in the form: cloud runs, BixBench3 tasks, other case folders, per-role models, a message
+limit per role. Start these from the CLI ([../docs/running.md](../docs/running.md)).
+
+The form has no automated tests.
 
 ## Characters
 - `src/components/Buddy.tsx`: SVG characters (bunny, flame, egg, mountain, sprout) with four moods.
@@ -76,7 +113,9 @@ runs `pause`, `play`, `reset` and `set <parameter> to <value>`. Swap it for the 
 and expose the same actions as tools to use a real model.
 
 ## Not wired yet
-- Starting a real-model run from the Swarm view.
+- Starting a cloud run or a run on a BixBench3 task from the Swarm view.
+- The registered tests of a claim (the ledger's `registered` and `pending_tests` fields) are
+  not in the client types in `src/swarm/api.ts`.
 - Claims and issues of cloud runs (they are in the results bucket).
 - Simulations: none is registered.
 - No automated tests. `npm run typecheck` in the repository root checks the types.
@@ -92,7 +131,7 @@ src/
 │   └── ui/                   # shadcn/ui (generated)
 ├── crew/                     # character store, sprites, skill starters
 ├── views/                    # Swarm, Board, Experiments, Agents, Overview, Analytics, Settings, Placeholder
-├── swarm/                    # client for /api/glhf/*, role list, styles
+├── swarm/                    # client for /api/glhf/*, New run form, role list, styles
 ├── board/                    # client for the drug board routes, styles
 └── sim/
     ├── types.ts              # Simulation contract

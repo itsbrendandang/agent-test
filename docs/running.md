@@ -20,7 +20,7 @@ case are defined in the [README](../README.md#words-used-in-these-documents).
 | `npm run runs` | Lists drug board runs. |
 | `npm run typecheck` | Type checks for the engine and the dashboard. |
 | `npm run test:engine` | Engine tests only. |
-| `npm test` | Harness tests, type checks, engine tests. |
+| `npm test` | Harness tests, type checks, engine tests. Not the tests of `glhf/bixbench_v1/`. |
 | `npm run docker` | Same as `docker compose up --build`. |
 
 ## Run tracker CLI
@@ -65,7 +65,7 @@ tracks the run itself. Only one process can track runs at a time (lock file
 | `--max-messages-per-role N` | local | swarm | Message limit per phase. 2 to 5,000. A model call with one tool call is two messages. |
 | `--seed N` | local | both | Sent to model providers that support a seed. |
 | `--exa` | local | swarm | Gives the roles the `search_docs` tool. Needs `EXA_API_KEY`. |
-| `--memory` | local | swarm | Keeps process lessons between runs. See below. |
+| `--memory` | local | swarm | Reads approved lessons from earlier runs and queues new lessons for a person to approve. See below. |
 | `--case DIR` | local | both | A case folder other than the demo case. |
 | `--task T` | cloud | both | Task number or paper id. Required for cloud runs. |
 | `--effort E` | cloud | both | Reasoning effort. Required for cloud runs. |
@@ -106,32 +106,99 @@ npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5
 
 ### Documentation search (`--exa`)
 
-`search_docs` searches a fixed list of software documentation and help sites (`DOC_DOMAINS` in
-`swarm/tools.py`). It does not search journals, preprint servers, code hosts or data
-repositories. The reason: an open search could find the results of the study that the task
-asks to reproduce.
+`search_docs` searches a fixed list of 9 software documentation sites (`DOC_DOMAINS` in
+`swarm/tools.py`). It does not search journals, preprint servers, code hosts, data
+repositories, package indexes or forums and question-and-answer sites. The reason: an open
+search could find the results of the study that the task asks to reproduce.
 
-Rules in code:
+| Site | What is allowed |
+|---|---|
+| `bioconductor.org` | Only software package pages (`/packages/<release>/bioc/`), `/help/` and `/install`. Not its subdomains (for example the support forum). Not experiment-data packages, annotation data or workflows. |
+| `readthedocs.io` | Only the tool manuals named in `READTHEDOCS_PROJECTS` in `swarm/tools.py` (for example `samtools`, `scanpy`, `pandas`). |
+| `htslib.org` | All pages. |
+| `support.10xgenomics.com` | All pages. |
+| `nf-co.re` | All pages. |
+| `training.galaxyproject.org` | All pages. |
+| `hbctraining.github.io` | All pages. |
+| `satijalab.org` | All pages. |
+| `docs.python.org` | All pages. |
 
-- A query with a DOI, an accession number or a paper id is refused.
-- Each result is checked again against the list and against the task's network policy.
-- A run gets at most 20 searches, for all roles together.
-- Every query, refusal and dropped result is written to the ledger.
+Rules in code (`swarm/tools.py`, `swarm/guards.py`):
+
+| Rule | Detail |
+|---|---|
+| Identifier queries are refused | A query or objective with a DOI, an accession number (GEO, SRA, BioProject, ArrayExpress and similar), a PubMed id, or a name such as `zenodo`, `figshare` or `biorxiv` is refused. |
+| The text is normalised first | Unusual characters, invisible characters, other dash characters, and spaces, hyphens or underscores inside an identifier (`GSE 12345`, `GSE12345_raw`) do not hide it. |
+| The task's own DOI is refused | Also with spaces or `%2F` in place of the slash. |
+| Each result is checked again | Against the list, the path rules above, and the task's network policy. A result that fails is dropped. |
+| At most 20 searches per run | For all roles together. A search that fails after it was sent also counts. A refused query does not count. |
+| Everything is recorded | Every query, refusal and dropped result is written to the ledger. |
+
+The code can also refuse a query that repeats the paper's title or names an author. A BixBench3
+case does not give the title or the authors, so this check is not active.
+
+One risk remains: a tool's manual can quote a public dataset in an example.
 
 The Critic and the Reporter do not get this tool.
 
+Tested with automated tests (`tests/unit/test_glhf_memory_and_search.py`) and with live
+searches. Not tested inside a run on a real BixBench3 task.
+
 ### Memory (`--memory`)
 
-The Reporter writes process lessons to a file. Code filters the lines (the text is cut at 2,000
-characters, and lines that look like results are dropped). The lines that pass are added to
-`glhf/memory/lessons.md`. This file is in git, so the team shares it.
+A person must approve each lesson before any later run sees it.
 
-- With `PAST_API_KEY` set, the lessons are also sent to past.dev, and the next run asks past.dev
-  for lessons. If past.dev fails, the run uses the file.
-- Lessons from a run on task X are never shown to a later run on task X.
+| File in `glhf/memory/` | Written by | Read by runs |
+|---|---|---|
+| `lessons.pending.md` | Runs with `--memory`. The file is created when the first lesson is queued. | Never. |
+| `lessons.md` | A person, with the `approve` command. | Yes. |
+
+What a run with `--memory` does:
+
+1. At the start, it gives the approved lessons to every role.
+2. At the end, the Reporter writes process lessons. Code cuts the text at 2,000 characters and
+   drops lines that look like results.
+3. The lines that pass are added to `lessons.pending.md`. They wait there. Nothing is sent to
+   past.dev at this step.
+
+Approve or reject lessons. Run these from `glhf/bixbench`:
+
+```bash
+uv run python -m bixbench3.inspect_harness.swarm.memory list
+uv run python -m bixbench3.inspect_harness.swarm.memory approve 1 3
+uv run python -m bixbench3.inspect_harness.swarm.memory reject 2
+uv run python -m bixbench3.inspect_harness.swarm.memory approve-all
+uv run python -m bixbench3.inspect_harness.swarm.memory reject-all
+```
+
+| Command or option | What it does |
+|---|---|
+| `list` | Shows each pending lesson with a number, its task and its context. |
+| `approve N...` | Moves these lessons to `lessons.md`. With `PAST_API_KEY` set, also sends them to past.dev. |
+| `reject N...` | Deletes these lessons. |
+| `approve-all`, `reject-all` | The same for every pending lesson. |
+| `--no-past` | Put it before the command. Approved lessons are not sent to past.dev. |
+| `--dir FOLDER` | Put it before the command. Uses another memory folder. |
+
+The numbers change after each `approve` or `reject`, so run `list` again first. A Python warning
+about `sys.modules` may appear; ignore it.
+
+Rules for reading lessons:
+
+- A lesson from a run on task X is never shown to a later run on task X.
+- A lesson is never shown to a run on a task in its "context". The context is the list of tasks
+  whose lessons the writing run was shown. This stops a result from going from X to Y and back
+  to X.
+- With `PAST_API_KEY` set, the run asks past.dev for lessons first. The same two rules apply.
+  If past.dev fails or returns nothing, the run uses `lessons.md`.
 - Lessons are written before grading, so a lesson cannot hold a score.
-- With `--model mock`, lessons go to the run folder (`glhf/runs/<run-id>/memory/`), not to
-  `glhf/memory/`.
+- With `--model mock`, pending lessons go to the run folder (`glhf/runs/<run-id>/memory/`), not
+  to `glhf/memory/`.
+
+Full text, with the filter rules: [glhf/memory/README.md](../glhf/memory/README.md).
+
+Tested with automated tests and with the scripted model. past.dev was tested against the live
+API. Memory was not used in a run with a real model.
 
 `--exa` and `--memory` give the swarm help that the single agent does not have. Say so when
 you report a run that used them.
@@ -185,9 +252,16 @@ A local run is stopped and marked failed when it is still going long after its t
 ## Docker
 
 ```bash
-docker compose up --build
-docker compose run --rm engine npm run doctor
+docker compose up --build                   # wait for the line "glhf tracker ready"
+docker compose exec engine npm run demo     # second terminal; ends with "score 1.000"
+docker compose exec engine npm run doctor
 ```
+
+`docker compose exec` runs a command in the engine container that is already running.
+`docker compose run --rm engine <command>` starts a new container for one command; use it when
+the services are not running.
+
+Tested on macOS on a new clone. Not tested on Linux or Windows. Windows needs WSL2.
 
 | Service | Address | Notes |
 |---|---|---|
@@ -199,6 +273,9 @@ docker compose run --rm engine npm run doctor
 - The engine container uses your machine's Docker (`/var/run/docker.sock`) to start the
   sandbox. This gives the container full control of Docker. Run only code you trust.
 - The first start installs dependencies into Docker volumes. This takes some minutes.
+- Both services use `init: true`. A small init process is process 1 in each container. It
+  passes the stop signal of `docker compose down` to the engine, so the engine releases its run
+  locks, and it cleans up processes that are left behind.
 - On Linux, files that the container writes under `glhf/runs/` belong to root.
 - The dashboard is built with the engine address `http://localhost:8787`
   (`VITE_ENGINE_URL` in the `Dockerfile`). If you change the engine port, rebuild with a
@@ -221,15 +298,50 @@ The engine can start runs that cost money, so it checks each request (`engine/sr
 | The dashboard page (allowed `Origin`) | Local runs on the demo case, also with a real model, `--exa` or `--memory`. |
 | Any other caller | The scripted demo only. |
 
-The dashboard's Swarm view has a button for the scripted demo only (`startDemo` in
-`dashboard/src/swarm/api.ts`). Start real-model runs from the CLI.
+### Starting a run from the dashboard
+
+The Swarm view has a **New run** button. It opens a form (`dashboard/src/swarm/NewRun.tsx`)
+that starts a local run on the demo case.
+
+| Field | Values | Notes |
+|---|---|---|
+| Who does the work | Swarm, Single agent, or Both | "Both" starts two runs with the same model, time limit, token budget and seed, so the scoreboard can pair them. They run at the same time. |
+| Model | `mock` (default, free), two Claude models, or another model id | |
+| Time limit | 1 to 1,440 minutes. Default 30. | |
+| Token budget | 1,000 to 500,000,000 | Required for a real model. Optional for `mock`. |
+| Seed | optional | |
+| Review rounds | 1 to 10. Default 3. | Swarm only. |
+| Exa documentation search | off by default | Swarm only. Same as `--exa`. |
+| Memory between runs | off by default | Swarm only. Same as `--memory`. |
+
+Safety steps for a real model:
+
+1. The form shows the note "This run costs money".
+2. The form refuses to continue without a token budget. (The CLI and the engine do not require
+   a token budget; only the form does.)
+3. A second page, "Confirm a paid run", repeats the model, the number of runs, the time limit
+   and the token budget.
+4. The start button works only after you tick "I understand that this spends money on the
+   model provider's account".
+
+Other behaviour:
+
+- The form warns when the engine has no key for an Anthropic or OpenAI model.
+- The form does not start a run while another run is still going.
+- The engine checks every field again. If it refuses, the form shows the engine's message.
+
+The form cannot start cloud runs, runs on another case (`--case`), per-role models
+(`--role-model`) or a message limit (`--max-messages-per-role`). Use the CLI for these.
+
+The form has no automated tests. Type checks only.
 
 Drug board runs (`POST /api/runs`) are allowed from the dashboard page, with the token, or when
 the board runs on scripted models.
 
 ## HTTP API
 
-Engine routes (`engine/src/server.ts`, `engine/src/glhf/routes.ts`):
+Engine routes (`engine/src/app.ts`, `engine/src/glhf/routes.ts`). `engine/src/server.ts` only
+starts the server and listens; the request handler is in `app.ts`, so tests can call it.
 
 | Method and path | Returns |
 |---|---|

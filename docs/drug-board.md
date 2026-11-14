@@ -43,7 +43,7 @@ The only required key for a live run is **`OPENROUTER_API_KEY`**. Every board mo
 | `OPENAI_API_KEY` | Escalation checker for contested literature claims | optional |
 | `TYPESAFE_API_KEY` | Jev directly instead of through OpenRouter | optional |
 
-Claude Code (the checker for computed claims) uses your existing `claude` login. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools`, and without the other providers' keys (`engine/src/checkers.ts`).
+Claude Code (the checker for computed claims) uses your existing `claude` login. By default it runs with `--restricted` and **cannot run code**: it checks a claim by reasoning and answers "unsupported" when that is not enough. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools` (`Read Write`), and with a fixed list of environment variables, so other providers' keys are not passed (`engine/src/checkers.ts`). It is not in a container. The `--restricted` mode was not tested with a live call. Details: [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
 ## The board (`board/agents/*.md`)
 
@@ -66,7 +66,7 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
 1. **Jev before LLMs.** Every Exa result is triaged by Jev (relevant? reports results? study type?) before any agent reads it.
 2. **Jev checks claims.** Members end each reply with a `CLAIMS` section. Jev judges each claim against its cited evidence (`supports` / `contradicts` Nouls, one request per evidence source). Code holds the truth table:
    contradicts > 0.7 → contradicted · supports > 0.7 → verified · both < 0.3 → unsupported · otherwise → **escalate**.
-3. **Only uncertain claims go to a second checker**: literature claims go to OpenAI, computed claims to Claude Code (Jev does not do math). At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
+3. **Only uncertain claims go to a second checker**: literature claims go to OpenAI, computed claims to Claude Code (Jev does not do math; by default Claude Code also does not run code, see Keys). At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
 4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). Past a limit, the lead is told to finish. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
 
 Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
@@ -79,7 +79,7 @@ All Jev wording lives in `engine/src/questions.ts`. All decision logic lives in 
 
 ## Durable over time (Pi Durable)
 
-The engine is built on [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi). Every model turn, tool call and member reply is committed to `board/runs/<run>/session.sqlite` before it's shown. Kill the process at any point, then run `npm run resume <run-id>` or restart the engine: the run continues where it stopped. Tools are replay-safe and member inputs carry stable request IDs, so a finished model turn or claim check is not asked or paid for again. A check that was running when the process died runs again. A lock file keeps two processes off the same run.
+The engine is built on [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi). Every model turn, tool call and member reply is committed to `board/runs/<run>/session.sqlite` before it's shown. Kill the process at any point, then run `npm run resume <run-id>` or restart the engine: the run continues where it stopped. Tools are replay-safe and member inputs carry stable request IDs, so a finished model turn or claim check is not asked or paid for again. A check that was running when the process died runs again. A lock file (`board/runs/<run>/run.lock`, code in `engine/src/runlock.ts`) keeps two processes off the same run. The lock stores the process id and the start time of the process. So a lock that is left after a crash, a restart or `docker compose down` does not block the run, also when the system gives the same process id to a new process (in a container the engine has the same process id on every start). Limit: an engine in a container and a CLI on your machine cannot see each other's processes, so the lock does not keep those two apart.
 
 ## Guarding against multi-agent failure modes
 
@@ -97,7 +97,8 @@ These come from the failure-mode probes in [acyclic-labs/sdk `research/experimen
 ```
 board/                 config.yaml, agents/, briefs/ (+ _template.md), context/ (shared), expertise/, runs/
 engine/src/            board.ts (Pi Durable), jev.ts + questions.ts, exa.ts, checkers.ts, claims.ts,
-                       models.ts (OpenRouter / scripted), mock.ts, server.ts (HTTP + SSE), http.ts, cli.ts
+                       models.ts (OpenRouter / scripted), mock.ts, app.ts (HTTP + SSE handler), server.ts (listens),
+                       http.ts, runlock.ts, cli.ts
 engine/src/glhf/       not part of the board: the GLHF run tracker
 dashboard/             the web UI (Tauri + React); the board is dashboard/src/views/BoardView.tsx
 ```
@@ -107,7 +108,7 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Add keys; run the example brief live; tune Jev questions on real Exa results.
 - [ ] Watch mode: scheduled Exa searches reopen a run when new evidence changes a verdict. The `watch:` keys exist in the config, but no code uses them yet.
 - [x] Members' checked claims are written to their `expertise/` files after each run (see Memory).
-- [ ] RDKit tool for the Medicinal Chemist and ADMET members (computed claims from code, not the model).
+- [ ] RDKit tool for the Medicinal Chemist and ADMET members (computed claims from code, not the model). Today the Claude Code checker does not run code by default.
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
 - [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.
 - [ ] Add OpenRouter, Exa and TypeSafe keys to the dashboard Settings (keychain) instead of `.env`.
