@@ -42,6 +42,8 @@ def clean(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv(key, "fake-key-for-tests")
     for key in ("VSCODE_PID", "VSCODE_CWD", "TERM_PROGRAM"):
         monkeypatch.delenv(key, raising=False)
+    for key in (paid.LOCAL_URL, paid.OLLAMA_URL, paid.ALLOW_REMOTE, "INSPECT_EVAL_MODEL_BASE_URL"):
+        monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture
@@ -187,7 +189,9 @@ def test_a_local_run_with_a_real_model_or_exa_is_refused_before_anything_starts(
     for arguments in (
         {"model": REAL},
         {"model": REAL, "solver": "single"},
-        {"model": "ollama/qwen3:32b"},
+        {"model": "ollama/qwen3:480b-cloud"},  # Ollama forwards its cloud models to ollama.com
+        {"model": "ollama/../openai/gpt-5.5"},
+        {"model": "ollama/qwen2.5:14b", "role_models": {"critic": "openai/gpt-5.5"}},
         {"model": REAL, "role_models": {"critic": "openai/gpt-5.5"}},
         {"model": "mock", "exa": True},
     ):
@@ -208,6 +212,165 @@ def test_a_local_run_with_a_real_model_or_exa_is_refused_before_anything_starts(
     with pytest.raises(Reached):
         glhf_local.run_local(DEMO_CASE, out, model=REAL)
     assert reached == [f"get_model {REAL}"]
+
+
+# --- local models (ollama/<name> on this machine) ---------------------------------------------
+
+LOCAL = "ollama/qwen2.5:14b"
+LOOKALIKES = (
+    "openai/ollama",
+    "openai/ollama/qwen2.5:14b",
+    "ollama",
+    "ollama/",
+    "Ollama/qwen2.5:14b",
+    "ollama/../openai/gpt-5.5",
+    "ollama/..",
+    "ollama/a/../b",
+    "ollama//qwen2.5",
+    "ollama/a/b/c",
+    "ollama/qwen2.5:14b ",
+    " ollama/qwen2.5:14b",
+    "ollama/qwen 2.5",
+    "ollama/qwen2.5:14b\nopenai/gpt-5.5",
+    "ollama/qwen2.5:14b?x=1",
+    "ollama/http://example.com/m",
+    "ollama/qwen3-coder:480b-cloud",
+    "ollama/gpt-oss:cloud",
+    "ollama/glm-4.6:CLOUD",
+    "ollama-cloud/qwen",
+    "openrouter/ollama/qwen2.5:14b",
+)
+
+
+def test_a_local_model_is_an_ollama_id_on_a_loopback_address() -> None:
+    for model in (LOCAL, "ollama/qwen3:32b", "ollama/user/model:q4_K_M", "ollama/phi4-mini"):
+        assert paid.is_local(model, {}, []) is True, model
+        assert paid.model_class(model, {}, []) == "local"
+    assert paid.model_label(LOCAL, {}, []) == "local model (qwen2.5:14b)"
+    assert paid.model_label("mock", {}, []) == "scripted model"
+    assert paid.model_label(REAL, {}, []) == f"paid model ({REAL})"
+    for model in LOOKALIKES:
+        assert paid.local_name(model) is None, model
+        assert paid.is_local(model, {}, []) is False, model
+        assert paid.model_class(model, {}, []) == "paid", model
+
+    for url in (
+        "http://127.0.0.1:11434",
+        "http://127.0.0.1:11434/v1",
+        "http://127.0.0.1:11434/v1/",
+        "http://localhost:11434",
+        "http://127.8.9.1:1",
+        "http://[::1]:11434/v1",
+    ):
+        for name in (paid.LOCAL_URL, paid.OLLAMA_URL):
+            assert paid.is_local(LOCAL, {name: url}, []) is True, url
+    assert paid.local_server({paid.OLLAMA_URL: "http://localhost:9/v1/"}, []) == (
+        "http://localhost:9",
+        False,
+    )
+    for url in (
+        "http://192.168.1.20:11434",
+        "http://0.0.0.0:11434",
+        "http://studio.local:11434/v1",
+        "https://api.openai.com/v1",
+        "http://127.0.0.1.example.com:11434",
+        "http://localhost.example.com:11434",
+        "http://127.0.0.1@example.com:11434",
+        "http://user:pw@127.0.0.1:11434",
+        "http://127.0.0.1:11434@example.com",
+        "http://2130706433:11434",
+        "http://[::ffff:8.8.8.8]:11434",
+        "ftp://127.0.0.1/",
+        "127.0.0.1:11434",
+        "http://",
+    ):
+        for name in (paid.LOCAL_URL, paid.OLLAMA_URL):
+            assert paid.is_local(LOCAL, {name: url}, []) is False, url
+            assert paid.model_class(LOCAL, {name: url}, []) == "paid", url
+            with pytest.raises(paid.LocalModelRefused):
+                paid.local_server({name: url}, [])
+    # LOCAL_MODEL_URL is the one that counts when both are set, and it is the one that gets used.
+    both = {paid.LOCAL_URL: "http://10.0.0.5:11434", paid.OLLAMA_URL: "http://127.0.0.1:11434/v1"}
+    assert paid.is_local(LOCAL, both, []) is False
+
+
+def test_another_machine_needs_the_explicit_setting(tmp_path: Path) -> None:
+    remote = {paid.LOCAL_URL: "http://100.64.0.7:11434"}
+    with pytest.raises(paid.LocalModelRefused, match=r"100\.64\.0\.7.*LOCAL_MODEL_ALLOW_REMOTE=1"):
+        paid.local_server(remote, [])
+    for value in ("", "0", "true", "yes"):
+        assert paid.is_local(LOCAL, remote | {paid.ALLOW_REMOTE: value}, []) is False, value
+    allowed = remote | {paid.ALLOW_REMOTE: "1"}
+    assert paid.local_server(allowed, []) == ("http://100.64.0.7:11434", True)
+    assert paid.model_label(LOCAL, allowed, []) == "local model (qwen2.5:14b at 100.64.0.7)"
+    # The setting does not turn a look-alike id or something that is not an address into a model.
+    assert paid.is_local("ollama/qwen3:cloud", allowed, []) is False
+    assert paid.is_local(LOCAL, {paid.LOCAL_URL: "ftp://x", paid.ALLOW_REMOTE: "1"}, []) is False
+    # The address is also read from the .env a run would load: Inspect would load it from there.
+    env = tmp_path / "x.env"
+    env.write_text("OLLAMA_BASE_URL=https://ollama.example.com/v1\nANTHROPIC_API_KEY=sk-secret\n")
+    assert paid.is_local(LOCAL, {}, [env]) is False
+    with pytest.raises(paid.LocalModelRefused) as refusal:
+        paid.local_server({}, [env])
+    assert "sk-secret" not in str(refusal.value)
+    env.write_text("OLLAMA_BASE_URL=http://localhost:11434/v1\n")
+    assert paid.is_local(LOCAL, {}, [env]) is True
+
+
+def test_a_local_model_runs_with_the_switch_on_and_only_reaches_the_checked_address(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outbound: list[str]
+) -> None:
+    reached = _spy_local(monkeypatch)
+    out = tmp_path / "run"
+    monkeypatch.setenv("INSPECT_EVAL_MODEL_BASE_URL", "https://api.example.com/v1")
+    with pytest.raises(Reached):
+        glhf_local.run_local(DEMO_CASE, out, model=LOCAL, role_models={"critic": "ollama/qwen2.5:7b"})
+    assert reached == [f"get_model {LOCAL}"] and outbound == []
+    assert os.environ[paid.OLLAMA_URL] == "http://127.0.0.1:11434/v1"
+    assert "INSPECT_EVAL_MODEL_BASE_URL" not in os.environ
+    assert {key: os.environ[key] for key in paid.PAID_KEYS} == dict.fromkeys(paid.PAID_KEYS, "")
+    assert os.environ[paid.SWITCH] == "1"
+
+    # Exa stays refused with a local model, and so does a server on another machine.
+    reached.clear()
+    with pytest.raises(paid.PaidCallsOff, match="Exa"):
+        glhf_local.run_local(DEMO_CASE, tmp_path / "b", model=LOCAL, exa=True)
+    for name in (paid.LOCAL_URL, paid.OLLAMA_URL):
+        monkeypatch.setenv(name, "http://192.168.1.20:11434")
+        with pytest.raises(paid.LocalModelRefused, match="not this machine"):
+            glhf_local.run_local(DEMO_CASE, tmp_path / "c", model=LOCAL)
+        with pytest.raises(paid.LocalModelRefused, match="not this machine"):
+            glhf_local.run_local(DEMO_CASE, tmp_path / "c", model="mock", role_models={"critic": LOCAL})
+        monkeypatch.delenv(name)
+    for model in LOOKALIKES:
+        with pytest.raises(paid.PaidCallsOff, match="NO_PAID_CALLS"):
+            glhf_local.run_local(DEMO_CASE, tmp_path / "d", model=model)
+    assert reached == [] and outbound == []
+    assert not any((tmp_path / name).exists() for name in "bcd")
+
+    # With the explicit setting the other machine is used, and it is the pinned address.
+    monkeypatch.setenv(paid.LOCAL_URL, "http://192.168.1.20:11434/")
+    monkeypatch.setenv(paid.ALLOW_REMOTE, "1")
+    with pytest.raises(Reached):
+        glhf_local.run_local(DEMO_CASE, tmp_path / "e", model=LOCAL)
+    assert os.environ[paid.OLLAMA_URL] == "http://192.168.1.20:11434/v1"
+
+
+def test_inspect_sends_a_local_model_to_ollama_at_the_pinned_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from inspect_ai.model import get_model
+    from inspect_ai.model._providers.ollama import OllamaAPI
+
+    monkeypatch.setenv("INSPECT_EVAL_MODEL_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv(paid.LOCAL_URL, "http://127.0.0.1:11999")
+    paid.refuse_run(LOCAL)
+    for model in (LOCAL, "ollama/openai/gpt-5.5", "ollama/user/model:tag"):
+        assert paid.is_local(model)
+        api = get_model(model, memoize=False).api
+        assert isinstance(api, OllamaAPI), model
+        assert api.base_url == "http://127.0.0.1:11999/v1"
+        assert api.api_key == "ollama"
 
 
 def test_the_local_command_line_refuses_in_one_line(

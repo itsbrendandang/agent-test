@@ -54,7 +54,7 @@ from inspect_ai.util import (
 from ..models import RuntimeCase
 from ..tools import request_web_access
 from . import baseline, past_memory, roles
-from .ledger import Ledger
+from .ledger import UNREVIEWED, Ledger
 from .memory import add_pending, filter_lessons, load_memory
 from .tools import (
     WORK,
@@ -64,6 +64,7 @@ from .tools import (
     check_outputs,
     contract_text,
     needs_rescue,
+    persist_ledger,
     propose_claim,
     raise_issue,
     read_ledger,
@@ -84,6 +85,9 @@ FINISH_RESERVE = 0.05  # kept back so a missing artifact can still be rescued af
 REPORT_RESERVE = 0.05  # always kept for the reporter and final writes
 MIN_REVIEW_SECONDS = 15 * 60  # for long runs; short runs use min_review_seconds()
 MIN_REVIEW_SHARE = 0.15
+# The phases before review leave this many times min_review_seconds() for the first round:
+# the round is started only when that much is left, and hand-offs and checks take time too.
+REVIEW_MARGIN = 1.2
 RUN_MARGIN = 0.03  # of the sample's time limit, kept out of every phase's share
 FINAL_WRITES_SHARE = 0.015  # of the sample's time limit, kept after the report for final writes
 MIN_FINAL_WRITES_SECONDS = 30
@@ -116,6 +120,21 @@ def min_review_seconds(budget: float) -> float:
     A fixed 15 minutes meant the default 30-minute local run never reviewed: after the first
     pass about 5 minutes are left before the reserves. Scaled, such a run gets one round."""
     return min(float(MIN_REVIEW_SECONDS), budget * MIN_REVIEW_SHARE)
+
+
+def review_room(budget: float) -> float:
+    """Seconds the phases before review must leave so that one round can start."""
+    return REVIEW_MARGIN * min_review_seconds(budget)
+
+
+def study_names(case: object) -> tuple[list[str], list[str]]:
+    """The paper's title(s) and author surnames, when the case record has them, for the search
+    guard. The BixBench3 metadata has neither today (paper_id and doi only), so both are empty
+    there; a case record that gains `title` or `authors` is protected without a change here."""
+    title, authors = getattr(case, "title", None), getattr(case, "authors", None)
+    titles = [title] if isinstance(title, str) else list(title or [])
+    names = [authors] if isinstance(authors, str) else list(authors or [])
+    return [str(t) for t in titles if t], [str(a) for a in names if a]
 
 
 def review_step(critic: PhaseResult, open_issues: int) -> str:
@@ -306,7 +325,11 @@ def _tokens_needed(kinds: tuple[str, ...], max_tokens: int) -> int:
 
 
 def _seconds_needed(kinds: tuple[str, ...], seconds: float) -> int:
-    work = sum(NEEDS[k].seconds for k in kinds if k not in ("finish", "report"))
+    work = sum(NEEDS[k].seconds for k in kinds if k not in ("finish", "report", *REVIEW_KINDS))
+    review = float(sum(NEEDS[k].seconds for k in kinds if k in REVIEW_KINDS))
+    if "critique" in kinds:  # a plan with review must be able to start one round
+        review = max(review, review_room(seconds))
+    work += int(review)
     finish = finish_hold(seconds) * seconds if "finish" in kinds else 0.0
     return int(work + finish + max(NEEDS["report"].seconds, seconds * REPORT_RESERVE))
 
@@ -550,7 +573,13 @@ def seconds_for(
     kind = kind_of(title)
     left = plan.seconds - elapsed
     hold = plan.time_reserves["finish"] + plan.time_reserves["report"]
-    available = left - hold - sum(plan.time_floors[k] for k in later)
+    review_owed = float(sum(plan.time_floors[k] for k in later if k in REVIEW_KINDS))
+    if kind in TIME_TARGET and "critique" in later:
+        # Before review: leave room for one round to start, not only the review floors. With
+        # the floors alone, floors of the early phases could eat the round on a short run.
+        review_owed = max(review_owed, review_room(plan.seconds))
+    others_owed = sum(plan.time_floors[k] for k in later if k not in REVIEW_KINDS)
+    available = left - hold - others_owed - review_owed
     want: float | None = None  # the last working phase takes all that is not protected
     if kind in TIME_TARGET and later:
         want = plan.seconds * _cumulative(TIME_TARGET, kind) - elapsed
@@ -768,7 +797,11 @@ def glhf_swarm(
         def agent(name: str, instructions: str, model: str | None, extra: list[Tool]) -> Role:
             if exa and name in SEARCH_ROLES:
                 instructions += roles.SEARCH
-                extra = [*extra, search_docs(ledger, name, case.network_policy, case.doi)]
+                titles, authors = study_names(case)
+                extra = [
+                    *extra,
+                    search_docs(ledger, name, case.network_policy, case.doi, titles, authors),
+                ]
             made = react(
                 name=name,
                 prompt=instructions,
@@ -1068,6 +1101,7 @@ def glhf_swarm(
                     f"{pilot_contract}"
                 )
             await phase("experiment", experimenter, first_pass)
+            critiques_completed = 0
             if review_rounds and "critique" not in plan.phases:
                 ledger.log("review.not_planned", mode=plan.mode, reason=plan.reason)
             for n in range(1, review_rounds + 1 if "critique" in plan.phases else 1):
@@ -1089,6 +1123,7 @@ def glhf_swarm(
                 )
                 step = review_step(critique, len(ledger.open_issues()))
                 if critique.completed:
+                    critiques_completed += 1
                     # Fixes made before this round have now been through a full critic pass.
                     ledger.mark_rechecked()
                 else:
@@ -1117,6 +1152,14 @@ def glhf_swarm(
             ]
             if unchecked:
                 ledger.log("review.fixes_not_rechecked", issues=unchecked)
+            if review_rounds > 0 and "critique" in plan.phases and critiques_completed == 0:
+                # Review was planned and no critic finished a pass: the artifacts are the first
+                # pass, unchecked. Said in the ledger, in FINDINGS.md and in run.json.
+                ledger.log(
+                    UNREVIEWED,
+                    rounds_planned=review_rounds,
+                    note="no critic completed a pass; the artifacts are the first pass, unchecked",
+                )
             # Last line of defence for completeness: only for artifacts that would score zero
             # because they are missing or unreadable. Warnings never trigger it.
             last_check = await check_contract(outputs)
@@ -1170,6 +1213,15 @@ def glhf_swarm(
             report = await phase(
                 "report", reporter, "Write /outputs/METHODS.md.", clock.report_seconds()
             )
+            # Again after the report: the reporter is a role like any other and can leave a job
+            # behind (one left a loop rewriting the ledger copy). Nothing may run in the sandbox
+            # while the final files are written and the outputs are collected.
+            try:
+                killed = await background_processes(kill=True)
+                if killed:
+                    ledger.log("background.killed", after="report", processes=killed[:20])
+            except Exception as error:
+                ledger.log("background.kill_failed", after="report", error=str(error)[:200])
             if memory_dir:
                 # Written before grading, so a lesson can never contain a score. Lines that look
                 # like results are dropped in code (memory.filter_lessons). What is left is only
@@ -1221,6 +1273,9 @@ def glhf_swarm(
             await sandbox().exec(
                 ["sh", "-c", f"cp -r {HANDOFF_DIR} /outputs/glhf/ 2>/dev/null; true"]
             )
+            # The record that counts: from this process's memory into the sample's store (and
+            # the host folder, when one is set). The copies under /outputs/glhf/ are untrusted.
+            persist_ledger(ledger)
             state.output.completion = f"{final}\n\n{ledger.summary()}"
         return state
 

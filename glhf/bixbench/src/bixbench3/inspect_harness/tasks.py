@@ -19,6 +19,7 @@ from bixbench3.inspect_harness.swarm.baseline import TOKEN_SEMANTICS, single_wit
 from bixbench3.inspect_harness.swarm.solver import glhf_swarm
 
 MESSAGE_LIMIT = 5_000
+TOKEN_BACKSTOP = 1.15  # the sample's hard token limit, as a multiple of max_tokens
 TIME_LIMIT_SECONDS = DEFAULT_TIME_LIMIT_SECONDS
 DEFAULT_SANDBOX_COMPOSE = Path(__file__).parents[3] / "sandbox" / "compose.yaml"
 
@@ -79,8 +80,9 @@ def bixbench3_cases(
         message_limit=MESSAGE_LIMIT,
         time_limit=limit,
         # The token budget is enforced by the solvers (see the docstring). This is a backstop
-        # only, well above the budget, in case a solver's own limit fails.
-        token_limit=max_tokens * 2 if max_tokens else None,
+        # only, in case a solver's own limit fails: close to the budget, so a failure cannot
+        # double the bill, and above it by more than a role's last call can overshoot.
+        token_limit=int(max_tokens * TOKEN_BACKSTOP) if max_tokens else None,
         config=GenerateConfig(seed=seed) if seed is not None else GenerateConfig(),
         metadata={
             "effort": effort,

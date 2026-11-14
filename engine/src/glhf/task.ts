@@ -14,10 +14,11 @@ import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
 import { childEnv, HOW_TO_ALLOW, paidCallsOff } from "../paid.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
-import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, type Stored, tail, trackerLog } from "./store.ts"
+import { bixbenchDir, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, runFile, type Stored, tail, trackerLog } from "./store.ts"
 import { type GlhfRun, type RunRequest, settled, type Usage } from "./types.ts"
 
-export type RunInput = RunRequest & { id: string }
+/** `maxHours`: cloud runs, the hours of VM billing the caller accepted at the start (tracker.ts checkRequest). */
+export type RunInput = RunRequest & { id: string; maxHours?: number }
 type Checkpoint =
   | { phase: "launch" }
   | { phase: "watchLocal"; polls: number }
@@ -43,7 +44,7 @@ const localDeadline = (startedAt: number, timeLimit: number | undefined) => {
 const localRunner = () => (process.env.GLHF_LOCAL_CMD ?? "uv run python -m bixbench3.glhf_local").split(/\s+/).filter(Boolean)
 /** The `bixbench3` command. GLHF_BIXBENCH3_CMD replaces it (tests use a stub script). */
 const bixbench3 = () => (process.env.GLHF_BIXBENCH3_CMD ?? "uv run bixbench3").split(/\s+/).filter(Boolean)
-const manifestsRoot = () => process.env.GLHF_BIXBENCH3_RUNS ?? resolve(BIXBENCH, "runs")
+const manifestsRoot = () => process.env.GLHF_BIXBENCH3_RUNS ?? resolve(bixbenchDir(), "runs")
 
 const quote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
 
@@ -58,19 +59,27 @@ const quote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
  * The pid is recorded twice, so that a crash right after the spawn does not leave a runner nobody knows: this
  * process writes it at once (the start time, which takes a `ps`, follows), and the shell writes its own pid to
  * `<name>.self` before it starts the command (see adopt).
+ *
+ * When the shell itself cannot be started (no process, so no pid), `<name>.nospawn` gets the reason. That is the
+ * one case in which an empty pid file is known to mean that nothing runs (see processState).
  */
-export function startOnce(dir: string, name: string, argv: string[], stdout: string, stderr: string | null, cwd = BIXBENCH): boolean {
+export function startOnce(dir: string, name: string, argv: string[], stdout: string, stderr: string | null, cwd = bixbenchDir()): boolean {
   const pidFile = `${dir}/${name}.pid`
   try { writeFileSync(pidFile, "", { flag: "wx" }) } catch { return false }
   const redirect = stderr ? `> ${quote(stdout)} 2> ${quote(stderr)}` : `> ${quote(stdout)} 2>&1`
   const script = `echo $$ > ${quote(`${dir}/${name}.self`)}; "$@" ${redirect}; echo $? > ${quote(`${dir}/${name}.exit`)}`
-  const child = spawn("sh", ["-c", script, "sh", ...argv], { cwd, detached: true, stdio: "ignore", env: childEnv() }) // keys blanked while paid calls are off
-  child.on("error", () => { /* reported by processState as "gone" */ })
+  const notStarted = (why: string) => { try { writeFileSync(`${dir}/${name}.nospawn`, why) } catch { /* the folder is gone */ } }
+  let child: ReturnType<typeof spawn>
+  try { child = spawn("sh", ["-c", script, "sh", ...argv], { cwd, detached: true, stdio: "ignore", env: childEnv() }) } // keys blanked while paid calls are off
+  catch (error) { notStarted(error instanceof Error ? error.message : String(error)); throw error } // an argument that is not text: nothing was started
+  // Node reports the reason later, as an event; the phase that reads the file may come first, so a reason is written at once.
+  const first = existsSync(cwd) ? "no process was created" : `the folder to start it in does not exist (${cwd})`
+  child.on("error", (error) => { if (!child.pid) notStarted(`${first}: ${error.message}`) }) // reported by processState as "unstarted"
   child.unref()
   if (child.pid) {
     writeFileSync(pidFile, String(child.pid)) // at once: nothing slow may stand between the spawn and this
     writeFileSync(pidFile, stamp(child.pid))
-  }
+  } else notStarted(first)
   return true
 }
 
@@ -100,13 +109,18 @@ function adopt(dir: string, name: string): boolean {
 /**
  * "running" while the process is alive, its exit status once it ended, "gone" if it died without one.
  * Alive means the pid exists and started when we recorded it, so a reused pid does not count.
+ * A pid file that is still empty says nothing about a process:
+ *   "unstarted"  the spawn failed (startOnce left `<name>.nospawn`): nothing runs
+ *   "unknown"    after five polls. The engine died between the marker and the pid. The command may never have
+ *                been started, may have ended, or may be running without anyone knowing its pid.
  */
-export function processState(dir: string, name: string, polls: number): "running" | "gone" | number {
+export type ProcessState = "running" | "gone" | "unknown" | "unstarted" | number
+export function processState(dir: string, name: string, polls: number): ProcessState {
   const exit = readText(`${dir}/${name}.exit`)
   if (exit !== null && exit.trim() !== "") return Number(exit.trim())
   let mark = readText(`${dir}/${name}.pid`)
   if (!parseStamp(mark) && mark !== null && adopt(dir, name)) mark = readText(`${dir}/${name}.pid`)
-  if (!parseStamp(mark)) return polls < 5 ? "running" : "gone" // the pid is not written yet; if it never is, the spawn failed
+  if (!parseStamp(mark)) return existsSync(`${dir}/${name}.nospawn`) ? "unstarted" : polls < 5 ? "running" : "unknown" // the pid may be written yet
   return alive(mark) ? "running" : "gone"
 }
 
@@ -171,7 +185,7 @@ export async function stopAndWait(dir: string, name: string, options: StopOption
 
 const run = (argv: string[], timeoutMs: number) =>
   new Promise<{ code: number; stdout: string; stderr: string }>((ok) => {
-    execFile(argv[0], argv.slice(1), { cwd: BIXBENCH, env: childEnv(), timeout: timeoutMs, maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
+    execFile(argv[0], argv.slice(1), { cwd: bixbenchDir(), env: childEnv(), timeout: timeoutMs, maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
       const code = error ? (typeof error.code === "number" ? error.code : 1) : 0
       ok({ code, stdout, stderr: stderr || (error && typeof error.code !== "number" ? String(error.message) : "") })
     })
@@ -253,14 +267,59 @@ export function stopRun(dir: string, options?: StopOptions): Promise<Stopped> {
 /** Is a stopRun for this folder under way? */
 export const beingStopped = (dir: string) => stopping.has(dir)
 
-/** The result a local runner wrote, when run.json says that it finished. */
-export type LocalRun = { status?: string; score?: number; artifacts?: GlhfRun["artifacts"]; usage?: Usage; error?: string | null; finished_at?: number }
+/** run.json as the local runner wrote it. Nothing in it is trusted: see readLocal. */
+export type LocalRun = { status?: unknown; score?: unknown; artifacts?: unknown; usage?: unknown; error?: unknown; finished_at?: unknown }
 export const localRun = (dir: string) => readJson<LocalRun>(`${dir}/run.json`)
-export const localEnded = (dir: string) => ["done", "failed"].includes(localRun(dir)?.status ?? "")
+/** Has the runner written its last word (status done or failed)? Whether that result can be used is readLocal's question. */
+export const localEnded = (dir: string) => ["done", "failed"].includes(localRun(dir)?.status as string)
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+const count = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+const isUsage = (value: unknown): value is Usage => isObject(value) && Object.values(value).every((u) => isObject(u) && count(u.input_tokens) && count(u.output_tokens) && count(u.total_tokens))
+const shown = (value: unknown) => (JSON.stringify(value) ?? String(value)).slice(0, 60)
+
 /** The token usage in run.json, when it has the shape the record wants. */
 export function localUsage(dir: string): Usage | undefined {
   const usage = localRun(dir)?.usage
-  return usage && typeof usage === "object" && !Array.isArray(usage) && Object.keys(usage).length ? usage : undefined
+  return isUsage(usage) && Object.keys(usage).length ? usage : undefined
+}
+
+/** What a finished run.json gives the record, every field checked. */
+export interface LocalResult { phase: "done" | "failed"; score?: number; artifacts?: NonNullable<GlhfRun["artifacts"]>; usage?: Usage; error?: string; finishedAt?: number }
+/**
+ * run.json, read without believing it. The record is what the dashboard and the scoreboard read, so nothing reaches
+ * it unchecked: status, score, artifacts, usage, error and finished_at must have the type GlhfRun gives them.
+ *   missing    there is no run.json
+ *   running    it says that the run is going
+ *   ended      it says done or failed, and every field can be used
+ *   unusable   anything else; `why` names what is wrong. `final`: the runner has written its last word (done or
+ *              failed), so waiting will not mend it. Otherwise the file may be half written and is read again.
+ */
+export function readLocal(dir: string): { kind: "missing" } | { kind: "running" } | { kind: "ended"; result: LocalResult } | { kind: "unusable"; why: string; final: boolean } {
+  const text = readText(`${dir}/run.json`)
+  if (text === null) return { kind: "missing" }
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return { kind: "unusable", why: "it is not JSON", final: false } }
+  if (!isObject(raw)) return { kind: "unusable", why: "it is not a JSON object", final: false }
+  const run = raw as LocalRun
+  if (run.status === "running") return { kind: "running" }
+  if (run.status !== "done" && run.status !== "failed") return { kind: "unusable", why: `status is ${shown(run.status)}, not "running", "done" or "failed"`, final: false }
+  const absent = (value: unknown) => value === undefined || value === null
+  const wrong: string[] = []
+  if (!absent(run.score) && !count(run.score)) wrong.push(`score is ${shown(run.score)}, not a number`)
+  const artifacts = run.artifacts
+  if (!absent(artifacts) && !(Array.isArray(artifacts) && artifacts.every((a) => isObject(a) && typeof a.artifact_id === "string" && count(a.score)))) wrong.push(`artifacts is ${shown(artifacts)}, not a list of {artifact_id, score}`)
+  if (!absent(run.usage) && !isUsage(run.usage)) wrong.push(`usage is ${shown(run.usage)}, not token counts per model`)
+  if (!absent(run.error) && typeof run.error !== "string") wrong.push(`error is ${shown(run.error)}, not text`)
+  if (!absent(run.finished_at) && !(count(run.finished_at) && (run.finished_at as number) > 0)) wrong.push(`finished_at is ${shown(run.finished_at)}, not seconds since 1970 as a number`)
+  if (wrong.length) return { kind: "unusable", why: wrong.join("; "), final: true }
+  const result: LocalResult = { phase: run.status }
+  if (count(run.score)) result.score = run.score as number
+  if (Array.isArray(artifacts)) result.artifacts = artifacts.map((a) => ({ artifact_id: a.artifact_id as string, score: a.score as number }))
+  if (isUsage(run.usage)) result.usage = run.usage
+  if (typeof run.error === "string") result.error = run.error
+  if (count(run.finished_at)) result.finishedAt = Math.round((run.finished_at as number) * 1000)
+  return { kind: "ended", result }
 }
 
 /** `bixbench3` prints one pretty JSON object (indent 2), sometimes followed by plain text. */
@@ -378,9 +437,12 @@ export function cancelDetail(stopped: Stopped): string {
 /** For error messages: said only when containers of the run were found. */
 const leftNote = (sandbox: SandboxCleanup | undefined) => (sandbox && sandbox.found > 0 ? `; ${sandboxNote(sandbox)}` : "")
 
-const lastPhase = (dir: string) => {
-  const ledger = readJson<{ events?: { kind?: string; phase?: string }[] }>(`${dir}/outputs/glhf/ledger.json`)
-  return ledger?.events?.findLast((e) => e.kind === "phase.started")?.phase
+/** The phase the swarm is in, from its ledger. The ledger is written inside the sandbox: any shape is possible. */
+const lastPhase = (id: string) => {
+  const events = readJson<{ events?: unknown }>(runFile(id, "ledger"))?.events
+  if (!Array.isArray(events)) return undefined
+  const phase = (events as { kind?: unknown; phase?: unknown }[]).findLast((e) => e?.kind === "phase.started")?.phase
+  return typeof phase === "string" ? phase.slice(0, 200) : undefined
 }
 
 export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
@@ -454,24 +516,28 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         const stopped = await stopRun(dir)
         return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `stopped: ${refused}${stopped.runner === "stuck" ? " The runner could not be stopped; check for a leftover process (runner.pid) or container." : ""}${leftNote(stopped.sandbox)}` })
       }
-      let local = localRun(dir)
+      let local = readLocal(dir)
       const state = processState(dir, "runner", polls)
-      if (state !== "running" && local?.status === "running") local = localRun(dir) // it may have finished between the two reads
-      if (local?.status === "done" || local?.status === "failed") {
-        return finish(runtime, context, id, {
-          phase: local.status, score: local.score, artifacts: local.artifacts, usage: local.usage,
-          error: local.error ?? (local.status === "failed" ? "the run failed; see runner.log" : undefined),
-          finishedAt: typeof local.finished_at === "number" && Number.isFinite(local.finished_at) && local.finished_at > 0 ? Math.round(local.finished_at * 1000) : undefined, // anything else would fault the task (NaN is not JSON)
-        })
+      if (state !== "running" && local.kind !== "ended") local = readLocal(dir) // it may have finished between the two reads
+      if (local.kind === "ended") {
+        const { phase, error, ...rest } = local.result
+        return finish(runtime, context, id, { phase, ...rest, error: error ?? (phase === "failed" ? "the run failed; see runner.log" : undefined) })
       }
+      const unusable = local.kind === "unusable" ? `run.json is not usable: ${local.why}` : undefined
+      // A result with the wrong types is the runner's last word: nothing of it reaches the record, and the run fails now.
+      if (local.kind === "unusable" && local.final && state === "running") return finish(runtime, context, id, { phase: "failed", error: `the local runner wrote a result, but ${unusable}\n${tail(`${dir}/runner.log`)}`.trim() })
       if (state !== "running") {
-        // "gone" with a pid that was never recorded is a guess (processState). When run.json shows that a runner did
-        // start, the message does not claim that it stopped.
-        const unknown = state === "gone" && !parseStamp(readText(`${dir}/runner.pid`)) && local?.status === "running"
-        const why = unknown ? "the local runner stopped without finishing, or it may still be running: its pid was never recorded, and run.json shows that it started. Check for a leftover process or container"
-          : state === "gone" ? "the local runner stopped without finishing" : `the local runner exited with status ${state}`
+        const also = unusable ? `; ${unusable}` : ""
+        const why = state === "unstarted" ? `the local runner could not be started: ${readText(`${dir}/runner.nospawn`)?.trim() || "no process was created"}`
+          // An empty pid file says nothing about a process (processState): the message claims neither that it stopped nor that it runs.
+          : state === "unknown" ? `the local runner's pid was never recorded, so it is not known whether it was started or is still running${local.kind === "running" ? " (run.json shows that it did start)" : ""}. Check for a leftover process or container (its command line holds --out ${dir})${also}`
+          : state === "gone" ? `the local runner stopped without finishing${also}`
+          : state !== 0 ? `the local runner exited with status ${state}${also}`
+          // Status 0 reads as success, so the message says first what is missing.
+          : unusable ? `the local runner exited with status 0, but ${unusable}`
+          : `the local runner ended without writing a result: it exited with status 0 and ${local.kind === "running" ? "run.json still says that it is running" : "there is no run.json"}`
         // A runner that was killed did not remove its sandbox.
-        const sandbox = state === "gone" ? leftNote(await removeSandbox(dir)) : ""
+        const sandbox = state === "gone" || state === "unknown" ? leftNote(await removeSandbox(dir)) : ""
         return finish(runtime, context, id, { phase: "failed", error: `${why}${sandbox}\n${tail(`${dir}/runner.log`)}`.trim() })
       }
       const startedAt = loadStored(id)?.run.startedAt ?? runtime.now()
@@ -481,7 +547,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         const how = stopped.runner === "stopped" ? "it was stopped" : "it could not be stopped, check for a leftover process or container"
         return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `the local runner was still going ${Math.round((runtime.now() - startedAt) / 60_000)} minutes after the start, far past its ${limit} s limit; ${how}${leftNote(stopped.sandbox)}\n${tail(`${dir}/runner.log`)}`.trim() })
       }
-      patchRun(id, local ? { phase: "running", detail: lastPhase(dir) ?? "running" } : { phase: "launching", detail: "starting the sandbox" })
+      patchRun(id, local.kind === "running" ? { phase: "running", detail: lastPhase(id) ?? "running" } : { phase: "launching", detail: "starting the sandbox" })
       await runtime.sleepUntil(runtime.now() + LOCAL_POLL(), { phase: "watchLocal", polls: polls + 1 }, context)
     },
 
@@ -499,12 +565,20 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       }
       let state = processState(dir, "launch", polls)
       const started = statSync(`${dir}/launch.pid`, { throwIfNoEntry: false })?.birthtimeMs || (loadStored(input.id)?.run.startedAt ?? runtime.now())
-      const stuck = state === "running" && runtime.now() > started + LAUNCH_TIMEOUT()
+      // A launcher past its limit is stopped, with the group stop a cancel uses, before anything is concluded from
+      // what it wrote: one that is left alive can still create a VM that bills and that no run follows. What the
+      // stop achieved is stored, so a second attempt at this phase (after a restart) says the same as the first.
+      let stop = await runtime.memo<{ left: boolean }>("launchStop", context)
+      if (!stop && state === "running" && runtime.now() > started + LAUNCH_TIMEOUT()) {
+        stop = await runtime.memo("launchStop", { left: (await stopAndWait(dir, "launch")) === "stuck" }, context)
+        if (cancelled(input.id)) return endCancelled(runtime, context)
+      }
+      const stuck = stop !== undefined, left = stop?.left === true
       if (state === "running" && !stuck) {
         patchRun(input.id, { phase: "launching", detail: tail(`${dir}/launch.log`, 1) || "provisioning the cloud run" })
         return runtime.sleepUntil(runtime.now() + LAUNCH_POLL(), { phase: "awaitLaunch", polls: polls + 1 }, context)
       }
-      if (stuck) state = "gone" // treated like a launcher that died: follow what it created, or fail
+      if (stuck) state = "gone" // from here on like a launcher that died: follow what it created, or fail
       const printed = leadingJson(readText(`${dir}/launch.out`) ?? "")?.run_id
       const manifest = typeof printed === "string" ? { id: printed } : findManifest(input, started, manifestsRoot(), takenRemoteIds(input.id), hasRival(input))
       const remoteId = manifest.id
@@ -512,15 +586,28 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: detached` }, `cloud run ${remoteId} launched`)
         return runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchCloud", remoteId, polls: 0, errors: 0 } }), context)
       }
-      if (state === "gone" && remoteId) { // the launcher died or hung mid-way: follow what it created instead of launching again
-        patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: launcher ${stuck ? "stuck" : "interrupted"}, checking` }, `adopted cloud run ${remoteId} from its manifest`)
+      if ((state === "gone" || state === "unknown") && remoteId) { // the launcher died or hung mid-way: follow what it created instead of launching again
+        const how = !stuck ? "interrupted" : left ? "stuck, and it could not be stopped (see launch.pid)" : "stuck, stopped"
+        patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: launcher ${how}; checking` }, `adopted cloud run ${remoteId} from its manifest`)
         return runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchCloud", remoteId, polls: 0, errors: 0 } }), context)
       }
       const command = (id: string) => `${bixbench3().join(" ")} cancel --run ${id} --project ${input.project}`
       const cancel = remoteId ? `\nA VM may be left stopped. Remove it with: ${command(remoteId)}`
         : manifest.ambiguous ? `\nSeveral cloud runs fit this launch and their manifests do not name the solver, so none was adopted: ${manifest.ambiguous.join(", ")}. Each may have a VM that is running and billing. Check each with: ${bixbench3().join(" ")} status --run ID --project ${input.project}` : ""
-      const why = stuck ? `the launcher did not finish within ${Math.round(LAUNCH_TIMEOUT() / 60_000)} minutes and reported no run; it may still be running (see launch.pid)`
-        : state === "gone" ? (manifest.ambiguous ? "the launcher stopped before it reported a run" : "the launcher stopped before it reported a run (no run manifest was written, so no VM was created by it)") : `bixbench3 run exited with status ${state}`
+      // "No VM was created" is said only when it is known: the launcher is not running (it ended, died or was
+      // stopped) and it wrote no manifest, which it does before it creates the VM. A launcher that may be alive can
+      // still create one, so then the message says how to look and how to remove it.
+      const noVm = manifest.ambiguous ? "" : " (no run manifest was written, so no VM was created by it)"
+      const alive = `It can still create a VM that bills, and no run would follow it. Check for a VM with: gcloud compute instances list --project ${input.project}\nRemove it with: ${command("ID")} (ID: the run_id in the run_manifest.json it wrote under ${manifestsRoot()})`
+      const minutes = Math.round(LAUNCH_TIMEOUT() / 60_000)
+      const why = stuck ? (left ? `the launcher did not finish within ${minutes} minutes, reported no run, and could not be stopped: it may still be running (see launch.pid). ${alive}`
+          : `the launcher did not finish within ${minutes} minutes and reported no run; it was stopped${noVm}`)
+        : state === "unstarted" ? `the launcher could not be started: ${readText(`${dir}/launch.nospawn`)?.trim() || "no process was created"}${noVm}`
+        : state === "unknown" ? `the launcher's pid was never recorded, so it is not known whether it was started or is still running. Check for a leftover process (\`bixbench3 run --task ${input.task}\`) and stop it. ${alive}`
+        : state === "gone" ? `the launcher stopped before it reported a run${noVm}`
+        // Status 0 reads as success, so the message says first what is missing.
+        : state === 0 ? `bixbench3 run exited with status 0 but printed no run id and ${manifest.ambiguous ? "its manifest could not be told from others" : "wrote no manifest, so there is no cloud run to follow"}`
+        : `bixbench3 run exited with status ${state}`
       return finish(runtime, context, input.id, { phase: "failed", error: `${why}\n${tail(`${dir}/launch.log`)}${cancel}`.trim() })
     },
 
@@ -529,9 +616,13 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       const { remoteId, polls, errors } = task.state.checkpoint
       const result = await run([...bixbench3(), "status", "--run", remoteId, "--project", input.project!], 180_000)
       const status = leadingJson(result.stdout) as { status?: string; phase?: string; vm_state?: string } | undefined
+      // The hours of billing the caller accepted are over. The same rule: say it, and how to stop; delete nothing.
+      const startedAt = loadStored(input.id)?.run.startedAt
+      const over = input.maxHours && startedAt && runtime.now() > startedAt + input.maxHours * 3_600_000
+        ? ` PAST THE ${input.maxHours} h OF BILLING ACCEPTED AT THE START: the VM is still there. Remove it with: ${bixbench3().join(" ")} cancel --run ${remoteId} --project ${input.project}` : ""
       if (result.code !== 0 || !status?.status) {
         // Never give up on a run whose VM may be billing; keep checking and say what is wrong.
-        patchRun(input.id, { detail: `cloud run ${remoteId}: status check failed ${errors + 1}x (${(result.stderr.trim().split("\n").pop() ?? "no output").slice(0, 200)})` })
+        patchRun(input.id, { detail: `cloud run ${remoteId}: status check failed ${errors + 1}x (${(result.stderr.trim().split("\n").pop() ?? "no output").slice(0, 200)})${over}` })
         return runtime.sleepUntil(runtime.now() + CLOUD_POLL(), { phase: "watchCloud", remoteId, polls: polls + 1, errors: errors + 1 }, context)
       }
       if (status.status === "succeeded" || status.status === "failed") {
@@ -542,7 +633,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       // A cloud run that was launched before the switch came on has its keys on the VM. The engine cannot take
       // them back, and it does not delete a VM on its own; it says how a person stops it.
       const paid = paidRun(input) ? ` Paid calls are off now, but this run keeps spending on its VM. Stop it with: ${bixbench3().join(" ")} cancel --run ${remoteId} --project ${input.project}` : ""
-      patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: ${status.status} (phase=${status.phase}, vm=${status.vm_state})${paid}` })
+      patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: ${status.status} (phase=${status.phase}, vm=${status.vm_state})${over}${paid}` })
       await runtime.sleepUntil(runtime.now() + CLOUD_POLL(), { phase: "watchCloud", remoteId, polls: polls + 1, errors: 0 }, context)
     },
 
@@ -561,7 +652,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         patchRun(input.id, { detail: `cloud run ${remoteId}: collecting failed ${attempts + 1}x (${why}); retrying` })
         return runtime.sleepUntil(runtime.now() + LAUNCH_POLL() * 12, { phase: "complete", remoteId, remoteStatus, attempts: attempts + 1 }, context)
       }
-      const dir = resolve(BIXBENCH, done.local_dir)
+      const dir = resolve(bixbenchDir(), done.local_dir)
       const ok = (done.status ?? remoteStatus) === "succeeded"
       return finish(runtime, context, input.id, {
         phase: ok ? "done" : "failed", ...grade(dir), detail: `cloud run ${remoteId}: results in ${dir}`,
@@ -595,3 +686,41 @@ async function finish(runtime: Runtime, context: Context, id: string, final: Par
   await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: { phase: final.phase, score } } }), context)
 }
 
+
+const faulting = new Map<string, Promise<void>>()
+
+/**
+ * The tracking task of a run ended on its own: a phase threw (the task faulted), or it was found terminal without a
+ * verdict. Nothing follows the run any more, so its record must not stay "launching" or "running": that would
+ * block every new local run until someone edits the file. The run is failed with the reason. A local runner that is
+ * still going is stopped first (nothing would ever read its result, and it holds the machine); a cloud run is not
+ * touched, and the message says how to look.
+ * Safe to repeat, and called from two places for that reason (the Harness's report, and openTracker after a
+ * restart that came in between): a settled record is left exactly as it is, and two calls at once share one attempt.
+ */
+export function failUntracked(id: string, why: string): Promise<void> {
+  const going = faulting.get(id)
+  if (going) return going
+  const attempt = (async () => {
+    const stored = loadStored(id)
+    if (!stored || settled(stored.run.phase)) return
+    const dir = runDir(id)
+    let rest = ""
+    let usage: Usage | undefined
+    if (stored.run.mode === "local") {
+      if (runnerAlive(dir)) {
+        const stopped = await stopRun(dir)
+        rest = `. ${stopped.runner === "stuck" ? "Its runner could not be stopped; check for a leftover process (runner.pid) or container" : "Its runner was stopped"}${leftNote(stopped.sandbox)}`
+      } else if (existsSync(`${dir}/runner.pid`) && !parseStamp(readText(`${dir}/runner.pid`)) && !existsSync(`${dir}/runner.exit`) && !existsSync(`${dir}/runner.nospawn`)) rest = ". The pid of its runner was never recorded; check for a leftover process or container"
+      usage = localUsage(dir)
+    } else {
+      const remote = stored.run.remoteId
+      rest = remote ? `. The cloud run itself was not stopped and its VM may be billing. Check with: ${bixbench3().join(" ")} status --run ${remote} --project ${stored.request.project}\nCollect it and delete the VM with: ${bixbench3().join(" ")} complete --run ${remote} --project ${stored.request.project}`
+        : existsSync(`${dir}/launch.pid`) ? `. Its launcher was not stopped (see launch.pid) and may have created a VM. Check with: gcloud compute instances list --project ${stored.request.project}` : ""
+    }
+    if (settled(loadStored(id)?.run.phase ?? "failed")) return // a cancel, or the task's own verdict, arrived meanwhile
+    patchRun(id, { phase: "failed", detail: undefined, error: `the tracker stopped following this run: ${why}${rest}`, ...(usage && { usage }), finishedAt: Date.now() }, `tracking ended: ${why}`)
+  })().finally(() => faulting.delete(id))
+  faulting.set(id, attempt)
+  return attempt
+}

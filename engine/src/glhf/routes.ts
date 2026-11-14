@@ -2,13 +2,16 @@
 //
 //   GET  /api/glhf/status        the record to beat, which tools and keys this machine has (never the keys), the
 //                                limits a request must keep (`limits`, from types.ts) and the models to offer
-//   GET  /api/glhf/roles         the swarm's roles: instructions and time shares, read from the solver code
+//   GET  /api/glhf/roles         the swarm's roles: instructions and time shares, read from the solver code. Needs
+//                                the dashboard's Origin or the token (it runs `uv`); the answer is kept, and a
+//                                failure is not tried again for a minute
 //   GET  /api/glhf/runs          runs, newest first
 //   GET  /api/glhf/scoreboard    single agent against swarm, runs paired only when their settings match
-//   POST /api/glhf/runs          start a run. Needs the dashboard's Origin or the CLI's token (403 without), also
-//                                for the scripted demo. Who may start what is in tracker.ts (checkRequest):
-//                                cloud runs and case directories need the CLI's token; a real model, Exa and
-//                                memory need the token or the dashboard's own Origin
+//   POST /api/glhf/runs          start a run. Needs the dashboard's Origin or the session token (403 without), also
+//                                for the scripted demo. Anything that can spend or touches shared state needs the
+//                                TOKEN (needsToken below): a real model, role models, Exa, memory, cloud, a case
+//                                directory. The Origin alone gets 401 {error, field: "token", needsToken: true}.
+//                                With NO_PAID_CALLS on, what is paid is refused first (400), whoever asks.
 //                                Body: a RunRequest; `solvers: ["glhf", "single"]` instead of `solver` starts a
 //                                matched pair, the second when the first is settled. Answers 201 {id, ids}.
 //                                409 {error, run} while a local run is still going: one local run at a time.
@@ -17,26 +20,30 @@
 //   POST /api/glhf/runs/:id/cancel   stop a local run and mark it cancelled; answers the run. A settled run is
 //                                returned unchanged, and so is one whose runner has written its result. `detail`
 //                                says what was done about the runner and its sandbox containers. Needs the
-//                                dashboard's Origin or the CLI's token (403 without).
+//                                dashboard's Origin or the token (403 without); the token (401 as above) when the
+//                                run is not a plain scripted local run, or its record cannot be read.
 import { execFile } from "node:child_process"
 import { randomBytes, timingSafeEqual } from "node:crypto"
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { allowedOrigin, HttpError, readJson } from "../http.ts"
-import { childEnv } from "../paid.ts"
+import { allowedOrigin, type Caller, gate, type GateOptions, HttpError, type Need, readJson } from "../http.ts"
+import { childEnv, paidCallsOff } from "../paid.ts"
 import { statusBody } from "./doctor.ts"
 import { scoreboard } from "./scoreboard.ts"
-import { BIXBENCH, listRuns, runDetail, RUNS, safeId } from "./store.ts"
+import { BIXBENCH, listRuns, runDetail, runDir, RUNS, safeId } from "./store.ts"
 import { BadRequest, CannotCancel, checkStart, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
-import { RECORD, type StartBody } from "./types.ts"
+import { type GlhfRun, RECORD, type StartBody } from "./types.ts"
 
-// Any web page can POST to localhost, and runs cost money. So a request may start a cloud run or name a case
-// directory only with this token, which the server writes to a file only local users can read. Runs with a
-// real model need the token or the dashboard's own Origin (the server refuses other Origins before this).
+// Any web page can POST to localhost, any program on this machine can send any Origin, and runs cost money. So
+// whatever can spend or touches shared state needs this token, which the server writes to a file only this user
+// can read (mode 600). The CLI reads the file. A browser cannot, and no route hands the token out (a route that
+// gave it to an Origin would be as spoofable as the Origin): a person pastes it into the dashboard once per engine
+// start, and the dashboard sends it as the x-glhf-token header.
 export const TOKEN_FILE = `${RUNS}/.token`
 const token = randomBytes(24).toString("hex")
 
 let tracker: Tracker | undefined
+let announced = false
 let retry: ReturnType<typeof setTimeout> | undefined
 let status: { at: number; body: Awaited<ReturnType<typeof statusBody>> } | undefined
 
@@ -49,6 +56,8 @@ export async function startTracker(): Promise<void> {
   rmSync(fresh, { force: true })
   writeFileSync(fresh, token, { mode: 0o600, flag: "wx" })
   renameSync(fresh, TOKEN_FILE)
+  // The path, never the token: this output may end up in a shared log.
+  if (!announced) { announced = true; console.log(`session token (for paid runs from the dashboard; paste it there when asked): ${TOKEN_FILE}`) }
   try {
     tracker = await openTracker()
     const open = tracker.unfinished()
@@ -68,12 +77,24 @@ export async function stopTracker(): Promise<void> {
   await open?.close()
 }
 
-// The roles as the solver defines them (instructions, time shares), read from the Python code once.
-let roles: Promise<unknown> | undefined
-const loadRoles = () => (roles ??= new Promise((ok, fail) => {
+// The roles as the solver defines them (instructions, time shares), read from the Python code once. `uv run` may
+// install packages, so a failure is kept for a minute instead of being tried again on every request.
+type RolesLoader = () => Promise<unknown>
+const readRoles: RolesLoader = () => new Promise((ok, fail) => {
   execFile("uv", ["run", "python", "-m", "bixbench3.inspect_harness.swarm.catalog"], { cwd: BIXBENCH, env: childEnv(), timeout: 120_000, maxBuffer: 8 << 20 },
-    (error, stdout) => { try { if (error) throw error; ok(JSON.parse(stdout)) } catch (e) { roles = undefined; fail(e) } })
-}))
+    (error, stdout) => { try { if (error) throw error; ok(JSON.parse(stdout)) } catch (e) { fail(e) } })
+})
+export const ROLES_RETRY_MS = 60_000
+let roles: { value: Promise<unknown>; failedAt?: number } | undefined
+function loadRoles(load: RolesLoader, now = Date.now()): Promise<unknown> {
+  if (roles && (roles.failedAt === undefined || now - roles.failedAt < ROLES_RETRY_MS)) return roles.value
+  const entry: NonNullable<typeof roles> = { value: Promise.resolve().then(load) }
+  entry.value.catch(() => { entry.failedAt = Date.now() })
+  roles = entry
+  return entry.value
+}
+/** Forget the cached roles (tests). */
+export const forgetRoles = () => { roles = undefined }
 
 const json = (res: ServerResponse, code: number, body: unknown) => {
   res.writeHead(code, { "content-type": "application/json" })
@@ -92,26 +113,59 @@ const hasToken = hasSessionToken
 /** This server's token, for the CLI and for tests in the same process. Never send it in a response. */
 export const sessionToken = () => token
 
+/** Who is asking, for code outside this file (the chat routes): `access(callerOf(req), need)` from http.ts. */
+export const callerOf = (req: Pick<IncomingMessage, "headers">, env: NodeJS.ProcessEnv = process.env): Caller => ({ origin: allowedOrigin(req, env), token: hasSessionToken(req) })
+
 /**
- * May this request start or stop a run? Only the dashboard's own page (its Origin) or a holder of the token. A
- * request with no Origin is not a browser, and anything on this machine or network can send one.
+ * The trust rule with this engine's token: true when the request may go on, else the 403 or 401 has been sent
+ * (see `gate` in http.ts). Check NO_PAID_CALLS before calling it for paid work.
  */
-const mayControl = (req: IncomingMessage) => hasToken(req) || allowedOrigin(req)
-const REFUSED = "starting and cancelling runs needs the dashboard's Origin or this machine's token (the x-glhf-token header; `npm run glhf -- run ...` sends it)"
+export const requireTrust = (req: IncomingMessage, res: ServerResponse, need: Need, what: string, options: Partial<GateOptions> = {}): boolean =>
+  gate(req, res, need, what, { hasToken: hasSessionToken, tokenFile: TOKEN_FILE, ...options })
+
+const has = (value: unknown) => value !== undefined && value !== null && value !== false && value !== "" && value !== 0
+/**
+ * Does starting this need the token? Yes for all but the plain scripted run: a real model (anything that is not
+ * exactly "mock"), role models, Exa, shared memory, a cloud run, a case directory. A body this misses is still
+ * not started: the caller is then checked as an unknown one (checkStart with no trust), who gets the demo only.
+ */
+export function needsToken(body: unknown): boolean {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false // refused as a bad request
+  const b = body as Record<string, unknown>
+  const roleModels = b.roleModels
+  return (typeof b.model === "string" && b.model !== "mock") || b.mode === "cloud" || has(b.exa) || has(b.memory) || has(b.caseDir)
+    || (typeof roleModels === "object" && roleModels !== null && Object.keys(roleModels).length > 0)
+}
+
+/** Is this a run only a token holder may stop? Everything but a scripted local run without Exa and memory. */
+export const paidRun = (run: GlhfRun): boolean =>
+  run.model !== "mock" || run.mode !== "local" || Object.keys(run.roleModels ?? {}).length > 0 || Boolean(run.settings?.exa) || Boolean(run.settings?.memory)
+
+export interface GlhfOptions { /** Reads the roles from the solver code. Tests replace it. */ loadRoles?: RolesLoader }
 
 /** Handles a request under /api/glhf. `parts` is the path split on "/": api, glhf, runs, :id. */
-export async function handleGlhf(req: IncomingMessage, res: ServerResponse, parts: string[]): Promise<void> {
+export async function handleGlhf(req: IncomingMessage, res: ServerResponse, parts: string[], options: GlhfOptions = {}): Promise<void> {
   try {
     if (parts[2] === "status" && req.method === "GET") {
       if (!status || Date.now() - status.at > 30_000) status = { at: Date.now(), body: await statusBody() }
       return json(res, 200, { record: RECORD, ...status.body })
     }
-    if (parts[2] === "roles" && req.method === "GET") return json(res, 200, await loadRoles())
+    if (parts[2] === "roles" && req.method === "GET") {
+      if (!requireTrust(req, res, "scripted", "reading the roles (it runs uv)")) return
+      return json(res, 200, await loadRoles(options.loadRoles ?? readRoles))
+    }
     if (parts[2] === "runs" && !parts[3] && req.method === "GET") return json(res, 200, listRuns())
     if (parts[2] === "runs" && !parts[3] && req.method === "POST") {
       const body = await readJson<StartBody>(req) // 415 unless application/json, 413 over 1 MB
-      if (!mayControl(req)) return json(res, 403, { error: REFUSED })
-      const requests = checkStart(body, { token: hasToken(req), origin: allowedOrigin(req) })
+      if (!requireTrust(req, res, "scripted", "starting and cancelling runs")) return
+      if (!hasToken(req) && needsToken(body)) {
+        // The switch first: with paid calls off, what is paid is refused as such (400), whoever asks. Checked with
+        // full trust so that the refusal is about the switch and not about the caller.
+        if (paidCallsOff()) checkStart(body, true)
+        if (!requireTrust(req, res, "spend", "a run with a real model, Exa, memory, the cloud or a case directory")) return
+      }
+      // Past this point a caller without the token has asked for the plain scripted run only.
+      const requests = checkStart(body, { token: hasToken(req), origin: false })
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
       const ids = (await tracker.startChain(requests)).map((run) => run.id)
       return json(res, 201, { id: ids[0], ids }) // `id` is the first run: what callers that start one run read
@@ -128,7 +182,13 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
       let id: string
       try { id = decodeURIComponent(parts[3]) } catch { return json(res, 400, { error: "invalid run id" }) }
       if (!safeId(id)) return json(res, 400, { error: "invalid run id" })
-      if (!mayControl(req)) return json(res, 403, { error: REFUSED })
+      if (!requireTrust(req, res, "scripted", "starting and cancelling runs")) return
+      if (!hasToken(req)) {
+        // A scripted local run may be stopped from the dashboard's page. Anything else, and a run folder whose
+        // record cannot be read (so nobody knows what it is), needs the token.
+        const run = listRuns().find((r) => r.id === id)
+        if ((run ? paidRun(run) : existsSync(runDir(id))) && !requireTrust(req, res, "spend", "cancelling a run that is not a scripted local run")) return
+      }
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
       return json(res, 200, await tracker.cancel(id))
     }

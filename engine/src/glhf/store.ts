@@ -1,13 +1,18 @@
 // Run records on disk. The durable task is the source of truth for what happens next; record.json is its
 // projection for the CLI, the server and the dashboard, rewritten (atomically) at every transition.
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { appendFileSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import { createHash } from "node:crypto"
-import { resolve } from "node:path"
+import { resolve, sep } from "node:path"
 import { ROOT } from "../config.ts"
 import type { GlhfRun, RunRequest, RunSettings } from "./types.ts"
 
 export const GLHF = resolve(ROOT, "glhf")
-export const BIXBENCH = resolve(GLHF, "bixbench")
+/**
+ * The folder the benchmark commands are started in. GLHF_BIXBENCH_DIR replaces it; it is read at each use, so a test
+ * can point it at a folder that does not exist and see what a failed spawn leaves behind.
+ */
+export const bixbenchDir = () => (process.env.GLHF_BIXBENCH_DIR ? resolve(process.env.GLHF_BIXBENCH_DIR) : resolve(GLHF, "bixbench"))
+export const BIXBENCH = bixbenchDir()
 /** Lessons the swarm keeps between runs. In git, so the whole team shares them. */
 export const MEMORY = resolve(GLHF, "memory")
 /** Where runs and the tracker's database live. GLHF_RUNS_DIR replaces it (tests and throwaway servers use a temporary folder). */
@@ -48,13 +53,73 @@ export function writeJson(file: string, value: unknown) {
   renameSync(tmp, file)
 }
 
-export function readJson<T>(file: string): T | undefined {
-  try { return JSON.parse(readFileSync(file, "utf8")) as T } catch { return undefined }
+/** The most that is read of one file. GLHF_MAX_READ_BYTES replaces it. Larger files count as unreadable; `tail` reads their end. */
+export const maxRead = () => Number(process.env.GLHF_MAX_READ_BYTES ?? 32 << 20)
+
+/**
+ * Open a file for reading, or undefined when it must not be read. A run folder holds files the sandbox writes
+ * (outputs/ and workspace/ are mounted into it), and what the engine reads there is sent on by GET
+ * /api/glhf/runs/:id. A symlink left in outputs/ would make that route return any file of this machine, .env
+ * included. So, for every file the engine reads:
+ *   - it must be a regular file: not a symlink (lstat, and O_NOFOLLOW on the open), a folder, a pipe or a device
+ *   - under glhf/runs, its real path must stay inside its run folder, which also refuses a symlinked folder on the
+ *     way (outputs/glhf -> somewhere else)
+ * The size is taken from the open file, so it is the size of what is read.
+ */
+function openSafe(file: string): { fd: number; size: number } | undefined {
+  let fd: number | undefined
+  try {
+    if (!lstatSync(file).isFile()) return undefined
+    const path = resolve(file)
+    if (path.startsWith(RUNS + sep)) {
+      const inside = path.slice(RUNS.length + 1).split(sep)
+      const root = realpathSync(inside.length > 1 ? resolve(RUNS, inside[0]) : RUNS)
+      if (!realpathSync(path).startsWith(root + sep)) return undefined
+    }
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) { closeSync(fd); return undefined }
+    return { fd, size: stat.size }
+  } catch {
+    if (fd !== undefined) try { closeSync(fd) } catch { /* already closed */ }
+    return undefined
+  }
 }
 
-export const readText = (file: string) => (existsSync(file) ? readFileSync(file, "utf8") : null)
+/** `length` bytes of an open file from `from`, as text. Closes the file. */
+function slurp(fd: number, from: number, length: number): string | null {
+  try {
+    const buffer = Buffer.alloc(length)
+    let got = 0
+    for (let n: number; got < length && (n = readSync(fd, buffer, got, length - got, from + got)) > 0;) got += n
+    return buffer.toString("utf8", 0, got)
+  } catch { return null } finally { closeSync(fd) }
+}
 
-export const loadStored = (id: string) => (safeId(id) ? readJson<Stored>(`${runDir(id)}/record.json`) : undefined)
+/**
+ * The text of a file, or null when there is none that may be read: it is missing, not a regular file, leaves its
+ * run folder (openSafe), or is larger than maxRead(). The one way the engine reads a file of a run.
+ */
+export function readText(file: string): string | null {
+  const open = openSafe(file)
+  if (!open) return null
+  if (open.size > maxRead()) { closeSync(open.fd); return null }
+  return slurp(open.fd, 0, open.size)
+}
+
+export function readJson<T>(file: string): T | undefined {
+  const text = readText(file)
+  if (text === null) return undefined
+  try { return JSON.parse(text) as T } catch { return undefined }
+}
+
+/** A record that has the shape the tracker works with; anything else counts as unreadable. */
+export function loadStored(id: string): Stored | undefined {
+  if (!safeId(id)) return undefined
+  const stored = readJson<Stored>(`${runDir(id)}/record.json`)
+  const run = stored?.run as Partial<GlhfRun> | undefined
+  return stored && typeof stored === "object" && run && typeof run === "object" && typeof run.id === "string" && typeof run.phase === "string" && typeof run.startedAt === "number" ? stored : undefined
+}
 
 export function saveStored(stored: Stored) {
   mkdirSync(runDir(stored.run.id), { recursive: true })
@@ -107,22 +172,33 @@ export function newRunId(task: string, solver: string, now = new Date()): string
   return id
 }
 
-/** Last lines of a log, for error messages. */
+/** Last lines of a log, for error messages. Of a long log only the last 64 KB are read. */
 export function tail(file: string, lines = 12): string {
-  const text = readText(file)
+  const open = openSafe(file)
+  if (!open) return ""
+  const length = Math.min(open.size, 64 << 10)
+  const text = slurp(open.fd, open.size - length, length)
   return text ? text.trim().split("\n").slice(-lines).join("\n") : ""
 }
+
+/**
+ * Where the files a run's solver leaves are read from, relative to the run folder. The one place these paths are
+ * named: change `ledger` here when the swarm writes its trusted ledger somewhere else.
+ * Today all three are inside outputs/, which the sandbox can write, so they are untrusted text: they are read
+ * through readText (never through a symlink, never out of the run folder, never more than maxRead()).
+ */
+export const RUN_FILES = { ledger: "outputs/glhf/ledger.json", findings: "outputs/glhf/FINDINGS.md", methods: "outputs/METHODS.md" } as const
+export const runFile = (id: string, name: keyof typeof RUN_FILES) => resolve(runDir(id), RUN_FILES[name])
 
 export interface Detail { run: GlhfRun; ledger: unknown | null; findings: string | null; methods: string | null }
 
 export function runDetail(id: string): Detail | undefined {
   const stored = loadStored(id)
   if (!stored) return undefined
-  const outputs = `${runDir(id)}/outputs`
   return {
     run: publicRun(stored),
-    ledger: readJson<unknown>(`${outputs}/glhf/ledger.json`) ?? null,
-    findings: readText(`${outputs}/glhf/FINDINGS.md`),
-    methods: readText(`${outputs}/METHODS.md`),
+    ledger: readJson<unknown>(runFile(id, "ledger")) ?? null,
+    findings: readText(runFile(id, "findings")),
+    methods: readText(runFile(id, "methods")),
   }
 }

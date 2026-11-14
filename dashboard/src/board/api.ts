@@ -1,5 +1,6 @@
 // Client for the engine (engine/src/server.ts). The engine owns runs; the dashboard only watches and starts them.
 import { useEffect, useMemo, useState } from "react"
+import { engineFetch } from "@/lib/token"
 
 export const ENGINE = (import.meta.env.VITE_ENGINE_URL as string | undefined) ?? "http://localhost:8787"
 
@@ -28,8 +29,8 @@ export type BoardEvent = { key: string; at: number } & (
 
 export const get = <T,>(path: string): Promise<T> => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
 export const post = <T,>(path: string, body?: unknown): Promise<T> =>
-  fetch(ENGINE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) })
-    .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json()).error ?? r.status))))
+  engineFetch(ENGINE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) })
+    .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json().catch(() => ({}))).error ?? `The engine answered ${r.status}.`))))
 export const memo = (runId: string) => fetch(`${ENGINE}/api/runs/${encodeURIComponent(runId)}/memo`).then((r) => (r.ok ? r.text() : ""))
 
 /** Every event of a run, replayed then live. Events with the same key replace each other (replays after a crash). */

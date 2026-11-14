@@ -8,8 +8,11 @@ extra fields, so a row cannot be passed through by accident.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import random
+import secrets
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -136,16 +139,39 @@ def find_capsules(capsules: list[Capsule], wanted: list[str]) -> list[Capsule]:
     return picked
 
 
+def new_shuffle_salt() -> str:
+    """A fresh secret for one run's option shuffle. Host only: it is written to the run folder
+    (runner.py) and never to a prompt, the sandbox, the environment or run.json."""
+    return secrets.token_hex(32)
+
+
+def _shuffle_rng(salt: str, seed: int, question_id: str) -> random.Random:
+    digest = hmac.new(salt.encode(), f"{seed}:{question_id}".encode(), hashlib.sha256).digest()
+    return random.Random(int.from_bytes(digest, "big"))
+
+
 def public_view(
-    questions: Iterable[Question], answer_mode: AnswerMode = "open", seed: int = 0
+    questions: Iterable[Question],
+    answer_mode: AnswerMode = "open",
+    seed: int = 0,
+    salt: str | None = None,
 ) -> tuple[list[PublicQuestion], dict[str, KeyEntry]]:
     """The solver's view of the questions, and the grading key that stays on the host.
 
     Multiple-choice options are the ideal answer and the distractors (plus the refusal option in
-    "mcq-refusal"), shuffled with a seed derived from `seed` and the question id so a rerun gives
-    the same letters. The official harness shuffles without a fixed seed."""
+    "mcq-refusal"), shuffled with a generator keyed by `salt`, a secret of this run that only
+    the host holds, together with `seed` and the question id. The ideal always enters the
+    shuffle in slot 0, so a shuffle keyed by seed and question id alone would let anyone who
+    knows them compute the correct letter without reading an option; the salt is what prevents
+    that, and it is required in the multiple-choice modes. The same salt gives the same letters
+    again, which is how a finished run is graded. The official harness shuffles unseeded."""
     if answer_mode not in ANSWER_MODES:
         raise ValueError(f"unknown answer mode {answer_mode!r}")
+    if answer_mode != "open" and not salt:
+        raise ValueError(
+            "multiple-choice options are shuffled with a host-only salt; none was given "
+            "(a run made before the salt existed cannot be re-keyed)"
+        )
     public: list[PublicQuestion] = []
     key: dict[str, KeyEntry] = {}
     for q in questions:
@@ -158,7 +184,8 @@ def public_view(
         options = [q.ideal, *q.distractors]
         if answer_mode == "mcq-refusal":
             options.append(REFUSAL_OPTION)
-        random.Random(f"{seed}:{q.question_id}").shuffle(options)
+        assert salt is not None
+        _shuffle_rng(salt, seed, q.question_id).shuffle(options)
         public.append(
             PublicQuestion(question_id=q.question_id, question=q.question, options=options)
         )

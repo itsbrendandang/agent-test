@@ -4,6 +4,7 @@ import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
 import { runState } from "@/lib/status"
 import { fmtScore } from "@/lib/format"
 import { usePaidCalls } from "@/lib/paid"
+import { engineFetch } from "@/lib/token"
 
 interface Hit {
   kind: "swarm" | "board"; id: string; title: string; status: string; startedAt: number; score?: number
@@ -63,7 +64,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
     asking.current?.abort()
     const stop = (asking.current = new AbortController())
     setAsked({ state: "loading", question: q })
-    fetch(`${ENGINE}/api/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, kind }), signal: stop.signal })
+    engineFetch(`${ENGINE}/api/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, kind }), signal: stop.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(typeof body.error === "string" ? body.error : `The engine answered ${r.status}.`)

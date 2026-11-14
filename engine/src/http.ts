@@ -2,6 +2,8 @@
 // - it answers only requests addressed to this machine by name (Host check, against DNS rebinding),
 // - a request that carries an Origin must come from the dashboard (browsers always send Origin on
 //   cross-origin POSTs, so another web page cannot start a run or read a memo),
+// - an Origin is not a credential: any program on this machine can send one. Whatever can spend money or touch
+//   shared state needs the session token (x-glhf-token); see `gate` below for the one rule,
 // - POST bodies must be application/json (a cross-origin text/plain POST needs no preflight) and small,
 // - ids that become folder names are checked before any path is built.
 import { timingSafeEqual } from "node:crypto"
@@ -14,8 +16,10 @@ export class HttpError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status }
 }
 
-// 5317 is the dashboard (Vite dev server, Docker, Tauri dev); 5173 and 4173 are Vite's defaults.
-const DEFAULT_ORIGINS = [5317, 5173, 4173].flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`])
+// 5317 is the dashboard (Vite dev server, Docker, Tauri dev). Vite's own default ports (5173, 4173) are not listed:
+// any other project's dev server would be the dashboard. The three tauri entries are the built desktop app
+// (tauri://localhost on macOS and Linux, http(s)://tauri.localhost on Windows). Others go in DASHBOARD_ORIGINS.
+const DEFAULT_ORIGINS = [5317].flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`])
   .concat(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"])
 
 const list = (value: string | undefined) => (value ?? "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
@@ -35,6 +39,56 @@ export function originState(req: HasHeaders, env: NodeJS.ProcessEnv = process.en
 
 /** True only when the request carries an Origin on the dashboard allow-list. */
 export const allowedOrigin = (req: HasHeaders, env: NodeJS.ProcessEnv = process.env): boolean => originState(req, env) === "allowed"
+
+/** Who is asking: `origin` the dashboard's own page (or something that says so), `token` a holder of the session token. */
+export interface Caller { origin: boolean; token: boolean }
+
+/**
+ * What a request is about to do:
+ *   "read"      read results. Open to any local caller (the Host and Origin checks in `guard` have passed).
+ *   "scripted"  start, stop or look up something that costs nothing: needs the dashboard's Origin or the token.
+ *   "spend"     anything that can spend or that touches shared state (a real model, Exa, shared memory, cloud, a
+ *               case directory, stopping a paid run, ideal answers): needs the token. An Origin is not enough,
+ *               because outside a browser it is a header anyone can type.
+ */
+export type Need = "read" | "scripted" | "spend"
+
+/** "ok", "forbidden" (403: neither the dashboard nor a token holder) or "token" (401: the dashboard must send the token). */
+export function access(caller: Caller, need: Need): "ok" | "forbidden" | "token" {
+  if (caller.token || need === "read") return "ok"
+  if (!caller.origin) return "forbidden"
+  return need === "spend" ? "token" : "ok"
+}
+
+/** Where the engine writes its session token, as told to people. The engine prints the real path at start-up. */
+export const TOKEN_HINT = "glhf/runs/.token"
+
+/**
+ * The body of the 401 that asks for the token. The dashboard recognises it by `needsToken: true` and `field: "token"`,
+ * asks the person for the token once, and repeats the request with the x-glhf-token header.
+ */
+export const tokenNeeded = (what: string, tokenFile: string = TOKEN_HINT) => ({
+  error: `${what} needs this engine's session token in the x-glhf-token header. It is in ${tokenFile} on the machine the engine runs on, and changes when the engine restarts`,
+  field: "token" as const, needsToken: true as const, tokenFile,
+})
+
+export interface GateOptions { hasToken: (req: IncomingMessage) => boolean; env?: NodeJS.ProcessEnv; tokenFile?: string }
+
+/**
+ * The one trust rule, for every route. Returns true when the request may go on. Otherwise the response has been
+ * sent: 403 {error} for a caller that is neither the dashboard nor a token holder, 401 {error, field: "token",
+ * needsToken: true, tokenFile} when the dashboard's page must send the token. `what` names the action in the message.
+ * The NO_PAID_CALLS switch is not weighed here: check it first, so that paid work is refused whoever asks.
+ */
+export function gate(req: IncomingMessage, res: ServerResponse, need: Need, what: string, options: GateOptions): boolean {
+  const state = access({ origin: allowedOrigin(req, options.env), token: options.hasToken(req) }, need)
+  if (state === "ok") return true
+  const body = state === "token" ? tokenNeeded(what, options.tokenFile)
+    : { error: `${what} needs the dashboard's Origin or this machine's token (the x-glhf-token header, from ${options.tokenFile ?? TOKEN_HINT}; the CLI, npm run glhf -- run ..., sends it)` }
+  res.writeHead(state === "token" ? 401 : 403, { "content-type": "application/json", "cache-control": "no-store" })
+  res.end(JSON.stringify(body))
+  return false
+}
 
 /** True when Host names this machine (localhost, 127.0.0.1, [::1], or a name in ENGINE_HOSTS). Any port. */
 export function allowedHost(req: HasHeaders, env: NodeJS.ProcessEnv = process.env): boolean {

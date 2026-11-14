@@ -1,6 +1,7 @@
 // Client for the GLHF run tracker routes of the engine (/api/glhf/*). Polling, no SSE.
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
+import { engineFetch } from "@/lib/token"
 
 // "queued": waits for another run (`after`) or for the runner. "cancelled": stopped on request; settled, but not a result.
 export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed" | "cancelled"
@@ -99,7 +100,7 @@ export class Refused extends Error {
 const send = async <T,>(path: string, body?: unknown): Promise<T> => {
   let r: Response
   try {
-    r = await fetch(ENGINE + path, body === undefined ? { method: "POST" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    r = await engineFetch(ENGINE + path, body === undefined ? { method: "POST" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
   } catch { throw new Refused("The engine cannot be reached. Start it with npm run engine.", 0) }
   const reply = await r.json().catch(() => ({}))
   if (r.ok) return reply as T

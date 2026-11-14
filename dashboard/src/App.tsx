@@ -7,12 +7,15 @@ import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle"
 import { Toolbar, ToolbarButton } from "@ui-sdk/react/toolbar"
 import {
   Activity, BarChart3, Expand, Globe2, Home, Layers, PanelRightClose, PanelRightOpen,
-  FlaskConical, Microscope, Search, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
+  FlaskConical, LayoutDashboard, Microscope, Search, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
 } from "lucide-react"
 import { Buddy, Mark } from "./components/Buddy"
 import { PaidIndicator } from "./components/Shared"
+import { TokenPrompt } from "./components/TokenPrompt"
 import { fmtMetric as fmt } from "./lib/format"
 import { usePaidCalls } from "./lib/paid"
+import { initialView, viewOfHash, type View } from "./nav"
+import { HomeView } from "./views/HomeView"
 import { ParamPanel } from "./components/ParamPanel"
 import { SideCrew } from "./components/SideCrew"
 import { SimCard } from "./components/SimCard"
@@ -38,11 +41,12 @@ const AnalyticsView = lazy(() => import("./views/AnalyticsView").then((m) => ({ 
 
 const categories = Object.keys(categoryLabels) as Category[]
 
-const rail = [
+const rail: { label: View; icon: typeof Home; hint: string }[] = [
+  { label: "Home", icon: Home, hint: "" },
   { label: "Swarm", icon: Microscope, hint: "" },
   { label: "Board", icon: FlaskConical, hint: "" },
   { label: "Experiments", icon: Search, hint: "" },
-  { label: "Overview", icon: Home, hint: "" },
+  { label: "Overview", icon: LayoutDashboard, hint: "" },
   { label: "Simulations", icon: Layers, hint: "" },
   { label: "Agents", icon: Users, hint: "" },
   { label: "Worlds", icon: Globe2, hint: "World and map definitions shared across simulations." },
@@ -50,10 +54,7 @@ const rail = [
   { label: "Settings", icon: Settings, hint: "App preferences and model / API configuration." },
 ]
 
-const viewFromHash = () => {
-  const label = decodeURIComponent(window.location.hash.slice(1))
-  return rail.some((r) => r.label === label) ? label : undefined
-}
+const viewFromHash = () => viewOfHash(window.location.hash)
 
 export default function App() {
   const [simId, setSimId] = useState(simulations[0]?.id ?? emptySimulation.id)
@@ -67,7 +68,7 @@ export default function App() {
   const [parade, setParade] = useState(0)
   const logoClicks = useRef(0)
   const paid = usePaidCalls()
-  const [view, setView] = useState(() => viewFromHash() ?? "Swarm")
+  const [view, setView] = useState<string>(() => initialView(window.location.hash))
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {
     const sync = () => { const v = viewFromHash(); if (v) setView(v) }
@@ -108,6 +109,7 @@ export default function App() {
     <Suspense fallback={null}>
     <div className="app">
       <Splash />
+      <TokenPrompt />
       <nav className="rail" aria-label="Main">
         <button type="button" className="mark-btn" aria-label="Drug Board" onClick={() => {
           logoClicks.current += 1
@@ -282,12 +284,13 @@ export default function App() {
         <OverviewView simCount={simulations.length} tick={tick} eventCount={events.length} active={active}
           onOpenSimulations={() => go("Simulations")} onMeetCrew={() => go("Agents")} onOpenKeys={() => go("Settings")} />
       )}
+      {view === "Home" && <HomeView onOpen={go} />}
       {view === "Swarm" && <SwarmView onSearch={(q) => { sessionStorage.setItem("experiments.q", q); go("Experiments") }} />}
       {view === "Board" && <BoardView />}
       {view === "Agents" && <AgentsView />}
       {view === "Experiments" && <ExperimentsView onOpen={go} />}
       {view === "Settings" && <SettingsView />}
-      {!["Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Experiments", "Settings"].includes(view) && (
+      {!["Home", "Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Experiments", "Settings"].includes(view) && (
         <PlaceholderView title={view} hint={rail.find((r) => r.label === view)!.hint} />
       )}
       <footer className="shell-foot"><PaidIndicator state={paid} onOpen={() => go("Settings")} /></footer>

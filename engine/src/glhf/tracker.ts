@@ -6,10 +6,11 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { createRegistry, defineExtension, Harness, type TaskId } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
+import { HttpError } from "../http.ts"
 import { HOW_TO_ALLOW, paidCallsOff } from "../paid.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { DEMO_CASE, type Stored, listStored, loadStored, newRunId, patchRun, publicRun, runDir, RUNS, safeId, saveStored, settingsOf, trackerLog } from "./store.ts"
-import { cancelDetail, cancelledWith, LOCAL_POLL, localEnded, localUsage, type RunInput, type RunResult, runnerAlive, RunTask, stopRun } from "./task.ts"
+import { cancelDetail, cancelledWith, failUntracked, LOCAL_POLL, localEnded, localUsage, type RunInput, type RunResult, runnerAlive, RunTask, stopRun } from "./task.ts"
 import { type Field, type GlhfRun, LIMITS, type RunRequest, settled, type Solver, type StartBody } from "./types.ts"
 
 const ctx = BACKGROUND_CONTEXT
@@ -20,11 +21,66 @@ export class TrackerBusy extends Error {
   pid: number
   constructor(pid: number) { super(`another process (pid ${pid}) is tracking runs`); this.pid = pid }
 }
+/** The inputs a refusal can be about: the form's fields, and the two that acknowledge a cloud run's bill. */
+export type AnyField = Field | "billCloud" | "maxHours"
 /** A refused request. `field` names the input the refusal is about, when there is one. */
 export class BadRequest extends Error {
-  field?: Field
-  constructor(message: string, field?: Field) { super(message); if (field) this.field = field }
+  field?: AnyField
+  constructor(message: string, field?: AnyField) { super(message); if (field) this.field = field }
 }
+
+/**
+ * The hard stop of a local run, as a multiple of its maxTokens. maxTokens is the budget the solvers plan by; the
+ * limit that ends the run whatever the solver does is Inspect's token_limit, which the harness sets to twice that
+ * (glhf/bixbench/src/bixbench3/inspect_harness/tasks.py, `token_limit=max_tokens * 2`). Keep the two in step.
+ */
+export const HARD_STOP = 2
+/** The most a run can spend, in tokens: nothing for the scripted model, and unknown here for a cloud run (0). */
+export const mostTokens = (request: Pick<RunRequest, "mode" | "model" | "maxTokens" | "roleModels">) =>
+  request.mode !== "local" || (request.model === "mock" && !Object.keys(request.roleModels ?? {}).length) ? 0 : (request.maxTokens ?? 0) * HARD_STOP
+
+/** Tokens all local runs of one day may use together. GLHF_DAILY_TOKENS replaces it (0 refuses every run that can spend). */
+export const DAILY_TOKENS = 20_000_000
+export const dailyTokenCap = () => {
+  const cap = Number(process.env.GLHF_DAILY_TOKENS ?? DAILY_TOKENS)
+  return Number.isFinite(cap) && cap >= 0 ? cap : DAILY_TOKENS // a value that is not a number must not switch the cap off
+}
+/**
+ * Tokens counted against today's cap (local time), as the board counts dollars (board.ts spentToday): every local
+ * run that started today, whatever its state.
+ *   settled, usage known:    what it used
+ *   settled, usage unknown:  its full budget if its runner was started (it may have spent it), else nothing
+ *   running or queued:       its full budget (mostTokens), so runs started together cannot each pass at zero
+ * Scripted runs count nothing. Cloud runs are not counted: their tokens are spent on the VM under the cloud
+ * runner's own limit, and the tracker never sees them.
+ */
+export function tokensToday(stored: Stored[] = listStored(), now = new Date()): number {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  let tokens = 0
+  for (const { run, request } of stored) {
+    if (run.startedAt < midnight || !request) continue
+    const most = mostTokens(request)
+    if (!most) continue
+    const used = Object.values(run.usage ?? {}).reduce((sum, u) => sum + (Number.isFinite(u?.total_tokens) ? u.total_tokens : 0), 0)
+    tokens += !settled(run.phase) ? Math.max(used, most) : run.usage ? used : existsSync(`${runDir(run.id)}/runner.pid`) ? most : 0
+  }
+  return tokens
+}
+/** Today's token cap would be passed by this start. HTTP 429. `field` is the input to lower. */
+export class DailyTokens extends HttpError {
+  field: AnyField = "maxTokens"
+  constructor(today: number, ask: number, cap: number) {
+    super(429, `the daily token cap would be passed: ${today.toLocaleString("en-US")} of ${cap.toLocaleString("en-US")} tokens are counted for today's local runs (running and queued ones at their hard stop, ${HARD_STOP} x maxTokens), and this start can use up to ${ask.toLocaleString("en-US")} more. Lower maxTokens, wait until tomorrow, or raise GLHF_DAILY_TOKENS`)
+  }
+}
+
+/** The longest billing a cloud start may accept, in hours (the benchmark's own limit is 24). GLHF_CLOUD_MAX_HOURS replaces it. */
+export const cloudMaxHours = () => {
+  const cap = Number(process.env.GLHF_CLOUD_MAX_HOURS ?? 24)
+  return Number.isInteger(cap) && cap >= 1 ? cap : 24
+}
+/** A checked cloud request carries the hours of billing its caller accepted. */
+export type Acknowledged = RunRequest & { maxHours?: number }
 /** A local run is still going. Local runs share this machine's CPU under a time limit, so only one runs at a time. */
 export class LocalBusy extends Error {
   run: string
@@ -95,7 +151,7 @@ export type Trust = boolean | { token: boolean; origin: boolean }
 export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunRequest {
   const token = trust === true || (typeof trust === "object" && trust.token)
   const known = token || (typeof trust === "object" && trust.origin)
-  const bad = (why: string, field?: Field): never => { throw new BadRequest(why, field) }
+  const bad = (why: string, field?: AnyField): never => { throw new BadRequest(why, field) }
   if (typeof body !== "object" || body === null || Array.isArray(body)) bad("the request body must be a JSON object")
   if (body.mode !== "local" && body.mode !== "cloud") bad('mode must be "local" or "cloud"', "mode")
   if (body.solver !== "single" && body.solver !== "glhf") bad('solver must be "single" or "glhf"', "solver")
@@ -131,14 +187,16 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
     if ((body.task ?? "demo") !== "demo" && !body.caseDir) bad("local runs cover the demo case only; BixBench3 tasks need the cloud runner (mode cloud)")
   }
   if (body.model !== "mock" && !known) bad(`runs with a real model cost money, so they start from the dashboard or the CLI: ${cli}`, "model")
-  // A real model spends money until something stops it. The token budget is that stop. (The cloud runner has its own.)
-  if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad("maxTokens is required for a real model: it is the limit on what the run can spend", "maxTokens")
+  // A real model spends money until something stops it. maxTokens is what the solver plans by (it winds down as the
+  // budget runs out, checking after each model call); the stop that does not depend on the solver is HARD_STOP
+  // times that. So the message names both. (The cloud runner has its own limit.)
+  if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad(`maxTokens is required for a real model: it is the token budget the run plans by. It is not a hard limit: the run is cut off only at ${HARD_STOP} x maxTokens, so count on up to that being spent`, "maxTokens")
   if ((body.exa || body.memory) && !known) bad(`exa and memory are not open to unknown callers: ${cli}`, body.exa ? "exa" : "memory")
   const request: RunRequest = { mode: body.mode!, task: body.task ?? "demo", solver: body.solver!, model: body.model!, roleModels }
   if (body.effort) request.effort = body.effort
   if (body.project) request.project = body.project
   if (body.resultsBucket) request.resultsBucket = body.resultsBucket
-  const whole = (name: string, field: Field, value: unknown, [min, max]: readonly [number, number]) => {
+  const whole = (name: string, field: AnyField, value: unknown, [min, max]: readonly [number, number]) => {
     const n = Number(value)
     if (!Number.isInteger(n) || n < min || n > max) bad(`${name} must be a whole number from ${min} to ${max}`, field)
     return n
@@ -157,6 +215,16 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   }
   if (body.mode === "cloud" && (body.maxTokens !== undefined || body.seed !== undefined || body.timeLimit)) {
     bad("timeLimit, maxTokens and seed are for local runs so far; the cloud runner does not pass them on yet", body.timeLimit ? "timeLimit" : body.maxTokens !== undefined ? "maxTokens" : "seed")
+  }
+  // A cloud run creates a VM that bills until it is removed, and takes no token or time limit from here. The token
+  // alone must not be enough to start one (the CLI reads it by itself): the caller says that the bill is meant,
+  // and for how long at most.
+  if (body.mode === "cloud") {
+    const ack = body as { billCloud?: unknown; maxHours?: unknown }
+    const how = `billCloud: true and maxHours (1 to ${cloudMaxHours()}), the hours of VM billing you accept (CLI: --yes-bill-cloud --max-hours N). Past maxHours the tracker says so on the run and gives the command that removes the VM; it does not remove it itself`
+    if (ack.billCloud !== true) bad(`a cloud run creates a VM that bills until it is removed. To start one, send ${how}`, "billCloud")
+    if (ack.maxHours === undefined || ack.maxHours === null) bad(`a cloud run needs ${how}`, "maxHours")
+    ;(request as Acknowledged).maxHours = whole("maxHours", "maxHours", ack.maxHours, [1, cloudMaxHours()])
   }
   if (body.reviewRounds !== undefined && body.reviewRounds !== null) request.reviewRounds = whole("reviewRounds", "reviewRounds", body.reviewRounds, LIMITS.reviewRounds)
   if (body.mode === "local") request.caseDir = token && body.caseDir ? body.caseDir : DEMO_CASE
@@ -193,7 +261,8 @@ export interface Tracker {
   start(request: RunRequest): Promise<GlhfRun>
   /**
    * Start the runs one after the other: each starts when the one before it is settled, however that ended. Used
-   * for a matched pair. Throws LocalBusy, starting none, when a local run outside this group is still going.
+   * for a matched pair. Throws LocalBusy, starting none, when a local run outside this group is still going, and
+   * DailyTokens (HTTP 429), starting none, when the runs could take today's local runs past the daily token cap.
    */
   startChain(requests: RunRequest[]): Promise<GlhfRun[]>
   /**
@@ -215,11 +284,29 @@ export interface Tracker {
 export async function openTracker(): Promise<Tracker> {
   lock()
   const registry = createRegistry()
+  // A task that faulted (a phase threw) is terminal: nothing would ever settle its run. Its record is failed here
+  // with what was thrown. The fault is durable before it is reported; when the engine stops between the two, the
+  // loop below does the same at the next start.
+  const failing = new Set<Promise<unknown>>()
+  const onFault = (taskId: unknown, error: unknown) => {
+    const why = `its tracking task faulted (${error instanceof Error ? error.message : String(error)})`
+    const work = (async () => {
+      // The record names its task; a record that does not yet (the fault came before createTask stored the id) is found through the task's input.
+      const id = listStored().find((s) => s.taskId !== undefined && String(s.taskId) === String(taskId))?.run.id
+        ?? ((await harness.getTask(taskId as TaskId<RunResult>, ctx))?.input as RunInput | undefined)?.id
+      if (id) await failUntracked(id, why)
+    })().catch((failed) => console.error(`glhf tracker: could not fail the run of task ${String(taskId)}`, failed))
+    failing.add(work)
+    void work.finally(() => failing.delete(work))
+  }
   registry.install(defineExtension({ name: "glhf", tasks: [RunTask] }))
   const harness = await Harness.open(await openNodeSqliteStorage(`${RUNS}/tracker.sqlite`), {
     models: createModels(), // required by the Harness; the tracker never calls a model
     registry,
-    onReport: (report) => console.error(`glhf tracker: ${report.kind}`, report.error),
+    onReport: (report) => {
+      console.error(`glhf tracker: ${report.kind}`, report.error)
+      if (report.kind === "task_faulted") onFault(report.task.id, report.error)
+    },
   }, ctx)
   const root = await harness.root(ctx)
 
@@ -240,7 +327,10 @@ export async function openTracker(): Promise<Tracker> {
     if (stored.taskId === undefined) { await createTask({ ...stored.request, id: stored.run.id }); continue }
     const task = await harness.getTask(stored.taskId as unknown as TaskId<RunResult>, ctx)
     if (!task) patchRun(stored.run.id, { phase: "failed", error: "its tracking task is missing from tracker.sqlite", finishedAt: Date.now() })
-    else if (task.state.status === "terminal") patchRun(stored.run.id, { phase: "failed", error: `tracking ended (${task.state.outcome.status}) without a result`, finishedAt: Date.now() })
+    else if (task.state.status === "terminal") {
+      const outcome = task.state.outcome
+      await failUntracked(stored.run.id, outcome.status === "faulted" ? `its tracking task faulted (${outcome.error.message})` : `its tracking task ended (${outcome.status}) without a result`)
+    }
   }
   harness.resume() // continue every unfinished run from its last checkpoint
 
@@ -263,6 +353,13 @@ export async function openTracker(): Promise<Tracker> {
   const startChain = async (requests: RunRequest[]): Promise<GlhfRun[]> => {
     const busy = requests.some((r) => r.mode === "local") ? liveLocal() : undefined
     if (busy) throw new LocalBusy(busy)
+    // The day's cap, checked before any record is written and in the same step as the writes below (nothing here
+    // waits), so two starts cannot both pass on the same count.
+    const ask = requests.reduce((sum, r) => sum + mostTokens(r), 0)
+    if (ask > 0) {
+      const today = tokensToday(), cap = dailyTokenCap()
+      if (today + ask > cap) throw new DailyTokens(today, ask, cap)
+    }
     const now = Date.now()
     const ids: string[] = []
     for (const request of requests) {
@@ -353,6 +450,7 @@ export async function openTracker(): Promise<Tracker> {
     },
     unfinished: () => listStored().map(publicRun).filter((r) => !settled(r.phase)),
     async close() {
+      await Promise.all(failing)
       await harness.close(ctx)
       rmSync(LOCK, { force: true })
     },

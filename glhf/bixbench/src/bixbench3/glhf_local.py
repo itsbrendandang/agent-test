@@ -8,32 +8,64 @@ their data is 8 to 259 GB and they need the full runtime image.
 
 `--model mock` plays a fixed script and needs no API key. It proves the plumbing, not the science.
 
-Layout of --out: workspace/ outputs/ logs/ grade.json run.json
+Layout of --out:
+  workspace/ outputs/   mounted into the sandbox; everything in them is written by the agents
+  graded/               regular files copied out of outputs/ after the run; the grader reads these
+  ledger.json FINDINGS.md   the swarm's record, written by the solver process (never by the sandbox)
+  logs/ grade.json run.json
+
+Nothing the sandbox wrote is trusted as a record or followed as a link: a symbolic link, a hard
+link, a device or a pipe under outputs/ fails the run (it scored 1.0 once, by pointing at the
+grader's own files), and outputs/glhf/ledger.json is only the roles' working copy.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import platform
+import shutil
+import stat
 import time
+from collections.abc import Callable, Iterator
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
 from inspect_ai import eval as inspect_eval
-from inspect_ai.model import Model, ModelOutput, get_model
+from inspect_ai.model import ChatMessage, GenerateConfig, Model, ModelOutput, get_model
+from inspect_ai.tool import ToolChoice, ToolInfo
 
 from bixbench3 import paid
 from bixbench3.grading.grader import grade
 from bixbench3.inspect_harness.models import RuntimeCase
+from bixbench3.inspect_harness.swarm import roles as swarm_roles
+from bixbench3.inspect_harness.swarm import tools as swarm_tools
 from bixbench3.inspect_harness.swarm.baseline import TOKEN_SEMANTICS
+from bixbench3.inspect_harness.swarm.ledger import UNREVIEWED
 from bixbench3.inspect_harness.tasks import bixbench3_cases
 
 LOCAL_COMPOSE = Path(__file__).parents[2] / "sandbox" / "local-compose.yaml"
 MOCK = "mockllm/model"
 ROLES = ("planner", "experimenter", "critic", "reporter")
+GRADED_DIR = "graded"  # under --out; never mounted into the sandbox
+MAX_OUTPUT_FILE_BYTES = 2 * 1024**3
+MAX_OUTPUT_TOTAL_BYTES = 8 * 1024**3
+# The agent names of solver.py and the instructions that identify each in a model call.
+ROLE_PROMPTS = {
+    "scout": swarm_roles.SCOUT,
+    "planner": swarm_roles.PLANNER,
+    "pilot": swarm_roles.PILOT,
+    "experimenter": swarm_roles.EXPERIMENTER,
+    "auditor": swarm_roles.AUDITOR,
+    "critic": swarm_roles.CRITIC,
+    "reviser": swarm_roles.REVISER,
+    "finisher": swarm_roles.FINISHER,
+    "reporter": swarm_roles.REPORTER,
+    "handoff": swarm_roles.HANDOFF,
+}
 
 
 def _call(tool: str, **arguments: object) -> ModelOutput:

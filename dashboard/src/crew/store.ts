@@ -12,6 +12,13 @@ export interface CrewMember {
 
 const KEY = "simlab.crew.v1"
 
+/**
+ * The demo characters (Momo, Ember and Fuji, or whatever a browser saved in their place) are hidden unless the app
+ * is built or served with VITE_DEMO_CREW=1. With the flag off useCrew() gives an empty crew, also to a browser that
+ * has characters saved, so no view shows them. Their saved data and the character art are left alone.
+ */
+export const demoCrew = (): boolean => import.meta.env.VITE_DEMO_CREW === "1"
+
 export const DEFAULT_CREW: CrewMember[] = [
   { id: "researcher", name: "Momo", role: "Researcher", species: "bunny" },
   { id: "builder", name: "Ember", role: "Builder", species: "flame" },
@@ -19,6 +26,7 @@ export const DEFAULT_CREW: CrewMember[] = [
 ]
 
 function load(): CrewMember[] {
+  if (!demoCrew()) return []
   try {
     const raw = localStorage.getItem(KEY)
     const parsed = raw ? (JSON.parse(raw) as CrewMember[]) : null

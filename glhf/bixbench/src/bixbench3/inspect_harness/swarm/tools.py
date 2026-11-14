@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
+import anyio
 import httpx
 from inspect_ai.tool import Tool, ToolError, tool
-from inspect_ai.util import sandbox
+from inspect_ai.util import sandbox, store
 
 from ... import paid
 from ...network_gateway.policy import (
@@ -103,6 +106,10 @@ print(json.dumps(report))
 """
 
 
+CONTRACT_TIMEOUT = 120  # seconds for the shape check of all artifacts
+SAVE_TIMEOUT = 60  # seconds for writing the ledger's working copy into the sandbox
+
+
 async def check_contract(
     outputs: list[ExpectedOutput], root: str | None = None
 ) -> list[dict[str, Any]]:
@@ -111,16 +118,16 @@ async def check_contract(
     if root:
         for spec in specs:
             spec["sandbox_path"] = root.rstrip("/") + spec["sandbox_path"].removeprefix("/outputs")
-    result = await sandbox().exec(
-        ["python3", "-c", _CONTRACT_SCRIPT, json.dumps(specs)], timeout=600
-    )
-    if not result.success:
-        return [
-            {
-                "artifact_id": "*",
-                "problems": [f"contract check failed to run: {result.stderr[-500:]}"],
-            }
-        ]
+    try:
+        result = await sandbox().exec(
+            ["python3", "-c", _CONTRACT_SCRIPT, json.dumps(specs)], timeout=CONTRACT_TIMEOUT
+        )
+        failure = None if result.success else result.stderr[-500:]
+    except TimeoutError:
+        # A stuck sandbox must not hold the run for ten minutes at every check (it did, once).
+        failure = f"no answer from the sandbox in {CONTRACT_TIMEOUT} s"
+    if failure is not None:
+        return [{"artifact_id": "*", "problems": [f"contract check failed to run: {failure}"]}]
     report: list[dict[str, Any]] = json.loads(result.stdout)
     return report
 
@@ -200,9 +207,54 @@ async def background_processes(kill: bool = False) -> list[dict[str, Any]]:
     return found
 
 
+# The record of a run is kept by the solver process, never read back from the sandbox: a role
+# can rewrite any file under /workspace or /outputs (one left a loop doing it), so those copies
+# are for the roles to read and are not evidence. The trusted copy is in the sample's store
+# (it ends in the Inspect log) and, when HOST_LEDGER_ENV names a folder on the host, in
+# <folder>/ledger.json and <folder>/FINDINGS.md.
+LEDGER_STORE_KEY = "glhf:ledger"
+FINDINGS_STORE_KEY = "glhf:findings"
+HOST_LEDGER_ENV = "GLHF_HOST_LEDGER_DIR"
+HOST_LEDGER_FILE = "ledger.json"
+HOST_FINDINGS_FILE = "FINDINGS.md"
+
+
+def write_host_file(file: Path, text: str) -> None:
+    """Write in one step (temporary file, then rename), so a reader never sees half a file."""
+    file.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=file.parent, prefix=f".{file.name}.")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as out:
+            out.write(text)
+        os.replace(temporary, file)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def persist_ledger(ledger: Ledger) -> None:
+    """Keep the trusted copy of the ledger: straight from this process's memory."""
+    text, findings = ledger.to_json(), ledger.findings_markdown()
+    store().set(LEDGER_STORE_KEY, text)
+    store().set(FINDINGS_STORE_KEY, findings)
+    folder = os.environ.get(HOST_LEDGER_ENV)
+    if folder:
+        write_host_file(Path(folder) / HOST_LEDGER_FILE, text)
+        write_host_file(Path(folder) / HOST_FINDINGS_FILE, findings)
+
+
 async def save_ledger(ledger: Ledger) -> None:
-    await sandbox().exec(["mkdir", "-p", WORK])
-    await sandbox().write_file(f"{WORK}/ledger.json", ledger.to_json())
+    """Persist the ledger (trusted copy first), then refresh the copy the roles can read.
+    The sandbox copy has a time limit: a sandbox that does not answer must not stop the run."""
+    persist_ledger(ledger)
+    try:
+        with anyio.fail_after(SAVE_TIMEOUT):
+            await sandbox().exec(["mkdir", "-p", WORK], timeout=SAVE_TIMEOUT)
+            await sandbox().write_file(f"{WORK}/ledger.json", ledger.to_json())
+    except TimeoutError:
+        if not any(e.get("kind") == "ledger.sandbox_copy_timeout" for e in ledger.events):
+            ledger.log("ledger.sandbox_copy_timeout", seconds=SAVE_TIMEOUT)
+            persist_ledger(ledger)
 
 
 @tool

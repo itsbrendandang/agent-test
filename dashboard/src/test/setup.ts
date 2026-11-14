@@ -5,6 +5,7 @@ import { afterEach, beforeEach, vi } from "vitest"
 
 // No test talks to the engine or to anything else. A test that needs a reply stubs fetch itself (see engine()).
 beforeEach(() => {
+  sessionStorage.clear(); localStorage.clear()
   vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("a test called fetch without stubbing it"))))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })

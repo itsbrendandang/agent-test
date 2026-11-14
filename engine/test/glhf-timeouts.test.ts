@@ -4,8 +4,8 @@
 // and short limits (GLHF_LOCAL_MARGIN_MS, GLHF_LAUNCH_TIMEOUT_MS). No Docker, no cloud, no model, no cost.
 //
 // Every scenario checks four things: the final phase, the error a person reads, that no process is left running,
-// and that a restart neither launches again nor hangs. Where the tracker gets one of them wrong, that check is a
-// `todo` subtest whose text says what happens instead. Those are bugs in engine/src/glhf/task.ts, not in the test.
+// and that a restart neither launches again nor hangs. The last part of the file calls single phases of the task
+// with a runtime of its own, to repeat a phase the way a restart does (a crash after an effect, before the commit).
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -35,6 +35,7 @@ process.env.NO_PAID_CALLS = "1" // the kill switch stays on, except inside cloud
 // Imported only now: store.ts reads GLHF_RUNS_DIR when it loads.
 const { openTracker } = await import("../src/glhf/tracker.ts")
 const { loadStored, patchRun, runDir, RUNS, saveStored } = await import("../src/glhf/store.ts")
+const { failUntracked, processState, readLocal, RunTask, startOnce } = await import("../src/glhf/task.ts")
 const { alive, parseStamp } = await import("../src/glhf/proc.ts")
 
 // After the imports: env.ts fills the keys from .env when it loads. Nothing here may be able to spend.
@@ -188,10 +189,7 @@ scenario("watchLocal: a runner that ignores SIGTERM at the deadline", async (t) 
   assert.match(final.error ?? "", /^the local runner was still going \d+ minutes after the start, far past its 60 s limit; /)
   await sleep(500) // time for SIGTERM to do what it is going to do
   const left = leftovers()
-  await t.test("the runner is gone, or the error says that it could not be stopped", {
-    todo: "BUG (task.ts watchLocal -> stop): at the deadline only SIGTERM is sent, nothing waits or sends SIGKILL (cancel does, with stopAndWait). "
-      + "The `sh` wrapper dies, the runner that ignores SIGTERM lives on without an owner, and the error still says \"it was stopped\"",
-  }, () => {
+  await t.test("the runner is gone, or the error says that it could not be stopped", () => {
     assert.ok(left.length === 0 || /could not be stopped/.test(final.error ?? ""), `error: ${final.error!.split("\n")[0]}\nstill running: ${left.join(" | ")}`)
   })
   sweep()
@@ -224,14 +222,16 @@ scenario("watchLocal: a runner that exits 0 without writing its result", async (
   const { id } = await startLocal("timeouts/silent.mjs")
   const final = await settle(id)
   assert.equal(final.phase, "failed")
-  assert.equal(final.error, "the local runner exited with status 0", "runner.log is empty, so that is all a person gets")
+  assert.equal(final.error, "the local runner ended without writing a result: it exited with status 0 and there is no run.json", "runner.log is empty, so that is all a person gets")
   assert.equal(final.score, undefined)
   assert.equal(launches().length, 1)
   await assertNoProcess()
-  await t.test("the error says what is wrong: the runner ended without a result (run.json)", {
-    todo: "MISLEADING ERROR (task.ts watchLocal): the whole message is \"the local runner exited with status 0\". Status 0 reads as success; "
-      + "that run.json was never written is not said",
-  }, () => assert.match(final.error ?? "", /run\.json|result/))
+  await t.test("the same when run.json still says running", async () => {
+    rmSync(stubLog, { force: true })
+    const { id } = await startLocal("timeouts/crash.mjs", { GLHF_STUB_WRITE: "running", GLHF_STUB_EXIT: "0" })
+    assert.match((await settle(id)).error ?? "", /^the local runner ended without writing a result: it exited with status 0 and run\.json still says that it is running\n/)
+    await assertNoProcess()
+  })
   await assertRestartChangesNothing(id, "runner")
 })
 
@@ -265,67 +265,67 @@ scenario("watchLocal: a runner that exits non-zero", async (t) => {
 })
 
 scenario("watchLocal: a runner that writes a malformed run.json and exits 0", async (t) => {
-  for (const kind of ["text", "truncated", "array", "status"]) {
-    await t.test(kind, async (t) => {
+  for (const [kind, why] of [["text", "it is not JSON"], ["truncated", "it is not JSON"], ["array", "it is not a JSON object"], ["status", 'status is "finished-ish", not "running", "done" or "failed"']]) {
+    await t.test(kind, async () => {
       rmSync(stubLog, { force: true })
       const { id } = await startLocal("timeouts/garbage.mjs", { GLHF_STUB_GARBAGE: kind })
       const final = await settle(id)
       assert.equal(final.phase, "failed")
-      assert.equal(final.error, "the local runner exited with status 0\ngarbage stub: wrote run.json")
+      assert.equal(final.error, `the local runner exited with status 0, but run.json is not usable: ${why}\ngarbage stub: wrote run.json`)
       assert.equal(final.score, undefined, "nothing of the rubbish reached the record")
       assert.equal(launches().length, 1)
       await assertNoProcess()
-      await t.test("the error says that run.json cannot be used", {
-        todo: "MISLEADING ERROR (task.ts watchLocal): an unreadable run.json is treated like a missing one, and the message is \"the local runner exited with status 0\" plus the log",
-      }, () => assert.match((final.error ?? "").split("\n")[0], /run\.json/))
       await assertRestartChangesNothing(id, "runner")
     })
   }
 })
 
-scenario("watchLocal: run.json says done, with the wrong type in score, artifacts, usage and error", async (t) => {
+scenario("watchLocal: run.json says done, with the wrong type in score, artifacts, usage and error", async () => {
   const { id } = await startLocal("timeouts/garbage.mjs", { GLHF_STUB_GARBAGE: "types" })
   const final = await settle(id)
-  assert.ok(final.phase === "done" || final.phase === "failed")
+  assert.equal(final.phase, "failed", "a result that cannot be used is not a result")
+  assert.match(final.error ?? "", /^the local runner (wrote a result, but|exited with status 0, but) run\.json is not usable: score is "high", not a number; artifacts is "none", not a list of \{artifact_id, score\}; usage is 7, not token counts per model; error is 5, not text\ngarbage stub: wrote run\.json$/)
+  for (const key of ["score", "artifacts", "usage"] as const) assert.equal(final[key], undefined, `${key} of the rubbish reached the record`)
   assert.equal(launches().length, 1)
   await assertNoProcess()
-  await t.test("the record holds a number as score, lists and text where GlhfRun says so, or the run fails and says why", {
-    todo: "BUG (task.ts watchLocal): score, artifacts, usage and error are copied from run.json unchecked. The record ends as phase \"done\" with "
-      + "score \"high\", artifacts \"none\", usage 7 and error 5, and the dashboard and the scoreboard read it",
-  }, () => {
-    const wrong = [typeof final.score !== "number" && final.score !== undefined && "score", !Array.isArray(final.artifacts ?? []) && "artifacts",
-      typeof (final.usage ?? {}) !== "object" && "usage", typeof (final.error ?? "") !== "string" && "error"].filter(Boolean)
-    assert.deepEqual(wrong, [], `the record: ${JSON.stringify(final)}`)
-    if (final.phase === "failed") assert.match(final.error ?? "", /run\.json/)
-  })
   await assertRestartChangesNothing(id, "runner")
 })
 
-scenario("watchLocal: a finished run whose run.json gives finished_at as a date, not as seconds", async (t) => {
+scenario("watchLocal: a finished run whose run.json gives finished_at as a date, not as seconds", async () => {
   const { id } = await startLocal("timeouts/garbage.mjs", { GLHF_STUB_GARBAGE: "date" })
   await launched(id, "runner")
-  const alone = await eventually(() => isSettled(id), 3_000) // the runner ended within 0.2 s; this is 75 polls
-  const before = structuredClone(run(id))
-  let next = "started"
-  if (!alone) await tracker.start({ mode: "local", solver: "single", model: "mock", timeLimit: 60 }).catch((error) => { next = `refused: ${error.message}` })
-  await t.test("the run settles while the engine is up, and does not block the next local run", {
-    todo: "BUG, A RUN STUCK FOREVER (task.ts watchLocal + finish): finishedAt becomes Math.round(\"2026-...\" * 1000) = NaN, runtime.memo refuses it "
-      + "(\"Value contains a non-finite number and is not strict JSON\"), the task faults, and nothing writes that to the record. The run stays \"launching: starting the sandbox\" "
-      + "although its runner has ended with a result, and every new local run is refused with 409 until the engine is restarted. The same happens for any exception in a phase: "
-      + "tracker.ts onReport only prints it",
-  }, () => assert.ok(alone, `still ${before.phase} (${before.detail}) 3 s after the runner ended; the next local run: ${next}`))
-  await assertNoProcess()
-
-  // Only a restart ends it (openTracker finds the faulted task). Nothing is launched again.
-  await restart()
-  const final = await settle(id)
-  assert.ok(final.phase === "done" || final.phase === "failed")
+  // It settles while the engine is up (it once faulted the task on NaN and stayed "launching" for good).
+  const final = await settle(id, 3_000)
+  assert.equal(final.phase, "failed")
+  assert.match(final.error ?? "", /run\.json is not usable: finished_at is "2026-11-14T22:27:23Z", not seconds since 1970 as a number\n/)
+  assert.equal(final.score, undefined)
   assert.equal(launches().length, 1)
-  await t.test("the result that run.json holds is kept (done, score 1), or the error names finished_at", {
-    todo: "MISLEADING ERROR (tracker.ts openTracker): after the restart the run is failed with \"tracking ended (faulted) without a result\". "
-      + "The score in run.json is lost and nothing points at run.json or finished_at",
-  }, () => assert.ok((final.phase === "done" && final.score === 1) || /finished_at|run\.json/.test(final.error ?? ""), `phase ${final.phase}, error: ${final.error}`))
+  await assertNoProcess()
+  const next = await tracker.start({ mode: "local", solver: "single", model: "mock", timeLimit: 60 }) // the machine is free again
+  await settle(next.id)
   await assertRestartChangesNothing(id, "runner")
+})
+
+test("readLocal: every field of run.json is checked before it can reach the record", () => {
+  const dir = join(base, "read-local")
+  mkdirSync(dir, { recursive: true })
+  const read = (value: unknown) => { writeFileSync(join(dir, "run.json"), typeof value === "string" ? value : JSON.stringify(value)); return readLocal(dir) }
+  const usage = { "m/x": { input_tokens: 1, output_tokens: 2, total_tokens: 3 } }
+  assert.deepEqual(read({ status: "done", score: 0.5, artifacts: [{ artifact_id: "a", score: 1, extra: "dropped" }], usage, error: null, finished_at: 1_700_000_000.4 }),
+    { kind: "ended", result: { phase: "done", score: 0.5, artifacts: [{ artifact_id: "a", score: 1 }], usage, finishedAt: 1_700_000_000_400 } })
+  assert.deepEqual(read({ status: "failed", error: "boom" }), { kind: "ended", result: { phase: "failed", error: "boom" } })
+  assert.deepEqual(read({ status: "running", score: "anything" }), { kind: "running" })
+  const bad = (value: Record<string, unknown>) => { const got = read({ status: "done", ...value }); assert.equal(got.kind, "unusable", JSON.stringify(value)); return got.kind === "unusable" && got.final ? got.why : "" }
+  assert.match(bad({ score: "1" }), /^score is "1", not a number$/)
+  assert.match(bad({ artifacts: [{ artifact_id: 1, score: 1 }] }), /^artifacts/)
+  assert.match(bad({ artifacts: {} }), /^artifacts/)
+  assert.match(bad({ usage: { m: { input_tokens: "1", output_tokens: 1, total_tokens: 1 } } }), /^usage/)
+  assert.match(bad({ usage: [] }), /^usage/)
+  assert.match(bad({ error: { message: "x" } }), /^error/)
+  assert.match(bad({ finished_at: -1 }), /^finished_at/)
+  assert.match(bad({ finished_at: "1700000000" }), /^finished_at/)
+  rmSync(join(dir, "run.json"))
+  assert.deepEqual(readLocal(dir), { kind: "missing" })
 })
 
 scenario("watchLocal: the runner is killed mid-run", async (t) => {
@@ -359,13 +359,16 @@ scenario("watchLocal: the runner is killed mid-run", async (t) => {
 
 const LOCAL: RunRequest = { mode: "local", solver: "glhf", model: "mock", task: "demo", timeLimit: 60 }
 
+// An empty pid file says nothing about a process. The message claims neither "stopped" nor "running", and asks someone to look.
+const NO_PID = (id: string) => `the local runner's pid was never recorded, so it is not known whether it was started or is still running. Check for a leftover process or container (its command line holds --out ${runDir(id)})`
+
 scenario("the engine died between the pid marker and the pid: nothing is started again, and the run fails after five polls", async (t) => {
   await t.test("nothing was started", async () => {
     await restart(() => seed("seeded-never-started", "runner", LOCAL))
     const id = "seeded-never-started"
     const final = await settle(id)
     assert.equal(final.phase, "failed")
-    assert.equal(final.error, "the local runner stopped without finishing")
+    assert.equal(final.error, NO_PID(id))
     assert.match(text(id, "tracker.log"), /local runner was already started; not starting again/)
     assert.equal(text(id, "runner.pid"), "", "the marker was left alone")
     assert.deepEqual(launches(), [], "the runner was not started: it may be running already")
@@ -381,7 +384,7 @@ scenario("the engine died between the pid marker and the pid: nothing is started
     assert.equal(run(id).phase, "launching")
     const final = await settle(id)
     assert.equal(final.phase, "failed")
-    assert.equal(final.error, "the local runner stopped without finishing")
+    assert.equal(final.error, NO_PID(id))
     assert.equal((text(id, "tracker.log").match(/not starting again/g) ?? []).length, 1, "the launch phase ran once")
     assert.deepEqual(launches(), [])
     await assertNoProcess()
@@ -401,21 +404,16 @@ scenario("the engine died between the pid marker and the pid: nothing is started
   })
 })
 
-scenario("the engine died between the spawn and the pid: the runner is alive, but nobody knows its pid", async (t) => {
+scenario("the engine died between the spawn and the pid: the runner is alive, but nobody knows its pid", async () => {
   const id = "seeded-orphan-alive"
   await restart(() => { seed(id, "runner", LOCAL); orphan(id, "timeouts/hang.mjs", { GLHF_STUB_WRITE: "running" }) })
   const final = await settle(id)
   assert.equal(final.phase, "failed")
   assert.equal(launches().length, 1, "only the one the dead engine started")
   const left = leftovers()
-  await t.test("the run is not called stopped while its runner works on", {
-    todo: "BUG (task.ts processState): a pid marker that is still empty after five polls counts as \"gone\", so the run fails with "
-      + "\"the local runner stopped without finishing\" while the runner is alive (its run.json says running) and goes on to use the machine and the token budget. "
-      + "Nothing stops it and the message does not ask anyone to look. The window is real: startOnce runs `ps` (proc.ts stamp) between the spawn and the write",
-  }, () => {
-    assert.ok(left.length === 0 || /leftover|may still be running/.test(final.error ?? ""), `error: ${final.error}\nstill running: ${left.join(" | ")}`)
-  })
-  assert.match(final.error ?? "", /^the local runner stopped without finishing/, "what it says today")
+  assert.ok(left.length > 0, "the runner works on: the tracker has no pid to stop it with")
+  assert.equal(final.error, NO_PID(id).replace(". Check", " (run.json shows that it did start). Check"))
+  assert.doesNotMatch(final.error ?? "", /stopped without finishing/, "the run is not called stopped while its runner works on")
   sweep()
   await assertNoProcess()
   await assertRestartChangesNothing(id, "runner")
@@ -436,18 +434,44 @@ scenario("the same state when the deadline has passed: the error tells the perso
   await assertRestartChangesNothing(id, "runner")
 })
 
-test("the spawn of the wrapping shell itself fails (child.pid is undefined)", {
-  skip: "not reachable without a change in src: startOnce always spawns `sh` in BIXBENCH (glhf/bixbench), and neither can be made to fail from a test. "
-    + "It leaves exactly the state of \"nothing was started\" above (an empty pid marker), which is covered. To reach the branch itself: let GLHF_BIXBENCH_DIR replace BIXBENCH in store.ts",
-}, () => {})
+scenario("the spawn of the wrapping shell itself fails (child.pid is undefined): the run fails at once and says why", async () => {
+  // GLHF_BIXBENCH_DIR is the folder the commands start in; one that does not exist makes the spawn fail.
+  try {
+    const { id } = await startLocal("timeouts/silent.mjs", { GLHF_BIXBENCH_DIR: join(base, "no-such-folder"), GLHF_LOCAL_POLL_MS: "400" })
+    const final = await settle(id)
+    assert.equal(final.phase, "failed")
+    const why = `the folder to start it in does not exist (${join(base, "no-such-folder")})`
+    assert.ok([why, `${why}: spawn sh ENOENT`].includes(final.error!.replace("the local runner could not be started: ", "")), final.error) // Node's own reason arrives as an event, a moment later
+    assert.ok(final.finishedAt! - final.startedAt < 1_500, "known at the first look, not after five polls of guessing")
+    assert.equal(text(id, "runner.pid"), "", "no pid: no process was created")
+    assert.equal(text(id, "runner.nospawn"), `${why}: spawn sh ENOENT`)
+    assert.deepEqual(launches(), [])
+    await assertNoProcess()
+    await assertRestartChangesNothing(id, "runner")
+  } finally { delete process.env.GLHF_BIXBENCH_DIR }
+})
+
+test("startOnce and processState: an empty pid file is \"unstarted\" only when the spawn is known to have failed, else \"unknown\", never \"gone\"", () => {
+  const dir = join(base, "spawn-states")
+  mkdirSync(dir, { recursive: true })
+  assert.equal(startOnce(dir, "a", ["true"], join(dir, "a.log"), null, join(base, "no-such-folder")), true)
+  assert.equal(processState(dir, "a", 0), "unstarted")
+  assert.equal(processState(dir, "a", 99), "unstarted")
+  assert.throws(() => startOnce(dir, "b", ["true", "a\0b"], join(dir, "b.log"), null), TypeError, "an argument the system cannot take")
+  assert.equal(processState(dir, "b", 0), "unstarted", "the marker is there and the reason is recorded: a retry starts nothing and does not guess")
+  assert.equal(startOnce(dir, "b", ["true"], join(dir, "b.log"), null), false)
+  writeFileSync(join(dir, "c.pid"), "")
+  assert.equal(processState(dir, "c", 4), "running")
+  assert.equal(processState(dir, "c", 5), "unknown")
+})
 
 // ---------------------------------------------------------------- cloud runs: awaitLaunch
 
-const STUCK = /^the launcher did not finish within \d+ minutes and reported no run; it may still be running \(see launch\.pid\)\nbixbench3 stub: provisioning$/
-const LAUNCHER_LEFT = "BUG (task.ts awaitLaunch): a launcher past GLHF_LAUNCH_TIMEOUT_MS is declared stuck but never stopped. The run is settled, so nothing watches it any more, "
-  + "and `bixbench3 run` stays alive. If it comes back to life it creates a VM that bills and that no run follows"
+// A launcher past GLHF_LAUNCH_TIMEOUT_MS is stopped (the group stop of a cancel) before the run is settled: left
+// alive, it could still create a VM that bills and that no run follows. "No VM" is said because it is known then.
+const STUCK = /^the launcher did not finish within \d+ minutes and reported no run; it was stopped \(no run manifest was written, so no VM was created by it\)\nbixbench3 stub: provisioning$/
 
-scenario("awaitLaunch: a launcher that hangs and wrote no manifest fails the run at GLHF_LAUNCH_TIMEOUT_MS", cloud(async (t) => {
+scenario("awaitLaunch: a launcher that hangs and wrote no manifest fails the run at GLHF_LAUNCH_TIMEOUT_MS", cloud(async () => {
   const { id } = await startCloud("hang-1", { GLHF_STUB_RUN: "hang", GLHF_LAUNCH_TIMEOUT_MS: "1200" })
   await launched(id, "launch")
   await until("the launch to be shown", () => run(id).phase === "launching" && run(id).detail === "bixbench3 stub: provisioning", 1_000)
@@ -457,15 +481,12 @@ scenario("awaitLaunch: a launcher that hangs and wrote no manifest fails the run
   assert.match(final.error ?? "", STUCK)
   assert.equal(final.remoteId, undefined)
   assert.ok(final.finishedAt! - final.startedAt >= 1_200 && final.finishedAt! - final.startedAt < 5_000, "at the limit, not before and not much later")
-  await sleep(300)
-  const left = leftovers()
-  await t.test("no process is left running", { todo: LAUNCHER_LEFT }, () => assert.deepEqual(left, []))
-  sweep()
-  await assertNoProcess()
+  assert.deepEqual(leftovers(), [], "the launcher was stopped before the run was settled")
+  assert.equal(text(id, "launch.exit"), "", "its wrapper too")
   await assertRestartChangesNothing(id, "launch")
 }))
 
-scenario("awaitLaunch: the engine is down when the launch limit passes; after the restart the run fails, and nothing is launched again", cloud(async (t) => {
+scenario("awaitLaunch: the engine is down when the launch limit passes; after the restart the run fails, and nothing is launched again", cloud(async () => {
   const { id } = await startCloud("hang-2", { GLHF_STUB_RUN: "hang", GLHF_LAUNCH_TIMEOUT_MS: "1200" })
   await launched(id, "launch")
   const pid = text(id, "launch.pid")
@@ -480,14 +501,11 @@ scenario("awaitLaunch: the engine is down when the launch limit passes; after th
   assert.equal(launches().length, 1, "the restart did not launch a second time")
   assert.equal(text(id, "launch.pid"), pid)
   assert.doesNotMatch(text(id, "tracker.log"), /already started/, "the launch phase did not run a second time")
-  const left = leftovers()
-  await t.test("no process is left running", { todo: LAUNCHER_LEFT }, () => assert.deepEqual(left, []))
-  sweep()
-  await assertNoProcess()
+  assert.deepEqual(leftovers(), [], "the launcher was stopped before the run was settled")
   await assertRestartChangesNothing(id, "launch")
 }))
 
-scenario("awaitLaunch: a launcher that hangs after it wrote its manifest: the cloud run is adopted and followed to its grade", cloud(async (t) => {
+scenario("awaitLaunch: a launcher that hangs after it wrote its manifest: the cloud run is adopted and followed to its grade", cloud(async () => {
   const { id } = await startCloud("hang-3", { GLHF_STUB_RUN: "hang", GLHF_STUB_MANIFEST: "remote-hang-3", GLHF_LAUNCH_TIMEOUT_MS: "800" })
   const final = await settle(id)
   assert.equal(final.phase, "done")
@@ -497,28 +515,22 @@ scenario("awaitLaunch: a launcher that hangs after it wrote its manifest: the cl
   assert.equal(final.detail, `cloud run remote-hang-3: results in ${join(manifests, "remote-hang-3")}`)
   assert.match(text(id, "tracker.log"), /adopted cloud run remote-hang-3 from its manifest/)
   assert.equal(launches().length, 1)
-  const left = leftovers()
-  await t.test("no process is left running", { todo: LAUNCHER_LEFT + ". Here the run even ends as done while its launcher is still there" }, () => assert.deepEqual(left, []))
-  sweep()
-  await assertNoProcess()
+  assert.match(text(id, "tracker.log"), /adopted cloud run remote-hang-3 from its manifest\n[^\n]*running -> completing/, "adopted only after the stop")
+  assert.deepEqual(leftovers(), [], "the launcher was stopped before its cloud run was followed")
   await assertRestartChangesNothing(id, "launch")
 }))
 
 scenario("awaitLaunch: the launcher exits 0 and the manifest never appears", cloud(async (t) => {
   for (const mode of ["silent", "garbage"]) {
-    await t.test(mode === "silent" ? "it printed nothing" : "it printed text without a run id", async (t) => {
+    await t.test(mode === "silent" ? "it printed nothing" : "it printed text without a run id", async () => {
       rmSync(stubLog, { force: true })
       const { id } = await startCloud(`exit0-${mode}`, { GLHF_STUB_RUN: mode })
       const final = await settle(id)
       assert.equal(final.phase, "failed")
-      assert.equal(final.error, "bixbench3 run exited with status 0\nbixbench3 stub: provisioning")
+      assert.equal(final.error, "bixbench3 run exited with status 0 but printed no run id and wrote no manifest, so there is no cloud run to follow\nbixbench3 stub: provisioning")
       assert.equal(final.remoteId, undefined)
       assert.equal(launches().length, 1)
       await assertNoProcess()
-      await t.test("the error says what is wrong: no run id was printed and no manifest was written", {
-        todo: "MISLEADING ERROR (task.ts awaitLaunch): the message is \"bixbench3 run exited with status 0\" plus the log. Status 0 reads as success; "
-          + "that no run id came out, that no manifest was found, and whether a VM can exist, is not said (the \"gone\" case one line above says all three)",
-      }, () => assert.match(final.error ?? "", /run id|manifest|reported no run/))
       await assertRestartChangesNothing(id, "launch")
     })
   }
@@ -576,18 +588,21 @@ scenario("awaitLaunch: the launcher is killed and the manifest never appears", c
   })
 }))
 
-scenario("awaitLaunch: the engine died between the pid marker and the pid of the launcher", cloud(async (t) => {
+scenario("awaitLaunch: the engine died between the pid marker and the pid of the launcher", cloud(async () => {
+  const NO_PID = (task: string) => `the launcher's pid was never recorded, so it is not known whether it was started or is still running. Check for a leftover process (\`bixbench3 run --task ${task}\`) and stop it. `
+    + "It can still create a VM that bills, and no run would follow it. Check for a VM with: gcloud compute instances list --project stub-project\n"
+    + `Remove it with: ${BIXBENCH3} cancel --run ID --project stub-project (ID: the run_id in the run_manifest.json it wrote under ${manifests})`
   const id = "seeded-cloud-never-launched"
   await restart(() => seed(id, "launch", { ...CLOUD, task: "seeded-1" }))
   const final = await settle(id)
   assert.equal(final.phase, "failed")
-  assert.equal(final.error, "the launcher stopped before it reported a run (no run manifest was written, so no VM was created by it)")
+  assert.equal(final.error, NO_PID("seeded-1"), "nothing is known, so nothing is promised")
   assert.match(text(id, "tracker.log"), /bixbench3 run was already started; not launching again/)
   assert.deepEqual(launches(), [], "not launched: a second launch could mean a second VM")
   await assertNoProcess()
   await assertRestartChangesNothing(id, "launch")
 
-  // The launcher that such an engine did start, alive and unknown. As for local runs, five polls later it counts as gone.
+  // The launcher that such an engine did start, alive and unknown: the same message, and it is the true one.
   const alone = "seeded-cloud-orphan"
   await restart(() => {
     seed(alone, "launch", { ...CLOUD, task: "seeded-2" })
@@ -596,11 +611,9 @@ scenario("awaitLaunch: the engine died between the pid marker and the pid of the
   const second = await settle(alone)
   assert.equal(second.phase, "failed")
   await until("the orphan to be up", () => launches().length === 1)
-  const left = leftovers()
-  await t.test("the error does not promise that no VM was created while the launcher is still at work", {
-    todo: "BUG (task.ts processState + awaitLaunch): an empty launch.pid after five polls counts as \"gone\", and without a manifest yet the error says "
-      + "\"no run manifest was written, so no VM was created by it\". The launcher is alive and can still create the VM; nobody follows it",
-  }, () => assert.ok(left.length === 0 || !/no VM was created/.test(second.error ?? ""), `error: ${second.error}\nstill running: ${left.join(" | ")}`))
+  assert.ok(leftovers().length > 0, "the launcher works on: the tracker has no pid to stop it with")
+  assert.equal(second.error, NO_PID("seeded-2"))
+  assert.doesNotMatch(second.error ?? "", /no VM was created/, "not promised while the launcher may be at work")
   sweep()
   await assertNoProcess()
   await assertRestartChangesNothing(alone, "launch")

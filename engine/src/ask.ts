@@ -8,6 +8,12 @@
 // Text inside runs was written by models and may come from the web, so it is passed as data between markers,
 // with every "<" escaped so that it cannot close a marker or open a fake one, and the model is told not to
 // follow instructions found there. The answer is shown as plain text.
+//
+// Who may ask (the caller is checked in app.ts, before handleAsk): the keyword answer needs the dashboard's
+// Origin or the session token (403 without). The model call costs money, so it needs the token: the dashboard's
+// Origin without it gets the keyword answer with {needsToken: true, field: "token"} and a note, so the page can
+// ask for the token. Model calls are also capped per day (ASK_DAILY_CAP, default 200); past the cap the answer is
+// the keyword one with a note.
 import { existsSync, readFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { runDir as boardDir } from "./board.ts"
@@ -20,7 +26,7 @@ import { type BoardRun, search } from "./search.ts"
 
 export type Kind = "all" | "swarm" | "board"
 export interface Cited { kind: "swarm" | "board"; id: string; title: string; why: string }
-export interface Answer { answer: string; runs: Cited[]; mode: "ai" | "keyword"; note?: string }
+export interface Answer { answer: string; runs: Cited[]; mode: "ai" | "keyword"; note?: string; needsToken?: true; field?: "token" }
 export interface Entry { kind: "swarm" | "board"; id: string; title: string; startedAt: number; text: string }
 
 const MAX_QUESTION = 500
@@ -146,18 +152,48 @@ export function keywordAnswer(question: string, boardRuns: BoardRun[], kind: Kin
 
 type Fetch = typeof fetch
 
+/** Model calls a day (UTC) unless ASK_DAILY_CAP says otherwise. Counted in this process: a restart starts again. */
+export const ASK_DAILY_CAP = 200
+export const askDailyCap = (env: NodeJS.ProcessEnv = process.env): number => {
+  const n = Number(env.ASK_DAILY_CAP)
+  return env.ASK_DAILY_CAP?.trim() && Number.isInteger(n) && n >= 0 ? n : ASK_DAILY_CAP
+}
+const spent = { day: "", calls: 0 }
+/** Count one model call against today's cap. False, counting nothing, when the cap is reached. */
+export function takeDaily(now = Date.now(), cap = askDailyCap()): boolean {
+  const day = new Date(now).toISOString().slice(0, 10)
+  if (spent.day !== day) { spent.day = day; spent.calls = 0 }
+  if (spent.calls >= cap) return false
+  spent.calls++
+  return true
+}
+/** Start today's count again (tests). */
+export const resetDaily = () => { spent.day = ""; spent.calls = 0 }
+
+export interface AskOptions {
+  fetch?: Fetch; key?: string; signal?: AbortSignal; entries?: Entry[]
+  /** May a model be called for this caller? False for a caller without the session token. Default true: `ask` checks no caller. */
+  model?: boolean
+  /** The daily cap on model calls, and the time it is counted at (tests). */
+  cap?: number; now?: number
+}
+
 /** Thrown when the caller went away before the answer was ready. Nothing is sent back. */
 export class AskAborted extends Error {}
 
-export async function ask(question: string, boardRuns: BoardRun[], kind: Kind = "all", options: { fetch?: Fetch; key?: string; signal?: AbortSignal; entries?: Entry[] } = {}): Promise<Answer> {
+export async function ask(question: string, boardRuns: BoardRun[], kind: Kind = "all", options: AskOptions = {}): Promise<Answer> {
   // Before the key is even looked at: with paid calls off there is no model call, whoever asks.
   if (paidCallsOff()) return keywordAnswer(question, boardRuns, kind, "Paid calls are off (NO_PAID_CALLS), so no model was asked and this is a keyword search.")
   const key = options.key ?? process.env.ANTHROPIC_API_KEY
   if (!key) return keywordAnswer(question, boardRuns, kind, "No ANTHROPIC_API_KEY is set, so this is a keyword search.")
+  // The model call costs money: only for a holder of the session token. The page is told so and can ask for it.
+  if (options.model === false) return { ...keywordAnswer(question, boardRuns, kind, "An AI answer costs money, so it needs this engine's session token (the x-glhf-token header). This is a keyword search."), needsToken: true, field: "token" }
   try {
     const entries = options.entries ?? buildIndex(boardRuns, kind) // built once; a run folder that cannot be read ends in the keyword answer
     const { text, used } = renderIndex(entries)
     if (!used.length) return { answer: "There are no experiments yet.", runs: [], mode: "ai" }
+    const cap = options.cap ?? askDailyCap()
+    if (!takeDaily(options.now, cap)) return keywordAnswer(question, boardRuns, kind, `Today's limit of ${cap} AI answers is reached (ASK_DAILY_CAP), so this is a keyword search. AI answers are back tomorrow (UTC).`)
     const timeout = AbortSignal.timeout(45_000)
     const response = await (options.fetch ?? fetch)("https://api.anthropic.com/v1/messages", {
       method: "POST", signal: options.signal ? AbortSignal.any([timeout, options.signal]) : timeout, // the paid call stops when the caller leaves
@@ -188,7 +224,8 @@ export function allow(now = Date.now(), limit = 20, windowMs = 60_000): boolean 
   return true
 }
 
-export async function handleAsk(req: IncomingMessage, res: ServerResponse, boardRuns: BoardRun[], options: { fetch?: Fetch; key?: string; entries?: Entry[] } = {}): Promise<void> {
+/** Answers POST /api/ask. It checks no caller: app.ts does, and passes `model: false` for one without the token. */
+export async function handleAsk(req: IncomingMessage, res: ServerResponse, boardRuns: BoardRun[], options: Omit<AskOptions, "signal"> = {}): Promise<void> {
   const json = (code: number, body: unknown) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(body)) }
   try {
     if (req.method !== "POST") return json(405, { error: "POST a JSON body: {question}" })

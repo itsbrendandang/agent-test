@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .budget import Budget
+from .paid import enforce, refuse_paid
 
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.1"
@@ -68,6 +69,10 @@ class LLMClient:
         seed: int | None = None,
         max_tokens: int = MAX_COMPLETION_TOKENS,
     ):
+        # the paid switch: every real model call starts here (run.py,
+        # regrade.py, the judge, direct use). Keys are blanked while it is on.
+        enforce()
+        refuse_paid(f"a call to a real model ({provider or 'auto'}/{model or 'default'})")
         self.provider = provider or detect_provider()
         self.model = model or default_model(self.provider)
         self.seed = seed
