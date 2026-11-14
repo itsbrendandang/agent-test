@@ -242,8 +242,8 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         </div>
         <div className="swarm-roles">
           {run?.solver === "single" ? (
-            <div className="swarm-role" data-active={live || undefined} data-done={!live || undefined}>
-              <span className="swarm-face"><Buddy seed="single-agent" mood={live ? "working" : run.phase === "done" ? "happy" : "alert"} size={56} /></span>
+            <div className="swarm-role" data-active={(live && run.phase !== "queued") || undefined} data-done={!live || undefined}>
+              <span className="swarm-face"><Buddy seed="single-agent" mood={run.phase === "queued" || run.phase === "cancelled" ? "sleeping" : live ? "working" : run.phase === "done" ? "happy" : "alert"} size={56} /></span>
               Single agent
             </div>
           ) : ROLES.map((r) => (
@@ -279,7 +279,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               </p>
             )}
             {run.after && (
-              <p>{run.phase === "queued" ? "Starts when" : "Was queued behind"} <RunLink id={run.after} onOpen={openRun} />{run.phase === "queued" ? " has ended." : "."}</p>
+              <p>{run.phase === "queued" ? "Starts when" : "Was queued behind"} <RunLink id={run.after} onOpen={openRun} />{run.phase === "queued" && " has ended"}</p>
             )}
             {run.note && <p className="swarm-rownote">Note: {run.note}</p>}
           </div>

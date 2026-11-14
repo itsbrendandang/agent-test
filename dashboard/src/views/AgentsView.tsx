@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead, RunId } from "@/components/Shared"
-import { isLive, useSwarm } from "@/swarm/api"
+import { isLive, latestSwarmRun, useSwarm } from "@/swarm/api"
 import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
 import { Buddy } from "@/components/Buddy"
 import { SPECIES } from "@/components/species"
@@ -137,7 +137,7 @@ function SkillEditor({ member, onChange, onImport, onDownload }: {
 // The nine swarm roles in the crew's card layout: what each does, its share of the time, the model
 // it runs on in the latest run, and its instructions as the solver defines them (read-only).
 function SwarmTeam() {
-  const { runs, detail, offline } = useSwarm(undefined, 0)
+  const { runs, detail, offline } = useSwarm(undefined, 0, latestSwarmRun) // the ledger of the newest swarm run, not of the newest run
   const [catalog, setCatalog] = useState<RoleCatalog>()
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)

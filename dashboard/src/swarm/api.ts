@@ -34,7 +34,7 @@ export interface GlhfStatus {
   keys: { ANTHROPIC_API_KEY: boolean; OPENAI_API_KEY: boolean; HF_TOKEN: boolean; EXA_API_KEY?: boolean }
   project: string | null
   /** What a request may ask for. timeLimit is in seconds. Absent on an older engine; the engine checks in any case. */
-  limits?: { timeLimit: Range; maxTokens: Range; reviewRounds: Range; maxMessagesPerRole: Range }
+  limits?: { timeLimit: Range; maxTokens: Range; reviewRounds: Range; maxMessagesPerRole: Range; seed?: Range }
   /** Models the form offers: "mock" first, then the models whose key is set. */
   models?: string[]
 }
@@ -120,7 +120,11 @@ export const isLive = (r: GlhfRun) => !settled(r.phase)
 export const isDemo = (r: GlhfRun) => r.task === "demo" || r.model === "mock"
 
 /** Status, the run list, the scoreboard and the selected run, polled every 2 s while a run is live and every 15 s otherwise. */
-export function useSwarm(selected: string | undefined, nudge: number) {
+/** The newest swarm run, for views that show the swarm's roles. Module-level, so its identity is stable. */
+export const latestSwarmRun = (runs: GlhfRun[]) => runs.find((r) => r.solver === "glhf")?.id
+
+/** `choose` picks the run to load when none is selected; by default the newest run. It must be a stable function. */
+export function useSwarm(selected: string | undefined, nudge: number, choose?: (runs: GlhfRun[]) => string | undefined) {
   const [status, setStatus] = useState<GlhfStatus>()
   const [runs, setRuns] = useState<GlhfRun[]>()
   const [detail, setDetail] = useState<RunDetail>()
@@ -140,7 +144,7 @@ export function useSwarm(selected: string | undefined, nudge: number) {
         if (stopped) return
         setStatus(s); setRuns(list); setBoard(rows); setOffline(false)
         live = list.some(isLive)
-        const id = selected ?? list[0]?.id
+        const id = selected ?? (choose ? choose(list) : list[0]?.id)
         if (id) {
           const d = await get<RunDetail>(`/api/glhf/runs/${encodeURIComponent(id)}`).catch(() => undefined)
           if (stopped) return
@@ -154,7 +158,7 @@ export function useSwarm(selected: string | undefined, nudge: number) {
     }
     void tick()
     return () => { stopped = true; if (timer) clearTimeout(timer) }
-  }, [selected, nudge])
+  }, [selected, nudge, choose])
 
   return { status, runs, detail, offline, scoreboard: board }
 }

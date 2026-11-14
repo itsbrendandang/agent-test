@@ -88,7 +88,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
     let r: number | undefined
     if (swarm) { const x = whole(rounds, "Review rounds", limits?.reviewRounds); if (typeof x === "string") e.rounds = x; else r = x }
     let sd: number | undefined
-    if (seed.trim()) { const x = whole(seed, "The seed"); if (typeof x === "string") e.seed = x; else sd = x }
+    if (seed.trim()) { const x = whole(seed, "The seed", limits?.seed); if (typeof x === "string") e.seed = x; else sd = x }
     const request: StartRequest = {
       mode: "local", task: "demo", model, ...(who === "both" ? { solvers: ["glhf", "single"] } : { solver: who }),
       timeLimit: (typeof m === "number" ? m : 0) * 60, ...(budget !== undefined && { maxTokens: budget }), ...(sd !== undefined && { seed: sd }),
@@ -193,7 +193,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               </div>
               <div className="newrun-field">
                 <label htmlFor={`${uid}-seed`}>Seed (optional)</label>
-                <input id={`${uid}-seed`} type="number" inputMode="numeric" min={1} step={1} value={seed} placeholder="none"
+                <input id={`${uid}-seed`} type="number" inputMode="numeric" min={limits?.seed?.[0] ?? 1} max={limits?.seed?.[1]} step={1} value={seed} placeholder="none" title={hint(limits?.seed)}
                   onChange={(e) => setSeed(e.currentTarget.value)} aria-invalid={!!errors.seed} aria-describedby={described("seed")} />
                 {err("seed")}
               </div>
