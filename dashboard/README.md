@@ -133,6 +133,7 @@ and expose the same actions as tools to use a real model.
 
 ## Not wired yet
 - Starting a cloud run or a run on a BixBench3 task from the Swarm view.
+- The BixBench v1 results (`GET /api/bixv1/...` in the engine). No view reads them.
 - Claims and issues of cloud runs (they are in the results bucket).
 - Simulations: none is registered.
 - No automated tests. `npm run typecheck` in the repository root checks the types.

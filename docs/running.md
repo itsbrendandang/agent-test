@@ -594,6 +594,9 @@ starts the server and listens; the request handler is in `app.ts`, so tests can 
 | `POST /api/runs/:id/resume` | Continue a drug board run. |
 | `GET /api/runs/:id/events` | Drug board run events (server-sent events). |
 | `GET /api/runs/:id/memo` | The memo of a drug board run (Markdown). |
+| `GET /api/bixv1/runs` | BixBench v1 adapter: run folders, newest first. Read-only. See [below](#bixbench-v1-results-api). |
+| `GET /api/bixv1/runs/:id` | One run folder, with one row for each question. |
+| `GET /api/bixv1/scoreboard` | Single agent against swarm, question by question, with statistics. |
 
 Fields of `GET /api/glhf/status` (`statusBody` in `engine/src/glhf/doctor.ts`). The answer is
 kept for 30 seconds.
@@ -609,6 +612,130 @@ kept for 30 seconds.
 | `models` | Model ids to offer in a form: `mock` first, then each of `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` and `openai/gpt-5.5` whose key is set. While paid calls are off, only `mock`. With paid calls on, any other model id can still be sent. |
 
 The dashboard's New run form reads `limits`, `models` and `keys` from this route.
+
+## BixBench v1 results API
+
+Code: `engine/src/bixv1/` (`routes.ts`, `store.ts`, `scoreboard.ts`, `stats.ts`, `types.ts`).
+Tests: `engine/test/bixv1-api.test.ts`, `engine/test/bixv1-stats.test.ts` (fixture folders, no
+real run).
+
+These routes only read the run folders that the BixBench v1 adapter writes
+(`glhf/bixbench_v1/runs/`). They start no run, call no model and write no file. Only `GET` is
+allowed (other methods get 405). They cost nothing, so the paid-calls switch does not apply.
+The dashboard does not use these routes yet.
+
+| Route | Returns |
+|---|---|
+| `GET /api/bixv1/runs` | The run folders, newest first, with totals for each solver. A folder that cannot be read in full is still listed, with an `error`. |
+| `GET /api/bixv1/runs/:id` | One run folder: the run, and a row for each question with each solver's answer and how it was graded. 404 when there is no such run. |
+| `GET /api/bixv1/scoreboard` | One row for each group of runs that can be compared. |
+
+| Query | Routes | Meaning |
+|---|---|---|
+| `?profile=per-mode\|official\|paper` | all three | The grading profile. Default: the profile `report.json` was written with, or `per-mode`. A run that was not graded with the profile: 400 for one run, left out of the scoreboard, "not graded" counts in the list. |
+| `?ideal=1` | `/api/bixv1/runs/:id` only | Adds the ideal answers. See "Ideal answers" below. On another route: 400. |
+
+The numbers are computed from `run.json` and `grade.json` of each capsule run, not copied from
+`report.json`.
+
+### When two runs are compared
+
+A "side" is the capsule runs of one solver in one run folder. A single-agent side and a swarm
+side are compared only when all of these are the same (`pairKey` in `scoreboard.ts`):
+
+| Must be the same |
+|---|
+| Dataset: benchmark name and dataset revision |
+| Answer mode: open, `mcq` or `mcq-refusal` |
+| The set of capsules, and in each capsule the same questions |
+| The solver's model |
+| The grading profile |
+| The token budget of every capsule run (it may differ between capsules, not between the two sides) |
+| The time limit of every capsule run |
+
+Other rules:
+
+- A side that still has a capsule run going is left out until it ends.
+- The row shows the newest single-agent side and the newest swarm side of the group. Two sides
+  from the same run folder are preferred.
+- A side with no match still gets a row, with a note and no comparison. A number is never taken
+  from a run with other settings.
+- Settings that may differ inside a pair are named in the row's note: role models, seed, judge
+  model.
+- A question counts as correct only when its grade says so. Wrong, refused, no answer, a
+  failed capsule run and a judge error all count as not correct, for both sides.
+- A row from the scripted model always says: "Scripted mock model: this tests the plumbing and
+  is not a result."
+
+Note on budgets: in `extended` mode the swarm's own total is larger than the token budget that
+the run was started with. Check `budget` in the swarm's `run.json` before you read a pair as
+"same budget".
+
+### Statistics
+
+Both solvers answer the same questions. Only the questions that the two solvers answered
+differently (one right, one wrong) say which solver is better.
+
+| Number | Method | Why this one |
+|---|---|---|
+| Accuracy of each solver, with a 95% interval | Wilson score interval | The adapter and the official harness use the same. |
+| p-value for "the solvers differ" | Exact McNemar test: a two-sided exact sign test on the questions answered differently | It uses no approximation, so it is valid for a small number of questions. |
+| 95% interval for swarm accuracy minus single-agent accuracy | Newcombe's paired score interval (Newcombe 1998, method 10) | It does not shrink to zero width when no question was answered differently, and it stays between -1 and 1. |
+| Bootstrap interval over capsules | Passed on from the adapter's `report.json`, only when that report describes exactly this pair | See the limit below. |
+
+Limit of all three methods: questions of one capsule share data, so they are not independent.
+The intervals and the p-value are then somewhat too confident. The row's text says this when a
+capsule has more than one question.
+
+### The "too small" rule
+
+A row has `tooSmall: true` when **fewer than 6 questions were answered differently** by the two
+solvers (`MIN_DISCORDANT` in `stats.ts`).
+
+The reason: with `k` questions answered differently, the smallest p-value the exact test can
+give is `2 / 2^k`. With 5 it is 0.0625. So below 6, the test cannot reach `p < 0.05`, whatever
+the answers were.
+
+| Case | The row's `conclusion` says |
+|---|---|
+| Fewer than 6 questions answered differently | "Too few questions to conclude anything." It adds that this fits either solver being better and no difference, and gives the interval. |
+| 6 or more, and `p < 0.05` | Which solver was correct more often, with the difference, the p-value and the interval. |
+| 6 or more, and `p >= 0.05` | "No difference detected." It adds that this is not evidence that the solvers are equal. |
+| A scripted run | Always `tooSmall: true`. |
+
+Example: the pilot (8 questions, 4 of 8 for each solver, no question answered differently) is
+"too small". Its interval runs from -20.1 to +20.1 percentage points.
+
+### Ideal answers
+
+An ideal answer is the benchmark's correct answer to a question.
+
+**Rule: no response holds an ideal answer, unless the request is
+`GET /api/bixv1/runs/:id?ideal=1` and every capsule run in that folder has finished.**
+
+| Case | Result |
+|---|---|
+| Any route without `?ideal=1` | No ideal answers. Also no raw judge reply and no grader note, because these can quote the ideal. `idealsRevealed` is false. |
+| `?ideal=1` on a finished run | Each question gets `ideal`. The response has `idealsRevealed: true` and the header `cache-control: no-store`. |
+| `?ideal=1` on a run that is still going, or that has no capsule runs | Refused with 409. |
+| `?ideal=1` on the list or the scoreboard | Refused with 400. |
+| The dataset's question file is not on this machine | No ideals; `idealNote` says to run `uv run bixbench-v1 download`. |
+
+The reason for the rule:
+
+- The dashboard polls the default responses, and anything on this machine can read them. That
+  includes coding agents that work on the solvers and their prompts.
+- An answer that appears there can end up in a prompt, a lesson file or a screenshot. After
+  that, every later run on that question is worthless.
+- A results view needs only "right" or "wrong".
+- A run that is still going is refused because its solver is working on these questions now.
+
+The flag is for a person who reviews a finished run and needs to see why an answer was marked
+wrong. A coding agent must not use it (see [AGENTS.md](../AGENTS.md): never read benchmark
+answers).
+
+What the rule cannot hide: an answer that was graded correct by exact match is the ideal
+answer.
 
 ## Ask and search
 

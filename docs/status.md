@@ -47,16 +47,29 @@ capsules, in 64 zip files). It is not BixBench3 and not the nine-role swarm. Ful
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Staging of data, integrity rules, both solvers, three grading profiles, report | Tested with the scripted model. | 102 automated tests in `glhf/bixbench_v1/tests/`. Run: `cd glhf/bixbench_v1 && uv run pytest -q tests`. Not part of `npm test`. |
+| Staging of data, integrity rules, both solvers, three grading profiles, report | Tested with the scripted model. | 117 automated tests in `glhf/bixbench_v1/tests/`. Run: `cd glhf/bixbench_v1 && uv run pytest -q tests`. Not part of `npm test`. |
 | Pilot with a real model | Done once. 3 capsules, 8 questions, `anthropic/claude-sonnet-5-5`. | Single agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). Report in `glhf/bixbench_v1/runs/pilot-sonnet-5-5/report.md` (local file, not in git). |
 | Full run (205 questions) | **Not done.** | |
 | One run per question (`--unit question`) | Not tried with a real model. | |
 | Multiple-choice mode (`--answer-mode mcq`) | Not tried with a real model. | |
-| Critic without hints (`--critic-hints none`) | Not tried with a real model. | |
+| Swarm changes after the pilot: blind critic (no hint, analyst's files moved away, checked), reconciler that derives again by running a script, same-method flag, budget floors with refusal before the start, forced final turn, equal or extended budget (`BIXBENCH_V1_SWARM_BUDGET`) | **Tested with the scripted model only. No real-model run has checked these fixes.** | `glhf/bixbench_v1/tests/test_swarm_rules.py`, `test_swarm_e2e.py` (needs Docker). Commit `cfac205`. |
+| `--critic-hints` | Still accepted, now ignored. The critic is always blind. | `runner.py`, `solvers.py` in `glhf/bixbench_v1/src/bixbench_v1/`. |
+| Results API in the engine: `GET /api/bixv1/runs`, `/api/bixv1/runs/:id`, `/api/bixv1/scoreboard` | Automated tests with fixture run folders (15 tests). Read-only. Not shown in the dashboard yet. Not used on a full run (none exists). | `engine/test/bixv1-api.test.ts`, `engine/test/bixv1-stats.test.ts`. |
+| Statistics of the results API (exact McNemar, Newcombe paired interval, Wilson) | Automated tests on worked examples. Not checked by us against a statistics package. | `engine/test/bixv1-stats.test.ts`. |
 
 The pilot is too small to conclude anything. Both solvers answered the same 4 questions
 correctly, and the 95% interval for each is about 22% to 79%. It does not show that one solver
-is better or that they are equal.
+is better or that they are equal. The results API, called on the pilot folder, gives the same
+reading: "Too few questions to conclude anything". No question was answered differently (the
+rule needs at least 6), and the 95% interval for swarm minus single agent runs from -20.1 to
++20.1 percentage points.
+
+**The pilot ran the older swarm.** In it the critic was shown the analyst's route, and each
+derivation got 42% of the token budget. In the pilot's report, the analyst and the critic
+agreed on 6 answers and 4 of these were graded wrong (the adapter's README says "four answers
+and all four were wrong"; the report file counts 6 agreed, 2 correct). This is why the swarm
+was changed. The 4-of-8 score and the 1.7 times token figure describe the older swarm, not the
+present one. The present swarm has no real-model result at all.
 
 Known limits:
 
@@ -65,6 +78,10 @@ Known limits:
 | The sandbox has no network. | At least 17 of the 205 questions (in 6 capsules) name an online resource such as KEGG or Reactome. Neither solver can answer them as asked. The official harness leaves the network on. |
 | The official image (`futurehouse/bixbench:aviary-notebook-env`) lacks some R packages. | edgeR, limma, org.Mm.eg.db, Seurat, msigdbr and ReactomePA are not installed. Questions that need them are harder or cannot be done as asked. |
 | One run is one capsule with all its questions. | The official protocol is one question per run. Questions of a capsule can hint at each other, and one data-loading mistake can cost several questions. State this with any number. |
+| "Replicated" is not "correct". | Two blind derivations by the same model can make the same choice where a question leaves one open. |
+| The same-method check is crude. | It compares the words of two short lines that the roles write themselves. |
+| The reconciler's script check can be gamed. | The harness checks that the value came from a script that reads `/data`. It cannot check that the script is a real analysis. |
+| The forced final turn exists for the swarm only. | On a capsule where the single agent hits its limit, this is an advantage for the swarm. Say so with any comparison. |
 | The image is published for linux/arm64 only. | Tested on Apple Silicon. An x86-64 machine needs emulation or its own build. |
 
 ## Sponsor tools

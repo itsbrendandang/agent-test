@@ -87,6 +87,14 @@ All others are read in `engine/src/glhf/task.ts`.
 If you set `GLHF_RUNS_DIR`, set it for the engine and for the CLI. The CLI reads the token
 and the run records from the same folder.
 
+### BixBench v1
+
+| Variable | Default | Meaning | Code |
+|---|---|---|---|
+| `BIXV1_RUNS_DIR` | `glhf/bixbench_v1/runs` | Where the results API looks for the adapter's run folders. Tests use a fixture folder. | `engine/src/bixv1/store.ts` |
+| `BIXV1_QUESTIONS_FILE` | `glhf/data/bixbench_v1/hub/BixBench.jsonl` | The dataset's question file. The results API opens it only for a `?ideal=1` request. | `engine/src/bixv1/store.ts` |
+| `BIXBENCH_V1_SWARM_BUDGET` | `equal` | Token budget of the adapter's swarm. `equal`: the same total as the single agent. `extended`: 2.25 times that; read the result as "more budget". Read by the Python adapter, not by the engine. There is no command-line option for it. | `glhf/bixbench_v1/src/bixbench_v1/solvers.py` |
+
 ### Sandbox and Docker
 
 | Variable | Default | Meaning | File |

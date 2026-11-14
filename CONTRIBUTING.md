@@ -113,9 +113,9 @@ npm test
 |---|---|---|
 | Everything below except the adapter | `npm test` | |
 | Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 359 |
-| Engine | `npm run test:engine` | 159 with all test files (142 pass, 1 skipped, 16 marked "todo" for known problems). 86 in the committed files at commit `77f7b75`. |
+| Engine | `npm run test:engine` | 159 with all test files (142 pass, 1 skipped, 16 marked "todo" for known problems). 101 in the committed files at commit `5177a0e`, all pass. |
 | Type checks (engine and dashboard) | `npm run typecheck` | |
-| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 102 |
+| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 117 |
 
 Some tests start a Docker sandbox. They are skipped when Docker is not running. The dashboard
 has no automated tests.
@@ -207,15 +207,18 @@ git diff --cached --stat
 
 This project was built with [Pi](https://pi.dev), an agent harness. You do not need it. If you
 want it, [docs/pi-setup.md](docs/pi-setup.md) has the install and what the repository configures for it:
-shared skills in `.agents/skills/`, and four agent profiles in `.pi/agents/` (reviewer,
-advisor, docs-writer, dashboard-qa).
+shared skills in `.agents/skills/`, four agent profiles in `.pi/agents/` (reviewer, advisor,
+docs-writer, dashboard-qa), and one package, `pi-agents` 0.40.1. This package is from a third
+party ([github.com/mavam/pi-agents](https://github.com/mavam/pi-agents)), not from the authors
+of Pi. It runs inside the agent with full access to your files and shell.
 
 Whatever agent you use, hold it to the rules in `AGENTS.md`. The two that cost real money or
 invalidate a result:
 
 - An agent never makes a paid call and never sets `NO_PAID_CALLS=0`. Only the person who pays
-  may. The engine refuses paid calls by default, but it cannot stop an agent that runs a paid
-  Python command directly, so the rule still matters.
+  may. Paid calls are off unless `.env` has `NO_PAID_CALLS=0`. The switch is tested for the
+  engine only. The check for a paid Python command that an agent runs directly is new and has
+  no automated tests, so the rule still matters.
 - Never let an agent read benchmark answers: the bucket `gs://bixbench3-ground-truth` or the
   published results of a benchmark paper. That voids the run. The grader's code may be read,
   but it must not be changed.

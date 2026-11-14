@@ -31,9 +31,26 @@ Then it loads these:
 | Repository rules | `AGENTS.md` | The rules every agent follows here |
 | Skills | `.agents/skills/` | Exa search, the Biomni method catalog |
 | Agent profiles | `.pi/agents/` | reviewer, advisor, docs-writer, dashboard-qa |
-| Packages | `.pi/settings.json` | Sub-agents and session memory, installed on first trust |
+| Package | `.pi/settings.json` | One package, `pi-agents` 0.40.1. It gives Pi the tools to start other agents. See below. |
 
 `AGENTS.md` loads even without trust, so read it yourself before you rely on it.
+
+### The one package: `pi-agents`
+
+`.pi/settings.json` declares exactly one package: `npm:pi-agents@0.40.1`.
+
+| Question | Answer |
+|---|---|
+| Version | 0.40.1. The version is pinned, so an update does not arrive by itself. |
+| Source | [github.com/mavam/pi-agents](https://github.com/mavam/pi-agents), published on npm as `pi-agents`. |
+| Who wrote it | A third party. It is **not** from the authors of Pi, and not from us. |
+| What it can do | It runs inside the Pi agent, with the same access as Pi: your files, your shell, your network, with your user's rights. Trusting this project means trusting this package. Read its code first if that matters to you. |
+| What it adds | Five tools: `agent_spawn`, `agent_send`, `agent_wait`, `agent_status`, `agent_stop`. |
+| Cost | Each agent that is started uses a model through your Pi account. More agents cost more. |
+
+An earlier version of the settings also declared a session-memory package. It was removed
+because it makes model calls in the background, and a teammate would pay for them without
+asking for them.
 
 ## The agent profiles
 
@@ -46,11 +63,14 @@ can check the first one's work without being told the context every time.
 - **advisor** — reads only. Weighs a design decision and says what would change
   its mind.
 - **docs-writer** — Markdown only. Must name the file that proves each claim.
-- **dashboard-qa** — `dashboard/` only. Tests in a real browser with the mock
-  model, never a paid one.
+- **dashboard-qa** — `dashboard/` only. Tests in a real browser with the
+  scripted model (`mock`), never a paid one.
 
-Start one with the `subagent` tool, or ask Pi in plain words: "have the
-reviewer look at the last commit".
+Pi starts a profile with the tool `agent_spawn` from the `pi-agents` package.
+The other tools are `agent_send` (send it a message), `agent_wait` (wait for
+its answer), `agent_status` (list the agents) and `agent_stop` (stop one).
+You can also ask Pi in plain words: "have the reviewer look at the last
+commit". There is no tool named `subagent`.
 
 ## Rules worth repeating to any agent
 
@@ -58,9 +78,10 @@ These are in `AGENTS.md`, and they are the ones that cost real money or
 invalidate a result when broken:
 
 1. **An agent never makes a paid call and never sets `NO_PAID_CALLS=0`.** Only
-   the person who pays may. The engine refuses paid calls unless `.env` has
+   the person who pays may. Paid calls are off unless `.env` has
    `NO_PAID_CALLS=0`, so a new clone can only do scripted runs
-   (`--model mock`). The check for a Python command that an agent runs directly
+   (`--model mock`). Before this switch existed (commit `05600b1`), nothing
+   made the scripted model the default: a run with keys in `.env` could spend. The check for a Python command that an agent runs directly
    (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`) is new and has no
    automated tests, so the agent must follow the rule itself. Pi's own model use is separate: it
    is paid by your Pi account, not by this repository's keys.

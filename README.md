@@ -8,6 +8,8 @@ better than one model with the same budget?
 This repository holds two projects that share one backend and one web UI:
 
 1. **GLHF swarm** (the main project). A solver with nine roles for Edison's BixBench3 benchmark.
+   The nine roles are nine phases with their own instructions. They use four model groups, and
+   by default all four use the same model.
    Only the solver is ours. The sandbox, time limit, grader and judge are the benchmark's own code.
 2. **Drug candidate board** (the older project). A lead scientist agent and eight research agents
    that write a go / no-go memo. See [docs/drug-board.md](docs/drug-board.md).
@@ -42,7 +44,7 @@ Read this first. It says what was really done.
 | Swarm and single agent on the demo case, real model | Done once each. Both scored 1.0. The swarm used about 15 times the tokens of the single agent. |
 | A real BixBench3 task | **Not done.** There is no benchmark score to report. |
 | Cloud run on Google Cloud | **Not done.** Google Cloud is not set up. |
-| Public BixBench dataset (`futurehouse/BixBench` v1.5, 205 questions, 59 data capsules) | Adapter built and tested with the scripted model. A small pilot with a real model ran (3 capsules, 8 questions). **The full run is not done.** See [BixBench v1 adapter](#bixbench-v1-adapter). |
+| Public BixBench dataset (`futurehouse/BixBench` v1.5, 205 questions, 59 data capsules) | Adapter built and tested with the scripted model. A small pilot with a real model ran (3 capsules, 8 questions) with the older swarm. The swarm was changed after it; the changes are tested with the scripted model only. **The full run is not done.** See [BixBench v1 adapter](#bixbench-v1-adapter). |
 
 The demo case is a small built-in test case. It is not a benchmark task, so a demo score is not a
 benchmark score. Full details: [docs/status.md](docs/status.md).
@@ -53,7 +55,7 @@ benchmark score. Full details: [docs/status.md](docs/status.md).
 |---|---|
 | Swarm | The GLHF solver with nine roles (`--solver glhf`). |
 | Single agent | The benchmark's own solver with one agent (`--solver single`). It is our baseline. |
-| Role | One agent in the swarm. Each role has its own instructions and starts with an empty context. |
+| Role | One agent in the swarm. Each role has its own instructions and starts with an empty context. There are nine roles in four model groups (planner, experimenter, critic, reporter). A role is not a separate model: with one `--model`, all nine use it. |
 | Phase | One turn of one role inside a run, for example `critique 2`. |
 | Artifact | An output file that the task requires. The grader scores artifacts. |
 | Claim | A statement about the results that can be tested, with a null hypothesis. |
@@ -178,17 +180,34 @@ How verdicts are computed and how to compare two runs fairly:
 ## BixBench v1 adapter
 
 `glhf/bixbench_v1/` runs the single agent and a three-role swarm (analyst, blind critic,
-reconciler) on the public dataset `futurehouse/BixBench` v1.5. This is a different benchmark
+reconciler that derives the answer again by running code) on the public dataset
+`futurehouse/BixBench` v1.5. This is a different benchmark
 from BixBench3, and this swarm is not the nine-role swarm. Full text:
 [glhf/bixbench_v1/README.md](glhf/bixbench_v1/README.md).
 
 | Item | Status |
 |---|---|
-| Staging, the integrity rules, both solvers, grading, report | Built. Tested with the scripted model (102 automated tests). |
-| Pilot with a real model (`anthropic/claude-sonnet-5-5`) | 3 capsules, 8 questions. Single agent 4 of 8 correct. Swarm 4 of 8 correct. The swarm used about 1.7 times the tokens. |
+| Staging, the integrity rules, both solvers, grading, report | Built. Tested with the scripted model (117 automated tests). |
+| Pilot with a real model (`anthropic/claude-sonnet-5-5`) | 3 capsules, 8 questions. Single agent 4 of 8 correct. Swarm 4 of 8 correct. The swarm used about 1.7 times the tokens. **This was the older swarm**, before the changes below. |
+| Changes to the swarm after the pilot (table below) | **Tested with the scripted model only. No run with a real model has checked them.** |
 | Full run (205 questions) | **Not done.** |
+| Results API in the engine (`GET /api/bixv1/...`) | Built, read-only. Automated tests with fixture folders. The dashboard does not show it yet. See [docs/running.md](docs/running.md#bixbench-v1-results-api). |
 
 The pilot is too small to conclude anything. It does not show that one solver is better.
+
+What the pilot did show: where the analyst and the critic agreed, the answer was often wrong.
+In the pilot the critic was shown the analyst's route. That is why the swarm was changed:
+
+| Change | What it does now |
+|---|---|
+| Blind critic | The critic gets the questions and its own instructions only. Nothing of the analyst's: no answer, no route, no files. Code moves the analyst's files away and checks this before the critic starts. If the check fails, the critic does not run. `--critic-hints` is still accepted but is ignored. |
+| Reconciler runs code | The reconciler cannot record an answer by saying so. It writes a script, the harness runs it, and the answer is the value on the last output line. It runs whenever a question has two answers. |
+| Same-method flag | When two answers agree and both were made by the same method, the agreement is marked as weaker and gets a spot check. |
+| Budget floors | Each role has a smallest token budget, computed from the number of questions. A run whose budget cannot hold the three floors is refused before it starts. Tokens that a role does not use go to the next role. |
+| Forced final turn | A derivation that stops with questions unanswered gets one last short turn that can only submit answers. Such answers are marked as forced and count as weak. The single agent has no such turn. |
+| Equal or extended budget | `BIXBENCH_V1_SWARM_BUDGET=equal` (default): the swarm's total is the single agent's budget. `extended`: the swarm gets 2.25 times that, and the result must be read as "more budget". There is no command-line option for this yet. |
+
+These changes answer a problem seen in 8 questions. We do not know if they help.
 
 Known limits:
 
@@ -197,6 +216,10 @@ Known limits:
 - The official image does not have some R packages (for example edgeR, limma, Seurat).
 - One run is one capsule with all its questions. The official protocol is one question per run
   (`--unit question` does that, at a higher cost). Say this with any number you report.
+- Two blind derivations by the same model can still make the same mistake. "Replicated" does
+  not mean "correct".
+- The same-method check compares the words of two short lines. It is crude.
+- The harness cannot prove that the reconciler's script is a real analysis.
 
 ## Where things are
 
@@ -212,6 +235,8 @@ Known limits:
 | `glhf/docs/DESIGN.md` | Design of the swarm. |
 | `glhf/runs/` | Run folders. Not in git. |
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
+| `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
+| `engine/src/paid.ts` | The paid-calls switch (`NO_PAID_CALLS`). |
 | `engine/src/` (other files) | Drug board, search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | `SwarmView.tsx`, `AgentsView.tsx`, `ExperimentsView.tsx`, `BoardView.tsx` and others. |
 | `dashboard/src/swarm/NewRun.tsx` | The form that starts a run from the dashboard. |
@@ -248,15 +273,14 @@ engine tests.
 | Engine tests | Count |
 |---|---|
 | All test files in `engine/test/` | 159: 142 pass, 0 fail, 1 skipped, 16 marked "todo" |
-| The 8 committed test files only (at commit `77f7b75`) | 86, all pass |
+| The 10 committed test files only (at commit `5177a0e`) | 101, all pass |
 
-The other 73 tests are in three new files that were not committed when this was counted
-(`glhf-timeouts.test.ts`, `bixv1-api.test.ts`, `bixv1-stats.test.ts`). The 16 "todo" tests are
-in `glhf-timeouts.test.ts`. Each one describes a known problem in how the engine handles a
+The other 58 tests are in one new file that was not committed when this was counted
+(`glhf-timeouts.test.ts`). The 16 "todo" tests and the skipped test are in that file. Each one describes a known problem in how the engine handles a
 run that passes its time limit. They do not count as failures, but the problems are real.
  Some harness tests start a Docker sandbox; they are skipped when Docker is not running.
 
-`npm test` does not run the tests of the BixBench v1 adapter (102 tests). Run them with:
+`npm test` does not run the tests of the BixBench v1 adapter (117 tests). Run them with:
 
 ```bash
 cd glhf/bixbench_v1 && uv run pytest -q tests

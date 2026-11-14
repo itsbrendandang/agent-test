@@ -1,7 +1,10 @@
 # Notes for coding agents (Pi, Claude Code, Codex and others)
 
-This repository holds GLHF, a nine-role solver (the swarm) for the BixBench3 benchmark, and a
-drug candidate board that shares its engine and dashboard. Read `README.md` first. Reference
+This repository holds GLHF, a multi-agent solver (the swarm) for the BixBench3 benchmark, and a
+drug candidate board that shares its engine and dashboard. The swarm has nine phases, each
+with its own instructions and an empty context (`swarm/catalog.py`). The nine phases use four
+model groups: planner, experimenter, critic, reporter. So a run uses at most four different
+models, not nine. The documents call each phase a "role". Read `README.md` first. Reference
 documents are in `docs/`.
 
 ## Commands
@@ -67,6 +70,10 @@ documents are in `docs/`.
   exists. The pattern is in `checkClaims` in `engine/src/board.ts` (key: round, member, hash of
   the claim) and `startOnce` in `engine/src/glhf/task.ts`. Do not add a paid call without
   one, and add a test that replays and counts the calls.
+- Never call `GET /api/bixv1/runs/:id?ideal=1`, and never open the dataset's question file
+  (`glhf/data/bixbench_v1/hub/BixBench.jsonl`) or a `report.md` for the answers. Ideal answers
+  are for a person who reviews a finished run. Do not add ideal answers, judge replies or
+  grader notes to any default API response.
 - The engine's request checks (`engine/src/http.ts`, `checkRequest` in
   `engine/src/glhf/tracker.ts`) decide who may start a paid run. Do not loosen them. The
   paid-calls check in `checkRequest` comes before them and holds for every caller.
@@ -84,6 +91,8 @@ documents are in `docs/`.
 - Swarm memory: `glhf/memory/` (`lessons.pending.md`, `lessons.md`, `README.md`).
 - Run tracker (Pi Durable): `engine/src/glhf/`. Contract types: `engine/src/glhf/types.ts`.
 - Paid-calls switch: `engine/src/paid.ts`, tests in `engine/test/paid.test.ts`.
+- BixBench v1 results API (read-only): `engine/src/bixv1/`. It must never return an ideal
+  answer by default; see the rule at the top of `engine/src/bixv1/routes.ts`.
 - Engine request handler and request checks: `engine/src/app.ts`, `engine/src/http.ts`.
   `engine/src/server.ts` only listens. Board run lock: `engine/src/runlock.ts`.
 - Search and Ask over runs: `engine/src/search.ts`, `engine/src/ask.ts`.
