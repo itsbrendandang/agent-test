@@ -93,7 +93,7 @@ Known limits:
 | Ask (question answering over runs) | Automated tests with a stand-in for the model API (`engine/test/glhf-ask.test.ts`). |
 | Docker Compose setup | Tested by hand on macOS on a new clone: `docker compose up --build`, then `docker compose exec engine npm run demo` (score 1.000) and `npm run doctor`. Not tested on Linux or Windows. Windows needs WSL2. |
 | Dashboard | No automated tests. Type checks only (`npm run typecheck`). |
-| Dashboard: New run form (real models, with a confirm step) | No automated tests. The engine's checks on the request are tested (`engine/test/glhf-tracker.test.ts`). |
+| Dashboard: New run form (real models with a confirm step, pair with "Both"), Cancel run button, queued and cancelled states | No automated tests in the dashboard. The engine's side is tested (`engine/test/glhf-tracker.test.ts`, `engine/test/glhf-runs.test.ts`). |
 
 ## Drug candidate board
 

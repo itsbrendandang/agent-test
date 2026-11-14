@@ -421,8 +421,8 @@ that starts a local run on the demo case.
 
 | Field | Values | Notes |
 |---|---|---|
-| Who does the work | Swarm, Single agent, or Both | "Both" starts two runs with the same model, time limit, token budget and seed, so the scoreboard can pair them. They run at the same time. |
-| Model | `mock` (default, free), two Claude models, or another model id | |
+| Who does the work | Swarm, Single agent, or Both | "Both" starts a matched pair: the same model, time limit, token budget and seed, one run after the other. |
+| Model | `mock` (default, free), the models the engine offers (`models` in the status), or another model id | |
 | Time limit | 1 to 1,440 minutes. Default 30. | |
 | Token budget | 1,000 to 500,000,000 | Required for a real model, by the form and by the engine. Optional for `mock`. |
 | Seed | optional | |
@@ -441,20 +441,21 @@ Safety steps for a real model:
 
 Other behaviour:
 
-- The form warns when the engine has no key for an Anthropic or OpenAI model.
-- The form does not start a run while another local run is still going.
-- **"Both" does not work with the present engine.** The form still sends two separate
-  requests. The engine now allows one local run at a time, so the second request gets 409.
-  The swarm run starts and the form says that the single-agent run did not. The form does not
-  yet use `solvers`. Until it does, start a pair from the CLI (`--solvers glhf,single`).
-- The dashboard has no cancel button yet, and its types do not know the phase `cancelled`.
-  Cancel from the CLI.
-- The engine checks every field again. If it refuses, the form shows the engine's message.
+- The form warns when the engine has no key for an Anthropic or OpenAI model, and says that
+  Exa search is off when the engine has no Exa key.
+- If another local run is still going, the engine answers 409. The form shows the message and
+  a link to that run.
+- "Both" sends one request with `solvers: ["glhf", "single"]`. The swarm run goes first; the
+  single-agent run is queued behind it.
+- A live or queued run has a **Cancel run** button (`dashboard/src/swarm/CancelRun.tsx`). A
+  dialog asks first, and says when a queued partner will be cancelled too.
+- The engine checks every field again. If it refuses, the form shows the engine's message next
+  to the input that the refusal names (`field`).
 
 The form cannot start cloud runs, runs on another case (`--case`), per-role models
 (`--role-model`) or a message limit (`--max-messages-per-role`). Use the CLI for these.
 
-The form has no automated tests. Type checks only.
+The form and the cancel dialog have no automated tests. Type checks only.
 
 Drug board runs (`POST /api/runs`) are allowed from the dashboard page, with the token, or when
 the board runs on scripted models.
@@ -495,8 +496,7 @@ kept for 30 seconds.
 | `limits` | The smallest and largest value a request may ask for: `timeLimit` [60, 86400] seconds, `maxTokens` [1000, 500000000], `reviewRounds` [1, 10], `maxMessagesPerRole` [2, 5000], `seed` [1, 2147483647]. From `LIMITS` in `engine/src/glhf/types.ts`, the same numbers the engine enforces. |
 | `models` | Model ids to offer in a form: `mock` first, then each of `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` and `openai/gpt-5.5` whose key is set. Any other model id can still be sent. |
 
-The dashboard does not read `limits` and `models` yet. It keeps its own copy in
-`dashboard/src/swarm/api.ts`.
+The dashboard's New run form reads `limits`, `models` and `keys` from this route.
 
 ## Ask and search
 

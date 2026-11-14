@@ -59,9 +59,9 @@ Docker on the engine's machine.
 
 | Field | Values | Notes |
 |---|---|---|
-| Who does the work | Swarm (9 roles), Single agent, Both | "Both" starts two runs with the same model, time limit, token budget and seed, so the scoreboard can pair them. |
-| Model | `mock` (default, free), `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5`, or another model id | `mock` is the scripted model. It does no real analysis. |
-| Time limit | 1 to 1,440 minutes, default 30 | |
+| Who does the work | Swarm (9 roles), Single agent, Both | "Both" starts a matched pair with one request: the same model, time limit, token budget and seed, the swarm first, then the single agent. |
+| Model | `mock` (default, free), the models the engine offers (those whose key is set), or another model id | `mock` is the scripted model. It does no real analysis. |
+| Time limit | 1 to 1,440 minutes, default 30 | The ranges of all number fields come from the engine (`limits`). |
 | Token budget | 1,000 to 500,000,000 | Required for a real model. The engine has the same rule. |
 | Seed | optional | |
 | Review rounds | 1 to 10, default 3 | Swarm only. |
@@ -72,40 +72,41 @@ A real model costs money, so the form adds these steps:
 1. A note says that the run costs money.
 2. A token budget is required.
 3. A second page, "Confirm a paid run", repeats the model, the number of runs, the time limit
-   and the token budget (also the total for two runs).
+   and the token budget.
 4. The button "Start paid run" works only after you tick the box "I understand that this
    spends money on the model provider's account".
 
 Other behaviour:
 
 - A warning appears when the engine has no key for an Anthropic or OpenAI model.
-- No new run starts while a local run is still going. The engine has the same rule: it
-  answers 409 with the id of the run that is going.
 - The engine checks every field again (`checkRequest` in `engine/src/glhf/tracker.ts`). Its
   refusal is shown in the form, next to the field when possible.
-- If only the first of two runs starts, the form stays open and says why.
+- The engine starts no local run while another local run is still going. See the table below.
 
 Not in the form: cloud runs, BixBench3 tasks, other case folders, per-role models, a message
 limit per role. Start these from the CLI ([../docs/running.md](../docs/running.md)).
 
 The form has no automated tests.
 
-### Not yet matched to the engine's run control
+### Run control in the dashboard
 
-The engine gained run control (pair in one request, one local run at a time, cancel). See
-[../docs/running.md](../docs/running.md#run-control). The dashboard code does not use it yet:
+The engine's run control is described in [../docs/running.md](../docs/running.md#run-control).
+The dashboard uses it in this way:
 
-| Engine feature | Dashboard today (`src/swarm/api.ts`, `src/swarm/NewRun.tsx`, `src/views/SwarmView.tsx`) |
-|---|---|
-| `solvers: ["glhf", "single"]` starts a pair, one run after the other | Not used. "Both" sends two requests. The second gets 409, so only the swarm run starts and the form says that the single-agent run did not. Start a pair from the CLI. |
-| Phase `cancelled` | Not in the `GlhfPhase` type of `src/swarm/api.ts`. |
-| `POST /api/glhf/runs/:id/cancel` | No cancel button. Cancel from the CLI: `npm run glhf -- cancel <run-id>`. |
-| A queued partner (`after`, `pairedWith`, `note`) | Not shown. A queued run reads "Starting the run". |
-| `limits` and `models` in `GET /api/glhf/status` | Not read. The form keeps its own limits and model list. Its list has no `openai/gpt-5.5`. |
-| `keys.EXA_API_KEY` in the status | Not in the `GlhfStatus` type. The form does not warn when the Exa key is missing; the engine's refusal is shown. |
-| `field` in a 400 answer | Not read. The form finds the field from the first word of the message. |
+| Engine feature | In the dashboard | Code |
+|---|---|---|
+| A pair in one request (`solvers`) | "Both" sends one request with `solvers: ["glhf", "single"]`. The swarm run goes first. The single-agent run is queued and starts when the swarm run has ended. | `src/swarm/NewRun.tsx`, `startRun` in `src/swarm/api.ts` |
+| One local run at a time (409) | The form shows the engine's message and a link "Open <run id>" to the run that is in the way. | `NewRun.tsx` |
+| Cancel | A live or queued run has a **Cancel run** button. A dialog asks first ("Cancel this run?"). It says when a queued partner will be cancelled too. For a cloud run, the engine's refusal with the command to run is shown as it is. | `src/swarm/CancelRun.tsx`, `src/views/SwarmView.tsx` |
+| Phases `queued` and `cancelled` | A queued partner reads "Waiting in the queue". A cancelled run reads "This run was cancelled. It has no score." | `SwarmView.tsx` |
+| `pairedWith`, `after`, `note` | The run page links to the partner and to the run it was queued behind, and shows the note. | `SwarmView.tsx` |
+| `limits` and `models` in `GET /api/glhf/status` | The form takes its ranges and its model list from the engine. With no model key, only `mock` is listed. | `NewRun.tsx` |
+| `keys.EXA_API_KEY` | The form says that Exa search is off when the engine has no Exa key. | `NewRun.tsx` |
+| `{error, field}` in a 400 answer | The message is shown next to the input that `field` names. Other refusals are shown under the form. | `NewRun.tsx` |
+| Registered tests of a claim | The claim list shows planned tests, tests with no result, and results that were "not planned beforehand". | `SwarmView.tsx` |
 
-A dashboard change may be in progress. Check the code before you rely on this table.
+None of this has automated tests in the dashboard. The engine side is tested in
+`engine/test/glhf-runs.test.ts`.
 
 ## Characters
 - `src/components/Buddy.tsx`: SVG characters (bunny, flame, egg, mountain, sprout) with four moods.
@@ -132,9 +133,6 @@ and expose the same actions as tools to use a real model.
 
 ## Not wired yet
 - Starting a cloud run or a run on a BixBench3 task from the Swarm view.
-- Cancel, pairs through `solvers`, and the engine's `limits` and `models` (see the table above).
-- The registered tests of a claim (the ledger's `registered` and `pending_tests` fields) are
-  not in the client types in `src/swarm/api.ts`.
 - Claims and issues of cloud runs (they are in the results bucket).
 - Simulations: none is registered.
 - No automated tests. `npm run typecheck` in the repository root checks the types.
@@ -150,7 +148,7 @@ src/
 │   └── ui/                   # shadcn/ui (generated)
 ├── crew/                     # character store, sprites, skill starters
 ├── views/                    # Swarm, Board, Experiments, Agents, Overview, Analytics, Settings, Placeholder
-├── swarm/                    # client for /api/glhf/*, New run form, role list, styles
+├── swarm/                    # client for /api/glhf/*, New run form, cancel dialog, role list, styles
 ├── board/                    # client for the drug board routes, styles
 └── sim/
     ├── types.ts              # Simulation contract

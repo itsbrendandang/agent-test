@@ -133,9 +133,8 @@ Rules for local runs (details: [docs/running.md](docs/running.md#run-control)):
 These rules were tested with a stand-in for the runner, not with a real model.
 
 The dashboard's Swarm view can also start a local run on the demo case (button **New run**).
-A run with a real model needs a token budget and a confirm step there. The dashboard cannot
-cancel a run yet, and its "Both, to compare" choice does not work with the one-at-a-time rule
-yet; use the CLI for a pair.
+A run with a real model needs a token budget and a confirm step there. "Both, to compare"
+starts a pair. A live or queued run has a **Cancel run** button.
 
 Cloud runs create a billed 32-core virtual machine. Do not start one unless the team agrees.
 
@@ -221,7 +220,7 @@ Known limits:
 npm test
 ```
 
-This runs 359 harness tests (pytest), the type checks for the engine and the dashboard, and 64
+This runs 359 harness tests (pytest), the type checks for the engine and the dashboard, and 74
 engine tests. Some harness tests start a Docker sandbox; they are skipped when Docker is not running.
 
 `npm test` does not run the tests of the BixBench v1 adapter (102 tests). Run them with:

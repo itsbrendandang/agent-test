@@ -99,7 +99,7 @@ npm test
 |---|---|---|
 | Everything below except the adapter | `npm test` | |
 | Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 359 |
-| Engine | `npm run test:engine` | 64 |
+| Engine | `npm run test:engine` | 74 |
 | Type checks (engine and dashboard) | `npm run typecheck` | |
 | BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 102 |
 
