@@ -6,6 +6,8 @@ The pattern follows IndyDevDan's "CEO and board" video (brief in, memo out, cons
 
 ![Board view](docs/board.png)
 
+The Board view shows a plain summary (progress, recommendation, how many claims checked out, open questions, next steps). Tick **Show details** for the full roster, discussion with per-claim verdicts, evidence pool and memo ([screenshot](docs/board-details.png)).
+
 > **Skeleton.** It runs end to end today on scripted mock models (no keys). Add keys to `.env` to make it live.
 
 ```
