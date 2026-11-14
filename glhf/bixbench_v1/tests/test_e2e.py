@@ -42,6 +42,42 @@ def answer(question: int, value: str, route: str = "pandas on counts.csv") -> Mo
     )
 
 
+def sanswer(question: int, value: str, method: str, route: str = "pandas") -> ModelOutput:
+    """A swarm derivation's answer: the same record plus its one-line method."""
+    return call(
+        "submit_answer",
+        question_id=f"syn-1-q{question}",
+        answer=value,
+        method=method,
+        route=route,
+        evidence="work/s.py",
+    )
+
+
+def rederive(question: int, script: str, value: str, cause: str, **more: object) -> ModelOutput:
+    return call(
+        "rederive",
+        question_id=f"syn-1-q{question}",
+        script=script,
+        answer=value,
+        cause=cause,
+        same_method=bool(more.pop("same_method", False)),
+        **more,
+    )
+
+
+def write(path: str, text: str) -> ModelOutput:
+    return shell(f"cat > {path} <<'EOS'\n{text}\nEOS")
+
+
+PANDAS = "data=counts.csv column a; subset=all rows; procedure=sum of the column; tool=pandas.sum"
+AWK = (
+    "data=counts.csv second field; subset=lines after the header; procedure=running total; tool=awk"
+)
+SUM_A = "print(sum(int(l.split(',')[1]) for l in open('/data/counts.csv').read().split()[1:]))"
+ANALYST_FILES = (
+    "notes.txt", "scratch_a.txt", "answer_is_five.txt", "shm_a.txt", "a_dir", "inner.txt", "leak_a.txt",
+)  # fmt: skip
 DONE = call("submit", answer="done")
 PROBE = (
     "import os, socket, subprocess\n"
@@ -74,39 +110,64 @@ PROBE = (
     "            if 'SENTINEL' in text or name.endswith('.ipynb'):\n"
     "                found.append(path)\n"
     "print('SECRETS', found)\n"
+    f"names = {set(ANALYST_FILES)!r}\n"
+    "seen = []\n"
+    "for folder, dirs, files in os.walk('/'):\n"
+    "    dirs[:] = [d for d in dirs if os.path.join(folder, d) not in ('/proc', '/sys', '/data')]\n"
+    "    seen += [os.path.join(folder, n) for n in dirs + files if n in names]\n"
+    "print('ANALYST_PATHS', seen)\n"
+    "print('OUTPUTS', os.listdir('/outputs'), 'WORK', os.listdir(os.path.expanduser('~/work')))\n"
     "print('DATA', sorted(os.listdir('/data')), 'ENV', sorted(k for k in os.environ if 'API' in k or 'TOKEN' in k))\n"
 )
 
 SWARM_SCRIPT = [
-    # analyst: leaves a note in its home and a file in shared /tmp, answers all three
-    shell("echo 'sum is four' > ~/work/notes.txt; echo scratch > /tmp/scratch_a.txt; id -un"),
-    answer(1, "5", route="summed column a"),  # wrong on purpose
-    answer(2, "3.0"),
-    answer(3, "two genes, two samples"),
+    # analyst: answers all three, and leaves traces everywhere its user can write: its home
+    # (which it then opens to everyone), three shared scratch directories with a file name
+    # that carries its answer, and the mounted /outputs.
+    shell(
+        "echo 'sum is four' > ~/work/notes.txt; echo scratch > /tmp/scratch_a.txt; "
+        "echo x > /var/tmp/answer_is_five.txt; echo x > /dev/shm/shm_a.txt; "
+        "mkdir /tmp/a_dir; echo x > /tmp/a_dir/inner.txt; echo five > /outputs/leak_a.txt; "
+        "chmod -R a+rX ~ /tmp/a_dir; chmod a+r /tmp/scratch_a.txt; id -un"
+    ),
+    sanswer(1, "5", PANDAS, route="summed column a"),  # wrong on purpose
+    sanswer(
+        2, "3.0", "data=counts.csv column b; subset=all rows; procedure=mean; tool=pandas.mean"
+    ),
+    sanswer(
+        3,
+        "two genes, two samples",
+        "data=counts.csv; subset=header and rows; procedure=read it; tool=head",
+    ),
     DONE,
     # critic: probes the boundary, then answers independently
     call("python", code=PROBE),
-    answer(1, "4", route="awk over the csv"),
-    answer(2, "3"),
-    answer(3, "a small count table"),
-    DONE,
-    # reconciler: resolves the numeric mismatch and the free-text pair
-    shell("cat /home/deriv_a/work/notes.txt; id -un"),
-    call(
-        "resolve_dispute",
-        question_id="syn-1-q1",
-        keep="B",
-        final_answer="4",
-        cause="A added the header row index",
-        evidence="reconcile/check.py: 1 + 3 = 4",
+    sanswer(1, "4", AWK, route="awk over the csv"),
+    sanswer(
+        2,
+        "3",
+        "data=counts.csv third field; subset=two data lines; procedure=average by hand; tool=awk",
     ),
-    call(
-        "resolve_dispute",
-        question_id="syn-1-q3",
-        keep="both",
-        final_answer="a small count table",
-        cause="same description in different words",
-        evidence="read both",
+    sanswer(
+        3,
+        "a small count table",
+        "data=counts.csv; subset=whole file; procedure=describe shape; tool=wc",
+    ),
+    DONE,
+    # reconciler: as root it can read the analyst's note; it re-derives the numeric mismatch
+    # and the free-text pair with scripts the harness runs itself
+    shell("cat /home/deriv_a/work/notes.txt; id -un"),
+    write("/root/reconcile/q1.py", SUM_A),
+    rederive(1, "/root/reconcile/q1.py", "4", "A added the header row index"),
+    write(
+        "/root/reconcile/q3.sh", "head -n 1 /data/counts.csv > /dev/null\necho a small count table"
+    ),
+    rederive(
+        3,
+        "/root/reconcile/q3.sh",
+        "a small count table",
+        "same description in different words",
+        text_matches="both",
     ),
     DONE,
 ]
@@ -166,20 +227,52 @@ def test_swarm_blind_critic_reconciliation_and_boundary(
     assert "WHOAMI deriv_b" in transcript
     for path in ("/home/deriv_a/work/notes.txt", "/home/deriv_a", "/root", "/tmp/scratch_a.txt"):
         assert f"DENIED {path}" in transcript
-    assert "READABLE" not in transcript
+    assert "READABLE /" not in transcript  # (the probe's own code is quoted to the reconciler)
     # No network, read-only data, only input files, no secrets and no keys in the container.
     assert "NETWORK down" in transcript and "DATA read-only" in transcript
     assert "SECRETS []" in transcript
     assert "DATA ['counts.csv', 'nested', 'results.busco.zip'] ENV []" in transcript
-    # The critic's task named the first route but not the first answer; the reconciler, as
-    # root, could read the analyst's note.
-    critic_task = next(
-        str(m.content)
-        for m in log.samples[0].messages
-        if "Route of the first derivation" in str(m.content)
-    )
-    assert "syn-1-q1: summed column a" in critic_task and "two genes" not in critic_task
+    # The critic can find no path the analyst wrote, anywhere: not in shared scratch (a file
+    # name alone can carry an answer), not in /outputs; and it starts in an empty directory.
+    assert "ANALYST_PATHS []" in transcript and "OUTPUTS [] WORK []" in transcript
+    assert summary["blind_check"] == {"checked": True, "visible_to_critic": []}
+    # The critic's task holds the questions and nothing the analyst produced: no route (as it
+    # did before), no method, no answer, no path. The reconciler, as root, can read the note.
+    messages = [str(m.content) for m in log.samples[0].messages]
+    critic_task = messages[messages.index(next(m for m in messages if "phase: critic" in m)) + 1]
+    assert "What is the sum of column a" in critic_task
+    for leak in (
+        "summed column a",
+        PANDAS,
+        "two genes",
+        "notes.txt",
+        "deriv_a",
+        "first derivation",
+    ):
+        assert leak not in critic_task, leak
     assert "sum is four\nroot" in transcript.replace("\r", "")
+    # Unused budget rolled forward: the critic may spend all the analyst left but the
+    # reconciler's floor (3 questions: 60,000), not a fixed 42%.
+    started = {p["phase"]: p for p in summary["phases"] if p["kind"] == "phase.started"}
+    finished = {p["phase"]: p for p in summary["phases"] if p["kind"] == "phase.finished"}
+    assert started["analyst"]["tokens_allowed"] == 500_000 - 155_000 - 60_000
+    assert started["critic"]["tokens_allowed"] == 500_000 - finished["analyst"]["tokens"] - 60_000
+    assert started["critic"]["tokens_allowed"] > started["analyst"]["tokens_allowed"]
+    assert summary["budget"]["reading"] == "same budget"
+    assert summary["settings"]["swarm_budget"]["mode"] == "equal"
+    assert summary["settings"]["total_budget_tokens"] == summary["settings"]["single_budget_tokens"]
+    # Per question: both answers, agreed?, same method?, the reconciler's value, changed?
+    rows = {r["question_id"]: r for r in summary["questions"]}
+    q1, q2 = rows["syn-1-q1"], rows["syn-1-q2"]
+    assert (q1["analyst_answer"], q1["critic_answer"], q1["agreed"]) == ("5", "4", False)
+    assert (q1["reconciler_answer"], q1["reconciler_changed"], q1["final_answer"]) == (
+        "4",
+        True,
+        "4",
+    )
+    assert q1["same_method"] is False and q1["reconciler_printed"] == "4"
+    assert (q2["agreed"], q2["same_method"], q2["reconciler_answer"]) == (True, False, None)
+    assert q2["reconciler_changed"] is False
     # Nothing secret reached Inspect: not the sample, not the transcript, not the log file.
     raw_log = _eval_text(next((out / "logs").glob("*.eval")))
     for name, secret in SENTINELS.items():
@@ -203,6 +296,7 @@ def test_swarm_blind_critic_reconciliation_and_boundary(
     assert graded["profiles"]["per-mode"]["summary"]["correct"] == 2
     # The judge saw question, ideal and answer only: no route, evidence or transcript.
     assert all("awk over the csv" not in p and "work/s.py" not in p for p in judge.prompts)
+    assert all(AWK not in p and "q1.py" not in p for p in judge.prompts)
     # grade.json records verdicts, not the key.
     assert SENTINELS["ideal"] not in (out / "grade.json").read_text()
 
@@ -214,22 +308,38 @@ def _eval_text(path: Path) -> str:
         )
 
 
-def test_fully_blind_critic_gets_no_route(synthetic: Synthetic, tmp_path: Path) -> None:
-    script = [answer(1, "4", route="summed column a"), DONE, answer(1, "4"), DONE]
-    summary = run(synthetic, tmp_path / "run", "glhf", script, critic_hints="none")
+@pytest.mark.parametrize("hints", ["none", "route"])
+def test_fully_blind_critic_gets_no_route(synthetic: Synthetic, tmp_path: Path, hints: str) -> None:
+    # "route" is what the command line still passes by default; it is ignored.
+    script = [
+        sanswer(1, "4", PANDAS, route="summed column a"),
+        DONE,
+        sanswer(1, "4", AWK),
+        DONE,
+        DONE,
+    ]
+    summary = run(
+        synthetic, tmp_path / "run", "glhf", script, critic_hints=hints, question_ids=["syn-1-q1"]
+    )
     assert summary["status"] == "done", summary["error"]
     assert summary["settings"]["critic_hints"] == "none"
     assert summary["answer_statuses"]["syn-1-q1"] == "replicated"
     log = read_eval_log(str(next((tmp_path / "run" / "logs").glob("*.eval"))))
     assert log.samples is not None
     transcript = "\n".join(str(m.content) for m in log.samples[0].messages)
-    assert "Derive every answer independently." in transcript
+    assert "Answer every question from the data in /data." in transcript
     assert "Route of the first derivation" not in transcript
-    # No mismatch, so the reconciler never ran.
+    assert (
+        "summed column a" not in transcript
+        and PANDAS not in transcript.split("phase: critic")[1].split("phase: reconciler")[0]
+    )
+    # An agreement by different methods: the reconciler is asked, and may leave it.
     assert [p["phase"] for p in summary["phases"] if p["kind"] == "phase.started"] == [
         "analyst",
         "critic",
+        "reconciler",
     ]
+    assert summary["questions"][0]["reconciler_action"] is None
 
 
 def test_single_agent_on_the_same_capsule(synthetic: Synthetic, tmp_path: Path) -> None:

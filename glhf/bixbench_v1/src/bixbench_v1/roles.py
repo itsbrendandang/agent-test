@@ -2,11 +2,11 @@
 rules (`RULES`), so a difference in score comes from the swarm's structure, not from a better
 brief. Three swarm roles, each a separate agent with a fresh context:
 
-  analyst      derives every answer (the single agent's job, on a share of the budget)
-  critic       derives every answer again, blind: it is not shown the analyst's answers and its
-               Unix user cannot read the analyst's files
-  reconciler   only when code finds answers that do not agree: finds the cause, records which
-               derivation to keep and why
+  analyst      derives every answer (the single agent's job)
+  critic       derives every answer again, blind: its prompt holds the questions and nothing of
+               the analyst's, and its Unix user can find no file the analyst wrote
+  reconciler   sees both answers with the commands behind them and re-derives by its own
+               script: every disagreement, and every agreement reached by the same method
 
 The BixBench3 swarm has nine roles because a task there is hours of pipeline work on raw reads
 with a strict output contract. A v1.5 capsule is a few small tables and a handful of questions
@@ -60,45 +60,76 @@ SINGLE = "Your role: you are the only analyst. Answer every question."
 
 ANALYST = (
     "Your role: ANALYST in a small team. Answer every question. After you finish, a second "
-    "analyst derives the answers again without seeing yours, and code compares the two."
+    "analyst derives the answers again without seeing anything of yours, and a third re-derives "
+    "the ones that matter."
 )
 
+# For the two swarm derivations only (the single agent's brief is unchanged).
+METHOD_LINE = """
+- submit_answer also takes `method`: ONE line that stands on its own for that question (never
+  "same as above"), in this form:
+    data=<files and columns used>; subset=<rows or samples included>; procedure=<test, model or
+    formula, with its settings>; tool=<package.function>
+  State what you actually ran. Do not put the resulting value in it. Code compares your method
+  line with the other analyst's: an agreement reached by the same method counts for less.
+- If your budget ends before every question is answered you get one last turn, without tools,
+  to record your best answer for the rest from the work you have done. So keep your outputs
+  short and informative: print the candidate value for each question as soon as you have one.
+""".strip()
+
 CRITIC = """
-Your role: INDEPENDENT CHECKER in a small team. Another analyst has already answered these
-questions. You are not shown their answers, code or files, and you cannot read them: that is
-deliberate. Derive every answer again from the data, so that code can compare the two
-derivations afterwards. An answer you both reach is reported as replicated; where you differ, a
-third reviewer examines both. So:
-- Do not guess what the other analyst did, and do not aim to match anything. If the question is
-  ambiguous, take the reading its wording supports best and state that reading in the route.
-- If your task lists the route of the first derivation per question (a one-line description,
-  never its result), then where another equally valid route exists (a different language or
-  implementation, a direct computation instead of a library call, another way of reading the
-  file), take it, so the two derivations are less likely to share a mistake. The listed route
-  is not a specification: decide the outcome, the samples and the model from the question and
-  the data yourself. Where the question prescribes a tool, use that tool: your independence is
-  then your own reading of the data and your own code.
+Your role: ANALYST in a small team. Answer every question from the data. You start from nothing
+but the questions and the files in /data: nobody's notes, code or results are available to you,
+and your working directory is empty. Another analyst answers the same questions separately, and
+neither of you can see the other's work; code compares the answers afterwards. So:
+- Do not guess what anyone else did and do not aim to match anything. Decide the outcome, the
+  samples, the columns and the model from the question's wording and the data yourself. If the
+  question is ambiguous, take the reading its wording supports best and say which in `method`.
 - Be most careful where analyses usually go wrong: which samples and groups are included, the
   direction of a contrast, filters applied before or after a test, identifier mapping, which
   column a threshold applies to, and rounding.
 """.strip()
 
+FORCED_FINAL = """
+You were answering questions about a dataset by running code, and your budget has ended. You
+cannot run anything more. Below are the questions you have not answered and the end of your own
+work log. For EACH listed question call submit_answer once, now:
+- answer: the value your log's outputs support best, in the format the question asks for
+  (a number as digits only, rounded as the question asks). If the log shows several candidate
+  values, take the one whose computation follows the question's wording most closely. If the log
+  holds no computed value for a question, give your best estimate from what the log shows of
+  the data. Never leave a listed question without an answer.
+- method: one line, data=...; subset=...; procedure=...; tool=..., describing the computation
+  in the log that the value comes from, or "estimate: no finished computation" if there is none.
+- evidence: the log line that shows the value.
+""".strip()
+
 RECONCILER = f"""
 Your role: RECONCILER in a small team. Two analysts, A and B, answered the same questions
-independently. For the questions in your task their answers do not agree, or are worded
-differently and could not be compared by code. You have no stake in either answer.
-For each such question:
-1. Read both scripts: A worked in {HOME_A}/work, B in {HOME_B}/work. Work in {RECONCILE_DIR}.
-2. Find the specific cause of the difference (a different filter, sample set, contrast direction,
-   column, test, rounding, or reading of the question) and confirm it by running code.
-3. Decide which derivation follows the question's wording and the data. Do not average, do not
-   choose by plausibility, and do not prefer A or B by default.
-4. Call resolve_dispute: keep "A" or "B"; "both" if they are the same finding (same value within
-   the rounding the question asks for, or the same thing in different words); "neither" if both
-   are wrong and you derived the answer yourself. final_answer is the answer to report, in the
-   format the question asks for. cause is the difference you found; evidence is the script path
-   and output that shows it.
-Resolve every listed question, the cheapest first, then call submit with a one-line summary.
+separately; neither saw the other's work. Your task lists, per question, both answers, each
+side's one-line method, and the commands each side ran with their output. You have no stake in
+either answer, and you settle nothing by opinion: for every question you handle you WRITE AND
+RUN YOUR OWN SCRIPT in {RECONCILE_DIR} that computes the answer from /data, and the harness
+re-runs that script and takes the value it prints. Never copy a value from A or B, never pick
+the answer that two of three agree on, never choose by plausibility.
+1. Disagreements, every one, the cheapest first. From the commands, find the specific cause (a
+   different filter, sample set, contrast direction, column, test, coding of a variable,
+   rounding, or reading of the question). Decide from the question's wording and the data what
+   the computation should be, write it, run it, then call rederive. Code works out which side
+   your value supports; if it supports neither, yours is reported.
+2. Agreements that are not independent (same method on both sides, or one side's answer is a
+   forced estimate), every one. Two analysts who made the same choice agree with each other
+   whether or not the choice is right, so this agreement is weak evidence. Re-read the
+   question: list the choices their shared method made that the question does not dictate or
+   dictates differently (outcome column, which rows or samples, how a variable is coded, which
+   terms are in a model, the direction, the rounding). Check those choices against the data
+   and the question's exact words, then derive the answer your own way and call rederive. If
+   your value differs, set overturn=true only if you can name where their method departs from
+   the question; otherwise the agreed answer stays, flagged.
+3. Agreements by different methods: spot-check them only if budget is left.
+A script for rederive is a .py, .R or .sh file under {RECONCILE_DIR} that reads /data, does not
+read {HOME_A} or {HOME_B}, and prints the value as the last line of its output. You may read
+the analysts' files to understand what they did. Then call submit with a one-line summary.
 """.strip()
 
 

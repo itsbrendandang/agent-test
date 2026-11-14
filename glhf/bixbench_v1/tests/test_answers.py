@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -10,10 +11,10 @@ from bixbench_v1.answers import AnswerLedger, compare
 from bixbench_v1.solvers import (
     DERIVATION_SHARE,
     RECONCILE_RESERVE,
+    CrossCheck,
     allowance,
-    dispute_text,
-    route_hints,
-    route_reveals,
+    critic_prompt,
+    review_text,
 )
 
 
@@ -157,26 +158,19 @@ def test_single_agent_answers_are_all_unchecked() -> None:
     assert "Solver: single" in methods and "`5` (status: unchecked)" in methods
 
 
-def test_the_critic_is_shown_routes_never_results() -> None:
-    book = ledger()
-    book.submit("q1", "166", "count rows with padj < 0.05 in res.csv", "e", "analyst")
-    book.submit("q2", "0.05", "t-test at alpha 0.05 gave the value", "e", "analyst")
-    book.submit("q3", "CDKN1A", "the top gene by log2FC was CDKN1A", "e", "analyst")
-    hints = route_hints(book)
-    assert "- q1: count rows with padj < 0.05 in res.csv" in hints
-    assert "- q2: (withheld)" in hints and "- q3: (withheld)" in hints
-    assert "- q4: (no first derivation recorded)" in hints
-    assert "166" not in hints and "CDKN1A" not in hints
-    assert route_reveals("found 166 genes", "166") and route_reveals("p = 1.9e-5", "1.9E-05")
-    assert not route_reveals("DESeq2, padj < 0.05, lfc > 1", "166")
-    assert route_reveals("picked option B", "B") and not route_reveals("Bonferroni by gene", "B")
+def test_the_critic_prompt_is_built_without_the_ledger() -> None:
+    # Was: "the critic is shown routes, never results". The route hint is gone (pilot 1: the
+    # critic repeated the analyst's method); the prompt builder has no access to the ledger.
+    assert list(inspect.signature(critic_prompt).parameters) == ["brief", "note"]
+    prompt = critic_prompt("## Question q1\nHow many genes?\n", "")
+    assert "How many genes?" in prompt and "first derivation" not in prompt.lower()
 
 
 def test_the_reconciler_sees_both_derivations_under_neutral_labels() -> None:
     book = ledger()
     book.submit("q2", "0.0002", "t-test", "a.py", "analyst")
     book.submit("q2", "0.0003", "Welch test", "b.R", "critic")
-    text = dispute_text(book)
+    text = review_text(book, CrossCheck())
     assert "A answered: 0.0002" in text and "B answered: 0.0003" in text
     assert "analyst" not in text and "critic" not in text
 

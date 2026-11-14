@@ -35,6 +35,9 @@ from .solvers import (
     DERIVATION_SHARE,
     RECONCILE_RESERVE,
     TOKEN_SEMANTICS,
+    BudgetPolicy,
+    plan_budget,
+    swarm_budget_mode,
 )
 from .stats import summarise
 from .task import COMPOSE, backstop_tokens, bixbench_v1
@@ -83,7 +86,7 @@ def mock_script(solver: str, question_ids: list[str]) -> list[ModelOutput]:
     def call(tool: str, **arguments: object) -> ModelOutput:
         return ModelOutput.for_tool_call(MOCK, tool, arguments)
 
-    def answers(value: str, differ_on_first: str | None = None) -> list[ModelOutput]:
+    def answers(value: str, differ_on_first: str | None = None, **more: str) -> list[ModelOutput]:
         return [
             call(
                 "submit_answer",
@@ -91,6 +94,7 @@ def mock_script(solver: str, question_ids: list[str]) -> list[ModelOutput]:
                 answer=differ_on_first if differ_on_first and i == 0 else value,
                 route="scripted placeholder",
                 evidence="none: scripted run",
+                **more,
             )
             for i, q in enumerate(question_ids)
         ]
@@ -98,18 +102,31 @@ def mock_script(solver: str, question_ids: list[str]) -> list[ModelOutput]:
     done = call("submit", answer="done")
     if solver == "single":
         return [call("bash_session", action="type_submit", input="ls /data"), *answers("1"), done]
+    script = f"{roles.RECONCILE_DIR}/scripted.sh"
     return [
-        *answers("1"),
+        *answers(
+            "1", method="data=none; subset=none; procedure=scripted placeholder one; tool=mock"
+        ),
         done,
-        *answers("1", differ_on_first="2"),
+        *answers(
+            "1",
+            differ_on_first="2",
+            method="data=other; subset=every; procedure=different scripted route two; tool=mock",
+        ),
         done,
+        # The reconciler has to produce the value with a script the harness runs itself.
         call(
-            "resolve_dispute",
+            "bash_session",
+            action="type_submit",
+            input=f"printf 'ls /data >/dev/null\\necho 2\\n' > {script}",
+        ),
+        call(
+            "rederive",
             question_id=question_ids[0],
-            keep="B",
-            final_answer="2",
+            script=script,
+            answer="2",
             cause="scripted disagreement",
-            evidence="none: scripted run",
+            same_method=False,
         ),
         done,
     ]
@@ -143,20 +160,35 @@ def run_capsule(
     max_tokens: int | None = None,
     max_messages_per_role: int | None = None,
     role_models: dict[str, str] | None = None,
-    critic_hints: str = "route",
+    critic_hints: str = "none",
     seed: int = 0,
     image: str | None = None,
     mock_outputs: list[ModelOutput] | None = None,
+    swarm_budget: str | None = None,
+    budget_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the solver. Does not grade and never touches the key beyond building the public view.
     `question_ids` restricts the run to some of the capsule's questions (one per run mirrors the
-    official protocol). `mock_outputs` replaces the fixed script of `--model mock` (tests)."""
+    official protocol). `mock_outputs` replaces the fixed script of `--model mock` (tests).
+
+    `max_tokens` is the single agent's budget for this run. `swarm_budget` ("equal": the swarm
+    gets the same total; "extended": the analyst gets all of it and the swarm's total is larger;
+    default $BIXBENCH_V1_SWARM_BUDGET, else "equal") says what the swarm gets. A swarm budget
+    that cannot hold the role floors raises `BudgetError` here, before staging or any container.
+    `critic_hints` is accepted for the command line and ignored: the critic is always blind."""
     out_dir = out_dir.resolve()
     outputs = out_dir / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
     asked = [q for q in capsule.questions if question_ids is None or q.question_id in question_ids]
     if not asked:
         raise ValueError(f"{capsule.key}: none of {question_ids} is a question of this capsule")
+    swarm = solver == "glhf"
+    mode = swarm_budget_mode(swarm_budget)
+    plan = (
+        plan_budget(max_tokens, len(asked), mode, BudgetPolicy(**(budget_policy or {})))
+        if swarm and max_tokens
+        else None
+    )
 
     # 1. Stage and verify the data the sandbox will see.
     staged = staged_root.resolve() / capsule.uuid
@@ -188,7 +220,6 @@ def run_capsule(
     else:
         resolved = get_model(model)
 
-    swarm = solver == "glhf"
     started = time.time()
     summary: dict[str, Any] = {
         "benchmark": "BixBench v1.5 (futurehouse/BixBench)",
@@ -205,13 +236,20 @@ def run_capsule(
             "unit": "capsule" if len(asked) == len(capsule.questions) else "questions",
             "time_limit_seconds": time_limit_seconds,
             "max_tokens": max_tokens,
-            "token_backstop": backstop_tokens(max_tokens) if max_tokens else None,
+            "token_backstop": backstop_tokens(max_tokens, solver, mode) if max_tokens else None,
+            # What the single agent gets for this run, what this solver may spend in all, and
+            # whether a swarm result is therefore a "same budget" or a "more budget" result.
+            "single_budget_tokens": max_tokens,
+            "total_budget_tokens": (plan.total if plan else max_tokens),
+            "swarm_budget": plan.describe() if plan else ({"mode": mode} if swarm else None),
+            "budget_reading": (plan.reading if plan else None),
             "token_semantics": TOKEN_SEMANTICS[solver] if max_tokens else None,
             "max_messages_per_role": max_messages_per_role,
             "compaction_threshold_tokens": COMPACTION_THRESHOLD_TOKENS,
             "derivation_share": DERIVATION_SHARE if swarm else None,
             "reconcile_reserve": RECONCILE_RESERVE if swarm else None,
-            "critic_hints": critic_hints if swarm else None,
+            "critic_hints": "none" if swarm else None,  # always blind; "route" is ignored
+            "critic_hints_requested": critic_hints if swarm else None,
             "seed": seed,
             "image": image,
             "image_id": _image_digest(image),
@@ -220,7 +258,7 @@ def run_capsule(
             "documentation_search": False,
             "lessons_memory": False,
             "tools": ["bash_session", "python", "text_editor", "submit_answer"]
-            + (["resolve_dispute (reconciler only)"] if swarm else []),
+            + (["rederive (reconciler only)"] if swarm else []),
         },
         "staging": {
             "zip": manifest.zip_name,
@@ -244,6 +282,8 @@ def run_capsule(
     if swarm:
         role_args = {f"{role}_model": name for role, name in (role_models or {}).items()}
         role_args["critic_hints"] = critic_hints
+        role_args["swarm_budget"] = mode
+        role_args["budget_policy"] = budget_policy
     logs = inspect_eval(
         bixbench_v1(
             questions=[q.model_dump() for q in public],
@@ -280,6 +320,31 @@ def run_capsule(
     if ledger_file.exists():
         events = json.loads(ledger_file.read_text(encoding="utf-8")).get("events", [])
     sample = log.samples[0] if log.samples else None
+    total_tokens = sum(int(u["total_tokens"] or 0) for u in usage.values())
+    phases = [e for e in events if str(e.get("kind", "")).startswith("phase.")]
+    records_file = outputs / "glhf" / "questions.json"
+    if records_file.exists():
+        cross = json.loads(records_file.read_text(encoding="utf-8"))
+        summary["questions"] = cross.get("questions", [])
+        summary["blind_check"] = cross.get("blind_check", {})
+    summary["budget"] = {
+        "solver": solver,
+        "single_budget_tokens": max_tokens,
+        "total_budget_tokens": plan.total if plan else max_tokens,
+        "reading": plan.reading if plan else None,
+        "tokens_used": total_tokens,
+        "used_vs_single_budget": round(total_tokens / max_tokens, 3) if max_tokens else None,
+        "tokens_by_phase": {
+            str(e["phase"]): e.get("phase_tokens", e.get("tokens"))
+            for e in phases
+            if e.get("kind") == "phase.finished"
+        },
+        "forced_answers": {
+            str(e["phase"]): e.get("forced_answers", [])
+            for e in phases
+            if e.get("kind") == "phase.finished" and e.get("forced_answers")
+        },
+    }
     summary.update(
         status="done" if log.status == "success" and answers_file.exists() else "failed",
         error=str(log.error.message) if log.error else None,
@@ -287,10 +352,10 @@ def run_capsule(
         finished_at=time.time(),
         seconds=round(time.time() - started, 1),
         usage=usage,
-        total_tokens=sum(int(u["total_tokens"] or 0) for u in usage.values()),
+        total_tokens=total_tokens,
         messages=len(sample.messages) if sample is not None else 0,
         answer_statuses=statuses,
-        phases=[e for e in events if str(e.get("kind", "")).startswith("phase.")],
+        phases=phases,
     )
     (out_dir / "run.json").write_text(json.dumps(summary, indent=2))
     return summary
