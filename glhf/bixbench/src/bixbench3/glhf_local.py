@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import time
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +46,13 @@ def _done(answer: str) -> ModelOutput:
     return _call("submit", answer=answer)
 
 
-def mock_script(solver: str, truths: dict[str, str], review_rounds: int = 3) -> list[ModelOutput]:
+def mock_script(
+    solver: str,
+    truths: dict[str, str],
+    review_rounds: int = 3,
+    exa: bool = False,
+    memory: bool = False,
+) -> list[ModelOutput]:
     """A fixed script for `--model mock`. `truths` maps each required sandbox path to correct content.
 
     Swarm story: the first pass leaves the first artifact with a header and no rows; the critic
@@ -55,6 +63,21 @@ def mock_script(solver: str, truths: dict[str, str], review_rounds: int = 3) -> 
         "/outputs/METHODS.md", "# Methods\n\nScripted mock run. No analysis was performed.\n"
     )
     correct = [_write(path, text) for path, text in truths.items()]
+    search = [
+        _call(
+            "search_docs",
+            query="featureCounts count reads per gene paired-end strandedness option",
+            objective="Find the official featureCounts manual page; rank the Subread user guide "
+            "first, exclude forum posts, and pull the meaning of the -s and -p options.",
+        )
+    ]
+    lessons = [
+        _write(
+            "/workspace/work/glhf/lessons.md",
+            "- Scripted run: check that every output has data rows, not just a header, "
+            "before review.\n",
+        )
+    ]
     if solver == "single":
         return [*correct, methods, _done("done")]
     first_path, first_text = next(iter(truths.items()))
@@ -72,11 +95,13 @@ def mock_script(solver: str, truths: dict[str, str], review_rounds: int = 3) -> 
             correct[0],  # finisher
             _done("rescued"),
             methods,  # reporter
+            *(lessons if memory else []),
             _done("reported"),
         ]
     return [
         # scout
         _call("bash_session", action="type_submit", input="ls -la /data"),
+        *(search if exa else []),
         _done("inputs listed"),
         # proposer
         _call(
@@ -141,6 +166,7 @@ def mock_script(solver: str, truths: dict[str, str], review_rounds: int = 3) -> 
         _done("no issues"),
         # reporter
         methods,
+        *(lessons if memory else []),
         _done("reported"),
     ]
 
@@ -159,6 +185,11 @@ def run_local(
     role_models: dict[str, str] | None = None,
     time_limit_seconds: int = 1800,
     review_rounds: int = 3,
+    max_tokens: int | None = None,
+    max_messages_per_role: int | None = None,
+    exa: bool = False,
+    memory_dir: Path | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     case_dir, out_dir = case_dir.resolve(), out_dir.resolve()
     case = load_case(case_dir)
@@ -183,7 +214,10 @@ def run_local(
             for a in spec["artifacts"]
         }
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
-        resolved: Model = get_model(MOCK, custom_outputs=mock_script(solver, truths, review_rounds))
+        resolved: Model = get_model(
+            MOCK,
+            custom_outputs=mock_script(solver, truths, review_rounds, exa, memory_dir is not None),
+        )
     else:
         resolved = get_model(model)
 
@@ -194,15 +228,23 @@ def run_local(
         "model": model,
         "role_models": role_models or {},
         "time_limit_seconds": time_limit_seconds,
+        "limits": {"max_tokens": max_tokens, "max_messages_per_role": max_messages_per_role},
+        "exa": exa,
+        "memory_dir": str(memory_dir) if memory_dir else None,
+        "seed": seed,
+        "versions": {"inspect_ai": version("inspect_ai"), "python": platform.python_version()},
         "started_at": started,
         "status": "running",
     }
     (out_dir / "run.json").write_text(json.dumps(summary, indent=2))
-    task_args = (
-        {f"{role}_model": name for role, name in (role_models or {}).items()}
-        if solver == "glhf"
-        else {}
-    )
+    task_args: dict[str, Any] = {"max_tokens": max_tokens, "seed": seed}
+    if solver == "glhf":
+        task_args |= {f"{role}_model": name for role, name in (role_models or {}).items()}
+        task_args |= {
+            "max_messages_per_role": max_messages_per_role,
+            "exa": exa,
+            "memory_dir": str(memory_dir.resolve()) if memory_dir else None,
+        }
     logs = inspect_eval(
         bixbench3_cases(
             dataset_path=str(case_dir),
@@ -259,6 +301,17 @@ def main() -> int:
     parser.add_argument("--role-model", action="append", default=[], metavar="ROLE=MODEL")
     parser.add_argument("--time-limit", type=int, default=1800, help="seconds for the whole run")
     parser.add_argument("--review-rounds", type=int, default=3)
+    parser.add_argument("--max-tokens", type=int, help="token budget for the whole run")
+    parser.add_argument(
+        "--max-messages-per-role",
+        type=int,
+        help="swarm: message cap per phase (a model call with one tool call is two messages)",
+    )
+    parser.add_argument(
+        "--exa", action="store_true", help="swarm: documentation search (needs EXA_API_KEY)"
+    )
+    parser.add_argument("--memory-dir", type=Path, help="swarm: keep lessons between runs here")
+    parser.add_argument("--seed", type=int, help="sent to providers that support a seed")
     arguments = parser.parse_args()
     role_models: dict[str, str] = {}
     for item in arguments.role_model:
@@ -274,6 +327,11 @@ def main() -> int:
         role_models=role_models,
         time_limit_seconds=arguments.time_limit,
         review_rounds=arguments.review_rounds,
+        max_tokens=arguments.max_tokens,
+        max_messages_per_role=arguments.max_messages_per_role,
+        exa=arguments.exa,
+        memory_dir=arguments.memory_dir,
+        seed=arguments.seed,
     )
     print(json.dumps(summary, indent=2))
     return 0 if summary["status"] == "done" else 1

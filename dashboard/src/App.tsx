@@ -271,7 +271,7 @@ export default function App() {
         <OverviewView simCount={simulations.length} tick={tick} eventCount={events.length} active={active}
           onOpenSimulations={() => go("Simulations")} onMeetCrew={() => go("Agents")} onOpenKeys={() => go("Settings")} />
       )}
-      {view === "Swarm" && <SwarmView />}
+      {view === "Swarm" && <SwarmView onSearch={(q) => { sessionStorage.setItem("experiments.q", q); go("Experiments") }} />}
       {view === "Board" && <BoardView />}
       {view === "Agents" && <AgentsView />}
       {view === "Experiments" && <ExperimentsView onOpen={go} />}

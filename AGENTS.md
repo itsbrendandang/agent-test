@@ -15,7 +15,10 @@ that shares its engine and dashboard. Read README.md first.
 
 - Never read, download or reference `gs://bixbench3-ground-truth` or any published result of a
   benchmark paper while working on a solver, a prompt or a run. It holds the answers.
-- Do not give benchmark agents a web search tool. Scored runs use only staged inputs.
+- Benchmark agents get no open web search. The optional `search_docs` tool (`--exa`) is limited to the
+  documentation allow-list in `swarm/tools.py` (`DOC_DOMAINS`); never add a journal, preprint server or
+  data repository to it.
+- `glhf/memory/lessons.md` holds process lessons only. Never write results, scores or answers into it.
 - Never start a cloud run (`--mode cloud`, `bixbench3 run`, `setup-runtime`) unless the user asks
   for that run. It creates a billed 32-core VM.
 - Keys live in `.env` (gitignored). Never print, log or commit a key.

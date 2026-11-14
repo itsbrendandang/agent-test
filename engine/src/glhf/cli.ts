@@ -135,6 +135,8 @@ async function main(): Promise<number> {
       if (f.get("help")) {
         console.log("run --mode local|cloud --solver single|glhf --model MODEL [--task T] [--role-model ROLE=MODEL]... [--follow]\n" +
           "  local: runs the demo case in Docker. --model mock needs no key. [--time-limit SECONDS] [--case DIR]\n" +
+          "  budgets (local): [--max-tokens N] whole run; [--max-messages-per-role N] swarm, per phase; [--seed N]\n" +
+          "  swarm extras (local): [--exa] documentation search, needs EXA_API_KEY; [--memory] keep lessons in glhf/memory/\n" +
           "  cloud: a BixBench3 task on a GCP VM. Needs --task N --effort E; --project defaults to gcloud's. [--results-bucket gs://...] [--review-rounds N]\n" +
           "  roles: planner, experimenter, critic, reporter (swarm only), e.g. --role-model critic=openai/gpt-5.5")
         return 0
@@ -146,6 +148,10 @@ async function main(): Promise<number> {
         mode: mode as RunRequest["mode"], task: f.get("task"), solver: (f.get("solver") ?? "glhf") as RunRequest["solver"], model: f.get("model") ?? "",
         roleModels, effort: f.get("effort"), project, resultsBucket: f.get("results-bucket"), caseDir: f.get("case"),
         timeLimit: f.get("time-limit") ? Number(f.get("time-limit")) : undefined, reviewRounds: f.get("review-rounds") ? Number(f.get("review-rounds")) : undefined,
+        maxTokens: f.get("max-tokens") ? Number(f.get("max-tokens")) : undefined,
+        maxMessagesPerRole: f.get("max-messages-per-role") ? Number(f.get("max-messages-per-role")) : undefined,
+        seed: f.get("seed") ? Number(f.get("seed")) : undefined,
+        exa: f.get("exa") !== undefined || undefined, memory: f.get("memory") !== undefined || undefined,
       }, true)
       return start(request, f.get("follow") !== undefined)
     }

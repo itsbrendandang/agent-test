@@ -6,7 +6,14 @@ meeting:
   max_minutes: 15          # wall clock for one deliberation; the lead is told to wrap up after this
   max_usd: 5               # spend cap for one deliberation (all agents + checkers)
   max_rounds: 4            # lead -> board broadcasts before final positions are forced
-  daily_usd: 20            # cap across all runs per day (watch mode included)
+  daily_usd: 20            # cap across all runs started today; a new run is refused once reached
+  lead_turns: 20           # model calls the lead may make in one run
+  member_turns: 6          # model calls each board member may make per question
+  max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
+
+memory:
+  enabled: true            # after each run, add each member's checked claims to board/expertise/<member>.md
+  max_notes: 40            # newest notes kept per member; the file is read into that member's next run
 
 watch:
   enabled: false           # rerun the Literature Scout's queries on a schedule

@@ -10,7 +10,8 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 export type Tier = "lead" | "strong" | "cheap" | "rival"
 
 export interface BoardConfig {
-  meeting: { max_minutes: number; max_usd: number; max_rounds: number; daily_usd: number }
+  meeting: { max_minutes: number; max_usd: number; max_rounds: number; daily_usd: number; lead_turns?: number; member_turns?: number; max_escalations?: number }
+  memory?: { enabled: boolean; max_notes: number }
   watch: { enabled: boolean; every_hours: number }
   brief: { required_sections: string[] }
   paths: { agents: string; briefs: string; context: string; expertise: string; runs: string }

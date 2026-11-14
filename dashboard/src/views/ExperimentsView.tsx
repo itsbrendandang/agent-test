@@ -11,14 +11,15 @@ type Kind = "all" | "swarm" | "board"
 export function takeOpen(kind: "swarm" | "board"): string | undefined {
   const key = `open.${kind}`
   const id = sessionStorage.getItem(key) ?? undefined
-  sessionStorage.removeItem(key)
+  if (id) window.setTimeout(() => sessionStorage.removeItem(key), 0) // after React's double call in development
   return id
 }
 
 // Search over every experiment: swarm runs (task, model, claims, problems, reports) and drug board
 // runs (brief, memo, checked claims). The engine does the matching; every word must appear.
 export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") => void }) {
-  const [query, setQuery] = useState("")
+  const [query, setQuery] = useState(() => sessionStorage.getItem("experiments.q") ?? "")
+  useEffect(() => sessionStorage.removeItem("experiments.q"), [])
   const [kind, setKind] = useState<Kind>("all")
   const [hits, setHits] = useState<Hit[]>()
   const [error, setError] = useState(false)

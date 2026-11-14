@@ -16,7 +16,7 @@ import { resolve } from "node:path"
 import { search } from "./search.ts"
 import "./env.ts"
 import { loadAgent, loadRoster } from "./agents.ts"
-import { loadState, runBoard, runDir, startRun } from "./board.ts"
+import { BudgetReached, loadState, runBoard, runDir, startRun } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path } from "./config.ts"
 import { handleGlhf, startTracker } from "./glhf/routes.ts"
@@ -109,7 +109,7 @@ createServer(async (req, res) => {
     }
     json(res, 404, { error: "not found" })
   } catch (error) {
-    json(res, error instanceof BriefRejected ? 400 : 500, { error: String(error instanceof Error ? error.message : error) })
+    json(res, error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : 500, { error: String(error instanceof Error ? error.message : error) })
   }
 }).listen(PORT, () => {
   console.log(`drug-board engine on http://localhost:${PORT}  (${MOCK ? "mock models" : "live models"})`)

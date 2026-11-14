@@ -7,6 +7,8 @@ import type { GlhfRun, RunRequest } from "./types.ts"
 
 export const GLHF = resolve(ROOT, "glhf")
 export const BIXBENCH = resolve(GLHF, "bixbench")
+/** Lessons the swarm keeps between runs. In git, so the whole team shares them. */
+export const MEMORY = resolve(GLHF, "memory")
 export const RUNS = resolve(GLHF, "runs")
 export const DEMO_CASE = resolve(GLHF, "demo_case")
 export const runDir = (id: string) => resolve(RUNS, id)

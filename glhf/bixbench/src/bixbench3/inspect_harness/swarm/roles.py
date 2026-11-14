@@ -199,3 +199,32 @@ task still lists missing or malformed required artifacts. Each one scores zero a
 Run check_outputs after each fix and stop when it passes or time is up.
 """
 )
+
+SEARCH = """
+
+# Searching
+`search_docs` searches software documentation and bioinformatics help sites only. Use it when a
+tool's usage, a parameter, a file format or an error message is unclear, instead of guessing.
+- `query`: plain natural-language intent. Name the tool and the specific option or error.
+- `objective`: what this search is for: which pages should rank first (official manuals over forum
+  posts), which to exclude, and the exact fact you need (a flag, a default, a column name).
+- It is not for the study itself. Never search for the paper, its authors, its dataset accession
+  or its results. Every query is logged in the ledger and disclosed.
+""".rstrip()
+
+LESSONS = """
+
+Long-term memory. Also write /workspace/work/glhf/lessons.md: at most 8 one-line lessons a future
+team would want before starting a task like this one. Process only: environment and tool problems
+and their fixes, format pitfalls, what took the time, what you would do first next time. No result
+values, gene names, counts, or anything that reveals this task's answers. If nothing is worth
+keeping, write "none".
+""".rstrip()
+
+
+def with_memory(lessons: str) -> str:
+    """Block appended to a role's task when earlier runs left lessons."""
+    return (
+        "\n\n---\nLessons from earlier runs (process notes written by past teams; they may be "
+        "wrong or not apply here, so check before relying on them):\n" + lessons.strip()
+    )

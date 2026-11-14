@@ -12,18 +12,21 @@ e.g. -T critic_model=openai/gpt-5.5 to put the critic on a second vendor (Claude
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 from inspect_ai.agent import Agent, AgentState, react, run
 from inspect_ai.model import ChatMessageUser, CompactionAuto, Model, get_model
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.tool import Tool, bash_session, python, text_editor
-from inspect_ai.util import sandbox, time_limit
+from inspect_ai.util import Limit, message_limit, sample_limits, sandbox, time_limit, token_limit
 
 from ..models import RuntimeCase
 from ..tools import request_web_access
-from . import roles
+from . import past_memory, roles
 from .ledger import Ledger
 from .tools import (
     WORK,
@@ -37,6 +40,7 @@ from .tools import (
     report_failed_replication,
     resolve_issue,
     save_ledger,
+    search_docs,
 )
 
 # Fractions of the run's time budget. Whatever a phase does not use rolls forward.
@@ -51,6 +55,38 @@ MIN_FINISH_SECONDS = 5 * 60
 AUDIT_SHARE = 0.10  # of the review time left in a round
 CRITIQUE_SHARE = 0.30
 PILOT_OUT = f"{WORK}/pilot/outputs"
+REPORT_TOKEN_RESERVE = 0.10  # of max_tokens, kept for the reporter
+# With a token budget, the supporting roles are capped so the full run and the review keep most
+# of it. Shares of max_tokens by phase (first word of the phase name); other phases take what is left.
+TOKEN_SHARE = {"scout": 0.05, "propose": 0.08, "pilot": 0.15, "audit": 0.08, "critique": 0.20}
+MEMORY_FILE = "lessons.md"
+MEMORY_INJECT_CHARS = 6000  # newest lessons that fit; older ones stay on disk
+SEARCH_ROLES = {"scout", "planner", "pilot", "experimenter", "reviser", "finisher", "auditor"}
+
+
+def read_memory(memory_dir: str | None) -> str:
+    """Lessons earlier runs left on the runner's disk. Empty when memory is off or new."""
+    if not memory_dir:
+        return ""
+    file = Path(memory_dir) / MEMORY_FILE
+    return file.read_text(encoding="utf-8")[-MEMORY_INJECT_CHARS:] if file.exists() else ""
+
+
+def append_memory(memory_dir: str, task_id: str, lessons: str) -> bool:
+    lessons = lessons.strip()
+    if not lessons or lessons.lower().strip(" .") == "none":
+        return False
+    folder = Path(memory_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    file = folder / MEMORY_FILE
+    known = set(file.read_text(encoding="utf-8").splitlines()) if file.exists() else set()
+    fresh = [line for line in lessons[:2000].splitlines() if line.strip() and line not in known]
+    if not fresh:
+        return False
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    with file.open("a", encoding="utf-8") as fh:
+        fh.write(f"\n## Task {task_id}, {stamp}\n" + "\n".join(fresh) + "\n")
+    return True
 
 
 @dataclass
@@ -77,7 +113,15 @@ def glhf_swarm(
     experimenter_model: str | None = None,
     critic_model: str | None = None,
     reporter_model: str | None = None,
+    max_tokens: int | None = None,
+    max_messages_per_role: int | None = None,
+    exa: bool = False,
+    memory_dir: str | None = None,
 ) -> Solver:
+    """Budgets: `budget_seconds` (time), `max_tokens` (all roles together) and
+    `max_messages_per_role` (each phase; a model call with one tool call is two messages).
+    `exa` gives roles a documentation search. `memory_dir` keeps lessons between runs."""
+
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         del generate
         case = state.metadata_as(RuntimeCase)
@@ -89,8 +133,41 @@ def glhf_swarm(
         clock = Clock(float(budget_seconds or tasks.TIME_LIMIT_SECONDS) * 0.97, time.monotonic())
         await sandbox().exec(["mkdir", "-p", f"{WORK}/scripts", "/outputs/glhf"])
         await save_ledger(ledger)
+        if exa and not os.environ.get("EXA_API_KEY"):
+            raise RuntimeError("exa=True needs EXA_API_KEY in the runner's environment")
+        memory = read_memory(memory_dir)
+        past_used = False
+        if memory_dir and past_memory.enabled():
+            try:  # past.dev picks the lessons that fit this task; the local file is the fallback
+                question = (
+                    "Process lessons for reproducing a computational biology analysis like this "
+                    f"one: {brief[:600]}"
+                )
+                recalled = await past_memory.recall(question)
+                if recalled:
+                    memory, past_used = recalled, True
+                ledger.log("memory.recalled", source="past.dev", chars=len(recalled))
+            except Exception as error:
+                ledger.log(
+                    "memory.failed", source="past.dev", step="recall", error=str(error)[:200]
+                )
+        tokens_at_start = sample_limits().token.usage
+        ledger.log(
+            "settings",
+            max_tokens=max_tokens,
+            max_messages_per_role=max_messages_per_role,
+            exa=exa,
+            memory=bool(memory_dir),
+            memory_source="past.dev" if past_used else ("file" if memory else None),
+        )
+
+        def tokens_used() -> int:
+            return int(sample_limits().token.usage - tokens_at_start)
 
         def agent(name: str, instructions: str, model: str | None, extra: list[Tool]) -> Agent:
+            if exa and name in SEARCH_ROLES:
+                instructions += roles.SEARCH
+                extra = [*extra, search_docs(ledger, name)]
             return react(
                 name=name,
                 prompt=instructions,
@@ -108,12 +185,33 @@ def glhf_swarm(
             )
 
         async def phase(title: str, who: Agent, task: str, seconds: int) -> None:
+            limits: list[Limit] = [time_limit(seconds)]
+            if max_messages_per_role:
+                limits.append(message_limit(max_messages_per_role))
+            if max_tokens:
+                reserve = int(max_tokens * REPORT_TOKEN_RESERVE)
+                if title == "report":
+                    # The report always runs: a limit is checked after each call, so earlier phases
+                    # can overshoot slightly, and a run must still end documented.
+                    allowance = max(max_tokens - tokens_used(), reserve)
+                else:
+                    allowance = max_tokens - tokens_used() - reserve
+                    share = TOKEN_SHARE.get(title.split()[0])
+                    if share:
+                        allowance = min(allowance, int(max_tokens * share))
+                if allowance <= 0:
+                    ledger.log("phase.skipped", phase=title, reason="tokens", used=tokens_used())
+                    await save_ledger(ledger)
+                    return
+                limits.append(token_limit(allowance))
             ledger.log("phase.started", phase=title, seconds=seconds)
+            await save_ledger(ledger)
             # Every role's transcript is appended to the sample so the process judge sees all work.
             state.messages.append(
                 ChatMessageUser(content=f"=== GLHF phase: {title} (budget {seconds}s) ===")
             )
-            result = await run(who, f"{brief}\n\n---\n\n{task}", limits=[time_limit(seconds)])
+            prompt = f"{brief}\n\n---\n\n{task}" + (roles.with_memory(memory) if memory else "")
+            result = await run(who, prompt, limits=limits)
             agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
             assert isinstance(agent_state, AgentState)
             state.messages.extend(m for m in agent_state.messages if m.role != "system")
@@ -121,7 +219,9 @@ def glhf_swarm(
                 "phase.finished",
                 phase=title,
                 limit_hit=limit_error is not None,
+                limit=getattr(limit_error, "type", None),
                 left=int(clock.left()),
+                tokens=tokens_used(),
             )
             await save_ledger(ledger)
 
@@ -144,7 +244,9 @@ def glhf_swarm(
                 report_failed_replication(ledger, "critic"),
             ],
         )
-        reporter = agent("reporter", roles.REPORTER, reporter_model, [])
+        reporter = agent(
+            "reporter", roles.REPORTER + (roles.LESSONS if memory_dir else ""), reporter_model, []
+        )
 
         hold = REPORT_RESERVE + FINISH_RESERVE  # time the early phases may not spend
 
@@ -232,8 +334,28 @@ def glhf_swarm(
             await phase(
                 "report", reporter, "Write /outputs/METHODS.md.", max(120, int(clock.left()) - 60)
             )
+            if memory_dir:
+                # Written before grading, so a lesson can never contain a score.
+                try:
+                    lessons = await sandbox().read_file(f"{WORK}/lessons.md")
+                    saved = append_memory(memory_dir, case.task_id, lessons)
+                    await sandbox().exec(["cp", f"{WORK}/lessons.md", "/outputs/glhf/lessons.md"])
+                    ledger.log("memory.saved" if saved else "memory.nothing_to_save", source="file")
+                    if saved and past_memory.enabled():
+                        try:
+                            receipt = await past_memory.remember(case.task_id, lessons)
+                            ledger.log("memory.saved", source="past.dev", ingestion=receipt)
+                        except Exception as error:
+                            ledger.log(
+                                "memory.failed",
+                                source="past.dev",
+                                step="ingest",
+                                error=str(error)[:200],
+                            )
+                except Exception as error:  # a missing lessons file must not fail the run
+                    ledger.log("memory.failed", error=str(error)[:200])
             final = contract_text(await check_contract(outputs))
-            ledger.log("finished", contract=final)
+            ledger.log("finished", contract=final, tokens=tokens_used())
             await save_ledger(ledger)
             await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
             state.output.completion = f"{final}\n\n{ledger.summary()}"

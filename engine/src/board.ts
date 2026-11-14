@@ -16,7 +16,7 @@
 // - Evidence is screened by Jev before it enters the shared pool, and contradicted claims are marked
 //   in every later digest, against error propagation.
 // - One budget for the whole run, not per agent. Unknown cost is recorded as unknown, not zero.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { bool, obj, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
@@ -32,7 +32,6 @@ import { Jev } from "./jev.ts"
 import { buildModels, modelFor } from "./models.ts"
 
 const ctx = BACKGROUND_CONTEXT
-const MAX_ESCALATIONS = 12 // OpenAI + Claude Code calls per run
 
 interface RunState {
   runId: string
@@ -50,9 +49,64 @@ interface RunState {
 
 export const runDir = (config: BoardConfig, runId: string) => path(config, "runs", runId)
 
+export class BudgetReached extends Error {}
+
+/** Dollars spent by finished runs that started today (local time), from their event logs. */
+export function spentToday(config: BoardConfig, now = new Date()): number {
+  const dir = path(config, "runs")
+  if (!existsSync(dir)) return 0
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  let usd = 0
+  for (const id of readdirSync(dir)) {
+    const file = `${dir}/${id}/events.jsonl`
+    if (!existsSync(file) || !existsSync(`${dir}/${id}/run.json`)) continue
+    if ((JSON.parse(readFileSync(`${dir}/${id}/run.json`, "utf8")) as { startedAt: number }).startedAt < midnight) continue
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (line.includes('"run.finished"')) usd += (JSON.parse(line) as { usd?: number }).usd ?? 0
+    }
+  }
+  return usd
+}
+
+const MEMORY_MARK = "## From earlier runs"
+
+/**
+ * Long-term memory: add each member's checked claims from this run to its expertise file, which is read
+ * into that member's instructions next run. Text above the "## From earlier runs" heading is yours and is
+ * kept as it is. Scripted (mock) runs write to the run folder instead, so made-up claims never reach it.
+ */
+export function rememberRun(config: BoardConfig, runId: string, ledger: { member: string; claim: string; verdict: string; checker: string; note?: string }[], dir = path(config, "expertise")): number {
+  if (!config.memory?.enabled) return 0
+  mkdirSync(dir, { recursive: true })
+  const clean = (t: string) => t.replace(/\s+/g, " ").trim()
+  const claimOf = (line: string) => line.replace(/^- \[[^\]]*\] /, "").replace(/ \(why: .*\)$/, "")
+  let written = 0
+  for (const member of new Set(ledger.map((e) => e.member))) {
+    const file = `${dir}/${member}.md`
+    const text = existsSync(file) ? readFileSync(file, "utf8") : `# ${member} expertise\n`
+    const cut = text.indexOf(MEMORY_MARK)
+    const head = (cut < 0 ? text : text.slice(0, cut)).trimEnd()
+    const old = cut < 0 ? [] : text.slice(cut).split("\n").filter((l) => l.startsWith("- "))
+    const seen = new Set(old.map(claimOf))
+    const fresh: string[] = []
+    for (const e of ledger) {
+      if (e.member !== member || (e.verdict !== "verified" && e.verdict !== "contradicted") || seen.has(clean(e.claim))) continue
+      seen.add(clean(e.claim))
+      fresh.push(`- [${e.verdict} by ${e.checker}, run ${runId}] ${clean(e.claim)}${e.verdict === "contradicted" && e.note ? ` (why: ${clean(e.note).slice(0, 160)})` : ""}`)
+    }
+    if (!fresh.length) continue
+    const kept = [...old, ...fresh].slice(-(config.memory.max_notes ?? 40))
+    writeFileSync(file, `${head}\n\n${MEMORY_MARK}\n\nClaims you made that a checker verified or contradicted. A verified claim still needs a source in the new run. Do not repeat a contradicted one.\n\n${kept.join("\n")}\n`)
+    written += fresh.length
+  }
+  return written
+}
+
 export async function startRun(briefFile: string): Promise<string> {
   const config = loadConfig()
   const brief = loadBrief(briefFile, config.brief.required_sections) // throws BriefRejected before anything runs
+  const today = spentToday(config)
+  if (today >= config.meeting.daily_usd) throw new BudgetReached(`Daily budget reached: $${today.toFixed(2)} of $${config.meeting.daily_usd} spent by runs started today. Raise meeting.daily_usd in board/config.yaml or wait until tomorrow.`)
   const runId = `${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}-${brief.id}`
   mkdirSync(runDir(config, runId), { recursive: true })
   const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0 }
@@ -169,7 +223,7 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void): 
       lines.push(`[${verdict}] ${claim.text}`)
     }
     const escalate = async (claim: Claim, evidence: string) => {
-      if (state.escalations >= MAX_ESCALATIONS) return record(claim, "unchecked", "jev", undefined, "escalation budget used up")
+      if (state.escalations >= (config.meeting.max_escalations ?? 12)) return record(claim, "unchecked", "jev", undefined, "escalation budget used up")
       state.escalations++
       const ruling = claim.kind === "computed"
         ? await claudeCodeCheck(config, claim.text, claim.source)
@@ -213,13 +267,13 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void): 
   }
 
   const leadConversation = await harness.root(ctx, {
-    agent: { model: modelFor(config, lead), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: 20 },
+    agent: { model: modelFor(config, lead), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: config.meeting.lead_turns ?? 20 },
   })
   for (const agent of roster) {
     if (state.members[agent.name]) continue
     const c = await harness.createConversation({
       ownership: { kind: "ownerless" },
-      agent: { model: modelFor(config, agent), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: 6 },
+      agent: { model: modelFor(config, agent), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
     }, ctx)
     state.members[agent.name] = c.id
     save()
@@ -234,6 +288,7 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void): 
     if (settled.status !== "done") throw new Error(`Lead stopped: ${settled.reason}`)
     state.finished = true
     save()
+    rememberRun(config, runId, state.ledger, MOCK ? `${runDir(config, runId)}/expertise` : undefined)
     log.emit("finished", { type: "run.finished", usd: await spend(), minutes: (Date.now() - state.startedAt) / 60_000 })
   } catch (error) {
     log.emit(`failed:${Date.now()}`, { type: "run.failed", error: String(error) })

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Literal
 
+import httpx
 from inspect_ai.tool import Tool, ToolError, tool
 from inspect_ai.util import sandbox
 
@@ -230,4 +232,97 @@ def read_ledger(ledger: Ledger) -> Tool:
         """Read the shared ledger: claims with test results and verdicts, and critic issues."""
         return ledger.summary()
 
+    return execute
+
+
+# --- Optional documentation search (Exa). Off unless the run sets exa=True. -----------------------
+# The benchmark asks agents to reproduce a published analysis, so an open web search could surface
+# the paper's own results. This tool therefore searches an allow-list of software documentation
+# and community help sites only; it cannot return journals, preprint servers or data repositories.
+DOC_DOMAINS = [
+    "bioconductor.org",
+    "support.bioconductor.org",
+    "biostars.org",
+    "github.com",
+    "readthedocs.io",
+    "rdrr.io",
+    "cran.r-project.org",
+    "r-project.org",
+    "pypi.org",
+    "python.org",
+    "htslib.org",
+    "gencodegenes.org",
+    "ensembl.org",
+    "ccb.jhu.edu",
+    "broadinstitute.org",
+    "10xgenomics.com",
+    "nf-co.re",
+    "galaxyproject.org",
+    "hbctraining.github.io",
+    "stackoverflow.com",
+    "bioinformatics.stackexchange.com",
+    "stats.stackexchange.com",
+    "satijalab.org",
+    "scanpy.readthedocs.io",
+    "geneontology.org",
+    "gsea-msigdb.org",
+]
+# Verbatim from Exa's build-with-exa skill: the description of the `objective` parameter.
+_OBJECTIVE = (
+    "Goal for this search turn; say which documents should rank first, which should be excluded, "
+    "and what specific facts or figures to pull from them."
+)
+
+
+async def exa_docs(query: str, objective: str, api_key: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(
+            "https://api.exa.ai/search",
+            headers={"x-api-key": api_key},
+            json={
+                "query": query,
+                "objective": objective,
+                "type": "auto",
+                "includeDomains": DOC_DOMAINS,
+                "contents": {"highlights": True},
+            },
+        )
+    if response.status_code >= 400:
+        raise ToolError(f"search failed ({response.status_code}): {response.text[:300]}")
+    body: dict[str, Any] = response.json()
+    return body
+
+
+@tool
+def search_docs(ledger: Ledger, role: str) -> Tool:
+    async def execute(query: str, objective: str) -> str:
+        """Search software documentation and bioinformatics help sites (not papers, not data).
+
+        Use it for tool usage, parameters, file formats, error messages and version differences.
+        It cannot and must not be used to look up the study being reproduced or its results.
+
+        Args:
+            query: What to retrieve, as plain natural-language intent, e.g. "featureCounts
+                reverse-stranded paired-end -s 2 -p option".
+            objective: OBJECTIVE_PLACEHOLDER
+        """
+        key = os.environ.get("EXA_API_KEY")
+        if not key:
+            raise ToolError("search is not available: EXA_API_KEY is not set on the runner")
+        body = await exa_docs(query, objective, key)
+        results = body.get("results", [])
+        ledger.log("search", by=role, query=query, urls=[r.get("url") for r in results])
+        await save_ledger(ledger)
+        if not results:
+            return "Nothing relevant found on the documentation sites."
+        lines = [
+            f"- {r.get('title') or r.get('url')}\n  {r.get('url')}\n  "
+            + " ".join(" ".join(r.get("highlights") or []).split())[:700]
+            for r in results[:8]
+        ]
+        notices = [f"Note from the search engine: {n['message']}" for n in body.get("notices", [])]
+        return "\n".join(lines + notices)
+
+    assert execute.__doc__
+    execute.__doc__ = execute.__doc__.replace("OBJECTIVE_PLACEHOLDER", _OBJECTIVE)
     return execute

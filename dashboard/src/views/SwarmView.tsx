@@ -76,7 +76,7 @@ function scoreboard(runs: GlhfRun[]): Row[] {
   return [...rows.values()]
 }
 
-export function SwarmView() {
+export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) {
   const [picked, setPicked] = useState<string | undefined>(() => takeOpen("swarm"))
   const [nudge, setNudge] = useState(0)
   const [solver, setSolver] = useState<Solver>("glhf")
@@ -131,6 +131,12 @@ export function SwarmView() {
 
   return (
     <div className="page swarm">
+      <form className="swarm-search" role="search" onSubmit={(e) => {
+        e.preventDefault()
+        onSearch?.(String(new FormData(e.currentTarget).get("q") ?? ""))
+      }}>
+        <input type="search" name="q" aria-label="Search experiments" placeholder="Search experiments: task, model, claim, problem… then press Enter" />
+      </form>
       <header className="swarm-banner card-surface">
         <h1>AI Scientist Swarm</h1>
         {noKeys && <span className="pill" data-kind="warning" title="No model API keys set. The demo uses a scripted model.">Demo mode</span>}

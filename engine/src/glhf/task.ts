@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
-import { BIXBENCH, DEMO_CASE, patchRun, readJson, readText, runDir, tail, trackerLog } from "./store.ts"
+import { BIXBENCH, DEMO_CASE, MEMORY, patchRun, readJson, readText, runDir, tail, trackerLog } from "./store.ts"
 import type { GlhfRun, RunRequest, Usage } from "./types.ts"
 
 export type RunInput = RunRequest & { id: string }
@@ -119,7 +119,12 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         const argv = ["uv", "run", "python", "-m", "bixbench3.glhf_local", "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
           "--model", input.model, "--out", dir, ...roles,
           ...(input.timeLimit ? ["--time-limit", String(input.timeLimit)] : []),
-          ...(input.reviewRounds ? ["--review-rounds", String(input.reviewRounds)] : [])]
+          ...(input.reviewRounds ? ["--review-rounds", String(input.reviewRounds)] : []),
+          ...(input.maxTokens ? ["--max-tokens", String(input.maxTokens)] : []),
+          ...(input.maxMessagesPerRole ? ["--max-messages-per-role", String(input.maxMessagesPerRole)] : []),
+          ...(input.seed ? ["--seed", String(input.seed)] : []),
+          ...(input.exa ? ["--exa"] : []),
+          ...(input.memory ? ["--memory-dir", input.model === "mock" ? `${dir}/memory` : MEMORY] : [])]
         const started = startOnce(dir, "runner", argv, `${dir}/runner.log`, null)
         patchRun(input.id, { phase: "launching", detail: "starting the local runner" }, started ? "local runner started" : "local runner was already started; not starting again")
         await runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchLocal", polls: 0 } }), context)

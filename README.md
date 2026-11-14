@@ -34,6 +34,14 @@ inputs   plan,       subsample  full run       methods diff,       │ no       
 | Finisher | Runs only if an artifact is still missing or malformed after review; never fabricates. |
 | Reporter | Writes METHODS.md from what actually ran. |
 
+## Sponsors
+
+| Sponsor | Used for | Status in this repo |
+|---|---|---|
+| [Exa](https://exa.ai) | Research search | Working. Literature search for the drug board, and the swarm's documentation search (`--exa`). Tested with live searches. |
+| [past.dev](https://past.dev) | Long-term memory | Built, not yet tested live. With `PAST_API_KEY` set, `--memory` sends each run's process lessons to past.dev and recalls the relevant ones at the start of the next run. Without the key, memory is the shared file `glhf/memory/lessons.md`. |
+| [Modal](https://modal.com) | Cloud computing | Planned. The design for running tasks on Modal is written up; no run has used Modal yet. |
+
 ## Quick start (no keys needed)
 
 Needs Node 26 (the version tested), [uv](https://docs.astral.sh/uv/) and Docker running.
@@ -65,7 +73,9 @@ Copy `.env.example` to `.env` (gitignored). Put comments on their own lines.
 | `OPENAI_API_KEY` | Required for cloud runs: the benchmark's judge and network gate use GPT-5.5. Also an agent provider. |
 | `ANTHROPIC_API_KEY` | Claude as the agents, or as one role. |
 | `HF_TOKEN` | Access to the gated dataset `EdisonScientific/BixBench3`. |
-| `EXA_API_KEY`, `OPENROUTER_API_KEY` | Drug board only (literature search, board models). |
+| `EXA_API_KEY` | Exa search: the drug board's literature search and the swarm's `--exa` documentation search. |
+| `PAST_API_KEY` | past.dev long-term memory for the swarm (`--memory`). Optional; a local file is used without it. |
+| `OPENROUTER_API_KEY` | Drug board models and Jev. |
 
 ## Running it
 
@@ -100,6 +110,38 @@ for the cloud CLI, not against Google Cloud).
 Cloud runs start from the CLI only (they cost money). In the dashboard they appear with their phase
 and score. Claims and issues for cloud runs are in the results bucket (`--results-bucket`), not yet
 in the dashboard.
+
+## Budgets, search, memory and repeatability (local runs)
+
+```bash
+npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 \
+    --time-limit 2400 --max-tokens 4000000 --max-messages-per-role 300 \
+    --exa --memory --seed 7 --follow
+```
+
+| Flag | What it does |
+|---|---|
+| `--time-limit S` | Seconds for the whole run. Each role gets a fixed share (see the Agents view). |
+| `--max-tokens N` | Token budget for the whole run, both solvers. The swarm caps the supporting roles, skips phases once the budget is spent, and keeps 10% so the Reporter still writes METHODS.md. Limits are checked after each model call, so a run can end slightly over. |
+| `--max-messages-per-role N` | Swarm: message cap per phase. A model call with one tool call is two messages. |
+| `--review-rounds N` | Swarm: audit, critique and revise rounds (default 3). |
+| `--exa` | Swarm: a `search_docs` tool (Exa). It searches an allow-list of software documentation and help sites only, never journals, preprint servers or data repositories, so it cannot return the study being reproduced. Every query is logged in the ledger. |
+| `--memory` | Swarm: the Reporter writes up to 8 process lessons; they are saved in `glhf/memory/lessons.md` (in git, shared by the team) and, when `PAST_API_KEY` is set, in past.dev, which then picks the lessons relevant to each new task. They are given to every role in later runs. Lessons are written before grading and must not contain results. |
+| `--seed N` | Sent to providers that support a seed. |
+
+There is no dollar cap for swarm runs: tokens are the budget. These flags are not passed to cloud
+runs yet. `--exa` and `--memory` give the swarm help the single agent does not have, so say so when
+reporting a run that used them.
+
+**Repeatability.** A rerun with a real model will not repeat exactly: model output varies, and time
+budgets cut phases at different points. What is fixed or recorded: the order of roles and their
+budgets (code), verdicts (code), every model call (Inspect log), every search query and claim
+(ledger), the analysis scripts, and the settings, seed and versions in `run.json`. Report the mean
+and spread of repeated runs rather than one run.
+
+The drug board has its own limits and memory in `board/config.yaml`: spend per run and per day, turns
+per agent, escalation checks, and `memory`, which adds each member's verified and contradicted claims
+to `board/expertise/<member>.md` after a real (not scripted) run.
 
 ## A fair comparison
 
@@ -142,7 +184,7 @@ Dockerfile, docker-compose.yml   the platform in containers
 ## Tests
 
 ```bash
-npm test    # 155 harness tests (ledger, Type-I simulation, end-to-end in Docker) + type checks
+npm test    # 160 harness tests (ledger, Type-I simulation, end-to-end in Docker) + type checks
 ```
 
 ## Also in this repo: the drug candidate board

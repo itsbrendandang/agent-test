@@ -58,6 +58,18 @@ export function checkRequest(body: Partial<RunRequest>, trusted: boolean): RunRe
   if (body.project) request.project = String(body.project)
   if (body.resultsBucket) request.resultsBucket = String(body.resultsBucket)
   if (body.timeLimit) request.timeLimit = Math.max(60, Math.floor(Number(body.timeLimit)))
+  const whole = (name: string, value: unknown) => { const n = Number(value); if (!Number.isInteger(n) || n < 1) bad(`${name} must be a whole number above 0`); return n }
+  if (body.maxTokens !== undefined) request.maxTokens = whole("maxTokens", body.maxTokens)
+  if (body.seed !== undefined) request.seed = whole("seed", body.seed)
+  if (body.maxMessagesPerRole !== undefined || body.exa || body.memory) {
+    if (body.solver !== "glhf") bad("maxMessagesPerRole, exa and memory need solver glhf")
+    if (body.mode === "cloud") bad("maxMessagesPerRole, exa and memory are for local runs so far; the cloud runner does not pass them on yet")
+    if (body.exa && !process.env.EXA_API_KEY) bad("exa needs EXA_API_KEY in .env")
+    if (body.maxMessagesPerRole !== undefined) request.maxMessagesPerRole = whole("maxMessagesPerRole", body.maxMessagesPerRole)
+    if (body.exa) request.exa = true
+    if (body.memory) request.memory = true
+  }
+  if (body.mode === "cloud" && (body.maxTokens !== undefined || body.seed !== undefined)) bad("maxTokens and seed are for local runs so far; the cloud runner does not pass them on yet")
   if (body.reviewRounds) request.reviewRounds = Math.max(1, Math.floor(Number(body.reviewRounds)))
   if (body.mode === "local") request.caseDir = trusted && body.caseDir ? body.caseDir : DEMO_CASE
   return request

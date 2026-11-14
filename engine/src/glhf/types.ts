@@ -34,6 +34,16 @@ export interface RunRequest {
   timeLimit?: number
   reviewRounds?: number
   caseDir?: string
+  /** Token budget for the whole run (both solvers). */
+  maxTokens?: number
+  /** Swarm: message cap per phase. A model call with one tool call is two messages. */
+  maxMessagesPerRole?: number
+  /** Swarm: documentation search through Exa (needs EXA_API_KEY). */
+  exa?: boolean
+  /** Swarm: read and write lessons in glhf/memory/ between runs. */
+  memory?: boolean
+  /** Sent to providers that support a seed. */
+  seed?: number
 }
 
 export const RECORD = 0.523 // BixBench3 best published score (the bar to beat)

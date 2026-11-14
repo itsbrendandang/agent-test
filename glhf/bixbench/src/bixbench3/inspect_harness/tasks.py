@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from inspect_ai import Task, task
+from inspect_ai.model import GenerateConfig
 
 from bixbench3.inspect_harness.dataset import (
     DEFAULT_TIME_LIMIT_SECONDS,
@@ -33,6 +34,11 @@ def bixbench3_cases(
     critic_model: str | None = None,
     reporter_model: str | None = None,
     time_limit_seconds: int | None = None,
+    max_tokens: int | None = None,
+    max_messages_per_role: int | None = None,
+    exa: bool = False,
+    memory_dir: str | None = None,
+    seed: int | None = None,
 ) -> Task:
     """solver="single" is the upstream baseline, unchanged. solver="glhf" is the GLHF swarm."""
     if solver not in ("single", "glhf"):
@@ -58,12 +64,17 @@ def bixbench3_cases(
             experimenter_model=experimenter_model,
             critic_model=critic_model,
             reporter_model=reporter_model,
+            max_tokens=max_tokens,
+            max_messages_per_role=max_messages_per_role,
+            exa=exa,
+            memory_dir=memory_dir,
         ),
         scorer=output_collection(),
         sandbox=("docker", compose_path),
         message_limit=MESSAGE_LIMIT,
         time_limit=limit,
-        token_limit=None,
+        token_limit=max_tokens if solver == "single" else None,
+        config=GenerateConfig(seed=seed) if seed is not None else GenerateConfig(),
         metadata={
             "effort": effort,
             "solver": solver,
@@ -73,6 +84,10 @@ def bixbench3_cases(
                 "critic": critic_model,
                 "reporter": reporter_model,
             },
+            "limits": {"max_tokens": max_tokens, "max_messages_per_role": max_messages_per_role},
+            "exa": exa,
+            "memory": bool(memory_dir),
+            "seed": seed,
             "artifact_grading": "host_after_inspect_exit",
         },
     )
