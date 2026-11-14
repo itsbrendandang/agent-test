@@ -1,0 +1,48 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "p-2-q1": "Question text of p-2-q1?",
+    "p-2-q2": "Question text of p-2-q2?"
+  },
+  "final": [
+    {
+      "question_id": "p-2-q1",
+      "answer": "0.03",
+      "status": "unchecked",
+      "comparison": null,
+      "derivations": [
+        "D1"
+      ]
+    },
+    {
+      "question_id": "p-2-q2",
+      "answer": "61.7",
+      "status": "unchecked",
+      "comparison": null,
+      "derivations": [
+        "D2"
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "D1",
+      "question_id": "p-2-q1",
+      "by": "critic",
+      "answer": "0.03",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D2",
+      "question_id": "p-2-q2",
+      "by": "critic",
+      "answer": "61.7",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    }
+  ],
+  "resolutions": []
+}

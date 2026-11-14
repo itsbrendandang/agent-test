@@ -1,0 +1,32 @@
+{
+  "benchmark": "BixBench v1.5 (futurehouse/BixBench)",
+  "dataset_revision": "fixture-rev",
+  "capsule": "p-29_00000029",
+  "question_ids": [
+    "p-29-q1",
+    "p-29-q2",
+    "p-29-q3",
+    "p-29-q4"
+  ],
+  "settings": {
+    "solver": "single",
+    "model": "fixture/model-a",
+    "role_models": {},
+    "answer_mode": "open",
+    "unit": "capsule",
+    "time_limit_seconds": 600,
+    "max_tokens": 480,
+    "seed": 0
+  },
+  "started_at": 1500,
+  "status": "done",
+  "finished_at": 1550,
+  "seconds": 50,
+  "total_tokens": 100,
+  "answer_statuses": {
+    "p-29-q1": "unchecked",
+    "p-29-q2": "unchecked",
+    "p-29-q3": "unchecked",
+    "p-29-q4": "unchecked"
+  }
+}

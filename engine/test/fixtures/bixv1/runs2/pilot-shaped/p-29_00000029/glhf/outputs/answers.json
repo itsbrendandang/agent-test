@@ -1,0 +1,25 @@
+{
+  "solver": "glhf",
+  "answers": {
+    "p-29-q1": {
+      "answer": "12",
+      "status": "replicated",
+      "note": ""
+    },
+    "p-29-q2": {
+      "answer": "up",
+      "status": "replicated",
+      "note": ""
+    },
+    "p-29-q3": {
+      "answer": "down",
+      "status": "replicated",
+      "note": ""
+    },
+    "p-29-q4": {
+      "answer": "none",
+      "status": "replicated",
+      "note": ""
+    }
+  }
+}

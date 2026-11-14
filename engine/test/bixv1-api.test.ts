@@ -1,7 +1,7 @@
 // The /api/bixv1 routes on a throwaway server, reading the fixture run folders in test/fixtures/bixv1/runs.
 // Nothing is written there; the one test that needs a symlink builds its own temporary folder.
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
@@ -20,6 +20,8 @@ process.env.BIXV1_QUESTIONS_FILE = join(fixtures, "questions.jsonl")
 
 let server: Server, base = ""
 before(async () => {
+  // still-running is "running" only while its folder was written to recently (else it is "stalled"): touch it.
+  utimesSync(join(fixtures, "runs", "still-running", "fx-2_bbbb0002", "single", "run.json"), new Date(), new Date())
   // As app.ts would call it: guard first, then the handler with the path split on "/".
   server = createServer((req, res) => {
     if (!guard(req, res, {})) return
@@ -54,7 +56,7 @@ test("runs are listed newest first with their totals", async () => {
   assert.ok(Math.abs(single.accuracy! - 1 / 3) < 1e-12)
   assert.deepEqual(single.wilson95, [0.0615, 0.7923])
   assert.deepEqual([single.tokens, single.seconds, single.maxTokens, single.maxTokensTotal], [250, 100, 1000, 2000])
-  assert.deepEqual(single.capsuleRuns, { done: 2, failed: 0, running: 0 })
+  assert.deepEqual(single.capsuleRuns, { done: 2, failed: 0, running: 0, stalled: 0 })
   // Swarm: two right, one the judge failed on; that one counts against the accuracy and is reported apart.
   assert.deepEqual([swarm.solver, swarm.correct, swarm.incorrect, swarm.refused, swarm.notGraded, swarm.denominator], ["glhf", 2, 0, 0, 1, 3])
   assert.deepEqual(swarm.statuses, { replicated: 1, reconciled: 1, unchecked: 1 })

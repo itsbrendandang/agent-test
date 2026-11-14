@@ -1,0 +1,62 @@
+{
+  "benchmark": "BixBench v1.5 (futurehouse/BixBench)",
+  "dataset_revision": "fixture-rev",
+  "capsule": "n-1_00000001",
+  "question_ids": [
+    "n-1-q1",
+    "n-1-q2",
+    "n-1-q3",
+    "n-1-q4"
+  ],
+  "settings": {
+    "solver": "glhf",
+    "model": "fixture/model-a",
+    "role_models": {},
+    "answer_mode": "open",
+    "unit": "capsule",
+    "time_limit_seconds": 600,
+    "max_tokens": 1000,
+    "seed": 0,
+    "single_budget_tokens": 1000,
+    "total_budget_tokens": 2250,
+    "budget_reading": "more budget",
+    "critic_hints": "none",
+    "swarm_budget": {
+      "mode": "extended",
+      "reading": "more budget",
+      "single_budget_tokens": 1000,
+      "swarm_total_tokens": 2250,
+      "floors": {
+        "analyst": 300,
+        "critic": 300,
+        "reconciler": 100
+      },
+      "final_reserve": 50
+    }
+  },
+  "started_at": 3000,
+  "status": "done",
+  "finished_at": 3050,
+  "seconds": 50,
+  "total_tokens": 2000,
+  "answer_statuses": {
+    "n-1-q1": "replicated",
+    "n-1-q2": "replicated",
+    "n-1-q3": "replicated",
+    "n-1-q4": "replicated"
+  },
+  "budget": {
+    "solver": "glhf",
+    "single_budget_tokens": 1000,
+    "total_budget_tokens": 2250,
+    "reading": "more budget",
+    "tokens_used": 2000,
+    "used_vs_single_budget": 2,
+    "tokens_by_phase": {
+      "analyst": 950,
+      "critic": 900,
+      "reconciler": 150
+    },
+    "forced_answers": {}
+  }
+}

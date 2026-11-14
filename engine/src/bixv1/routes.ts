@@ -8,6 +8,7 @@
 // Query, on all three: ?profile=per-mode|official|paper picks the grading profile. Default: the one report.json
 // was written with, else "per-mode". On a run that was not graded with it: 400 for /runs/:id; the run is left
 // out of the scoreboard; in the list its counts are all "not graded".
+// Runs are cached in memory while their files are unchanged (store.ts), so polling these routes is cheap.
 //
 // IDEAL ANSWERS: ONE RULE. No response carries the ground-truth answer of a question unless the request is
 // GET /api/bixv1/runs/:id?ideal=1 and every capsule run in that folder has finished. Why:
@@ -19,6 +20,7 @@
 //     only source is the dataset's question file, which this module opens for the ?ideal=1 request and for
 //     nothing else.
 //   * A run that is still going is refused (409) even with the flag: its solver is at work on these questions.
+//     (A "stalled" run is not at work: its crashed capsule runs have been silent past their time limit.)
 //   * The judge's raw reply and the grader's note can quote or describe the ideal, so they follow the same rule.
 // The flag is for a person reviewing a finished run who needs to see why an answer was marked wrong. It is a
 // deliberate act, not a default, and the response is marked `idealsRevealed: true` and `cache-control: no-store`.
@@ -60,11 +62,12 @@ export async function handleBixV1(req: IncomingMessage, res: ServerResponse, par
       }
       const detail: BixRunDetail = { run: loaded.run, questions: loaded.questions, idealsRevealed: false }
       if (!reveal) return json(res, 200, detail)
-      if (loaded.run.state !== "done") throw new HttpError(409, "ideal answers are shown only for a finished run; this one has capsule runs still going or none at all")
+      if (loaded.run.state === "running" || loaded.run.state === "empty") throw new HttpError(409, "ideal answers are shown only for a finished run; this one has capsule runs still going or none at all")
       const ideals = readIdeals()
       if (!ideals) detail.idealNote = "the dataset's question file is not on this machine (uv run bixbench-v1 download), so there are no ideal answers to show"
       else {
-        for (const q of detail.questions) { const ideal = ideals.get(q.questionId); if (ideal !== undefined) q.ideal = ideal }
+        // Copies: the loaded questions are shared with the store's cache and must never carry an ideal.
+        detail.questions = detail.questions.map((q) => { const ideal = ideals.get(q.questionId); return ideal === undefined ? q : { ...q, ideal } })
         detail.idealsRevealed = true
         if (loaded.run.answerModes.some((m) => m !== "open")) detail.idealNote = "multiple-choice run: the answers are letters; the ideal shown is the text of the correct option, not its letter"
       }

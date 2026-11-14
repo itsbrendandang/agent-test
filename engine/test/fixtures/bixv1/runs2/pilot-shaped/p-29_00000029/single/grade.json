@@ -1,0 +1,48 @@
+{
+  "capsule": "p-29_00000029",
+  "solver": "single",
+  "answer_mode": "open",
+  "judge_model": "fixture/judge",
+  "profiles": {
+    "per-mode": {
+      "grades": [
+        {
+          "question_id": "p-29-q1",
+          "eval_mode": "range_verifier",
+          "predicted": "12",
+          "correct": false,
+          "refused": false,
+          "method": "range",
+          "graded": true
+        },
+        {
+          "question_id": "p-29-q2",
+          "eval_mode": "llm_verifier",
+          "predicted": "up",
+          "correct": false,
+          "refused": false,
+          "method": "llm",
+          "graded": true
+        },
+        {
+          "question_id": "p-29-q3",
+          "eval_mode": "llm_verifier",
+          "predicted": "down",
+          "correct": false,
+          "refused": false,
+          "method": "llm",
+          "graded": true
+        },
+        {
+          "question_id": "p-29-q4",
+          "eval_mode": "llm_verifier",
+          "predicted": "none",
+          "correct": false,
+          "refused": false,
+          "method": "llm",
+          "graded": true
+        }
+      ]
+    }
+  }
+}

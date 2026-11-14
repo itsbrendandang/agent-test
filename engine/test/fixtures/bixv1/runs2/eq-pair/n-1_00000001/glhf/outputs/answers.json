@@ -1,0 +1,25 @@
+{
+  "solver": "glhf",
+  "answers": {
+    "n-1-q1": {
+      "answer": "10",
+      "status": "replicated",
+      "note": ""
+    },
+    "n-1-q2": {
+      "answer": "B",
+      "status": "reconciled",
+      "note": ""
+    },
+    "n-1-q3": {
+      "answer": "8",
+      "status": "reconciled",
+      "note": ""
+    },
+    "n-1-q4": {
+      "answer": "x",
+      "status": "reconciled",
+      "note": ""
+    }
+  }
+}

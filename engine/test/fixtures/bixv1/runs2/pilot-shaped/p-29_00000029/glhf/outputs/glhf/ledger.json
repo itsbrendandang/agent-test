@@ -1,0 +1,126 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "p-29-q1": "Question text of p-29-q1?",
+    "p-29-q2": "Question text of p-29-q2?",
+    "p-29-q3": "Question text of p-29-q3?",
+    "p-29-q4": "Question text of p-29-q4?"
+  },
+  "final": [
+    {
+      "question_id": "p-29-q1",
+      "answer": "12",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D1",
+        "D5"
+      ]
+    },
+    {
+      "question_id": "p-29-q2",
+      "answer": "up",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D2",
+        "D6"
+      ]
+    },
+    {
+      "question_id": "p-29-q3",
+      "answer": "down",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D3",
+        "D7"
+      ]
+    },
+    {
+      "question_id": "p-29-q4",
+      "answer": "none",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D4",
+        "D8"
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "D1",
+      "question_id": "p-29-q1",
+      "by": "analyst",
+      "answer": "12",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D2",
+      "question_id": "p-29-q2",
+      "by": "analyst",
+      "answer": "up",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D3",
+      "question_id": "p-29-q3",
+      "by": "analyst",
+      "answer": "down",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D4",
+      "question_id": "p-29-q4",
+      "by": "analyst",
+      "answer": "none",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D5",
+      "question_id": "p-29-q1",
+      "by": "critic",
+      "answer": "12",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D6",
+      "question_id": "p-29-q2",
+      "by": "critic",
+      "answer": "up",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D7",
+      "question_id": "p-29-q3",
+      "by": "critic",
+      "answer": "down",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D8",
+      "question_id": "p-29-q4",
+      "by": "critic",
+      "answer": "none",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    }
+  ],
+  "resolutions": []
+}

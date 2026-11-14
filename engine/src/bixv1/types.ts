@@ -24,6 +24,67 @@ export interface BixGrader {
   model?: string
 }
 
+/**
+ * How a swarm's token budget relates to the single agent's (settings.max_tokens) for the same capsule run.
+ *   equal     the swarm's total is the single agent's budget
+ *   extended  the swarm's total is larger (2.25 times, unless the run set another multiplier)
+ *   legacy    run.json has no budget fields: written before budget modes existed. Counted as the pilot's
+ *             allocation (analyst 42%, critic 42%, reconciler 16%) inside the single agent's budget.
+ *   mixed     a folder whose capsule runs did not all use one mode
+ *   unknown   a mode this reader does not know
+ */
+export type BixBudgetMode = "equal" | "extended" | "legacy" | "mixed" | "unknown"
+
+export interface BixBudget {
+  /** null for the single agent. */
+  mode: BixBudgetMode | null
+  /** The mode in plain words. null for the single agent. */
+  label: string | null
+  /** Sum over the capsule runs of what the single agent gets (max_tokens). null when a run did not record it. */
+  singleBudgetTokens: number | null
+  /** Sum of what this solver could really spend. Equal to singleBudgetTokens except for an extended swarm. */
+  totalBudgetTokens: number | null
+  /** totalBudgetTokens / singleBudgetTokens: 1, or 2.25 for an extended swarm. */
+  ratio: number | null
+  /** The adapter's own word, "same budget" or "more budget". null when not recorded (single agent, legacy). */
+  reading: string | null
+}
+
+/**
+ * Counts for judging the swarm's design, over the swarm's questions in a run folder. "Correct" and "wrong" are
+ * the graded result of the reported answer; "wrong" includes refusals; not-graded answers are counted apart.
+ */
+export interface BixDesign {
+  questions: number
+  /** Questions with both an analyst and a critic answer. compared = agreed + disagreed. */
+  compared: number
+  agreed: number
+  /**
+   * Agreed, and the agreed answer was the one graded (the reconciler did not replace it):
+   * agreed = agreedCorrect + agreedWrong + agreedNotGraded + (agreed answers the reconciler replaced).
+   */
+  agreedCorrect: number
+  agreedWrong: number
+  agreedNotGraded: number
+  /** Agreed, and both sides used the same method, so the agreement is not an independent check. */
+  agreedSameMethod: number
+  agreedSameMethodCorrect: number
+  agreedSameMethodWrong: number
+  /** Agreed answers for which "same method" was recorded at all. 0 for legacy runs: then agreedSameMethod says nothing. */
+  sameMethodKnown: number
+  disagreed: number
+  /** Questions with one derivation only, or none. */
+  oneDerivation: number
+  /** Questions where a side's answer was a forced estimate at its budget limit. */
+  forced: number
+  /** Questions the reconciler derived an answer for. */
+  reconcilerRan: number
+  /** Questions where the reconciler's work changed the reported answer, and how the changed answer was graded. */
+  reconcilerChanged: number
+  reconcilerChangedToCorrect: number
+  reconcilerChangedToWrong: number
+}
+
 /** One solver's answer to one question. */
 export interface BixAnswer {
   solver: string
@@ -42,17 +103,42 @@ export interface BixAnswer {
   runTokens: number | null
   runSeconds: number | null
   runQuestions: number
-  // The swarm only, from its ledger. Left out when the ledger has no such derivation.
+  // The swarm only: from its per-question record (questions.json), else from its ledger (older runs).
+  // All of these are left out for the single agent.
+  /** Left out when that role gave no answer. */
   analystAnswer?: string
   criticAnswer?: string
-  /** Did code find the two derivations to agree? null: one is missing. "unclear" comparisons are false. */
+  /** Did code find the two answers to agree? null: one is missing. An "unclear" comparison is false. */
   agreed?: boolean | null
-  /** The ledger's own word: agree, differ, unclear. */
+  /** The ledger's own word: agree, differ, unclear. null: one answer is missing. */
   comparison?: string | null
+  /** Did both sides use the same method (by code or by the reconciler's reading)? null: not known (always, for legacy runs). */
+  sameMethod?: boolean | null
+  sameMethodByCode?: boolean
+  sameMethodByReconciler?: boolean
+  /** Token overlap of the two one-line method statements, 0 to 1. */
+  methodSimilarity?: number
+  /** Each side's own one-line statement of its method. */
+  analystMethod?: string
+  criticMethod?: string
+  /** Was that side's answer a forced estimate made at its budget limit? `forced`: either side. */
+  analystForced?: boolean
+  criticForced?: boolean
+  forced?: boolean
+  /** The reconciler's own answer. Left out when it did not look at this question. */
   reconcilerAnswer?: string
-  /** Which derivation the reconciler kept (A = analyst, B = critic, both, neither) and the cause it recorded. */
-  reconcilerKeep?: string
+  /** rederived, confirmed, overturned or differs_kept. */
+  reconcilerAction?: string
   reconcilerCause?: string
+  /** Legacy runs only: which derivation the reconciler kept (A = analyst, B = critic, both, neither). */
+  reconcilerKeep?: string
+  /** Did the reconciler's work change the answer that was reported (from what the analyst, else the critic, gave)? */
+  reconcilerChanged?: boolean
+  /**
+   * Tokens per phase of the capsule run this answer came from: { analyst, critic, reconciler }. Like runTokens it
+   * is shared by the run's questions, not this question's own. {} when the run did not record it.
+   */
+  runPhaseTokens?: Record<string, number>
   /** Only with ?ideal=1 (see routes.ts): the judge's raw reply and the grader's note can quote the ideal. */
   judgeResponse?: string
   graderNote?: string
@@ -87,6 +173,8 @@ export interface BixSolverSummary {
   notGraded: number
   /** Questions of capsule runs that have not finished. They are in no other count and not in the denominator. */
   pending: number
+  /** Questions of capsule runs that say "running" but have been silent too long (crashed). Counted like pending. */
+  stalled: number
   /**
    * correct / denominator, null when the denominator is 0. The denominator is every question of a finished
    * capsule run: refusals, failed runs, missing answers and judge errors all count as incorrect, as in the
@@ -105,8 +193,14 @@ export interface BixSolverSummary {
   seconds: number
   /** Estimated from report.json's assumed list prices and the per-kind token usage. null when either is missing. */
   costUsd: number | null
-  capsuleRuns: { done: number; failed: number; running: number }
-  /** The per-run token budget when every capsule run had the same one, else null; and the sum. */
+  capsuleRuns: { done: number; failed: number; running: number; stalled: number }
+  /** What this solver could spend, against what the single agent gets. */
+  budget: BixBudget
+  /** Tokens per swarm phase summed over the capsule runs: { analyst, critic, reconciler }. {} when not recorded. */
+  tokensByPhase: Record<string, number>
+  /** The swarm only, and only when a ledger or per-question record could be read. */
+  design?: BixDesign
+  /** The single agent's budget (max_tokens) per capsule run when all are the same, else null; and the sum. For what a swarm could really spend see `budget`. */
   maxTokens: number | null
   maxTokensTotal: number | null
 }
@@ -125,8 +219,11 @@ export interface BixRun {
   gradingProfiles: string[]
   judgeModels: string[]
   answerModes: string[]
-  /** "running" while any capsule run is unfinished. A crashed run keeps saying "running": the adapter cannot tell. */
-  state: "running" | "done" | "empty"
+  /**
+   * "running" while a capsule run is at work. "stalled": none is at work, but at least one says "running" and has
+   * written nothing for longer than its time limit plus a margin (it crashed); the others are counted as usual.
+   */
+  state: "running" | "stalled" | "done" | "empty"
   startedAt: number | null
   finishedAt: number | null
   capsules: string[]
@@ -170,6 +267,10 @@ export interface BixScoreCell {
   startedAt: number | null
   /** Settings outside the pairing key that the other side might not share, in plain words. */
   extras: string[]
+  /** What this side could spend in all, summed over its capsule runs. */
+  budgetTokens: number | null
+  /** null for the single agent. */
+  budgetMode: BixBudgetMode | null
 }
 
 export interface BixPaired {
@@ -195,6 +296,26 @@ export interface BixPaired {
 }
 
 export interface BixScoreRow {
+  /**
+   * What kind of row this is. Read it before any number in the row.
+   *   "same budget"  both sides could spend the same total: a like-for-like comparison
+   *   "more budget"  the swarm could spend more than the single agent (extended mode): NOT like for like
+   *   "none"         one side only, nothing to compare
+   */
+  comparison: "same budget" | "more budget" | "none"
+  /** True only for "same budget". The dashboard must not show a row with false as a fair comparison. */
+  likeForLike: boolean
+  /** A short label for the row: the comparison kind and the swarm's budget mode in plain words. */
+  budgetLabel: string
+  /**
+   * The swarm's total budget divided by the single agent's, for the two sides in this row: 1 for "same budget",
+   * 2.25 for an extended swarm against its own baseline. null when there is one side only or a budget is unknown.
+   */
+  budgetRatio: number | null
+  /** Tokens the swarm used divided by tokens the single agent used. null when there is one side only. */
+  tokensUsedRatio: number | null
+  /** The swarm side's budget mode. null when the row has no swarm. */
+  swarmBudgetMode: BixBudgetMode | null
   dataset: string | null
   datasetRevision: string | null
   model: string
@@ -202,17 +323,20 @@ export interface BixScoreRow {
   answerMode: string | null
   capsules: string[]
   questions: number
-  /** Per capsule run when all are equal, else null; and the total. Equal on both sides by construction. */
+  /**
+   * The single agent's budget in this row: per capsule run when all are equal, else null; and the total. In a
+   * row with a swarm only, the swarm's total budget. Each side's own total is in its cell (`budgetTokens`).
+   */
   maxTokens: number | null
   maxTokensTotal: number | null
   timeLimit: number | null
   single?: BixScoreCell
   swarm?: BixScoreCell
-  /** Present only when both sides exist. */
+  /** Present only when both sides exist. In a "more budget" row it is still computed, and still not like for like. */
   paired?: BixPaired
   /** True when the data cannot support any conclusion, whatever the counts say. */
   tooSmall: boolean
-  /** One or two plain sentences on what can be concluded from this row. Always present. */
+  /** One or two plain sentences on what can be concluded from this row. Always present. A "more budget" row says so first. */
   conclusion: string
   /** Why there is no pair, or what differs between the sides. */
   note?: string

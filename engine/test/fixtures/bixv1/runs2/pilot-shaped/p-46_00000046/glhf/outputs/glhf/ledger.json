@@ -1,0 +1,68 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "p-46-q1": "Question text of p-46-q1?",
+    "p-46-q4": "Question text of p-46-q4?"
+  },
+  "final": [
+    {
+      "question_id": "p-46-q1",
+      "answer": "-4.9",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D1",
+        "D3"
+      ]
+    },
+    {
+      "question_id": "p-46-q4",
+      "answer": "-4.1",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D2",
+        "D4"
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "D1",
+      "question_id": "p-46-q1",
+      "by": "analyst",
+      "answer": "-4.9",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D2",
+      "question_id": "p-46-q4",
+      "by": "analyst",
+      "answer": "-4.1",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D3",
+      "question_id": "p-46-q1",
+      "by": "critic",
+      "answer": "-4.9",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D4",
+      "question_id": "p-46-q4",
+      "by": "critic",
+      "answer": "-4.1",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    }
+  ],
+  "resolutions": []
+}

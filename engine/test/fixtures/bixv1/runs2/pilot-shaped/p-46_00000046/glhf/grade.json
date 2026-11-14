@@ -1,0 +1,30 @@
+{
+  "capsule": "p-46_00000046",
+  "solver": "glhf",
+  "answer_mode": "open",
+  "judge_model": "fixture/judge",
+  "profiles": {
+    "per-mode": {
+      "grades": [
+        {
+          "question_id": "p-46-q1",
+          "eval_mode": "str_verifier",
+          "predicted": "-4.9",
+          "correct": true,
+          "refused": false,
+          "method": "exact",
+          "graded": true
+        },
+        {
+          "question_id": "p-46-q4",
+          "eval_mode": "str_verifier",
+          "predicted": "-4.1",
+          "correct": true,
+          "refused": false,
+          "method": "exact",
+          "graded": true
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "solver": "glhf",
+  "answers": {
+    "p-46-q1": {
+      "answer": "-4.9",
+      "status": "replicated",
+      "note": ""
+    },
+    "p-46-q4": {
+      "answer": "-4.1",
+      "status": "replicated",
+      "note": ""
+    }
+  }
+}

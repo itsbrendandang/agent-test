@@ -1,0 +1,25 @@
+{
+  "solver": "single",
+  "answers": {
+    "n-1-q1": {
+      "answer": "10",
+      "status": "unchecked",
+      "note": ""
+    },
+    "n-1-q2": {
+      "answer": "B",
+      "status": "unchecked",
+      "note": ""
+    },
+    "n-1-q3": {
+      "answer": "7",
+      "status": "unchecked",
+      "note": ""
+    },
+    "n-1-q4": {
+      "answer": "x",
+      "status": "unchecked",
+      "note": ""
+    }
+  }
+}

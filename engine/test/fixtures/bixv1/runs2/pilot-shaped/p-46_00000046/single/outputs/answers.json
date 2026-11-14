@@ -1,0 +1,15 @@
+{
+  "solver": "single",
+  "answers": {
+    "p-46-q1": {
+      "answer": "-4.9",
+      "status": "unchecked",
+      "note": ""
+    },
+    "p-46-q4": {
+      "answer": "-4.1",
+      "status": "unchecked",
+      "note": ""
+    }
+  }
+}
