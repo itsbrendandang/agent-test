@@ -13,6 +13,10 @@ export interface Brief {
 
 export class BriefRejected extends Error {}
 
+// A template placeholder left in: "<" then a letter, closed by ">" on the same line, as in "<SMILES>" or
+// "<One decision, phrased so...>". A comparison such as "IC50 < 10 nM" or "<10 nM" is not a placeholder.
+const PLACEHOLDER = /<[A-Za-z][^<>\n]*>/
+
 export function loadBrief(file: string, required: string[]): Brief {
   const markdown = readFileSync(file, "utf8")
   const sections: Record<string, string> = {}
@@ -22,7 +26,7 @@ export function loadBrief(file: string, required: string[]): Brief {
     if (heading) { current = heading[1]; sections[current] = ""; continue }
     if (current) sections[current] += line + "\n"
   }
-  const missing = required.filter((s) => !sections[s]?.trim() || sections[s].includes("<"))
+  const missing = required.filter((s) => !sections[s]?.trim() || PLACEHOLDER.test(sections[s]))
   if (missing.length) throw new BriefRejected(`Brief ${basename(file)} is missing or has unfilled sections: ${missing.join(", ")}`)
   const keyQuestions = (sections["Key Questions"] ?? "")
     .split("\n").map((l) => l.replace(/^\s*\d+\.\s*/, "").trim()).filter(Boolean)

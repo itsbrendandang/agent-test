@@ -5,9 +5,14 @@ import { ENGINE } from "@/board/api"
 export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed"
 export type Solver = "single" | "glhf"
 export interface Usage { input_tokens: number; output_tokens: number; total_tokens: number }
+/** Budgets and extras of a run: what decides whether two runs can be compared. */
+export interface RunSettings {
+  timeLimit?: number; maxTokens?: number; maxMessagesPerRole?: number; reviewRounds?: number
+  exa?: boolean; memory?: boolean; seed?: number; effort?: string
+}
 export interface GlhfRun {
   id: string; mode: "local" | "cloud"; task: string; solver: Solver; model: string
-  roleModels: Record<string, string>; phase: GlhfPhase; detail?: string
+  roleModels: Record<string, string>; settings?: RunSettings; phase: GlhfPhase; detail?: string
   startedAt: number; finishedAt?: number; score?: number
   artifacts?: { artifact_id: string; score: number }[]
   usage?: Record<string, Usage>; error?: string
@@ -17,6 +22,13 @@ export interface GlhfStatus {
   tools: { docker: boolean; uv: boolean; gcloud: boolean }
   keys: { ANTHROPIC_API_KEY: boolean; OPENAI_API_KEY: boolean; HF_TOKEN: boolean }
   project: string | null
+}
+
+// Mirrors engine/src/glhf/scoreboard.ts, which does the pairing (GET /api/glhf/scoreboard).
+export interface ScoreCell { id: string; phase: "done" | "failed"; score?: number; startedAt: number; extras: string[] }
+export interface ScoreRow {
+  task: string; model: string; timeLimit?: number; maxTokens?: number
+  single?: ScoreCell; swarm?: ScoreCell; diff?: number; note?: string
 }
 
 // Mirrors Ledger.to_json in glhf/bixbench/src/bixbench3/inspect_harness/swarm/ledger.py
@@ -56,6 +68,7 @@ export function useSwarm(selected: string | undefined, nudge: number) {
   const [status, setStatus] = useState<GlhfStatus>()
   const [runs, setRuns] = useState<GlhfRun[]>()
   const [detail, setDetail] = useState<RunDetail>()
+  const [board, setBoard] = useState<ScoreRow[]>()
   const [offline, setOffline] = useState(false)
 
   useEffect(() => {
@@ -64,9 +77,12 @@ export function useSwarm(selected: string | undefined, nudge: number) {
     const tick = async () => {
       let live = false
       try {
-        const [s, list] = await Promise.all([get<GlhfStatus>("/api/glhf/status"), get<GlhfRun[]>("/api/glhf/runs")])
+        const [s, list, rows] = await Promise.all([
+          get<GlhfStatus>("/api/glhf/status"), get<GlhfRun[]>("/api/glhf/runs"),
+          get<ScoreRow[]>("/api/glhf/scoreboard").catch(() => undefined), // an older engine has no scoreboard route
+        ])
         if (stopped) return
-        setStatus(s); setRuns(list); setOffline(false)
+        setStatus(s); setRuns(list); setBoard(rows); setOffline(false)
         live = list.some(isLive)
         const id = selected ?? list[0]?.id
         if (id) {
@@ -84,5 +100,5 @@ export function useSwarm(selected: string | undefined, nudge: number) {
     return () => { stopped = true; if (timer) clearTimeout(timer) }
   }, [selected, nudge])
 
-  return { status, runs, detail, offline }
+  return { status, runs, detail, offline, scoreboard: board }
 }

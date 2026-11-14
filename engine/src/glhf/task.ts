@@ -6,11 +6,12 @@
 //   cloud:  launch -> awaitLaunch (`bixbench3 run` provisions, then detaches) -> watchCloud (`status` every
 //           5 min) -> complete (`complete` collects grades and deletes the VM) -> done | failed
 import { execFile, spawn } from "node:child_process"
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
-import { BIXBENCH, DEMO_CASE, MEMORY, patchRun, readJson, readText, runDir, tail, trackerLog } from "./store.ts"
+import { alive, parseStamp, stamp } from "./proc.ts"
+import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, tail, trackerLog } from "./store.ts"
 import type { GlhfRun, RunRequest, Usage } from "./types.ts"
 
 export type RunInput = RunRequest & { id: string }
@@ -27,6 +28,13 @@ const LOCAL_POLL = () => ms("GLHF_LOCAL_POLL_MS", 2_000)
 const LAUNCH_POLL = () => ms("GLHF_LAUNCH_POLL_MS", 5_000)
 const CLOUD_POLL = () => ms("GLHF_CLOUD_POLL_MS", 5 * 60_000)
 const COMPLETE_RETRIES = 5
+/** How long `bixbench3 run` may take to provision and detach before the launch counts as stuck. */
+const LAUNCH_TIMEOUT = () => ms("GLHF_LAUNCH_TIMEOUT_MS", 2 * 60 * 60_000)
+/** Local runs: time allowed beyond the run's own limit (image build, sandbox start, grading). */
+const localDeadline = (startedAt: number, timeLimit: number | undefined) => {
+  const limit = (timeLimit ?? 1800) * 1000
+  return startedAt + limit + ms("GLHF_LOCAL_MARGIN_MS", Math.max(30 * 60_000, limit / 4))
+}
 
 /** The `bixbench3` command. GLHF_BIXBENCH3_CMD replaces it (tests use a stub script). */
 const bixbench3 = () => (process.env.GLHF_BIXBENCH3_CMD ?? "uv run bixbench3").split(/\s+/).filter(Boolean)
@@ -35,26 +43,43 @@ const manifestsRoot = () => process.env.GLHF_BIXBENCH3_RUNS ?? resolve(BIXBENCH,
 const quote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
 
 /**
- * Start `argv` detached, so it survives this process. The shell writes its own pid before the command and the
- * exit status after it, which is how a later process (after a restart) knows whether it was started and how it
- * ended. Returns false, starting nothing, when it was already started.
+ * Start `argv` detached, so it survives this process. Returns false, starting nothing, when it was already
+ * started. The marker file is created (exclusively) before anything is spawned, so two attempts can never both
+ * start it, and a crash between the marker and the spawn leaves a run that fails rather than one that may be
+ * started twice. The marker then gets "<pid> <start time>" of the wrapping shell, which stays alive for as long
+ * as the command runs and writes the exit status after it: that is how a later process (after a restart) knows
+ * whether it was started, whether it is still the same process, and how it ended.
  */
-function startOnce(dir: string, name: string, argv: string[], stdout: string, stderr: string | null): boolean {
+export function startOnce(dir: string, name: string, argv: string[], stdout: string, stderr: string | null, cwd = BIXBENCH): boolean {
   const pidFile = `${dir}/${name}.pid`
-  if (existsSync(pidFile)) return false
+  try { writeFileSync(pidFile, "", { flag: "wx" }) } catch { return false }
   const redirect = stderr ? `> ${quote(stdout)} 2> ${quote(stderr)}` : `> ${quote(stdout)} 2>&1`
-  const script = `echo $$ > ${quote(pidFile)}; "$@" ${redirect}; echo $? > ${quote(`${dir}/${name}.exit`)}`
-  spawn("sh", ["-c", script, "sh", ...argv], { cwd: BIXBENCH, detached: true, stdio: "ignore", env: process.env }).unref()
+  const script = `"$@" ${redirect}; echo $? > ${quote(`${dir}/${name}.exit`)}`
+  const child = spawn("sh", ["-c", script, "sh", ...argv], { cwd, detached: true, stdio: "ignore", env: process.env })
+  child.on("error", () => { /* reported by processState as "gone" */ })
+  child.unref()
+  if (child.pid) writeFileSync(pidFile, stamp(child.pid))
   return true
 }
 
-/** "running" while the process is alive, its exit status once it ended, "gone" if it died without one. */
-function processState(dir: string, name: string, polls: number): "running" | "gone" | number {
+/**
+ * "running" while the process is alive, its exit status once it ended, "gone" if it died without one.
+ * Alive means the pid exists and started when we recorded it, so a reused pid does not count.
+ */
+export function processState(dir: string, name: string, polls: number): "running" | "gone" | number {
   const exit = readText(`${dir}/${name}.exit`)
   if (exit !== null && exit.trim() !== "") return Number(exit.trim())
-  const pid = Number(readText(`${dir}/${name}.pid`)?.trim())
-  if (!pid) return polls < 5 ? "running" : "gone" // the shell has not written its pid yet
-  try { process.kill(pid, 0); return "running" } catch { return "gone" }
+  const mark = readText(`${dir}/${name}.pid`)
+  if (!parseStamp(mark)) return polls < 5 ? "running" : "gone" // the pid is not written yet; if it never is, the spawn failed
+  return alive(mark) ? "running" : "gone"
+}
+
+/** Stop a detached command and what it started (its process group). Only when it is still the process we started. */
+function stop(dir: string, name: string): boolean {
+  const mark = readText(`${dir}/${name}.pid`)
+  const pid = parseStamp(mark)?.pid
+  if (!pid || !alive(mark)) return false
+  try { process.kill(-pid, "SIGTERM"); return true } catch { try { process.kill(pid, "SIGTERM"); return true } catch { return false } }
 }
 
 const run = (argv: string[], timeoutMs: number) =>
@@ -74,24 +99,46 @@ export function leadingJson(text: string): Record<string, unknown> | undefined {
   try { return JSON.parse(lines.slice(start, end + 1).join("\n")) as Record<string, unknown> } catch { return undefined }
 }
 
-/** The run manifest `bixbench3 run` writes before it creates the VM, for a launch whose output was lost. */
-function findManifest(input: RunInput, since: number): string | undefined {
-  const found: { id: string; at: number }[] = []
+export interface Manifest { run_id?: string; task_id?: string; paper_id?: string; started_at?: string; model?: { id?: string }; solver?: string }
+
+/** Which solver a run manifest belongs to, when the manifest says so (a `solver` field, or solver=... in its command). */
+export function manifestSolver(manifest: unknown): "single" | "glhf" | undefined {
+  const named = (manifest as Manifest | undefined)?.solver
+  if (named === "single" || named === "glhf") return named
+  const found = JSON.stringify(manifest ?? {}).match(/solver=(single|glhf)\b/)
+  return found ? (found[1] as "single" | "glhf") : undefined
+}
+
+/**
+ * The run manifest `bixbench3 run` wrote before it created the VM, for a launch whose output was lost. It must
+ * match the task, the model and the solver, be no older than the launch, and not belong to another tracked run.
+ * When manifests do not name their solver and more than one fits, none is adopted: attributing a score to the
+ * wrong solver is worse than asking a person. Returns the candidates in that case.
+ */
+export function findManifest(input: Pick<RunInput, "task" | "model" | "solver">, since: number, root = manifestsRoot(), taken: string[] = []): { id?: string; ambiguous?: string[] } {
+  const found: { id: string; at: number; solver?: "single" | "glhf" }[] = []
   const walk = (dir: string) => {
     if (!existsSync(dir)) return
     for (const name of readdirSync(dir)) {
       const file = `${dir}/${name}`
       if (statSync(file).isDirectory()) walk(file)
       else if (name === "run_manifest.json") {
-        const m = readJson<{ run_id?: string; task_id?: string; paper_id?: string; started_at?: string; model?: { id?: string } }>(file)
+        const m = readJson<Manifest>(file)
         const at = Date.parse(m?.started_at ?? "")
-        if (m?.run_id && m.model?.id === input.model && [m.task_id, m.paper_id].includes(input.task) && at >= since - 1_000) found.push({ id: m.run_id, at })
+        if (m?.run_id && !taken.includes(m.run_id) && m.model?.id === input.model && [m.task_id, m.paper_id].includes(input.task) && at >= since - 1_000) found.push({ id: m.run_id, at, solver: manifestSolver(m) })
       }
     }
   }
-  walk(manifestsRoot())
-  return found.sort((a, b) => a.at - b.at)[0]?.id
+  walk(root)
+  const fits = found.filter((f) => f.solver === undefined || f.solver === input.solver).sort((a, b) => a.at - b.at)
+  const sure = fits.filter((f) => f.solver === input.solver)
+  if (sure.length) return { id: sure[0].id }
+  if (fits.length > 1) return { ambiguous: fits.map((f) => f.id) }
+  return { id: fits[0]?.id }
 }
+
+/** Cloud runs other tracked runs already follow. */
+const takenRemoteIds = (except: string) => listStored().filter((s) => s.run.id !== except).flatMap((s) => (s.run.remoteId ? [s.run.remoteId] : []))
 
 const grade = (dir: string) => {
   const g = readJson<{ score?: number; artifacts?: { artifact_id?: string; score?: number }[] }>(`${dir}/grade.json`)
@@ -161,6 +208,12 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         const why = state === "gone" ? "the local runner stopped without finishing" : `the local runner exited with status ${state}`
         return finish(runtime, context, id, { phase: "failed", error: `${why}\n${tail(`${dir}/runner.log`)}`.trim() })
       }
+      const startedAt = loadStored(id)?.run.startedAt ?? runtime.now()
+      if (runtime.now() > localDeadline(startedAt, task.input.timeLimit)) {
+        const stopped = stop(dir, "runner")
+        const limit = task.input.timeLimit ?? 1800
+        return finish(runtime, context, id, { phase: "failed", error: `the local runner was still going ${Math.round((runtime.now() - startedAt) / 60_000)} minutes after the start, far past its ${limit} s limit; ${stopped ? "it was stopped" : "it could not be stopped, check for a leftover process or container"}\n${tail(`${dir}/runner.log`)}`.trim() })
+      }
       patchRun(id, local ? { phase: "running", detail: lastPhase(dir) ?? "running" } : { phase: "launching", detail: "starting the sandbox" })
       await runtime.sleepUntil(runtime.now() + LOCAL_POLL(), { phase: "watchLocal", polls: polls + 1 }, context)
     },
@@ -169,24 +222,30 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       const input = task.input
       const dir = runDir(input.id)
       const { polls } = task.state.checkpoint
-      const state = processState(dir, "launch", polls)
-      if (state === "running") {
+      let state = processState(dir, "launch", polls)
+      const started = statSync(`${dir}/launch.pid`, { throwIfNoEntry: false })?.birthtimeMs || (loadStored(input.id)?.run.startedAt ?? runtime.now())
+      const stuck = state === "running" && runtime.now() > started + LAUNCH_TIMEOUT()
+      if (state === "running" && !stuck) {
         patchRun(input.id, { phase: "launching", detail: tail(`${dir}/launch.log`, 1) || "provisioning the cloud run" })
         return runtime.sleepUntil(runtime.now() + LAUNCH_POLL(), { phase: "awaitLaunch", polls: polls + 1 }, context)
       }
-      const started = statSync(`${dir}/launch.pid`, { throwIfNoEntry: false })?.mtimeMs ?? Date.now()
+      if (stuck) state = "gone" // treated like a launcher that died: follow what it created, or fail
       const printed = leadingJson(readText(`${dir}/launch.out`) ?? "")?.run_id
-      const remoteId = typeof printed === "string" ? printed : findManifest(input, started)
+      const manifest = typeof printed === "string" ? { id: printed } : findManifest(input, started, manifestsRoot(), takenRemoteIds(input.id))
+      const remoteId = manifest.id
       if (state === 0 && remoteId) {
-        patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: detached` }, `cloud run ${remoteId} launched`)
+        patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: detached` }, `cloud run ${remoteId} launched`)
         return runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchCloud", remoteId, polls: 0, errors: 0 } }), context)
       }
-      if (state === "gone" && remoteId) { // the launcher died mid-way: follow what it created instead of launching again
-        patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: launcher interrupted, checking` }, `adopted cloud run ${remoteId} from its manifest`)
+      if (state === "gone" && remoteId) { // the launcher died or hung mid-way: follow what it created instead of launching again
+        patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: launcher ${stuck ? "stuck" : "interrupted"}, checking` }, `adopted cloud run ${remoteId} from its manifest`)
         return runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchCloud", remoteId, polls: 0, errors: 0 } }), context)
       }
-      const cancel = remoteId ? `\nA VM may be left stopped. Remove it with: ${bixbench3().join(" ")} cancel --run ${remoteId} --project ${input.project}` : ""
-      const why = state === "gone" ? "the launcher stopped before it reported a run (no run manifest was written, so no VM was created by it)" : `bixbench3 run exited with status ${state}`
+      const command = (id: string) => `${bixbench3().join(" ")} cancel --run ${id} --project ${input.project}`
+      const cancel = remoteId ? `\nA VM may be left stopped. Remove it with: ${command(remoteId)}`
+        : manifest.ambiguous ? `\nSeveral cloud runs fit this launch and their manifests do not name the solver, so none was adopted: ${manifest.ambiguous.join(", ")}. Each may have a VM that is running and billing. Check each with: ${bixbench3().join(" ")} status --run ID --project ${input.project}` : ""
+      const why = stuck ? `the launcher did not finish within ${Math.round(LAUNCH_TIMEOUT() / 60_000)} minutes and reported no run; it may still be running (see launch.pid)`
+        : state === "gone" ? (manifest.ambiguous ? "the launcher stopped before it reported a run" : "the launcher stopped before it reported a run (no run manifest was written, so no VM was created by it)") : `bixbench3 run exited with status ${state}`
       return finish(runtime, context, input.id, { phase: "failed", error: `${why}\n${tail(`${dir}/launch.log`)}${cancel}`.trim() })
     },
 

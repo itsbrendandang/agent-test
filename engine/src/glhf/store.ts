@@ -3,7 +3,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { ROOT } from "../config.ts"
-import type { GlhfRun, RunRequest } from "./types.ts"
+import type { GlhfRun, RunRequest, RunSettings } from "./types.ts"
 
 export const GLHF = resolve(ROOT, "glhf")
 export const BIXBENCH = resolve(GLHF, "bixbench")
@@ -11,7 +11,29 @@ export const BIXBENCH = resolve(GLHF, "bixbench")
 export const MEMORY = resolve(GLHF, "memory")
 export const RUNS = resolve(GLHF, "runs")
 export const DEMO_CASE = resolve(GLHF, "demo_case")
-export const runDir = (id: string) => resolve(RUNS, id)
+
+/** A run id is one path segment of letters, digits, "_", "." and "-". Anything else could leave glhf/runs. */
+export const safeId = (id: unknown): id is string => typeof id === "string" && /^[\w.-]+$/.test(id) && !id.includes("..") && id.length <= 200
+export class BadId extends Error {}
+export const runDir = (id: string) => {
+  if (!safeId(id)) throw new BadId(`not a run id: ${JSON.stringify(String(id).slice(0, 80))}`)
+  return resolve(RUNS, id)
+}
+
+/** The comparable settings of a request (see RunSettings). */
+export function settingsOf(request: Partial<RunRequest>): RunSettings {
+  const out: RunSettings = {}
+  if (request.timeLimit) out.timeLimit = request.timeLimit
+  else if (request.mode === "local") out.timeLimit = 1800 // glhf_local's default
+  if (request.maxTokens) out.maxTokens = request.maxTokens
+  if (request.maxMessagesPerRole) out.maxMessagesPerRole = request.maxMessagesPerRole
+  if (request.reviewRounds) out.reviewRounds = request.reviewRounds
+  if (request.exa) out.exa = true
+  if (request.memory) out.memory = true
+  if (request.seed) out.seed = request.seed
+  if (request.effort) out.effort = request.effort
+  return out
+}
 
 /** What is stored per run: the public record, the request it came from, and its durable task. */
 export interface Stored { run: GlhfRun; request: RunRequest; taskId?: number }
@@ -28,7 +50,7 @@ export function readJson<T>(file: string): T | undefined {
 
 export const readText = (file: string) => (existsSync(file) ? readFileSync(file, "utf8") : null)
 
-export const loadStored = (id: string) => readJson<Stored>(`${runDir(id)}/record.json`)
+export const loadStored = (id: string) => (safeId(id) ? readJson<Stored>(`${runDir(id)}/record.json`) : undefined)
 
 export function saveStored(stored: Stored) {
   mkdirSync(runDir(stored.run.id), { recursive: true })
@@ -54,12 +76,15 @@ export function trackerLog(id: string, line: string) {
 export function listStored(): Stored[] {
   if (!existsSync(RUNS)) return []
   return readdirSync(RUNS)
+    .filter(safeId)
     .map((id) => loadStored(id))
     .filter((s): s is Stored => s !== undefined)
     .sort((a, b) => b.run.startedAt - a.run.startedAt || b.run.id.localeCompare(a.run.id))
 }
 
-export const listRuns = (): GlhfRun[] => listStored().map((s) => s.run)
+/** The public record, with its settings filled in from the request for records that predate the field. */
+export const publicRun = (s: Stored): GlhfRun => (s.run.settings ? s.run : { ...s.run, settings: settingsOf(s.request ?? {}) })
+export const listRuns = (): GlhfRun[] => listStored().map(publicRun)
 
 const pad = (n: number) => String(n).padStart(2, "0")
 
@@ -86,7 +111,7 @@ export function runDetail(id: string): Detail | undefined {
   if (!stored) return undefined
   const outputs = `${runDir(id)}/outputs`
   return {
-    run: stored.run,
+    run: publicRun(stored),
     ledger: readJson<unknown>(`${outputs}/glhf/ledger.json`) ?? null,
     findings: readText(`${outputs}/glhf/FINDINGS.md`),
     methods: readText(`${outputs}/METHODS.md`),

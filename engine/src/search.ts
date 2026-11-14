@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { runDir as boardDir } from "./board.ts"
 import { loadConfig } from "./config.ts"
-import { listRuns as swarmRuns, runDetail } from "./glhf/store.ts"
+import { listRuns as swarmRuns, runDetail, safeId } from "./glhf/store.ts"
 
 export interface Hit {
   kind: "swarm" | "board"
@@ -66,6 +66,7 @@ export function search(query: string, boardRuns: BoardRun[]): Hit[] {
 
   const config = loadConfig()
   for (const run of boardRuns) {
+    if (!safeId(run.id)) continue // an id is a folder name; never build a path from anything else
     const dir = boardDir(config, run.id)
     const fields: Field[] = [{ where: "run", text: `${run.id} ${run.brief ?? ""} drug board ${run.status}` }]
     if (words.length) {

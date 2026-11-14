@@ -184,9 +184,13 @@ def test_complete_collects_and_deletes_terminal_run(
     assert result["status"] == "succeeded"
     assert result["cleanup"]["action"] == "deleted"
     assert any(
-        "scp" in command and "inspect_logs" in " ".join(command) for command in executor.calls
+        "scp" in command and "inspect_logs" in " ".join(command)
+        for command in executor.calls
     )
-    assert any("scp" in command and "judge.json" in " ".join(command) for command in executor.calls)
+    assert any(
+        "scp" in command and "judge.json" in " ".join(command)
+        for command in executor.calls
+    )
     assert any("delete" in command and "instances" in command for command in executor.calls)
     manifest = json.loads(resolve_run_manifest(runs_root, run_id).read_text(encoding="utf-8"))
     assert manifest["phase"] == "finalized"

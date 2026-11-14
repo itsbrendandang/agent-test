@@ -68,7 +68,8 @@ def _task_row() -> HFTaskRow:
         input_size_gb=1.0,
         n_raw_sources=1,
         input_manifest_url=(
-            "https://storage.googleapis.com/bixbench3-inputs/releases/v1.0.0/manifests/paper.json"
+            "https://storage.googleapis.com/bixbench3-inputs/"
+            "releases/v1.0.0/manifests/paper.json"
         ),
         agent_package_path="cases/paper/agent",
         runtime_package_path="cases/paper/runtime/runtime.json",
@@ -152,10 +153,12 @@ def test_hf_release_requires_published_component_pins() -> None:
         "task_number_map_path": "manifests/task-number-map.json",
         "schema_paths": ["schemas/release.schema.json"],
         "input_release_manifest_url": (
-            "https://storage.googleapis.com/bixbench3-inputs/releases/v1.0.0/release-public.json"
+            "https://storage.googleapis.com/bixbench3-inputs/"
+            "releases/v1.0.0/release-public.json"
         ),
         "ground_truth_release_manifest_url": (
-            "https://storage.googleapis.com/bixbench3-ground-truth/releases/v1.0.0/release.json"
+            "https://storage.googleapis.com/bixbench3-ground-truth/"
+            "releases/v1.0.0/release.json"
         ),
         "components": ReleaseComponents().model_dump(),
         "files_sha256": {},
@@ -179,10 +182,12 @@ def test_hf_release_allows_forthcoming_paper_when_published() -> None:
         "task_number_map_path": "manifests/task-number-map.json",
         "schema_paths": ["schemas/release.schema.json"],
         "input_release_manifest_url": (
-            "https://storage.googleapis.com/bixbench3-inputs/releases/v1.0.0/release-public.json"
+            "https://storage.googleapis.com/bixbench3-inputs/"
+            "releases/v1.0.0/release-public.json"
         ),
         "ground_truth_release_manifest_url": (
-            "https://storage.googleapis.com/bixbench3-ground-truth/releases/v1.0.0/release.json"
+            "https://storage.googleapis.com/bixbench3-ground-truth/"
+            "releases/v1.0.0/release.json"
         ),
         "components": ReleaseComponents(
             git_commit="abc123",

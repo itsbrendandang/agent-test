@@ -15,7 +15,8 @@
     "dashboard": "npm --prefix dashboard run dev",
     "desktop": "npm --prefix dashboard run desktop",
     "typecheck": "(cd engine && npx tsc --noEmit) && (cd dashboard && npx tsc -b)",
-    "test": "(cd glhf/bixbench && uv run pytest -q tests) && npm run typecheck",
+    "test:engine": "npm --prefix engine test",
+    "test": "(cd glhf/bixbench && uv run pytest -q tests) && npm run typecheck && npm run test:engine",
     "docker": "docker compose up --build"
   }
 }

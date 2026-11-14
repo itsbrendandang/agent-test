@@ -6,10 +6,11 @@ meeting:
   max_minutes: 15          # wall clock for one deliberation; the lead is told to wrap up after this
   max_usd: 5               # spend cap for one deliberation (all agents + checkers)
   max_rounds: 4            # lead -> board broadcasts before final positions are forced
-  daily_usd: 20            # cap across all runs started today; a new run is refused once reached
+  daily_usd: 20            # cap across all runs started today (finished, failed, paused, running); starts and resumes are refused once reached
   lead_turns: 20           # model calls the lead may make in one run
   member_turns: 6          # model calls each board member may make per question
   max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
+  fallback_usd_per_mtok: 15 # price assumed per million tokens when a model reports tokens but no cost
 
 memory:
   enabled: true            # after each run, add each member's checked claims to board/expertise/<member>.md
@@ -53,6 +54,8 @@ checkers:
     computed: claude-code               # contested computed claims: Claude Code reruns them
   openai_model: "gpt-5-mini"
   claude_code_cmd: "claude -p --output-format json"
+  claude_code_tools: "Bash(python3:*) Bash(python:*) Write Read"  # the only tools the checker may use; it runs in an empty temp folder
+  timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member
   - literature-scout

@@ -57,7 +57,9 @@ def task() -> TaskSpec:
     return TaskSpec(
         task_id="1",
         paper_id="10.1234_example",
-        input_manifest_uri=("gs://bixbench3-inputs/releases/v1.0.0/manifests/10.1234_example.json"),
+        input_manifest_uri=(
+            "gs://bixbench3-inputs/releases/v1.0.0/manifests/10.1234_example.json"
+        ),
         input_manifest_sha256="a" * 64,
         input_size_bytes=100 * 1024**3,
         grader_manifest_url=(
@@ -304,7 +306,9 @@ def test_judge_summary_prints_score_status_and_failure_modes(
         {
             "judge_score": 0.625,
             "judge_status": "ok",
-            "failure_modes": [{"tag": "incomplete_data", "evidence": "one sample was omitted"}],
+            "failure_modes": [
+                {"tag": "incomplete_data", "evidence": "one sample was omitted"}
+            ],
         },
         tmp_path,
     )

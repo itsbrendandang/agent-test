@@ -60,3 +60,10 @@
 
 .swarm-search { display: flex; }
 .swarm-search input { flex: 1; padding: 10px 14px; font: inherit; border: 1px solid var(--border, #d9d5c8); border-radius: 12px; background: #fffdf6; color: inherit; }
+
+/* scoreboard cells */
+.swarm-cell { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.swarm-cell:hover b, .swarm-cell:focus-visible b { text-decoration: underline; }
+.swarm-cell b { font-variant-numeric: tabular-nums; }
+.swarm-extra { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--edge); color: var(--text-muted); }
+.swarm-rownote { font-size: 12px; color: #a35200; margin-top: 2px; }

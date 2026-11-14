@@ -5,7 +5,7 @@ import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
 import {
   isDemo, isLive, startDemo, useSwarm,
-  type GlhfRun, type Ledger, type LedgerEvent, type Solver,
+  type GlhfRun, type Ledger, type LedgerEvent, type ScoreCell, type ScoreRow, type Solver,
 } from "@/swarm/api"
 import { takeOpen } from "@/views/ExperimentsView"
 import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
@@ -64,16 +64,21 @@ function describe(e: LedgerEvent): string | undefined {
   }
 }
 
-interface Row { task: string; single?: GlhfRun; swarm?: GlhfRun }
-function scoreboard(runs: GlhfRun[]): Row[] {
-  const rows = new Map<string, Row>()
-  for (const r of runs) { // newest first, so the first scored run per task and solver is the latest
-    if (r.phase !== "done" || r.score === undefined) continue
-    const row = rows.get(r.task) ?? rows.set(r.task, { task: r.task }).get(r.task)!
-    if (r.solver === "single") row.single ??= r
-    else row.swarm ??= r
-  }
-  return [...rows.values()]
+const budget = (row: ScoreRow) => [
+  row.timeLimit ? duration(row.timeLimit * 1000) : "benchmark time limit",
+  row.maxTokens ? `${row.maxTokens.toLocaleString()} tokens` : "no token cap",
+].join(" · ")
+
+/** One side of a scoreboard row: the score, a failed mark, the extras this run had, and a way to open it. */
+function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: (id: string) => void }) {
+  if (!cell) return <span className="muted">no run</span>
+  return (
+    <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open ${cell.id}`}>
+      <b>{cell.score === undefined ? "–" : cell.score.toFixed(3)}</b>
+      {cell.phase === "failed" && <span className="pill" data-kind="danger">failed</span>}
+      {cell.extras.map((e) => <span key={e} className="swarm-extra">{e}</span>)}
+    </button>
+  )
 }
 
 export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) {
@@ -84,7 +89,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   const [starting, setStarting] = useState(false)
   const [details, setDetails] = useState(() => localStorage.getItem("swarm.details") === "1")
   useEffect(() => localStorage.setItem("swarm.details", details ? "1" : "0"), [details])
-  const { status, runs, detail, offline } = useSwarm(picked, nudge)
+  const { status, runs, detail, offline, scoreboard } = useSwarm(picked, nudge)
 
   if (offline && !runs) return (
     <div className="page"><div className="swarm-offline card-surface">
@@ -113,7 +118,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   }
   const noKeys = status && !status.keys.ANTHROPIC_API_KEY && !status.keys.OPENAI_API_KEY
   const record = status?.record ?? 0.523
-  const rows = scoreboard(list)
+  const rows = scoreboard ?? []
   // Only a local run blocks another demo; cloud runs take hours and run elsewhere.
   const anyLive = list.some((r) => isLive(r) && r.mode === "local")
   const stage = activeRole ? ROLES.findIndex((r) => r.key === activeRole) : -1
@@ -222,19 +227,21 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         {rows.length === 0 ? <p className="muted small">No finished runs yet.</p> : (
           <table className="swarm-table">
             <thead><tr>
-              <th>Task</th><th className="num">Single agent</th><th className="num">Swarm</th><th className="num">Difference</th><th className="num">Record to beat</th>
+              <th>Task and shared settings</th><th>Single agent</th><th>Swarm</th><th className="num">Difference</th><th className="num">Record to beat</th>
             </tr></thead>
             <tbody>
               {rows.map((row) => {
-                const used = [row.single, row.swarm].filter((r): r is GlhfRun => !!r)
-                const diff = row.single?.score !== undefined && row.swarm?.score !== undefined ? row.swarm.score - row.single.score : undefined
-                const label = [row.task === "demo" && "demo case", used.some((r) => r.model === "mock") && "scripted model"].filter(Boolean).join(", ")
+                const label = [row.task === "demo" && "demo case", row.model === "mock" && "scripted model"].filter(Boolean).join(", ")
                 return (
-                  <tr key={row.task}>
-                    <td>{row.task}{label && <> <span className="pill" data-kind="warning">{label}</span></>}</td>
-                    <td className="num">{score(row.single?.score)}</td>
-                    <td className="num">{score(row.swarm?.score)}</td>
-                    <td className="num">{diff === undefined ? "–" : `${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(3)}`}</td>
+                  <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
+                    <td>
+                      {row.task}{label && <> <span className="pill" data-kind="warning">{label}</span></>}
+                      <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
+                      {row.note && <div className="swarm-rownote">{row.note}</div>}
+                    </td>
+                    <td><ScoreCellView cell={row.single} onOpen={setPicked} /></td>
+                    <td><ScoreCellView cell={row.swarm} onOpen={setPicked} /></td>
+                    <td className="num">{row.diff === undefined ? "–" : `${row.diff >= 0 ? "+" : "−"}${Math.abs(row.diff).toFixed(3)}`}</td>
                     <td className="num">{row.task === "demo" ? <span className="muted">does not apply</span> : record.toFixed(3)}</td>
                   </tr>
                 )
@@ -243,8 +250,10 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
           </table>
         )}
         <p className="swarm-note">
-          {record.toFixed(3)} is the best published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only, and one
-          task's score is not the same measure as the whole benchmark. Each row shows the latest finished run per task.
+          A difference is shown only when both runs had the same task, model, time limit and token budget. Each row shows the latest
+          run per solver, also when it failed, and lists what each run had beyond the shared settings. {record.toFixed(3)} is the best
+          published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only, and one task's score is not the same
+          measure as the whole benchmark.
         </p>
       </section>
 
@@ -279,6 +288,12 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               {Object.entries(run.roleModels).map(([role, model]) => (
                 <div key={role} style={{ display: "contents" }}><dt>{role}</dt><dd><code>{model}</code></dd></div>
               ))}
+              <dt>Time limit</dt><dd>{run.settings?.timeLimit ? duration(run.settings.timeLimit * 1000) : "benchmark default"}</dd>
+              <dt>Token budget</dt><dd>{run.settings?.maxTokens ? run.settings.maxTokens.toLocaleString() : "none"}</dd>
+              {run.solver === "glhf" && <><dt>Review rounds</dt><dd>{run.settings?.reviewRounds ?? 3}</dd></>}
+              {run.settings?.maxMessagesPerRole && <><dt>Messages per role</dt><dd>{run.settings.maxMessagesPerRole}</dd></>}
+              {run.solver === "glhf" && <><dt>Exa search</dt><dd>{run.settings?.exa ? "on" : "off"}</dd><dt>Memory</dt><dd>{run.settings?.memory ? "on" : "off"}</dd></>}
+              {run.settings?.seed && <><dt>Seed</dt><dd>{run.settings.seed}</dd></>}
               <dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd>
               {run.finishedAt !== undefined && <><dt>Took</dt><dd>{duration(run.finishedAt - run.startedAt)}</dd></>}
             </dl>

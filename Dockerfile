@@ -5,9 +5,10 @@ FROM node:26-bookworm-slim AS base
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git curl \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
+# Pinned, so a rebuild gives the same tools. Raise the versions on purpose, not by accident.
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /uvx /usr/local/bin/
+COPY --from=docker:29.8.2-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:29.8.2-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 ENV UV_LINK_MODE=copy UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN uv python install 3.12 && docker compose version
 

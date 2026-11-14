@@ -82,16 +82,24 @@ sample_sheet.tsv, the scripts, notebook.md and the outputs; do not trust summari
 
 1. Contract: run check_outputs. Compare each artifact against the brief's Required Outputs
    (file name, delimiter, index column, column names, identifier type, units, sorting, filters,
-   thresholds). Any mismatch is blocking.
+   thresholds). A mismatch with the brief is blocking. A check_outputs warning (one column, no
+   rows, empty JSON, mostly NA) is not an issue by itself: raise it only if the brief or the
+   data shows the artifact should look different.
 2. Method adherence is the Methods Auditor's job (see /workspace/work/glhf/adherence.md). Do not
    repeat it; do check that the numbers the methods should produce are plausible.
 3. Data checks: every sample in the brief is used; sample-to-condition mapping matches the
    metadata; QC numbers are plausible; counts reconcile across artifacts that should agree.
 4. Falsification: for each claim in the ledger, design and RUN at least one test that could prove
-   it wrong (permute condition labels, leave-one-replicate-out, an alternative method on the same
-   counts, a negative-control gene set, a marker-direction check). Record each with
-   record_falsification_test using the p-value your code computed. If an independent
-   re-implementation of a claim's key number disagrees materially, use report_failed_replication.
+   it wrong (permute condition labels, held-out replicates, a negative-control gene set, a
+   marker-direction check, an alternative method). Decide the tests for a claim before running
+   any, then record every one you ran with record_falsification_test, favourable or not, using
+   the p-value your code computed. The ledger multiplies the evidence of a claim's tests, which
+   is only valid if they are independent: use different data splits or different methods, never
+   the same test rerun, renamed, or with another seed. A test name is accepted once per claim,
+   a claim takes at most 3 tests, and the support threshold rises with the number of claims
+   (read_ledger shows it), so one strong, well-powered test (for example 10,000 or more
+   permutations) is worth more than several weak ones. If an independent re-implementation of a
+   claim's key number disagrees materially, use report_failed_replication.
 5. Raise every problem with raise_issue (severity, artifacts, problem, evidence = command + output).
 Do not modify required outputs yourself; the experimenter fixes. Do not raise style nits.
 End with a list of the issues raised.
@@ -187,8 +195,11 @@ FINISHER = (
     + """
 
 This is the FINISHING pass. Review is over and time is nearly up, yet the contract check in your
-task still lists missing or malformed required artifacts. Each one scores zero as it stands.
-- Work only on the listed artifacts, cheapest first. Do not touch artifacts that pass.
+task still lists required artifacts that are missing or cannot be read (empty file, unparseable,
+wrong delimiter, no row-key column). Each one scores zero as it stands.
+- Work only on the artifacts listed as failing, cheapest first. Do not touch artifacts that pass,
+  and do not "fix" an artifact because of a warning (one column, no rows, empty JSON): those can
+  be correct, and changing a correct artifact loses its score.
 - Reuse intermediate files that already exist (alignments, counts, results tables). If an
   artifact is malformed, fix its shape. If it is missing, derive it from real data by the
   shortest valid route, following the Method Guidance as far as time allows.
@@ -215,10 +226,11 @@ tool's usage, a parameter, a file format or an error message is unclear, instead
 LESSONS = """
 
 Long-term memory. Also write /workspace/work/glhf/lessons.md: at most 8 one-line lessons a future
-team would want before starting a task like this one. Process only: environment and tool problems
-and their fixes, format pitfalls, what took the time, what you would do first next time. No result
-values, gene names, counts, or anything that reveals this task's answers. If nothing is worth
-keeping, write "none".
+team would want before starting a different task of this kind. Process only: environment and tool
+problems and their fixes, format pitfalls, what took the time, what you would do first next time.
+No result values, numbers from the data, gene or sample names, accessions, scores, or anything
+that reveals this task's inputs or answers. Lines that look like results are dropped by a filter
+and never saved. If nothing is worth keeping, write "none".
 """.rstrip()
 
 

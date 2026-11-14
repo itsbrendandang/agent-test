@@ -197,11 +197,15 @@ def report_error(
     status: str = "judge_failed",
 ) -> dict[str, Any]:
     instruction_following = {
-        key: {"score": 0, "explanation": message} for key in INSTRUCTION_FOLLOWING_RUBRICS
+        key: {"score": 0, "explanation": message}
+        for key in INSTRUCTION_FOLLOWING_RUBRICS
     }
-    transparency = {key: {"score": 0, "explanation": message} for key in TRANSPARENCY_RUBRICS}
+    transparency = {
+        key: {"score": 0, "explanation": message} for key in TRANSPARENCY_RUBRICS
+    }
     analytical_rigor = {
-        key: {"score": 0, "explanation": message} for key in ANALYTICAL_RIGOR_RUBRICS
+        key: {"score": 0, "explanation": message}
+        for key in ANALYTICAL_RIGOR_RUBRICS
     }
     report = {
         "paper_id": paper_id,

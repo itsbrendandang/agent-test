@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import math
 import random
 
 import pytest
 
-from bixbench3.inspect_harness.swarm.ledger import ALPHA, Ledger, p_to_e
+from bixbench3.inspect_harness.swarm.ledger import ALPHA, KAPPA, MAX_TESTS, Ledger, p_to_e
 
 
 def _claim(ledger: Ledger):
@@ -52,15 +51,100 @@ def test_failed_replication_refutes() -> None:
     assert c.verdict == "refuted"
 
 
-def test_type_one_error_is_controlled_under_the_null() -> None:
-    # Under the null, p-values are uniform. A true-null claim tested 5 times must reach
-    # "supported" with probability <= alpha (Ville's inequality on the e-value product).
+def _false_support_rate(tests: int, mode: str, claims: int = 1, trials: int = 20_000) -> float:
+    """Share of true-null claims that end "supported", going through record_test and verdict.
+
+    Under the null a p-value is uniform. `mode`: "independent" draws a new p per test; "same"
+    records one p again and again under new names (fully dependent tests); "contradicts" marks
+    every test with p > 0.5 as contradicting, which used to hide unfavourable evidence."""
     rng = random.Random(0)
-    trials, false_support = 20_000, 0
+    supported = 0
     for _ in range(trials):
-        e = math.prod(p_to_e(rng.random()) for _ in range(5))
-        false_support += e >= 1 / ALPHA
-    assert false_support / trials <= ALPHA
+        ledger = Ledger()
+        claim, *_ = [_claim(ledger) for _ in range(claims)]
+        first = rng.random()
+        for i in range(tests):
+            p = first if mode == "same" else rng.random()
+            try:
+                ledger.record_test(
+                    claim.id, f"test {i}", p, mode == "contradicts" and p > 0.5, "", "critic"
+                )
+            except ValueError:
+                break  # the cap on tests per claim
+        supported += claim.verdict == "supported"
+    return supported / trials
+
+
+@pytest.mark.parametrize("mode", ["independent", "same", "contradicts"])
+@pytest.mark.parametrize("tests", [1, 5, 10, 20])
+def test_type_one_error_is_controlled_through_the_ledger(mode: str, tests: int) -> None:
+    # The scenarios of the code review: repeated tests reached 15.6-19.8% and selective
+    # "contradicts" 28.8% false support before the fix. All must stay within alpha.
+    assert _false_support_rate(tests, mode) <= ALPHA
+
+
+@pytest.mark.parametrize("mode", ["independent", "same", "contradicts"])
+def test_type_one_error_is_split_across_claims(mode: str) -> None:
+    # Bonferroni: with m claims each may be falsely supported with probability alpha / m.
+    for claims in (3, 6):
+        assert _false_support_rate(10, mode, claims=claims) <= ALPHA / claims
+
+
+def test_every_test_counts_and_a_contradiction_counts_against() -> None:
+    ledger = Ledger()
+    c = _claim(ledger)
+    ledger.record_test(c.id, "direction", 0.4, True, "went the other way", "critic")
+    assert c.tests[0].e_value == KAPPA  # not 1.0: unfavourable evidence is not censored
+    assert c.verdict == "insufficient"  # p >= alpha, so not refuted either
+    ledger.record_test(c.id, "permutation", 0.9, False, "", "critic")
+    assert c.e_value == pytest.approx(KAPPA * p_to_e(0.9))
+
+
+def test_a_test_name_is_accepted_once_and_tests_are_capped() -> None:
+    ledger = Ledger()
+    c = _claim(ledger)
+    ledger.record_test(c.id, "Label permutation", 0.3, False, "", "critic")
+    with pytest.raises(ValueError, match="already has a result"):
+        ledger.record_test(c.id, "label-permutation ", 0.0001, False, "", "critic")
+    assert len(c.tests) == 1 and c.tests[0].p_value == 0.3  # the first result stands
+    for i in range(MAX_TESTS - 1):
+        ledger.record_test(c.id, f"other {i}", 0.5, False, "", "critic")
+    with pytest.raises(ValueError, match="most a claim may have"):
+        ledger.record_test(c.id, "one more", 0.0001, False, "", "critic")
+
+
+def test_thresholds_tighten_with_the_number_of_claims() -> None:
+    ledger = Ledger()
+    a = _claim(ledger)
+    ledger.record_test(a.id, "permutation", 0.001, False, "", "critic")  # e = 15.8
+    assert a.verdict == "supported"  # one claim: threshold 10
+    b = _claim(ledger)
+    assert a.threshold == 20 and a.verdict == "insufficient"  # two claims: threshold 20
+    ledger.record_test(b.id, "direction", 0.07, True, "", "critic")
+    assert b.verdict == "insufficient"  # 0.07 is not below alpha / 2
+    data = json.loads(ledger.to_json())
+    assert data["claims_in_family"] == 2 and data["support_threshold"] == 20
+
+
+def test_a_single_zero_p_value_is_bounded() -> None:
+    ledger = Ledger()
+    c = _claim(ledger)
+    ledger.record_test(c.id, "too good", 0.0, False, "", "critic")
+    assert c.e_value == pytest.approx(500.0)
+
+
+def test_findings_state_the_independence_assumption_and_unchecked_fixes() -> None:
+    ledger = Ledger()
+    _claim(ledger)
+    first = ledger.raise_issue("major", ["degs"], "wrong threshold", "grep", "critic")
+    ledger.resolve_issue(first.id, "fixed", "set padj < 0.05", "experimenter")
+    assert ledger.mark_rechecked() == [first.id]  # a critic round completed after the fix
+    second = ledger.raise_issue("major", ["degs"], "wrong sort", "head", "critic")
+    ledger.resolve_issue(second.id, "fixed", "sorted by padj", "experimenter")
+    md = ledger.findings_markdown()
+    assert "tests on one claim are independent" in md
+    assert md.count("fixed, not re-checked by the critic") == 1
+    assert "sorted by padj (fixed, not re-checked by the critic)" in md
 
 
 def test_rejects_invalid_p_values() -> None:

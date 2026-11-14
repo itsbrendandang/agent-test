@@ -5,7 +5,8 @@
   "scripts": {
     "board": "node src/cli.ts",
     "serve": "node src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\""
   },
   "dependencies": {
     "@earendil-works/chord": "^1.5.2",

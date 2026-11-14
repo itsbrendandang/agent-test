@@ -125,7 +125,7 @@ npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5
 | `--max-tokens N` | Token budget for the whole run, both solvers. The swarm caps the supporting roles, skips phases once the budget is spent, and keeps 10% so the Reporter still writes METHODS.md. Limits are checked after each model call, so a run can end slightly over. |
 | `--max-messages-per-role N` | Swarm: message cap per phase. A model call with one tool call is two messages. |
 | `--review-rounds N` | Swarm: audit, critique and revise rounds (default 3). |
-| `--exa` | Swarm: a `search_docs` tool (Exa). It searches an allow-list of software documentation and help sites only, never journals, preprint servers or data repositories, so it cannot return the study being reproduced. Every query is logged in the ledger. |
+| `--exa` | Swarm: a `search_docs` tool (Exa). It searches an allow-list of software documentation and help sites only, never journals, preprint servers or data repositories, so it should not return the study being reproduced. Results are re-checked against the list and the task's restricted sites, queries containing a DOI or accession are refused, and a run gets at most 20 searches. Every query, refusal and dropped result is logged in the ledger. |
 | `--memory` | Swarm: the Reporter writes up to 8 process lessons; they are saved in `glhf/memory/lessons.md` (in git, shared by the team) and, when `PAST_API_KEY` is set, in past.dev, which then picks the lessons relevant to each new task. They are given to every role in later runs. Lessons are written before grading and must not contain results. |
 | `--seed N` | Sent to providers that support a seed. |
 
@@ -151,6 +151,41 @@ to `board/expertise/<member>.md` after a real (not scripted) run.
 - The benchmark's answer tables are in a public bucket. Agents are told to use only staged inputs,
   and the benchmark's network gate lists that bucket as protected. We have not tested the gate.
 - Report results as "N tasks, same budget", not as a full-benchmark score, unless all 20 tasks ran.
+
+### What differs between the two solvers
+
+The comparison is not tool-for-tool. The swarm has, and the single agent does not:
+
+- `check_outputs`, a format checker built from the task's expected outputs
+- the claims ledger and its tools
+- nine role prompts with fresh contexts, and a Reporter pass that always runs
+- with `--exa`, documentation search; with `--memory`, lessons from earlier runs (never from the same task)
+
+With `--max-tokens`, both solvers keep 10% of the budget to write METHODS.md. The 5,000-message cap
+applies per phase for the swarm and once for the single agent. The scoreboard shows a difference
+only between runs with the same task, model, time limit and token budget, lists each run's extras,
+and shows failed runs.
+
+### Verdict rules
+
+A claim is supported when the product of its tests' e-values reaches m/0.1, where m is the number of
+registered claims; it is refuted by a contradicting test with p < 0.1/m. Each claim takes at most
+three tests, one result per test name. The error bound assumes the tests are independent, which the
+code cannot check; FINDINGS.md says so in every run.
+
+## Ask and search
+
+The Experiments view has an Ask box: a small model (`claude-haiku-5-5`, change with `ASK_MODEL`)
+reads a summary of the newest runs and answers with the runs it used. It needs `ANTHROPIC_API_KEY`;
+without it, or on an error, it falls back to keyword search and says so. Answers can be wrong: open
+the cited runs to check.
+
+## Who can start runs
+
+The engine listens on `127.0.0.1:8787` only and accepts browser requests only from the dashboard
+(`DASHBOARD_ORIGINS` adds origins, `HOST` changes the address). Cloud runs and `--case` need the
+token the CLI reads from `glhf/runs/.token`. Real-model local runs can start from the dashboard or
+the CLI. Any other caller can only start the scripted demo.
 
 ## What each run reports
 
@@ -184,7 +219,7 @@ Dockerfile, docker-compose.yml   the platform in containers
 ## Tests
 
 ```bash
-npm test    # 160 harness tests (ledger, Type-I simulation, end-to-end in Docker) + type checks
+npm test    # 237 harness tests (ledger, Type-I simulation, budgets, end-to-end in Docker), 32 engine tests, type checks
 ```
 
 ## Also in this repo: the drug candidate board

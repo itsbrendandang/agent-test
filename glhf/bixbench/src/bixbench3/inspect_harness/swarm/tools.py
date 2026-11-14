@@ -4,47 +4,76 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Literal
 
 import httpx
 from inspect_ai.tool import Tool, ToolError, tool
 from inspect_ai.util import sandbox
 
-from ..models import ExpectedOutput
+from ...network_gateway.policy import (
+    RESTRICTED_DOMAIN_SCOPES,
+    domain_matches,
+    host_from_url,
+    normalize_url,
+)
+from ..models import ExpectedOutput, NetworkAccessPolicy
 from .ledger import Ledger
 
 WORK = "/workspace/work/glhf"
 
 # Runs inside the sandbox with only the standard library. Checks shape, not correctness.
+# "problems" mean the grader is likely to score the artifact zero or wrongly as it stands;
+# "fatal" marks the ones the finisher is for (missing, empty, unparseable, no row-key column);
+# "warnings" are legitimate in some tasks (one column, no rows, empty JSON) and need a human look.
 _CONTRACT_SCRIPT = r"""
 import csv, json, os, sys
 specs = json.loads(sys.argv[1])
 csv.field_size_limit(1 << 30)
+TABLE_FORMATS = ("csv", "tsv", "txt", "tab", "table", "tabular")
 report = []
 for s in specs:
     path, fmt, key = s["sandbox_path"], (s.get("format") or "").lower(), s.get("row_key")
-    r = {"artifact_id": s["artifact_id"], "path": path, "problems": []}
+    r = {"artifact_id": s["artifact_id"], "path": path, "problems": [], "warnings": [], "fatal": False}
+    report.append(r)
     if not os.path.exists(path):
-        r["problems"].append("missing"); report.append(r); continue
+        r["problems"].append("missing"); r["fatal"] = True; continue
     size = os.path.getsize(path); r["bytes"] = size
     if size == 0:
-        r["problems"].append("empty file"); report.append(r); continue
+        r["problems"].append("empty file"); r["fatal"] = True; continue
     ext = os.path.splitext(path)[1].lower()
     try:
-        if fmt in ("csv", "tsv") or ext in (".csv", ".tsv", ".txt"):
-            delim = "\t" if (fmt == "tsv" or ext == ".tsv") else ","
+        if fmt == "json" or (ext == ".json" and fmt not in TABLE_FORMATS):
+            with open(path) as fh: data = json.load(fh)
+            r["json_type"] = type(data).__name__
+            if not data: r["warnings"].append("empty JSON (fine only if the result really is empty)")
+        elif fmt in TABLE_FORMATS or ext in (".csv", ".tsv", ".txt", ".tab"):
+            with open(path, newline="") as fh:
+                first = fh.readline()
+            tabs, commas = first.count("\t"), first.count(",")
+            if fmt == "tsv" or ext in (".tsv", ".tab"): expected = "\t"
+            elif fmt == "csv" or ext == ".csv": expected = ","
+            else: expected = None
+            # No declared delimiter (.txt, "table"): take the one the header line uses.
+            delim = expected or ("\t" if tabs >= commas and tabs else ",")
+            name = {"\t": "tab", ",": "comma"}
+            r["delimiter"] = name[delim]
             with open(path, newline="") as fh:
                 rows = csv.reader(fh, delimiter=delim)
                 header = next(rows, [])
                 body = [row for _, row in zip(range(200000), rows)]
             r["columns"] = header[:40]; r["rows_checked"] = len(body)
-            if len(header) <= 1 and body and len(body[0]) <= 1:
-                r["problems"].append(f"single column: wrong delimiter? (expected {'TSV' if delim == chr(9) else 'CSV'})")
+            other = "," if delim == "\t" else "\t"
+            if len(header) <= 1 and first.count(other):
+                r["problems"].append(f"wrong delimiter: expected {name[delim]}-separated, the header line uses {name[other]}s")
+                r["fatal"] = True
+            elif len(header) <= 1:
+                r["warnings"].append("single column (fine only if the brief asks for one column)")
             if not body:
-                r["problems"].append("header only, no rows")
+                r["warnings"].append("header only, no rows (fine only if the result really is empty)")
             if key:
                 if key not in header:
-                    r["problems"].append(f"row_key column {key!r} not in header")
+                    r["problems"].append(f"row_key column {key!r} not in header"); r["fatal"] = True
                 else:
                     i = header.index(key); keys = [row[i] for row in body if len(row) > i]
                     if len(set(keys)) != len(keys): r["problems"].append(f"duplicate {key!r} values")
@@ -53,14 +82,9 @@ for s in specs:
             if ragged: r["problems"].append(f"{ragged} rows with a different column count than the header")
             cells = [c.strip().lower() for row in body[:5000] for c in row]
             na = sum(c in ("", "na", "nan", "none", "null") for c in cells)
-            if cells and na / len(cells) > 0.5: r["problems"].append(f"{na}/{len(cells)} sampled cells are empty/NA")
-        elif fmt == "json" or ext == ".json":
-            with open(path) as fh: data = json.load(fh)
-            r["json_type"] = type(data).__name__
-            if not data: r["problems"].append("empty JSON")
+            if cells and na / len(cells) > 0.5: r["warnings"].append(f"{na}/{len(cells)} sampled cells are empty/NA")
     except Exception as e:
-        r["problems"].append(f"could not parse: {e}")
-    report.append(r)
+        r["problems"].append(f"could not parse: {e}"); r["fatal"] = True
 print(json.dumps(report))
 """
 
@@ -90,11 +114,68 @@ async def check_contract(
 def contract_text(report: list[dict[str, Any]]) -> str:
     ok = [r for r in report if not r.get("problems")]
     bad = [r for r in report if r.get("problems")]
+    warned = [r for r in report if r.get("warnings")]
     lines = [f"{len(ok)}/{len(report)} required artifacts pass the shape check."]
     lines += [
         f"- {r['artifact_id']} ({r.get('path')}): {'; '.join(map(str, r['problems']))}" for r in bad
     ]
+    if warned:
+        lines.append(
+            "Warnings (not failures; check each against the brief before changing anything):"
+        )
+        lines += [
+            f"- {r['artifact_id']} ({r.get('path')}): {'; '.join(map(str, r['warnings']))}"
+            for r in warned
+        ]
     return "\n".join(lines)
+
+
+def needs_rescue(report: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Artifacts the finisher is for: missing, empty, unparseable or without the row-key column."""
+    return [r for r in report if r.get("fatal") or r.get("artifact_id") == "*"]
+
+
+# Runs inside the sandbox. Lists (and with "kill", stops) processes that are not the container's
+# own (pid 1, `sleep infinity`), not Inspect's tool server and not a role's idle session shell:
+# what is left are jobs a role started in the background.
+_PROCESS_SCRIPT = r"""
+import json, os, signal, sys, time
+def parent(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as fh: return int(fh.read().rsplit(")", 1)[1].split()[1])
+    except Exception: return 0
+keep, p = set(), os.getpid()
+while p > 1: keep.add(p); p = parent(p)
+found = []
+for name in os.listdir("/proc"):
+    if not name.isdigit(): continue
+    pid = int(name)
+    if pid == 1 or pid in keep: continue
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh: cmd = fh.read().replace(b"\0", b" ").decode(errors="replace").strip()
+    except Exception: continue
+    if not cmd or "inspect-sandbox-tools" in cmd or "docker-init" in cmd: continue
+    if cmd in ("sleep infinity", "/bin/bash -i", "bash -i", "/bin/sh -i", "sh -i"): continue
+    found.append({"pid": pid, "cmd": cmd[:200]})
+if sys.argv[1] == "kill" and found:
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for f in found:
+            try: os.kill(f["pid"], sig)
+            except Exception: pass
+        time.sleep(2)
+print(json.dumps(found))
+"""
+
+
+async def background_processes(kill: bool = False) -> list[dict[str, Any]]:
+    """Jobs roles left running in the sandbox; `kill=True` stops them (TERM, then KILL)."""
+    result = await sandbox().exec(
+        ["python3", "-c", _PROCESS_SCRIPT, "kill" if kill else "list"], timeout=60
+    )
+    if not result.success:
+        return []
+    found: list[dict[str, Any]] = json.loads(result.stdout or "[]")
+    return found
 
 
 async def save_ledger(ledger: Ledger) -> None:
@@ -107,7 +188,9 @@ def check_outputs(outputs: list[ExpectedOutput]) -> Tool:
     async def execute() -> str:
         """Deterministically check every required output file: present, non-empty, parseable,
         row_key column present and unique, delimiter and column counts consistent.
-        This checks shape only, not scientific correctness. Run it before declaring any artifact done."""
+        This checks shape only, not scientific correctness. Lines under "Warnings" (one column,
+        no rows, empty JSON, mostly NA) are not failures: compare them with the brief.
+        Run it before declaring any artifact done."""
         return contract_text(await check_contract(outputs))
 
     return execute
@@ -143,7 +226,11 @@ def record_falsification_test(ledger: Ledger, role: str) -> Tool:
         only by chance (permutation of sample labels, held-out replicate, negative-control gene set,
         alternative method on the same data, direction check against a known marker). Report the
         p-value of the observed result under the claim's null hypothesis. Set contradicts=true when
-        the result goes against the claim. The verdict is computed by code (e-values, alpha=0.1).
+        the result goes against the claim. The verdict is computed by code (e-values, alpha=0.1 shared
+        across all claims). Every recorded test counts, a test name is accepted once per claim, and
+        a claim takes at most 3 tests, so decide the tests before you run them. Tests on one claim
+        must be independent of each other: different data splits or different methods, never the
+        same test rerun or renamed.
 
         Args:
             claim_id: Claim id, e.g. "C3".
@@ -238,12 +325,13 @@ def read_ledger(ledger: Ledger) -> Tool:
 # --- Optional documentation search (Exa). Off unless the run sets exa=True. -----------------------
 # The benchmark asks agents to reproduce a published analysis, so an open web search could surface
 # the paper's own results. This tool therefore searches an allow-list of software documentation
-# and community help sites only; it cannot return journals, preprint servers or data repositories.
+# and community help sites only: no journals, preprint servers, code hosts or data repositories.
+# The allow-list is enforced twice: Exa is asked for these domains only, and every returned URL is
+# checked here again, against the list and against the case's own network policy.
 DOC_DOMAINS = [
     "bioconductor.org",
     "support.bioconductor.org",
     "biostars.org",
-    "github.com",
     "readthedocs.io",
     "rdrr.io",
     "cran.r-project.org",
@@ -251,27 +339,67 @@ DOC_DOMAINS = [
     "pypi.org",
     "python.org",
     "htslib.org",
-    "gencodegenes.org",
-    "ensembl.org",
-    "ccb.jhu.edu",
-    "broadinstitute.org",
-    "10xgenomics.com",
+    "support.10xgenomics.com",
     "nf-co.re",
-    "galaxyproject.org",
+    "training.galaxyproject.org",
     "hbctraining.github.io",
     "stackoverflow.com",
     "bioinformatics.stackexchange.com",
     "stats.stackexchange.com",
     "satijalab.org",
-    "scanpy.readthedocs.io",
-    "geneontology.org",
-    "gsea-msigdb.org",
 ]
+MAX_SEARCHES = 20  # per run, all roles together
+# Identifiers of a study or its data. A query that carries one is looking for the study.
+_STUDY_ID = re.compile(
+    r"\b10\.\d{4,9}/\S+"  # DOI
+    r"|\b(?:GSE|GSM|GDS|GPL)\d{3,}\b"  # GEO
+    r"|\b[SED]R[RXPSA]\d{4,}\b"  # SRA / ENA / DDBJ runs, experiments, projects, samples
+    r"|\bPRJ(?:NA|EB|DB)\d+\b|\bSAM(?:N|EA|D)\d+\b"  # BioProject, BioSample
+    r"|\bE-[A-Z]{4}-\d+\b"  # ArrayExpress
+    r"|\bPMC\d{4,}\b|\bPMID:?\s*\d{5,}\b|\bpubmed\s*\d{5,}\b"
+    r"|\b(?:phs|EGA[SDCN])\d{6,}\b"  # dbGaP, EGA
+    r"|\b(?:doi\.org|zenodo|figshare|biorxiv|medrxiv)\b",
+    re.IGNORECASE,
+)
 # Verbatim from Exa's build-with-exa skill: the description of the `objective` parameter.
 _OBJECTIVE = (
     "Goal for this search turn; say which documents should rank first, which should be excluded, "
     "and what specific facts or figures to pull from them."
 )
+
+
+def query_refusal(text: str, doi: str | None = None) -> str | None:
+    """Why a search text is refused, or None. Checked on the query and on the objective."""
+    found = _STUDY_ID.search(text)
+    if found:
+        return f"it contains a study or dataset identifier ({found.group(0)[:40]!r})"
+    if doi and doi.lower() in text.lower():
+        return "it contains the study's DOI"
+    return None
+
+
+def result_block_reason(url: str, policy: NetworkAccessPolicy | None = None) -> str | None:
+    """Why a returned URL is dropped, or None. The case's policy wins over the allow-list."""
+    try:
+        normalized = normalize_url(url)
+        host = host_from_url(url)
+    except ValueError:
+        return "not an http(s) URL"
+    if not any(domain_matches(host, d) for d in DOC_DOMAINS):
+        return "host is not on the documentation allow-list"
+    restricted = [*RESTRICTED_DOMAIN_SCOPES, *(policy.restricted_domain_scopes if policy else [])]
+    if any(domain_matches(host, d) for d in restricted):
+        return "host is a restricted code or data host"
+    if policy:
+        if any(domain_matches(host, d) for d in policy.answer_source_domains):
+            return "host is an answer source for this task"
+        for source in policy.answer_source_urls:
+            try:
+                if normalized.startswith(normalize_url(source).rstrip("/")):
+                    return "URL is an answer source for this task"
+            except ValueError:
+                continue
+    return None
 
 
 async def exa_docs(query: str, objective: str, api_key: str) -> dict[str, Any]:
@@ -294,12 +422,16 @@ async def exa_docs(query: str, objective: str, api_key: str) -> dict[str, Any]:
 
 
 @tool
-def search_docs(ledger: Ledger, role: str) -> Tool:
+def search_docs(
+    ledger: Ledger, role: str, policy: NetworkAccessPolicy | None = None, doi: str | None = None
+) -> Tool:
     async def execute(query: str, objective: str) -> str:
         """Search software documentation and bioinformatics help sites (not papers, not data).
 
         Use it for tool usage, parameters, file formats, error messages and version differences.
-        It cannot and must not be used to look up the study being reproduced or its results.
+        It cannot and must not be used to look up the study being reproduced or its results:
+        a query with a DOI, an accession or a paper identifier is refused, and the run has a
+        fixed number of searches.
 
         Args:
             query: What to retrieve, as plain natural-language intent, e.g. "featureCounts
@@ -309,9 +441,29 @@ def search_docs(ledger: Ledger, role: str) -> Tool:
         key = os.environ.get("EXA_API_KEY")
         if not key:
             raise ToolError("search is not available: EXA_API_KEY is not set on the runner")
+
+        async def refuse(reason: str) -> ToolError:
+            ledger.log("search.refused", by=role, query=query[:300], reason=reason)
+            await save_ledger(ledger)
+            return ToolError(f"search refused: {reason}")
+
+        used = sum(1 for e in ledger.events if e.get("kind") == "search")
+        if used >= MAX_SEARCHES:
+            raise await refuse(f"the run's limit of {MAX_SEARCHES} searches is used up")
+        reason = query_refusal(f"{query}\n{objective}", doi)
+        if reason:
+            raise await refuse(reason + "; search_docs is for software documentation only")
         body = await exa_docs(query, objective, key)
-        results = body.get("results", [])
-        ledger.log("search", by=role, query=query, urls=[r.get("url") for r in results])
+        results, dropped = [], []
+        for r in body.get("results", []):
+            why = result_block_reason(str(r.get("url") or ""), policy)
+            if why:
+                dropped.append({"url": r.get("url"), "reason": why})
+            else:
+                results.append(r)
+        ledger.log(
+            "search", by=role, query=query, urls=[r.get("url") for r in results], dropped=dropped
+        )
         await save_ledger(ledger)
         if not results:
             return "Nothing relevant found on the documentation sites."

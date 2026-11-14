@@ -1,14 +1,15 @@
 // The tracker: one Pi Durable Harness over glhf/runs/tracker.sqlite that runs a `glhf.run` task per benchmark
 // run. No model is involved. Only one process may drive it at a time (the engine server, or a CLI command when
 // the server is not running); a lock file enforces that, so a run is never launched twice by two trackers.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { createRegistry, defineExtension, Harness, type TaskId } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { DEMO_CASE, listStored, loadStored, newRunId, patchRun, RUNS, saveStored } from "./store.ts"
+import { alive, parseStamp, stamp } from "./proc.ts"
+import { DEMO_CASE, listStored, loadStored, newRunId, patchRun, publicRun, RUNS, saveStored, settingsOf } from "./store.ts"
 import { type RunInput, type RunResult, RunTask } from "./task.ts"
-import type { GlhfRun, RunRequest } from "./types.ts"
+import { type GlhfRun, MAX_MESSAGES_PER_ROLE, MAX_REVIEW_ROUNDS, MAX_TIME_LIMIT, MAX_TOKENS, type RunRequest } from "./types.ts"
 
 const ctx = BACKGROUND_CONTEXT
 const LOCK = `${RUNS}/tracker.lock`
@@ -20,58 +21,102 @@ export class TrackerBusy extends Error {
 }
 export class BadRequest extends Error {}
 
-const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
+const read = (file: string) => { try { return readFileSync(file, "utf8") } catch { return null } }
 
-function lock() {
+/**
+ * Take the tracker lock, or throw TrackerBusy. The lock holds "<pid> <start time>", so a pid reused by another
+ * program does not keep it. A lock left by a dead process is replaced under a second, short-lived lock, so two
+ * processes that both find it stale cannot both end up holding it.
+ */
+export function lock(file = LOCK) {
   mkdirSync(RUNS, { recursive: true })
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try { writeFileSync(LOCK, String(process.pid), { flag: "wx" }); return } catch {
-      const holder = Number(existsSync(LOCK) ? readFileSync(LOCK, "utf8") : 0)
-      if (holder && holder !== process.pid && alive(holder)) throw new TrackerBusy(holder)
-      rmSync(LOCK, { force: true }) // left by a process that died
+  const me = stamp(process.pid)
+  const take = () => { try { writeFileSync(file, me, { flag: "wx" }); return true } catch { return false } }
+  if (take()) return
+  const takeover = `${file}.takeover`
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const holder = read(file)
+    if (holder !== null && parseStamp(holder)?.pid !== process.pid && alive(holder)) throw new TrackerBusy(parseStamp(holder)!.pid)
+    try { writeFileSync(takeover, me, { flag: "wx" }) } catch {
+      // Another process is replacing the stale lock right now. If it died doing so, clear its marker.
+      const age = Date.now() - (statSync(takeover, { throwIfNoEntry: false })?.mtimeMs ?? Date.now())
+      if (age > 10_000 || !alive(read(takeover))) rmSync(takeover, { force: true })
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+      continue
     }
+    try {
+      const now = read(file) // look again: it may have changed hands while we were getting here
+      if (now !== null && parseStamp(now)?.pid !== process.pid && alive(now)) throw new TrackerBusy(parseStamp(now)!.pid)
+      rmSync(file, { force: true })
+      if (take()) return
+    } finally { rmSync(takeover, { force: true }) }
   }
-  throw new Error(`could not take ${LOCK}`)
+  throw new Error(`could not take ${file}`)
 }
 
-/** Check a request and fill defaults. `trusted` (the CLI) may also start cloud runs and name a case directory. */
-export function checkRequest(body: Partial<RunRequest>, trusted: boolean): RunRequest {
-  const bad = (why: string) => { throw new BadRequest(why) }
+/**
+ * Who is asking. `token`: the caller holds the CLI's token (a local user). `origin`: the request came from the
+ * dashboard's own page. A plain `true` means token, `false` means neither (any web page, any host on the network).
+ */
+export type Trust = boolean | { token: boolean; origin: boolean }
+
+/**
+ * Check a request and fill defaults.
+ *   cloud runs, and naming a case directory:  token only (they cost real money, or read any folder)
+ *   a real model, Exa search, memory:         token, or the dashboard's own page
+ *   anyone else:                              the scripted demo only
+ */
+export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunRequest {
+  const token = trust === true || (typeof trust === "object" && trust.token)
+  const known = token || (typeof trust === "object" && trust.origin)
+  const bad = (why: string): never => { throw new BadRequest(why) }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) bad("the request body must be a JSON object")
   if (body.mode !== "local" && body.mode !== "cloud") bad('mode must be "local" or "cloud"')
   if (body.solver !== "single" && body.solver !== "glhf") bad('solver must be "single" or "glhf"')
-  if (typeof body.model !== "string" || !body.model) bad("model is required")
+  if (typeof body.model !== "string" || !body.model || body.model.length > 200 || !/^[\w./:@-]+$/.test(body.model)) bad("model is required (a model id such as anthropic/claude-sonnet-5-5, or mock)")
+  if (body.task !== undefined && (typeof body.task !== "string" || body.task.length > 100)) bad("task must be a short text")
+  if (body.caseDir !== undefined && typeof body.caseDir !== "string") bad("caseDir must be a path")
   const roleModels = body.roleModels ?? {}
+  if (typeof roleModels !== "object" || Array.isArray(roleModels)) bad("roleModels must be an object")
   for (const [role, model] of Object.entries(roleModels)) {
     if (!ROLES.includes(role) || typeof model !== "string" || !model.includes("/")) bad(`roleModels: ${role} must be one of ${ROLES.join(", ")} and name a provider/model`)
   }
   if (Object.keys(roleModels).length && body.solver !== "glhf") bad("roleModels need solver glhf")
   if (Object.keys(roleModels).length && body.model === "mock") bad("roleModels cannot be combined with the mock model")
+  const cli = "start it from the CLI (npm run glhf -- run ...), which holds this machine's token"
   if (body.mode === "cloud") {
-    if (!trusted) bad("cloud runs start from the CLI: npm run glhf -- run --mode cloud ...")
+    if (!token) bad(`cloud runs cost money: ${cli}`)
     if (!body.task || !body.effort || !body.project) bad("cloud runs need task, effort and project")
     if (body.model === "mock") bad("cloud runs need a real model")
-  } else if ((body.task ?? "demo") !== "demo" && !(trusted && body.caseDir)) {
-    bad("local runs cover the demo case only; BixBench3 tasks need the cloud runner (mode cloud)")
+  } else {
+    if (body.caseDir && !token) bad(`a case directory can only be named by a local user: ${cli}`)
+    if ((body.task ?? "demo") !== "demo" && !body.caseDir) bad("local runs cover the demo case only; BixBench3 tasks need the cloud runner (mode cloud)")
   }
+  if (body.model !== "mock" && !known) bad(`runs with a real model cost money, so they start from the dashboard or the CLI: ${cli}`)
+  if ((body.exa || body.memory) && !known) bad(`exa and memory are not open to unknown callers: ${cli}`)
   const request: RunRequest = { mode: body.mode!, task: body.task ?? "demo", solver: body.solver!, model: body.model!, roleModels }
-  if (body.effort) request.effort = String(body.effort)
-  if (body.project) request.project = String(body.project)
-  if (body.resultsBucket) request.resultsBucket = String(body.resultsBucket)
-  if (body.timeLimit) request.timeLimit = Math.max(60, Math.floor(Number(body.timeLimit)))
-  const whole = (name: string, value: unknown) => { const n = Number(value); if (!Number.isInteger(n) || n < 1) bad(`${name} must be a whole number above 0`); return n }
-  if (body.maxTokens !== undefined) request.maxTokens = whole("maxTokens", body.maxTokens)
-  if (body.seed !== undefined) request.seed = whole("seed", body.seed)
+  if (body.effort) request.effort = String(body.effort).slice(0, 40)
+  if (body.project) request.project = String(body.project).slice(0, 100)
+  if (body.resultsBucket) request.resultsBucket = String(body.resultsBucket).slice(0, 300)
+  const whole = (name: string, value: unknown, max: number, min = 1) => {
+    const n = Number(value)
+    if (!Number.isInteger(n) || n < min || n > max) bad(`${name} must be a whole number from ${min} to ${max}`)
+    return n
+  }
+  if (body.timeLimit !== undefined && body.timeLimit !== null) request.timeLimit = whole("timeLimit (seconds)", body.timeLimit, MAX_TIME_LIMIT, 60)
+  if (body.maxTokens !== undefined) request.maxTokens = whole("maxTokens", body.maxTokens, MAX_TOKENS, 1_000)
+  if (body.seed !== undefined) request.seed = whole("seed", body.seed, 2 ** 31 - 1)
   if (body.maxMessagesPerRole !== undefined || body.exa || body.memory) {
     if (body.solver !== "glhf") bad("maxMessagesPerRole, exa and memory need solver glhf")
     if (body.mode === "cloud") bad("maxMessagesPerRole, exa and memory are for local runs so far; the cloud runner does not pass them on yet")
     if (body.exa && !process.env.EXA_API_KEY) bad("exa needs EXA_API_KEY in .env")
-    if (body.maxMessagesPerRole !== undefined) request.maxMessagesPerRole = whole("maxMessagesPerRole", body.maxMessagesPerRole)
+    if (body.maxMessagesPerRole !== undefined) request.maxMessagesPerRole = whole("maxMessagesPerRole", body.maxMessagesPerRole, MAX_MESSAGES_PER_ROLE, 2)
     if (body.exa) request.exa = true
     if (body.memory) request.memory = true
   }
-  if (body.mode === "cloud" && (body.maxTokens !== undefined || body.seed !== undefined)) bad("maxTokens and seed are for local runs so far; the cloud runner does not pass them on yet")
-  if (body.reviewRounds) request.reviewRounds = Math.max(1, Math.floor(Number(body.reviewRounds)))
-  if (body.mode === "local") request.caseDir = trusted && body.caseDir ? body.caseDir : DEMO_CASE
+  if (body.mode === "cloud" && (body.maxTokens !== undefined || body.seed !== undefined || body.timeLimit)) bad("timeLimit, maxTokens and seed are for local runs so far; the cloud runner does not pass them on yet")
+  if (body.reviewRounds !== undefined && body.reviewRounds !== null) request.reviewRounds = whole("reviewRounds", body.reviewRounds, MAX_REVIEW_ROUNDS)
+  if (body.mode === "local") request.caseDir = token && body.caseDir ? body.caseDir : DEMO_CASE
   return request
 }
 
@@ -119,7 +164,7 @@ export async function openTracker(): Promise<Tracker> {
   return {
     async start(request) {
       const id = newRunId(request.task ?? "demo", request.solver)
-      const run: GlhfRun = { id, mode: request.mode, task: request.task ?? "demo", solver: request.solver, model: request.model, roleModels: request.roleModels ?? {}, phase: "queued", startedAt: Date.now() }
+      const run: GlhfRun = { id, mode: request.mode, task: request.task ?? "demo", solver: request.solver, model: request.model, roleModels: request.roleModels ?? {}, settings: settingsOf(request), phase: "queued", startedAt: Date.now() }
       saveStored({ run, request })
       await createTask({ ...request, id })
       return run
@@ -130,9 +175,9 @@ export async function openTracker(): Promise<Tracker> {
       if (stored.taskId !== undefined && stored.run.phase !== "done" && stored.run.phase !== "failed") {
         await harness.waitForTask(stored.taskId as unknown as TaskId<RunResult>, ctx)
       }
-      return loadStored(id)!.run
+      return publicRun(loadStored(id)!)
     },
-    unfinished: () => listStored().map((s) => s.run).filter((r) => r.phase !== "done" && r.phase !== "failed"),
+    unfinished: () => listStored().map(publicRun).filter((r) => r.phase !== "done" && r.phase !== "failed"),
     async close() {
       await harness.close(ctx)
       rmSync(LOCK, { force: true })

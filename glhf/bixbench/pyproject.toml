@@ -50,6 +50,23 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "RUF"]
 ignore = ["E501"]
 
+[tool.ruff.format]
+# Upstream BixBench3 files we do not change. They keep upstream's formatting so diffs against
+# upstream stay readable; `ruff format` must not touch them.
+exclude = [
+    "scripts/build_ground_truth_release.py",
+    "scripts/build_input_release.py",
+    "scripts/publish_release.py",
+    "src/bixbench3/gcp_runner.py",
+    "src/bixbench3/hub.py",
+    "src/bixbench3/grading/*.py",
+    "tests/unit/test_network_policy.py",
+    "tests/unit/test_process_judge.py",
+    "tests/unit/test_run_lifecycle.py",
+    "tests/unit/test_runner_commands.py",
+    "tests/unit/test_schemas.py",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

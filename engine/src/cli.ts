@@ -4,7 +4,7 @@
 import { existsSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import "./env.ts"
-import { loadState, runBoard, startRun } from "./board.ts"
+import { BudgetReached, loadState, RunBusy, runBoard, startRun } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path, ROOT } from "./config.ts"
 import type { Stamped } from "./events.ts"
@@ -46,5 +46,6 @@ try {
   }
 } catch (error) {
   if (error instanceof BriefRejected) { console.error(`✘ ${error.message}`); process.exit(2) }
+  if (error instanceof RunBusy || error instanceof BudgetReached) { console.error(`✘ ${error.message}`); process.exit(3) }
   throw error
 }

@@ -1,7 +1,10 @@
 """GLHF swarm solver, nine roles:
 scout -> propose -> pilot -> experiment -> [audit + critique -> revise] (loop) -> finish -> report.
 
-Same sandbox, tools, time limit and grader as the single-agent baseline (`bixbench3_agent`).
+Same sandbox, time limit and grader as the single-agent baseline (`bixbench3_agent`), and the
+baseline's four tools. The swarm's roles also have check_outputs (a shape check built from the
+task's expected outputs), the ledger tools and, when switched on, search_docs and memory; the
+baseline has none of these. Runs that use them must say so.
 Orchestration is code, not a supervisor model: phases, budgets and the stop rule are fixed here.
 
 Per-role models (task args, default = the eval's --model), one per group of roles:
@@ -15,8 +18,6 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
 
 from inspect_ai.agent import Agent, AgentState, react, run
 from inspect_ai.model import ChatMessageUser, CompactionAuto, Model, get_model
@@ -26,13 +27,16 @@ from inspect_ai.util import Limit, message_limit, sample_limits, sandbox, time_l
 
 from ..models import RuntimeCase
 from ..tools import request_web_access
-from . import past_memory, roles
+from . import baseline, past_memory, roles
 from .ledger import Ledger
+from .memory import append_memory, filter_lessons, read_memory
 from .tools import (
     WORK,
+    background_processes,
     check_contract,
     check_outputs,
     contract_text,
+    needs_rescue,
     propose_claim,
     raise_issue,
     read_ledger,
@@ -52,41 +56,38 @@ FINISH_RESERVE = 0.05  # kept back so a missing artifact can still be rescued af
 REPORT_RESERVE = 0.05  # always kept for the reporter and final writes
 MIN_REVIEW_SECONDS = 15 * 60
 MIN_FINISH_SECONDS = 5 * 60
+MAX_FINISH_HOLD = 0.25  # the finisher's reserve never takes more than this share of the run
+MIN_PHASE_SECONDS = 10  # a phase with less time than this is skipped, not started
 AUDIT_SHARE = 0.10  # of the review time left in a round
 CRITIQUE_SHARE = 0.30
 PILOT_OUT = f"{WORK}/pilot/outputs"
 REPORT_TOKEN_RESERVE = 0.10  # of max_tokens, kept for the reporter
+assert REPORT_TOKEN_RESERVE == baseline.REPORT_TOKEN_RESERVE  # same rule for both solvers
 # With a token budget, the supporting roles are capped so the full run and the review keep most
 # of it. Shares of max_tokens by phase (first word of the phase name); other phases take what is left.
 TOKEN_SHARE = {"scout": 0.05, "propose": 0.08, "pilot": 0.15, "audit": 0.08, "critique": 0.20}
-MEMORY_FILE = "lessons.md"
-MEMORY_INJECT_CHARS = 6000  # newest lessons that fit; older ones stay on disk
 SEARCH_ROLES = {"scout", "planner", "pilot", "experimenter", "reviser", "finisher", "auditor"}
 
 
-def read_memory(memory_dir: str | None) -> str:
-    """Lessons earlier runs left on the runner's disk. Empty when memory is off or new."""
-    if not memory_dir:
-        return ""
-    file = Path(memory_dir) / MEMORY_FILE
-    return file.read_text(encoding="utf-8")[-MEMORY_INJECT_CHARS:] if file.exists() else ""
+def finish_hold(budget: float) -> float:
+    """Share of the run kept back for the finisher: FINISH_RESERVE, raised to MIN_FINISH_SECONDS
+    when the run is long enough for that to be at most MAX_FINISH_HOLD of it (20 minutes or more),
+    so the reserve is never smaller than what the finisher needs to start."""
+    if budget > 0 and MIN_FINISH_SECONDS / budget <= MAX_FINISH_HOLD:
+        return max(FINISH_RESERVE, MIN_FINISH_SECONDS / budget)
+    return FINISH_RESERVE
 
 
-def append_memory(memory_dir: str, task_id: str, lessons: str) -> bool:
-    lessons = lessons.strip()
-    if not lessons or lessons.lower().strip(" .") == "none":
-        return False
-    folder = Path(memory_dir)
-    folder.mkdir(parents=True, exist_ok=True)
-    file = folder / MEMORY_FILE
-    known = set(file.read_text(encoding="utf-8").splitlines()) if file.exists() else set()
-    fresh = [line for line in lessons[:2000].splitlines() if line.strip() and line not in known]
-    if not fresh:
-        return False
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    with file.open("a", encoding="utf-8") as fh:
-        fh.write(f"\n## Task {task_id}, {stamp}\n" + "\n".join(fresh) + "\n")
-    return True
+def token_allowance(title: str, max_tokens: int, used: int) -> int:
+    """Tokens a phase may spend; <= 0 means skip it. The report always gets at least the reserve:
+    limits are checked after each call, so earlier phases can overshoot slightly, and a run must
+    still end documented."""
+    reserve = int(max_tokens * REPORT_TOKEN_RESERVE)
+    if title == "report":
+        return max(max_tokens - used, reserve)
+    allowance = max_tokens - used - reserve
+    share = TOKEN_SHARE.get(title.split()[0])
+    return min(allowance, int(max_tokens * share)) if share else allowance
 
 
 @dataclass
@@ -98,11 +99,39 @@ class Clock:
         return self.budget - (time.monotonic() - self.started)
 
     def slice(self, share: float, reserve: float = 0.0) -> int:
-        return int(max(60.0, min(self.budget * share, self.left() - self.budget * reserve)))
+        """Seconds for a phase: its share of the run, never into `reserve` (a share of the run).
+        A phase gets at least a minute only while that minute does not come out of the reserve."""
+        available = self.left() - self.budget * reserve
+        return int(max(0.0, min(max(60.0, self.budget * share), available)))
+
+
+@dataclass
+class PhaseResult:
+    ran: bool
+    limit: str | None = None  # the limit that ended it early: time, token, message
+
+    @property
+    def completed(self) -> bool:
+        return self.ran and self.limit is None
 
 
 def _model(name: str | None) -> Model | None:
     return get_model(name) if name else None
+
+
+def _budget_note(seconds: int, tokens: int | None, messages: int | None) -> str:
+    parts = [f"about {max(1, seconds // 60)} minutes ({seconds} s)"]
+    if tokens:
+        parts.append(f"{tokens:,} tokens")
+    if messages:
+        parts.append(f"{messages} messages")
+    return (
+        "\n\nYour budget for this phase: "
+        + ", ".join(parts)
+        + ". Any limit named in the brief is the whole team's; yours is this slice, and you are "
+        "cut off without warning when it ends. Plan for it, write files as you go, and leave "
+        "time for your final summary."
+    )
 
 
 @solver
@@ -135,15 +164,12 @@ def glhf_swarm(
         await save_ledger(ledger)
         if exa and not os.environ.get("EXA_API_KEY"):
             raise RuntimeError("exa=True needs EXA_API_KEY in the runner's environment")
-        memory = read_memory(memory_dir)
+        # Lessons from runs on other tasks only; never from an earlier run on this task.
+        memory = read_memory(memory_dir, case.task_id)
         past_used = False
         if memory_dir and past_memory.enabled():
-            try:  # past.dev picks the lessons that fit this task; the local file is the fallback
-                question = (
-                    "Process lessons for reproducing a computational biology analysis like this "
-                    f"one: {brief[:600]}"
-                )
-                recalled = await past_memory.recall(question)
+            try:  # past.dev ranks the lessons; the local file is the fallback
+                recalled = await past_memory.recall(task_id=case.task_id)
                 if recalled:
                     memory, past_used = recalled, True
                 ledger.log("memory.recalled", source="past.dev", chars=len(recalled))
@@ -154,11 +180,21 @@ def glhf_swarm(
         tokens_at_start = sample_limits().token.usage
         ledger.log(
             "settings",
+            budget_seconds=int(clock.budget),
+            review_rounds=review_rounds,
             max_tokens=max_tokens,
             max_messages_per_role=max_messages_per_role,
+            token_semantics=baseline.TOKEN_SEMANTICS["glhf"] if max_tokens else None,
             exa=exa,
             memory=bool(memory_dir),
             memory_source="past.dev" if past_used else ("file" if memory else None),
+            memory_chars=len(memory),
+            role_models={
+                "planner": planner_model,
+                "experimenter": experimenter_model,
+                "critic": critic_model,
+                "reporter": reporter_model,
+            },
         )
 
         def tokens_used() -> int:
@@ -167,7 +203,7 @@ def glhf_swarm(
         def agent(name: str, instructions: str, model: str | None, extra: list[Tool]) -> Agent:
             if exa and name in SEARCH_ROLES:
                 instructions += roles.SEARCH
-                extra = [*extra, search_docs(ledger, name)]
+                extra = [*extra, search_docs(ledger, name, case.network_policy, case.doi)]
             return react(
                 name=name,
                 prompt=instructions,
@@ -184,46 +220,63 @@ def glhf_swarm(
                 compaction=CompactionAuto(),
             )
 
-        async def phase(title: str, who: Agent, task: str, seconds: int) -> None:
+        orphans = False  # an earlier role was cut off, so it may have left jobs running
+
+        async def phase(title: str, who: Agent, task: str, seconds: int) -> PhaseResult:
+            nonlocal orphans
+            if seconds < MIN_PHASE_SECONDS:
+                ledger.log("phase.skipped", phase=title, reason="time", seconds=seconds)
+                await save_ledger(ledger)
+                return PhaseResult(ran=False)
             limits: list[Limit] = [time_limit(seconds)]
             if max_messages_per_role:
                 limits.append(message_limit(max_messages_per_role))
+            allowance: int | None = None
             if max_tokens:
-                reserve = int(max_tokens * REPORT_TOKEN_RESERVE)
-                if title == "report":
-                    # The report always runs: a limit is checked after each call, so earlier phases
-                    # can overshoot slightly, and a run must still end documented.
-                    allowance = max(max_tokens - tokens_used(), reserve)
-                else:
-                    allowance = max_tokens - tokens_used() - reserve
-                    share = TOKEN_SHARE.get(title.split()[0])
-                    if share:
-                        allowance = min(allowance, int(max_tokens * share))
+                allowance = token_allowance(title, max_tokens, tokens_used())
                 if allowance <= 0:
                     ledger.log("phase.skipped", phase=title, reason="tokens", used=tokens_used())
                     await save_ledger(ledger)
-                    return
+                    return PhaseResult(ran=False)
                 limits.append(token_limit(allowance))
-            ledger.log("phase.started", phase=title, seconds=seconds)
+            ledger.log("phase.started", phase=title, seconds=seconds, tokens_allowed=allowance)
             await save_ledger(ledger)
             # Every role's transcript is appended to the sample so the process judge sees all work.
             state.messages.append(
                 ChatMessageUser(content=f"=== GLHF phase: {title} (budget {seconds}s) ===")
             )
-            prompt = f"{brief}\n\n---\n\n{task}" + (roles.with_memory(memory) if memory else "")
+            prompt = f"{brief}\n\n---\n\n{task}"
+            prompt += _budget_note(seconds, allowance, max_messages_per_role)
+            if orphans:
+                running = await background_processes()
+                if running:
+                    prompt += (
+                        "\n\nAn earlier role ran out of budget and left these jobs running. "
+                        "Wait for them, reuse their output or kill them; do not start duplicates:\n"
+                        + "\n".join(f"- pid {p['pid']}: {p['cmd']}" for p in running[:20])
+                    )
+            if memory:
+                prompt += roles.with_memory(memory)
             result = await run(who, prompt, limits=limits)
             agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
             assert isinstance(agent_state, AgentState)
             state.messages.extend(m for m in agent_state.messages if m.role != "system")
+            limit = str(getattr(limit_error, "type", "limit")) if limit_error is not None else None
             ledger.log(
                 "phase.finished",
                 phase=title,
-                limit_hit=limit_error is not None,
-                limit=getattr(limit_error, "type", None),
+                limit_hit=limit is not None,
+                limit=limit,
                 left=int(clock.left()),
                 tokens=tokens_used(),
             )
+            if limit is not None:
+                orphans = True
+                running = await background_processes()
+                if running:
+                    ledger.log("phase.background", phase=title, processes=running[:20])
             await save_ledger(ledger)
+            return PhaseResult(ran=True, limit=limit)
 
         scout = agent("scout", roles.SCOUT, planner_model, [])
         planner = agent("planner", roles.PLANNER, planner_model, [propose_claim(ledger, "planner")])
@@ -248,7 +301,8 @@ def glhf_swarm(
             "reporter", roles.REPORTER + (roles.LESSONS if memory_dir else ""), reporter_model, []
         )
 
-        hold = REPORT_RESERVE + FINISH_RESERVE  # time the early phases may not spend
+        # Time the early phases may not spend: the report's reserve plus the finisher's.
+        hold = REPORT_RESERVE + finish_hold(clock.budget)
 
         def review_left() -> float:
             return clock.left() - clock.budget * hold
@@ -288,30 +342,55 @@ def glhf_swarm(
                     f"Current ledger:\n{ledger.summary()}",
                     int(review_left() * AUDIT_SHARE),
                 )
-                await phase(
+                critique = await phase(
                     f"critique {n}",
                     critic,
                     f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
                     f"Current ledger:\n{ledger.summary()}",
                     int(review_left() * CRITIQUE_SHARE),
                 )
+                if critique.completed:
+                    # Fixes made before this round have now been through a full critic pass.
+                    ledger.mark_rechecked()
+                else:
+                    # "No open issues" means nothing when the critic did not finish looking.
+                    ledger.log(
+                        "review.incomplete",
+                        round=n,
+                        reason=f"critic stopped by the {critique.limit} limit"
+                        if critique.ran
+                        else "critic did not run (no budget left)",
+                    )
+                    if not critique.ran:
+                        break
                 if not ledger.open_issues():
-                    ledger.log("review.converged", round=n)
-                    break
+                    if critique.completed:
+                        ledger.log("review.converged", round=n)
+                        break
+                    continue  # nothing to revise; the next round gives the critic another pass
                 await phase(
                     f"revise {n}",
                     reviser,
                     f"Revision round {n}. Fix the open issues.\n\n{ledger.summary()}",
                     int(review_left() * (0.6 if n < review_rounds else 0.9)),
                 )
-            # Last line of defence for completeness: only runs when an artifact would score zero.
-            failing = [r for r in await check_contract(outputs) if r.get("problems")]
+            unchecked = [
+                i.id for i in ledger.issues.values() if i.status == "fixed" and not i.rechecked
+            ]
+            if unchecked:
+                ledger.log("review.fixes_not_rechecked", issues=unchecked)
+            # Last line of defence for completeness: only for artifacts that would score zero
+            # because they are missing or unreadable. Warnings never trigger it.
+            failing = needs_rescue(await check_contract(outputs))
             finish_time = int(clock.left() - clock.budget * REPORT_RESERVE)
-            if failing and finish_time >= MIN_FINISH_SECONDS:
+            # A run too short for the full reserve (under 20 minutes) still gets a rescue attempt.
+            needed = min(MIN_FINISH_SECONDS, int(clock.budget * finish_hold(clock.budget)))
+            if failing and finish_time >= max(needed, MIN_PHASE_SECONDS):
                 await phase(
                     "finish",
                     finisher,
-                    "These required artifacts are missing or malformed:\n"
+                    "These required artifacts are missing or cannot be read:\n"
+                    f"{contract_text(failing)}\n\nFull check, for context:\n"
                     f"{contract_text(await check_contract(outputs))}",
                     finish_time,
                 )
@@ -319,6 +398,14 @@ def glhf_swarm(
                 ledger.log("finish.skipped", reason="time", failing=len(failing))
         finally:
             # Reporting always runs, even after a failure or a limit, so the run ends documented.
+            # First stop every job a role left running, so nothing writes to /outputs after review.
+            try:
+                killed = await background_processes(kill=True)
+                if killed:
+                    ledger.log("background.killed", processes=killed[:20])
+            except Exception as error:  # never block the report
+                ledger.log("background.kill_failed", error=str(error)[:200])
+            orphans = False
             await save_ledger(ledger)
             await sandbox().write_file("/outputs/glhf/FINDINGS.md", ledger.findings_markdown())
             await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
@@ -335,15 +422,24 @@ def glhf_swarm(
                 "report", reporter, "Write /outputs/METHODS.md.", max(120, int(clock.left()) - 60)
             )
             if memory_dir:
-                # Written before grading, so a lesson can never contain a score.
+                # Written before grading, so a lesson can never contain a score. Lines that look
+                # like results are dropped in code (memory.filter_lessons), not left to the prompt.
                 try:
                     lessons = await sandbox().read_file(f"{WORK}/lessons.md")
-                    saved = append_memory(memory_dir, case.task_id, lessons)
-                    await sandbox().exec(["cp", f"{WORK}/lessons.md", "/outputs/glhf/lessons.md"])
-                    ledger.log("memory.saved" if saved else "memory.nothing_to_save", source="file")
+                    kept, rejected = filter_lessons(lessons)
+                    if rejected:
+                        ledger.log("memory.rejected", lines=rejected)
+                    clean = "\n".join(kept)
+                    await sandbox().write_file("/outputs/glhf/lessons.md", clean + "\n")
+                    saved = append_memory(memory_dir, case.task_id, clean)
+                    ledger.log(
+                        "memory.saved" if saved else "memory.nothing_to_save",
+                        source="file",
+                        lines=len(kept),
+                    )
                     if saved and past_memory.enabled():
                         try:
-                            receipt = await past_memory.remember(case.task_id, lessons)
+                            receipt = await past_memory.remember(case.task_id, clean)
                             ledger.log("memory.saved", source="past.dev", ingestion=receipt)
                         except Exception as error:
                             ledger.log(
@@ -357,6 +453,7 @@ def glhf_swarm(
             final = contract_text(await check_contract(outputs))
             ledger.log("finished", contract=final, tokens=tokens_used())
             await save_ledger(ledger)
+            await sandbox().write_file("/outputs/glhf/FINDINGS.md", ledger.findings_markdown())
             await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
             state.output.completion = f"{final}\n\n{ledger.summary()}"
         return state

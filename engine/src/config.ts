@@ -10,7 +10,7 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 export type Tier = "lead" | "strong" | "cheap" | "rival"
 
 export interface BoardConfig {
-  meeting: { max_minutes: number; max_usd: number; max_rounds: number; daily_usd: number; lead_turns?: number; member_turns?: number; max_escalations?: number }
+  meeting: { max_minutes: number; max_usd: number; max_rounds: number; daily_usd: number; lead_turns?: number; member_turns?: number; max_escalations?: number; fallback_usd_per_mtok?: number }
   memory?: { enabled: boolean; max_notes: number }
   watch: { enabled: boolean; every_hours: number }
   brief: { required_sections: string[] }
@@ -21,6 +21,8 @@ export interface BoardConfig {
     escalate: { literature: "openai"; computed: "claude-code" }
     openai_model: string
     claude_code_cmd: string
+    claude_code_tools?: string
+    timeout_seconds?: number
   }
   board: string[]
 }

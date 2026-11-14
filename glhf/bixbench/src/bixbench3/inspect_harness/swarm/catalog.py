@@ -42,7 +42,8 @@ def catalog() -> dict[str, object]:
             "finish",
             "experimenter",
             roles.FINISHER,
-            f"{_pct(solver.FINISH_RESERVE)} held back; runs only if an output is missing",
+            f"{_pct(solver.FINISH_RESERVE)} held back (at least {solver.MIN_FINISH_SECONDS // 60} minutes "
+            "on runs of 20 minutes or more); runs only if an output is missing or unreadable",
         ),
         (
             "report",

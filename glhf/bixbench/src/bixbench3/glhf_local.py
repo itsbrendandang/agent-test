@@ -27,6 +27,7 @@ from inspect_ai.model import Model, ModelOutput, get_model
 
 from bixbench3.grading.grader import grade
 from bixbench3.inspect_harness.models import RuntimeCase
+from bixbench3.inspect_harness.swarm.baseline import TOKEN_SEMANTICS
 from bixbench3.inspect_harness.tasks import bixbench3_cases
 
 LOCAL_COMPOSE = Path(__file__).parents[2] / "sandbox" / "local-compose.yaml"
@@ -84,13 +85,13 @@ def mock_script(
     header = first_text.splitlines()[0] + "\n"
     artifact = Path(first_path).stem
     if review_rounds == 0:
-        # No review: the first pass stays broken, so the finisher has to rescue the artifact.
+        # No review: the first pass leaves one artifact missing, so the finisher has to rescue it.
+        # (A header with no rows is only a warning: it can be a correct, empty result.)
         return [
             _done("inputs listed"),  # scout
             _done("planned"),  # proposer
             _done("pilot skipped in the scripted run"),  # pilot
-            _write(first_path, header),  # experimenter
-            *correct[1:],
+            *correct[1:],  # experimenter: the first artifact is never written
             _done("first pass written"),
             correct[0],  # finisher
             _done("rescued"),
@@ -190,7 +191,9 @@ def run_local(
     exa: bool = False,
     memory_dir: Path | None = None,
     seed: int | None = None,
+    mock_outputs: list[ModelOutput] | None = None,
 ) -> dict[str, Any]:
+    """`mock_outputs` replaces the fixed script of `--model mock` (tests only)."""
     case_dir, out_dir = case_dir.resolve(), out_dir.resolve()
     case = load_case(case_dir)
     workspace, outputs, data = out_dir / "workspace", out_dir / "outputs", case_dir / "data"
@@ -216,12 +219,36 @@ def run_local(
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
         resolved: Model = get_model(
             MOCK,
-            custom_outputs=mock_script(solver, truths, review_rounds, exa, memory_dir is not None),
+            custom_outputs=mock_outputs
+            or mock_script(solver, truths, review_rounds, exa, memory_dir is not None),
         )
     else:
         resolved = get_model(model)
 
     started = time.time()
+    swarm = solver == "glhf"
+    settings: dict[str, Any] = {
+        "solver": solver,
+        "model": model,
+        "role_models": role_models or {},
+        "time_limit_seconds": time_limit_seconds,
+        "max_tokens": max_tokens,
+        "token_semantics": TOKEN_SEMANTICS[solver] if max_tokens else None,
+        "max_messages_per_role": max_messages_per_role if swarm else None,
+        "review_rounds": review_rounds if swarm else None,
+        "exa": bool(exa and swarm),
+        "memory": bool(memory_dir and swarm),
+        "memory_source": None,  # filled in after the run: "file", "past.dev" or None
+        "seed": seed,
+        # What the swarm's roles have that the single agent does not. Disclose with scores.
+        "swarm_only_tools": (
+            ["check_outputs", "read_ledger", "ledger tools"]
+            + (["search_docs"] if exa else [])
+            + (["memory"] if memory_dir else [])
+        )
+        if swarm
+        else [],
+    }
     summary: dict[str, Any] = {
         "task": case.task_id,
         "solver": solver,
@@ -232,6 +259,7 @@ def run_local(
         "exa": exa,
         "memory_dir": str(memory_dir) if memory_dir else None,
         "seed": seed,
+        "settings": settings,
         "versions": {"inspect_ai": version("inspect_ai"), "python": platform.python_version()},
         "started_at": started,
         "status": "running",
@@ -269,6 +297,14 @@ def run_local(
         }
         for name, u in (log.stats.model_usage or {}).items()
     }
+    ledger_file = outputs / "glhf" / "ledger.json"
+    if swarm and ledger_file.exists():
+        for event in json.loads(ledger_file.read_text(encoding="utf-8")).get("events", []):
+            if event.get("kind") == "settings":
+                settings["memory_source"] = event.get("memory_source")
+    sample = log.samples[0] if log.samples else None
+    if sample is not None and "token_budget" in (sample.metadata or {}):
+        settings["token_budget"] = sample.metadata["token_budget"]
     summary.update(
         status="done" if log.status == "success" else "failed",
         error=str(log.error.message) if log.error else None,

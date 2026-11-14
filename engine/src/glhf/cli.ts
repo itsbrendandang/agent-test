@@ -13,11 +13,12 @@ import { existsSync, readFileSync } from "node:fs"
 import "../env.ts"
 import { doctor, tools } from "./doctor.ts"
 import { TOKEN_FILE } from "./routes.ts"
+import { type Cell, scoreboard } from "./scoreboard.ts"
 import { listRuns, runDetail } from "./store.ts"
 import { BadRequest, checkRequest, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
 import { type GlhfRun, RECORD, type RunRequest } from "./types.ts"
 
-const ENGINE = `http://localhost:${process.env.DRUG_BOARD_PORT ?? 8787}`
+const ENGINE = `http://127.0.0.1:${process.env.DRUG_BOARD_PORT ?? 8787}`
 const [command, ...rest] = process.argv.slice(2)
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 const settled = (run: GlhfRun) => run.phase === "done" || run.phase === "failed"
@@ -183,18 +184,22 @@ async function main(): Promise<number> {
       })
     }
     case "scoreboard": {
-      const done = listRuns().filter((r) => r.phase === "done" && r.score !== undefined)
-      if (!done.length) { console.log("No finished runs yet."); return 0 }
-      console.log(`${"task".padEnd(34)} single   swarm    diff    models (single | swarm)`)
-      for (const task of [...new Set(done.map((r) => r.task))].sort()) {
-        const latest = (solver: string) => done.find((r) => r.task === task && r.solver === solver) // newest first
-        const single = latest("single"), swarm = latest("glhf")
-        const diff = single?.score !== undefined && swarm?.score !== undefined ? (swarm.score - single.score >= 0 ? "+" : "") + (swarm.score - single.score).toFixed(3) : "  -  "
-        const note = task === "demo" ? "  (demo case, not a BixBench3 task)" : ""
-        console.log(`${task.padEnd(34)} ${fmt(single?.score)}    ${fmt(swarm?.score)}    ${diff}   ${single?.model ?? "-"} | ${swarm?.model ?? "-"}${note}`)
+      const rows = scoreboard(listRuns())
+      if (!rows.length) { console.log("No finished runs yet."); return 0 }
+      const show = (c: Cell | undefined) => (c ? (c.score === undefined ? (c.phase === "failed" ? "failed" : "  -  ") : `${c.score.toFixed(3)}${c.phase === "failed" ? "!" : " "}`) : "  -  ").padEnd(8)
+      console.log(`${"task".padEnd(22)} single   swarm    diff     settings`)
+      for (const row of rows) {
+        const diff = row.diff === undefined ? "  -   " : (row.diff >= 0 ? "+" : "") + row.diff.toFixed(3)
+        const settings = [row.model, row.timeLimit ? `${row.timeLimit} s` : "", row.maxTokens ? `${row.maxTokens} tokens` : "no token cap"].filter(Boolean).join(", ")
+        console.log(`${row.task.padEnd(22)} ${show(row.single)} ${show(row.swarm)} ${diff}   ${settings}${row.task === "demo" ? "  (demo case, not a BixBench3 task)" : ""}`)
+        if (row.single) console.log(`    single agent: ${row.single.id}${row.single.extras.length ? `  [${row.single.extras.join("; ")}]` : ""}`)
+        if (row.swarm) console.log(`    swarm:        ${row.swarm.id}${row.swarm.extras.length ? `  [${row.swarm.extras.join("; ")}]` : ""}`)
+        if (row.note) console.log(`    note: ${row.note}`)
       }
-      console.log(`\nBixBench3 record to beat: ${RECORD} (best published score). It applies to BixBench3 tasks only.`)
-      if (done.some((r) => r.model === "mock")) console.log("Runs with the mock model replay a script: they show the plumbing works, not how well agents do.")
+      console.log("\nA difference is shown only for runs with the same task, model, time limit and token budget. Each row shows the")
+      console.log("latest settled run per solver, also when it failed (marked failed, or ! after a score).")
+      console.log(`BixBench3 record to beat: ${RECORD} (best published score). It applies to BixBench3 tasks only.`)
+      if (rows.some((r) => r.model === "mock")) console.log("Runs with the mock model replay a script: they show the plumbing works, not how well agents do.")
       return 0
     }
     default:

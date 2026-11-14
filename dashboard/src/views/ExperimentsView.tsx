@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { ENGINE } from "@/board/api"
 
 interface Hit {
@@ -6,6 +6,10 @@ interface Hit {
   matches: { where: string; text: string }[]
 }
 type Kind = "all" | "swarm" | "board"
+// POST /api/ask (engine/src/ask.ts). mode "keyword" means no AI answered: no key, or the call failed.
+interface Cited { kind: "swarm" | "board"; id: string; title: string; why: string }
+interface Answer { answer: string; runs: Cited[]; mode: "ai" | "keyword"; note?: string }
+type Asked = { state: "idle" } | { state: "loading"; question: string } | { state: "done"; question: string; result: Answer } | { state: "error"; question: string; message: string }
 
 /** A run another view should open on its next mount. Read once, then cleared. */
 export function takeOpen(kind: "swarm" | "board"): string | undefined {
@@ -15,6 +19,8 @@ export function takeOpen(kind: "swarm" | "board"): string | undefined {
   return id
 }
 
+// Two ways to find an experiment. Ask: a question in plain words, answered by a model from an index of every
+// run, with the runs it used. Search: every word must appear.
 // Search over every experiment: swarm runs (task, model, claims, problems, reports) and drug board
 // runs (brief, memo, checked claims). The engine does the matching; every word must appear.
 export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") => void }) {
@@ -35,8 +41,28 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
     return () => { window.clearTimeout(timer); stop.abort() }
   }, [query])
 
+  const [question, setQuestion] = useState("")
+  const [asked, setAsked] = useState<Asked>({ state: "idle" })
+  const asking = useRef<AbortController | undefined>(undefined)
+  useEffect(() => () => asking.current?.abort(), [])
+  const ask = (e: FormEvent) => {
+    e.preventDefault()
+    const q = question.trim()
+    if (!q || asked.state === "loading") return
+    asking.current?.abort()
+    const stop = (asking.current = new AbortController())
+    setAsked({ state: "loading", question: q })
+    fetch(`${ENGINE}/api/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, kind }), signal: stop.signal })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(body.error ?? `The engine answered ${r.status}.`)
+        setAsked({ state: "done", question: q, result: body as Answer })
+      })
+      .catch((err) => { if (err.name !== "AbortError") setAsked({ state: "error", question: q, message: err instanceof TypeError ? "Ask needs the engine. Start it with npm run engine." : String(err.message ?? err) }) })
+  }
+
   const shown = (hits ?? []).filter((h) => kind === "all" || h.kind === kind)
-  const open = (h: Hit) => {
+  const open = (h: { kind: "swarm" | "board"; id: string }) => {
     sessionStorage.setItem(`open.${h.kind}`, h.id)
     onOpen(h.kind === "swarm" ? "Swarm" : "Board")
   }
@@ -52,9 +78,46 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
       <header className="page-head">
         <div>
           <h1>Experiments</h1>
-          <p className="muted small">Search every run by task, model, status, or any text in its claims, problems, reports and memos.</p>
+          <p className="muted small">Ask a question about the runs, or search them by task, model, status, or any text in their claims, problems, reports and memos.</p>
         </div>
       </header>
+      <section className="exp-ask card-surface" aria-label="Ask about experiments">
+        <form onSubmit={ask}>
+          <label htmlFor="experiment-ask">Ask</label>
+          <input id="experiment-ask" type="text" name="experiment-ask" maxLength={500} value={question} onChange={(e) => setQuestion(e.currentTarget.value)}
+            placeholder="Try: which runs found a table with a header and no rows? What did the board decide about hERG?" />
+          <button type="submit" className="primary" disabled={!question.trim() || asked.state === "loading"}>{asked.state === "loading" ? "Reading the runs…" : "Ask"}</button>
+        </form>
+        {asked.state === "idle" && <p className="muted small">A model reads a summary of every run and answers from it, naming the runs it used. Open a run to check the answer.</p>}
+        {asked.state === "loading" && <p className="muted small" role="status">Reading the runs to answer “{asked.question}”…</p>}
+        {asked.state === "error" && <p role="alert" className="pill" data-kind="danger">{asked.message}</p>}
+        {asked.state === "done" && (
+          <div className="exp-answer" aria-live="polite">
+            <p className="exp-answer-head">
+              {asked.result.mode === "ai"
+                ? <span className="pill" data-kind="success">AI answer</span>
+                : <span className="pill" data-kind="warning">Keyword search, not an AI answer</span>}
+              <span className="muted small">“{asked.question}”</span>
+            </p>
+            <p>{asked.result.answer}</p>
+            {asked.result.note && <p className="muted small">{asked.result.note}</p>}
+            {asked.result.runs.length > 0 && (
+              <ul className="exp-list">
+                {asked.result.runs.map((r) => (
+                  <li key={`${r.kind}:${r.id}`}>
+                    <button type="button" className="exp-hit card-surface" onClick={() => open(r)}>
+                      <span className="exp-head"><b>{r.title}</b><span className="pill">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
+                      <span className="muted small">{r.id}</span>
+                      {r.why && <span className="exp-match small">{r.why}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {asked.result.mode === "ai" && <p className="muted small">Written by a model from the run records. It can be wrong; the linked runs are the source.</p>}
+          </div>
+        )}
+      </section>
       <div className="exp-bar">
         <input type="search" name="experiment-search" aria-label="Search experiments" autoFocus value={query}
           placeholder="Try: demo, single agent, refuted, hERG, header rows…" onChange={(e) => setQuery(e.currentTarget.value)} />

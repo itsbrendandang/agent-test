@@ -16,10 +16,19 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      # Inside the container the engine must listen on all interfaces to be reachable through the
+      # published port; the port above is published to 127.0.0.1 only, so it stays local to this machine.
+      HOST: 0.0.0.0
+      # The dashboard's address as the browser sees it. Change it if you change GLHF_DASHBOARD_PORT.
+      DASHBOARD_ORIGINS: http://localhost:${GLHF_DASHBOARD_PORT:-5317},http://127.0.0.1:${GLHF_DASHBOARD_PORT:-5317}
     volumes:
       - ${PWD}:${PWD}
       - engine_modules:${PWD}/engine/node_modules
       - bixbench_venv:${PWD}/glhf/bixbench/.venv
+      # Required: the engine starts the agents' sandbox containers through the host's Docker. This gives
+      # the engine container control of the host's Docker (root-equivalent), so run only code you trust
+      # in it and never publish the engine port beyond 127.0.0.1.
       - /var/run/docker.sock:/var/run/docker.sock
   dashboard:
     image: glhf-platform
