@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Board: engine", "type": "shell", "command": "npm run engine", "isBackground": true, "problemMatcher": [] },
+    { "label": "Board: dashboard", "type": "shell", "command": "npm run dashboard", "isBackground": true, "problemMatcher": [] },
+    { "label": "Board: start all", "dependsOn": ["Board: engine", "Board: dashboard"], "problemMatcher": [] },
+    { "label": "Board: run example brief (terminal)", "type": "shell", "command": "npm run board", "problemMatcher": [] },
+    { "label": "Board: list runs", "type": "shell", "command": "npm run runs", "problemMatcher": [] }
+  ]
+}

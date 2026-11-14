@@ -1,0 +1,58 @@
+# Drug Candidate Board: brief in, memo out.
+# Every model goes through OpenRouter (one key, one bill). Set DRUG_BOARD_MOCK=1 to run with scripted
+# models and no keys at all.
+
+meeting:
+  max_minutes: 15          # wall clock for one deliberation; the lead is told to wrap up after this
+  max_usd: 5               # spend cap for one deliberation (all agents + checkers)
+  max_rounds: 4            # lead -> board broadcasts before final positions are forced
+  daily_usd: 20            # cap across all runs per day (watch mode included)
+
+watch:
+  enabled: false           # rerun the Literature Scout's queries on a schedule
+  every_hours: 24          # new evidence that changes a verdict reopens the debate
+
+brief:
+  required_sections:       # a brief missing any of these is rejected before anything runs
+    - Question
+    - Candidates
+    - Target and Indication
+    - Available Data
+    - Stakes
+    - Constraints
+    - Key Questions
+    - Decision Criteria
+
+paths:
+  agents: board/agents
+  briefs: board/briefs
+  context: board/context     # shared by every member, every run
+  expertise: board/expertise # per-agent notes that persist across runs
+  runs: board/runs           # one directory per run: session.sqlite, events.jsonl, memo.md
+
+models:                      # OpenRouter IDs; "~" aliases follow the newest model of a family
+  lead: "~anthropic/claude-opus-latest"
+  strong: "~anthropic/claude-sonnet-latest"
+  cheap: "~google/gemini-flash-latest"
+  rival: "~openai/gpt-mini-latest"      # a second vendor, so the Skeptic does not share the lead's blind spots
+
+checkers:
+  jev:
+    model: "typesafe/jev-1.14"          # via OpenRouter; or provider "typesafe" with TYPESAFE_API_KEY
+    yes: 0.7                            # Noul above this reads as yes
+    no: 0.3                             # below this reads as no; in between escalates
+  escalate:
+    literature: openai                  # contested literature claims: OpenAI reads the source
+    computed: claude-code               # contested computed claims: Claude Code reruns them
+  openai_model: "gpt-5-mini"
+  claude_code_cmd: "claude -p --output-format json"
+
+board:                       # order = speaking order in the transcript; remove a line to bench a member
+  - literature-scout
+  - target-biologist
+  - medicinal-chemist
+  - admet
+  - toxicologist
+  - competitive-ip
+  - skeptic
+  - moonshot

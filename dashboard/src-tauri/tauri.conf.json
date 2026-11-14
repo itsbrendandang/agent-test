@@ -1,0 +1,62 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Drug Board",
+  "version": "0.1.0",
+  "identifier": "com.brendandang.drugboard",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5317",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Drug Board",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "label": "main"
+      },
+      {
+        "label": "crew",
+        "url": "index.html?crew=1",
+        "title": "Drug Board Crew",
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false,
+        "focus": false,
+        "visibleOnAllWorkspaces": true,
+        "acceptFirstMouse": true,
+        "width": 800,
+        "height": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

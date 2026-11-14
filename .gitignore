@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+board/runs/*
+!board/runs/.gitkeep
+*.sqlite
+*.sqlite-*
+dashboard/src-tauri/target/
+dashboard/src-tauri/gen/
+.DS_Store

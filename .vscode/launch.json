@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    { "name": "Engine (debug)", "type": "node", "request": "launch", "program": "${workspaceFolder}/engine/src/server.ts", "env": { "DRUG_BOARD_MOCK": "1" } },
+    { "name": "Board run (debug)", "type": "node", "request": "launch", "program": "${workspaceFolder}/engine/src/cli.ts", "args": ["run"], "env": { "DRUG_BOARD_MOCK": "1" } }
+  ]
+}

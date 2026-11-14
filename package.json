@@ -1,0 +1,15 @@
+{
+  "name": "drug-board",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm --prefix engine install && npm --prefix dashboard install",
+    "engine": "node engine/src/server.ts",
+    "board": "node engine/src/cli.ts run",
+    "resume": "node engine/src/cli.ts resume",
+    "runs": "node engine/src/cli.ts list",
+    "dashboard": "npm --prefix dashboard run dev",
+    "desktop": "npm --prefix dashboard run desktop",
+    "typecheck": "npm --prefix engine run typecheck && npm --prefix dashboard exec tsc -- -b"
+  }
+}
