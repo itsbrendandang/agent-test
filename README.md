@@ -262,7 +262,7 @@ Known limits:
 | [CONTRIBUTING.md](CONTRIBUTING.md) | For teammates: setup, tests, what not to commit. |
 | [AGENTS.md](AGENTS.md) | Rules for coding agents. |
 | [docs/pi-setup.md](docs/pi-setup.md) | Optional: the Pi agent harness this was built with, and the reviewer, advisor, docs and QA profiles in `.pi/agents/`. |
-- [`dashboard/DESIGN.md`](dashboard/DESIGN.md): where the dashboard's design lives and which file to change for what.
+| [dashboard/DESIGN.md](dashboard/DESIGN.md) | For teammates changing the UI: where the dashboard's design lives and which file to change for what. |
 
 ## Tests
 
