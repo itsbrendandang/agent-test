@@ -9,6 +9,7 @@
 //   POST /api/runs/:id/resume    resume a run
 //   GET  /api/runs/:id/events    SSE: the whole event log, then live events
 //   GET  /api/runs/:id/memo      the memo (Markdown)
+//   /api/glhf/*                  GLHF benchmark runs (see glhf/routes.ts)
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { resolve } from "node:path"
@@ -17,6 +18,7 @@ import { loadAgent, loadRoster } from "./agents.ts"
 import { loadState, runBoard, runDir, startRun } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path } from "./config.ts"
+import { handleGlhf, startTracker } from "./glhf/routes.ts"
 
 const PORT = Number(process.env.DRUG_BOARD_PORT ?? 8787)
 const config = loadConfig()
@@ -74,6 +76,7 @@ createServer(async (req, res) => {
   if (req.method === "OPTIONS") return res.end()
   const url = new URL(req.url ?? "/", "http://x")
   const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
+  if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
   try {
     if (url.pathname === "/api/status") return json(res, 200, {
       mock: MOCK,
@@ -109,4 +112,5 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`drug-board engine on http://localhost:${PORT}  (${MOCK ? "mock models" : "live models"})`)
   for (const run of listRuns()) if (run.status === "paused") { console.log(`resuming ${run.id}`); launch(run.id) }
+  void startTracker().catch((e) => console.error("glhf tracker failed to start:", e)) // continues unfinished GLHF runs
 })

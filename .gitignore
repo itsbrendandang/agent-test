@@ -10,3 +10,6 @@ board/runs/*
 dashboard/src-tauri/target/
 dashboard/src-tauri/gen/
 .DS_Store
+
+glhf/runs/
+glhf/bixbench/runs/

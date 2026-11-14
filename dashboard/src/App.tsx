@@ -7,7 +7,7 @@ import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle"
 import { Toolbar, ToolbarButton } from "@ui-sdk/react/toolbar"
 import {
   Activity, BarChart3, Boxes, Expand, Globe2, Home, Layers, PanelRightClose, PanelRightOpen,
-  FlaskConical, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
+  FlaskConical, Microscope, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
 } from "lucide-react"
 import { Buddy, Mark } from "./components/Buddy"
 import { fmtMetric as fmt } from "./lib/format"
@@ -25,6 +25,7 @@ import { BoardView } from "./views/BoardView"
 import { OverviewView } from "./views/OverviewView"
 import { PlaceholderView } from "./views/PlaceholderView"
 import { SettingsView } from "./views/SettingsView"
+import { SwarmView } from "./views/SwarmView"
 
 // Heavy pieces (markdown renderer, charts) load only when they are first shown.
 const CopilotPanel = lazy(() => import("./components/CopilotPanel").then((m) => ({ default: m.CopilotPanel })))
@@ -35,6 +36,7 @@ const AnalyticsView = lazy(() => import("./views/AnalyticsView").then((m) => ({ 
 const categories = Object.keys(categoryLabels) as Category[]
 
 const rail = [
+  { label: "Swarm", icon: Microscope, hint: "" },
   { label: "Board", icon: FlaskConical, hint: "" },
   { label: "Overview", icon: Home, hint: "" },
   { label: "Simulations", icon: Layers, hint: "" },
@@ -58,7 +60,7 @@ export default function App() {
   const logoClicks = useRef(0)
   const [view, setView] = useState(() => {
     const fromHash = decodeURIComponent(window.location.hash.slice(1))
-    return rail.some((r) => r.label === fromHash) ? fromHash : "Board"
+    return rail.some((r) => r.label === fromHash) ? fromHash : "Swarm"
   })
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<string[]>([])
@@ -268,10 +270,11 @@ export default function App() {
         <OverviewView simCount={simulations.length} tick={tick} eventCount={events.length} active={active}
           onOpenSimulations={() => go("Simulations")} onMeetCrew={() => go("Agents")} onOpenKeys={() => go("Settings")} />
       )}
+      {view === "Swarm" && <SwarmView />}
       {view === "Board" && <BoardView />}
       {view === "Agents" && <AgentsView />}
       {view === "Settings" && <SettingsView />}
-      {!["Board", "Simulations", "Analytics", "Overview", "Agents", "Settings"].includes(view) && (
+      {!["Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Settings"].includes(view) && (
         <PlaceholderView title={view} hint={rail.find((r) => r.label === view)!.hint} />
       )}
     </div>

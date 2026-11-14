@@ -27,7 +27,7 @@ import { type Claim, parseClaims, stripClaims } from "./claims.ts"
 import { claudeCodeCheck, openaiCheck } from "./checkers.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
 import { type Checker, EventLog, type EvidenceItem, type Verdict } from "./events.ts"
-import { exaSearch } from "./exa.ts"
+import { exaSearch, OBJECTIVE_DESCRIPTION } from "./exa.ts"
 import { Jev } from "./jev.ts"
 import { buildModels, modelFor } from "./models.ts"
 
@@ -77,20 +77,25 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void): 
   // ── Tools ──────────────────────────────────────────────────────────────────────────────────────
   const exaTool = defineTool({
     name: "exa_search",
-    description: "Search the scientific literature. Results are screened for relevance before you see them.",
-    parameters: obj({ query: str(), key_question: str({ description: "The key question this search serves" }) }),
+    description: "Search the live web and the scientific literature and return the most relevant URLs with excerpts. Results are screened for relevance before you see them.",
+    parameters: obj({
+      query: str({ description: "What to retrieve, as plain natural-language intent" }),
+      objective: str({ description: OBJECTIVE_DESCRIPTION }),
+      key_question: str({ description: "The one question from the brief this search serves" }),
+    }),
     replay: "safe",
     execute: async (args, api) => {
       const member = memberOf(api)
-      const found = await exaSearch(args.query)
-      const triaged = await Promise.all(found.map((item) => jev.triage(item, args.key_question)))
+      const found = await exaSearch(args.query, args.objective)
+      const triaged = await Promise.all(found.items.map((item) => jev.triage(item, args.key_question)))
       const kept = triaged.filter((t) => t.keep).map((t) => t.item)
       for (const item of kept) state.evidence[item.url] = item
       save()
-      log.emit(`evidence:${api.callId}`, { type: "evidence.triaged", member, query: args.query, kept: kept.length, dropped: found.length - kept.length, items: kept })
-      const text = kept.length
+      log.emit(`evidence:${api.callId}`, { type: "evidence.triaged", member, query: args.query, kept: kept.length, dropped: found.items.length - kept.length, items: kept })
+      const results = kept.length
         ? kept.map((i) => `- ${i.title} [${i.studyType ?? "?"}] ${i.url}\n  ${i.text}`).join("\n")
         : "Nothing relevant found. Say so in your reply."
+      const text = [results, ...found.notices.map((n) => `Note from the search engine: ${n}`)].join("\n\n")
       return { output: [{ type: "text", text }] }
     },
   })

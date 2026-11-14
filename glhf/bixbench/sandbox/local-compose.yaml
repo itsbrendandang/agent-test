@@ -1,0 +1,15 @@
+# Laptop sandbox for GLHF local runs and tests: the same mount points as compose.yaml
+# (/data read-only, /workspace, /outputs), with no network and no bioinformatics tools.
+# Real benchmark tasks need the full runtime image; use `bixbench3 run` for those.
+services:
+  default:
+    image: ${GLHF_LOCAL_IMAGE:-python:3.12-slim}
+    x-local: true
+    init: true
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    network_mode: none
+    volumes:
+      - ${BIXBENCH3_DATA_DIR:?task data directory is required}:/data:ro
+      - ${BIXBENCH3_WORKSPACE_DIR:?workspace directory is required}:/workspace
+      - ${BIXBENCH3_OUTPUTS_DIR:?outputs directory is required}:/outputs

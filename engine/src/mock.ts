@@ -53,7 +53,7 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
   const last = ctx.messages.at(-1)
   const round = Number(/Round (\d+)/.exec(ctx.messages.filter((m) => m.role === "user").map(text).at(-1) ?? "")?.[1] ?? 1)
   if (last?.role === "user" && agent.tools.includes("exa_search") && round === 1) {
-    return { text: "Searching.", tool: { name: "exa_search", args: { query: `KRAS G12C ${agent.title} evidence`, key_question: "Is either candidate differentiated?" } } }
+    return { text: "Searching.", tool: { name: "exa_search", args: { query: `KRAS G12C ${agent.title} evidence`, objective: "Find primary data that separates the two candidates; prefer research papers over news and pull potency, selectivity and safety figures.", key_question: "Is either candidate differentiated?" } } }
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
     const position = agent.name === "skeptic" ? "No-Go: no differentiation yet." : agent.name === "moonshot" ? "Go, but as a degrader program." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."

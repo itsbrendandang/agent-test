@@ -1,0 +1,197 @@
+"""GLHF swarm solver: propose -> experiment -> criticise/falsify -> revise (loop) -> report.
+
+Same sandbox, tools, time limit and grader as the single-agent baseline (`bixbench3_agent`).
+Orchestration is code, not a supervisor model: phases, budgets and the stop rule are fixed here.
+
+Per-role models (task args, default = the eval's --model):
+  planner_model, experimenter_model, critic_model, reporter_model
+e.g. -T critic_model=openai/gpt-5.5 to put the critic on a second vendor (Claude + OpenAI credits).
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+
+from inspect_ai.agent import Agent, AgentState, react, run
+from inspect_ai.model import ChatMessageUser, CompactionAuto, Model, get_model
+from inspect_ai.solver import Generate, Solver, TaskState, solver
+from inspect_ai.tool import Tool, bash_session, python, text_editor
+from inspect_ai.util import sandbox, time_limit
+
+from ..models import RuntimeCase
+from ..tools import request_web_access
+from . import roles
+from .ledger import Ledger
+from .tools import (
+    WORK,
+    check_contract,
+    check_outputs,
+    contract_text,
+    propose_claim,
+    raise_issue,
+    read_ledger,
+    record_falsification_test,
+    report_failed_replication,
+    resolve_issue,
+    save_ledger,
+)
+
+# Fractions of the run's time budget. Whatever a phase does not use rolls forward.
+PLAN_SHARE = 0.05
+FIRST_PASS_SHARE = 0.50
+REPORT_RESERVE = 0.05  # always kept for the reporter and final writes
+MIN_REVIEW_SECONDS = 15 * 60
+
+
+@dataclass
+class Clock:
+    budget: float
+    started: float
+
+    def left(self) -> float:
+        return self.budget - (time.monotonic() - self.started)
+
+    def slice(self, share: float, reserve: float = 0.0) -> int:
+        return int(max(60.0, min(self.budget * share, self.left() - self.budget * reserve)))
+
+
+def _model(name: str | None) -> Model | None:
+    return get_model(name) if name else None
+
+
+@solver
+def glhf_swarm(
+    review_rounds: int = 3,
+    budget_seconds: int | None = None,
+    planner_model: str | None = None,
+    experimenter_model: str | None = None,
+    critic_model: str | None = None,
+    reporter_model: str | None = None,
+) -> Solver:
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        del generate
+        case = state.metadata_as(RuntimeCase)
+        outputs = case.expected_outputs
+        brief = state.input_text
+        ledger = Ledger()
+        from .. import tasks  # late import: avoids a cycle with tasks.py
+
+        clock = Clock(float(budget_seconds or tasks.TIME_LIMIT_SECONDS) * 0.97, time.monotonic())
+        await sandbox().exec(["mkdir", "-p", f"{WORK}/scripts", "/outputs/glhf"])
+        await save_ledger(ledger)
+
+        def agent(name: str, instructions: str, model: str | None, extra: list[Tool]) -> Agent:
+            return react(
+                name=name,
+                prompt=instructions,
+                model=_model(model),
+                tools=[
+                    bash_session(timeout=600, instance=name),
+                    python(timeout=600),
+                    text_editor(timeout=120),
+                    request_web_access(),
+                    check_outputs(outputs),
+                    read_ledger(ledger),
+                    *extra,
+                ],
+                compaction=CompactionAuto(),
+            )
+
+        async def phase(title: str, who: Agent, task: str, seconds: int) -> None:
+            ledger.log("phase.started", phase=title, seconds=seconds)
+            # Every role's transcript is appended to the sample so the process judge sees all work.
+            state.messages.append(
+                ChatMessageUser(content=f"=== GLHF phase: {title} (budget {seconds}s) ===")
+            )
+            result = await run(who, f"{brief}\n\n---\n\n{task}", limits=[time_limit(seconds)])
+            agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
+            assert isinstance(agent_state, AgentState)
+            state.messages.extend(m for m in agent_state.messages if m.role != "system")
+            ledger.log(
+                "phase.finished",
+                phase=title,
+                limit_hit=limit_error is not None,
+                left=int(clock.left()),
+            )
+            await save_ledger(ledger)
+
+        planner = agent("planner", roles.PLANNER, planner_model, [propose_claim(ledger, "planner")])
+        experimenter = agent("experimenter", roles.EXPERIMENTER, experimenter_model, [])
+        reviser = agent(
+            "reviser", roles.REVISER, experimenter_model, [resolve_issue(ledger, "experimenter")]
+        )
+        critic = agent(
+            "critic",
+            roles.CRITIC,
+            critic_model,
+            [
+                raise_issue(ledger, "critic"),
+                record_falsification_test(ledger, "critic"),
+                report_failed_replication(ledger, "critic"),
+            ],
+        )
+        reporter = agent("reporter", roles.REPORTER, reporter_model, [])
+
+        try:
+            await phase(
+                "propose",
+                planner,
+                "Plan the reproduction.",
+                clock.slice(PLAN_SHARE, REPORT_RESERVE),
+            )
+            await phase(
+                "experiment",
+                experimenter,
+                "Produce every required artifact.",
+                clock.slice(FIRST_PASS_SHARE, REPORT_RESERVE),
+            )
+            for n in range(1, review_rounds + 1):
+                review_time = clock.left() - clock.budget * REPORT_RESERVE
+                if review_time < MIN_REVIEW_SECONDS:
+                    ledger.log("review.skipped", round=n, reason="time")
+                    break
+                contract = contract_text(await check_contract(outputs))
+                await phase(
+                    f"critique {n}",
+                    critic,
+                    f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
+                    f"Current ledger:\n{ledger.summary()}",
+                    int(review_time * 0.35),
+                )
+                if not ledger.open_issues():
+                    ledger.log("review.converged", round=n)
+                    break
+                await phase(
+                    f"revise {n}",
+                    reviser,
+                    f"Revision round {n}. Fix the open issues.\n\n{ledger.summary()}",
+                    int(
+                        (clock.left() - clock.budget * REPORT_RESERVE)
+                        * (0.6 if n < review_rounds else 0.9)
+                    ),
+                )
+        finally:
+            # Reporting always runs, even after a failure or a limit, so the run ends documented.
+            await save_ledger(ledger)
+            await sandbox().write_file("/outputs/glhf/FINDINGS.md", ledger.findings_markdown())
+            await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
+            await sandbox().exec(
+                [
+                    "sh",
+                    "-c",
+                    f"cp -r {WORK}/scripts {WORK}/plan.md {WORK}/notebook.md "
+                    f"{WORK}/deviations.md {WORK}/sample_sheet.tsv /outputs/glhf/ 2>/dev/null; true",
+                ]
+            )
+            await phase(
+                "report", reporter, "Write /outputs/METHODS.md.", max(120, int(clock.left()) - 60)
+            )
+            final = contract_text(await check_contract(outputs))
+            ledger.log("finished", contract=final)
+            await save_ledger(ledger)
+            await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
+            state.output.completion = f"{final}\n\n{ledger.summary()}"
+        return state
+
+    return solve

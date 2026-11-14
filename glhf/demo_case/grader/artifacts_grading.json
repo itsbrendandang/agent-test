@@ -1,0 +1,72 @@
+{
+  "paper_id": "demo",
+  "doi": "10.0000/glhf-demo",
+  "artifact_count": 2,
+  "artifacts": [
+    {
+      "artifact_id": "gene_counts",
+      "ground_truth": {
+        "path": "artifacts/gene_counts.csv",
+        "format": "csv"
+      },
+      "expected_output": {
+        "path": "outputs/gene_counts.csv",
+        "format": "csv",
+        "row_key": "gene_id"
+      },
+      "grading_method": {
+        "value_columns": [
+          "S1",
+          "S2",
+          "S3",
+          "S4"
+        ],
+        "checks": [
+          {
+            "metric": "f1",
+            "axis": "rows"
+          },
+          {
+            "metric": "ccc",
+            "axis": "columns",
+            "scope": {
+              "columns": "value_columns"
+            }
+          }
+        ],
+        "score_combination": "product"
+      }
+    },
+    {
+      "artifact_id": "treated_vs_control",
+      "ground_truth": {
+        "path": "artifacts/treated_vs_control.csv",
+        "format": "csv"
+      },
+      "expected_output": {
+        "path": "outputs/treated_vs_control.csv",
+        "format": "csv",
+        "row_key": "gene_id"
+      },
+      "grading_method": {
+        "value_columns": [
+          "log2fc"
+        ],
+        "checks": [
+          {
+            "metric": "f1",
+            "axis": "rows"
+          },
+          {
+            "metric": "ccc",
+            "axis": "columns",
+            "scope": {
+              "columns": "value_columns"
+            }
+          }
+        ],
+        "score_combination": "product"
+      }
+    }
+  ]
+}

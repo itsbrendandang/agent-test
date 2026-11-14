@@ -1,0 +1,33 @@
+# The whole platform in containers:  docker compose up --build
+#   dashboard  http://localhost:5317      engine  http://localhost:8787
+# CLI in the container:  docker compose run --rm engine npm run doctor
+#
+# The repo is mounted at its host path so the sandboxes the engine starts (through the host's Docker)
+# can mount run folders. Run this from the repo root. Run the engine here or on the host, not both.
+name: glhf
+services:
+  engine:
+    build: .
+    image: glhf-platform
+    working_dir: ${PWD}
+    command: ["node", "engine/src/server.ts"]
+    ports:
+      - "127.0.0.1:${GLHF_ENGINE_PORT:-8787}:8787"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ${PWD}:${PWD}
+      - engine_modules:${PWD}/engine/node_modules
+      - bixbench_venv:${PWD}/glhf/bixbench/.venv
+      - /var/run/docker.sock:/var/run/docker.sock
+  dashboard:
+    image: glhf-platform
+    depends_on: [engine]
+    entrypoint: []
+    command: ["node", "/srv/serve.mjs"]
+    ports:
+      - "127.0.0.1:${GLHF_DASHBOARD_PORT:-5317}:5317"
+volumes:
+  engine_modules:
+  bixbench_venv:

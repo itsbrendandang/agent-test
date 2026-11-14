@@ -1,15 +1,21 @@
 {
-  "name": "drug-board",
+  "name": "glhf",
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "npm --prefix engine install && npm --prefix dashboard install",
+    "setup": "npm --prefix engine install && npm --prefix dashboard install && (cd glhf/bixbench && uv sync --locked)",
     "engine": "node engine/src/server.ts",
     "board": "node engine/src/cli.ts run",
     "resume": "node engine/src/cli.ts resume",
     "runs": "node engine/src/cli.ts list",
+    "glhf": "node engine/src/glhf/cli.ts",
+    "doctor": "node engine/src/glhf/cli.ts doctor",
+    "demo": "node engine/src/glhf/cli.ts demo",
+    "scoreboard": "node engine/src/glhf/cli.ts scoreboard",
     "dashboard": "npm --prefix dashboard run dev",
     "desktop": "npm --prefix dashboard run desktop",
-    "typecheck": "npm --prefix engine run typecheck && npm --prefix dashboard exec tsc -- -b"
+    "typecheck": "(cd engine && npx tsc --noEmit) && (cd dashboard && npx tsc -b)",
+    "test": "(cd glhf/bixbench && uv run pytest -q tests) && npm run typecheck",
+    "docker": "docker compose up --build"
   }
 }
