@@ -49,6 +49,7 @@ from typing import Literal
 ALPHA = 0.1  # family-wise, across all registered claims (Bonferroni)
 KAPPA = 0.5
 P_FLOOR = 1e-6  # finer p-values are not credible from permutations or bootstraps; caps e at 500
+UNREVIEWED = "review.none"  # event: review was planned and no critic completed a pass
 MAX_TESTS = 3  # registered tests per claim; see the module docstring
 
 Verdict = Literal["supported", "refuted", "insufficient", "untested"]
@@ -234,7 +235,9 @@ class Ledger:
             contradicts=contradicts,
             registered=is_registered,
             e=round(claim.e_value, 4),
-            verdict=claim.verdict,
+            # Only what was true when this result came in. A claim registered later raises the
+            # threshold of every claim, so the verdict that counts is the one in "claims".
+            verdict_at_the_time=claim.verdict,
             by=by,
         )
         return claim
@@ -374,6 +377,18 @@ class Ledger:
 
         m = max(1, len(self.claims))
         fixed = [i for i in self.issues.values() if i.status == "fixed"]
+        unreviewed = (
+            [
+                "## NOT REVIEWED",
+                "",
+                "Review was planned and no critic completed a pass (event `review.none`). The "
+                "artifacts are the first pass, unchecked: no claim below was tested to the end, "
+                "and nothing in this run should be read as a reviewed result.",
+                "",
+            ]
+            if any(e.get("kind") == UNREVIEWED for e in self.events)
+            else []
+        )
         unresolved = [i for i in self.issues.values() if i.status != "fixed"]
         lines = [
             "# GLHF swarm: findings and rejections",
@@ -396,6 +411,7 @@ class Ledger:
             "model), and a true claim can be refuted by one mistaken contradicting test. The "
             "scripts are in scripts/.",
             "",
+            *unreviewed,
             *section("Supported findings", {"supported"}),
             *section("Rejected claims", {"refuted"}),
             *section(

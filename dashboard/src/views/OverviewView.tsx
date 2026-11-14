@@ -31,7 +31,7 @@ export function OverviewView({ simCount, tick, eventCount, active, onOpenSimulat
         <h1>Go enjoy<br />your day.</h1>
         <p>Your agents work behind the scenes. Check in whenever you like.</p>
         <nav className="home-links" aria-label="Start">
-          <button type="button" onClick={onMeetCrew}>Crew</button>
+          <button type="button" onClick={onMeetCrew}>{crew.length ? "Crew" : "Agents"}</button>
           <button type="button" onClick={onOpenSimulations}>Simulations</button>
           <button type="button" onClick={onOpenKeys}>Connect API keys</button>
         </nav>
@@ -45,7 +45,7 @@ export function OverviewView({ simCount, tick, eventCount, active, onOpenSimulat
           <div><dt>Ticks</dt><dd>{tick.toLocaleString()}</dd></div>
           <div><dt>Events</dt><dd>{eventCount}</dd></div>
         </dl>
-        <ul className="home-crew" aria-label="Crew">
+        {crew.length > 0 && <ul className="home-crew" aria-label="Crew">
           {crew.map((m) => (
             <li key={m.id}>
               <CrewSprite member={m} mood={active ? "working" : "sleeping"} size={56} />
@@ -53,7 +53,7 @@ export function OverviewView({ simCount, tick, eventCount, active, onOpenSimulat
               <span className="home-role">{m.role}</span>
             </li>
           ))}
-        </ul>
+        </ul>}
       </footer>
     </div>
   )

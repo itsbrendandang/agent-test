@@ -7,10 +7,10 @@ Grading happens in runner.py after `inspect_ai.eval` has returned and the sandbo
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
+import yaml
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.model import GenerateConfig
@@ -26,7 +26,7 @@ from .solvers import (
     swarm_budget_mode,
 )
 
-COMPOSE = Path(__file__).parent / "sandbox" / "compose.yaml"
+DEFAULT_IMAGE = "futurehouse/bixbench:aviary-notebook-env"
 SOLVERS = ("single", "glhf")
 MESSAGE_LIMIT = 2_000  # backstop only
 TOKEN_BACKSTOP = (
@@ -55,6 +55,39 @@ def backstop_tokens(
     return int(total * TOKEN_BACKSTOP)
 
 
+def compose_config(image: str, data_dir: Path, outputs_dir: Path) -> dict[str, Any]:
+    """The sandbox of ONE run, with that run's two host paths written in.
+
+      - no network (network_mode: none);
+      - /data is the staged capsule data, read-only (staging.py says what is staged);
+      - /outputs receives answers.json, METHODS.md and the ledger, written by the solver's code.
+    Nothing else from the host is mounted: the answer key, the capsule zip and the solution
+    notebooks stay on the host, and the service is given no environment. The paths are values
+    of this run, not process-wide environment variables, so two runs in one process (or two
+    processes sharing an environment) cannot mount each other's capsule."""
+    return {
+        "services": {
+            "default": {
+                "image": image,
+                "x-local": True,
+                "init": True,
+                "working_dir": "/home",
+                "command": ["sleep", "infinity"],
+                "network_mode": "none",
+                "volumes": [
+                    {"type": "bind", "source": str(data_dir), "target": "/data", "read_only": True},
+                    {"type": "bind", "source": str(outputs_dir), "target": "/outputs"},
+                ],
+            }
+        }
+    }
+
+
+def write_compose(path: Path, image: str, data_dir: Path, outputs_dir: Path) -> Path:
+    path.write_text(yaml.safe_dump(compose_config(image, data_dir, outputs_dir), sort_keys=False))
+    return path
+
+
 @task
 def bixbench_v1(
     questions: list[dict[str, Any]],
@@ -70,8 +103,11 @@ def bixbench_v1(
     seed: int | None = None,
     swarm_budget: str = "equal",
     budget_policy: dict[str, Any] | None = None,
+    compose_file: str | None = None,
 ) -> Task:
     """`questions` are `PublicQuestion` dicts; anything with another field is refused.
+    `compose_file` is this run's sandbox (`write_compose`); without one the task can be
+    inspected but not run.
 
     `max_tokens` is the single agent's budget. For the swarm, `swarm_budget` ("equal" or
     "extended") sets its total from that; a total that cannot hold the swarm's role floors
@@ -93,7 +129,7 @@ def bixbench_v1(
                 metadata={"questions": [q.model_dump() for q in public]},
             )
         ],
-        solver=single_agent(time_limit_seconds, max_tokens, max_messages_per_role)
+        solver=single_agent(time_limit_seconds, max_tokens, max_messages_per_role, budget_policy)
         if solver == "single"
         else glhf_qa_swarm(
             time_limit_seconds,
@@ -106,7 +142,7 @@ def bixbench_v1(
             mode,
             budget_policy,
         ),
-        sandbox=("docker", os.environ.get("BIXBENCH_V1_COMPOSE", str(COMPOSE))),
+        sandbox=("docker", compose_file) if compose_file else None,
         message_limit=MESSAGE_LIMIT,
         time_limit=time_limit_seconds + TIME_BACKSTOP_SECONDS,
         token_limit=backstop_tokens(max_tokens, solver, mode) if max_tokens else None,

@@ -58,6 +58,8 @@ export function SideCrew({ parade }: { parade: number }) {
     later(() => setBubble((b) => (b?.id === id ? null : b)), 2600)
   }
 
+  if (crew.length === 0) return null // demo crew off: no box, no parade
+
   return (
     <>
       <div className="side-crew">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead, RunId } from "@/components/Shared"
+import { AgentCatalog } from "@/home/AgentCatalog"
 import { isLive, latestSwarmRun, useSwarm } from "@/swarm/api"
 import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
 import { Buddy } from "@/components/Buddy"
@@ -40,8 +41,10 @@ export function AgentsView() {
 
   return (
     <div className="page">
-      <PageHead title="Agents" about="Who does the work: the nine roles of the swarm with their instructions, and the crew characters shown in the side rail." />
+      <PageHead title="Agents" about={crew.length ? "Who does the work: the nine roles of the swarm with their instructions, and the crew characters shown in the side rail." : "Who does the work: the nine roles of the swarm, in the order they run, with their instructions."} />
       <SwarmTeam />
+      <AgentCatalog />
+      {crew.length > 0 && <>
       <header className="section-head">
         <div>
           <h2>Your crew</h2>
@@ -86,6 +89,7 @@ export function AgentsView() {
           </article>
         ))}
       </section>
+      </>}
     </div>
   )
 }

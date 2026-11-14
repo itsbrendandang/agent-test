@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { HOW_TO_TURN_ON, PAID_LABEL, paidState, type PaidState } from "@/lib/paid"
+import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
 import { call, isDesktop } from "@/system/desktop"
 
 const PROVIDERS = [
@@ -126,10 +127,29 @@ function EngineSection() {
               {facts.paid !== "on" && HOW_TO_TURN_ON}
             </p>
           </li>
+          <TokenRow />
           {Object.entries(facts.tools).map(([name, on]) => row(name, on, "found", "not found"))}
           {Object.entries(facts.keys).sort(([a], [b]) => a.localeCompare(b)).map(([name, on]) => row(name, on, "set", "not set"))}
         </ul>
       )}
     </section>
+  )
+}
+
+/** The engine's session token: held or not, and a way to forget it. The token itself is never shown. */
+export function TokenRow() {
+  const held = useHasToken()
+  return (
+    <li>
+      <div className="keys-name"><strong>Session token</strong></div>
+      <span className="token-row">
+        <span className="pill" data-kind={held ? "success" : "waiting"}>{held ? "held for this tab" : "not held"}</span>
+        {held && <button type="button" className="btn" onClick={forgetToken}>Forget token</button>}
+      </span>
+      <p className="engine-how muted small">
+        Anything that can spend money needs the engine's session token. The engine writes it to <code>{TOKEN_FILE}</code> when it starts, and this page asks for it
+        the first time it is needed. It is kept for this browser tab only, never saved to disk by the page, and never shown again.
+      </p>
+    </li>
   )
 }

@@ -11,7 +11,9 @@
 // Runs are cached in memory while their files are unchanged (store.ts), so polling these routes is cheap.
 //
 // IDEAL ANSWERS: ONE RULE. No response carries the ground-truth answer of a question unless the request is
-// GET /api/bixv1/runs/:id?ideal=1 and every capsule run in that folder has finished. Why:
+// GET /api/bixv1/runs/:id?ideal=1, it carries the engine's session token (x-glhf-token; 401 {error, field: "token",
+// needsToken: true} without, also from the dashboard's Origin, which any local program can claim) and the run is neither "running" (a capsule run is still going) nor "empty" (it
+// has no capsule run at all); both are refused with 409. A "stalled" run is allowed, see below. Why:
 //   * The default responses are polled by the dashboard and readable by anything on this machine, including
 //     coding agents that work on the solvers and their prompts. An answer that shows up there can end up in a
 //     prompt, a lesson file or a screenshot, and then every later run on that question is worthless. Right or
@@ -20,13 +22,15 @@
 //     only source is the dataset's question file, which this module opens for the ?ideal=1 request and for
 //     nothing else.
 //   * A run that is still going is refused (409) even with the flag: its solver is at work on these questions.
-//     (A "stalled" run is not at work: its crashed capsule runs have been silent past their time limit.)
+//     A "stalled" run is allowed although not every capsule run in it finished: it is not at work, its crashed
+//     capsule runs have been silent past their time limit.
 //   * The judge's raw reply and the grader's note can quote or describe the ideal, so they follow the same rule.
-// The flag is for a person reviewing a finished run who needs to see why an answer was marked wrong. It is a
+// The flag is for a person reviewing a finished or stalled run who needs to see why an answer was marked wrong. It is a
 // deliberate act, not a default, and the response is marked `idealsRevealed: true` and `cache-control: no-store`.
 // What the rule cannot hide: an answer graded correct by exact match is, by definition, the ideal answer.
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { HttpError } from "../http.ts"
+import { hasSessionToken, TOKEN_FILE } from "../glhf/routes.ts"
+import { HttpError, tokenNeeded } from "../http.ts"
 import { scoreboard } from "./scoreboard.ts"
 import { listRuns, loadAll, loadRun, readIdeals, safeId } from "./store.ts"
 import type { BixRunDetail } from "./types.ts"
@@ -39,7 +43,7 @@ const json = (res: ServerResponse, code: number, body: unknown, headers: Record<
 const flag = (value: string | null) => value === "1" || value === "true"
 
 /** Handles a request under /api/bixv1. `parts` is the path split on "/": api, bixv1, runs, :id. */
-export async function handleBixV1(req: IncomingMessage, res: ServerResponse, parts: string[]): Promise<void> {
+export async function handleBixV1(req: IncomingMessage, res: ServerResponse, parts: string[], options: { hasToken?: (req: IncomingMessage) => boolean } = {}): Promise<void> {
   try {
     if (req.method !== "GET") throw new HttpError(405, "the BixBench v1 results are read-only: GET only")
     const query = new URL(req.url ?? "/", "http://x").searchParams
@@ -55,6 +59,8 @@ export async function handleBixV1(req: IncomingMessage, res: ServerResponse, par
       try { id = decodeURIComponent(parts[3]) } catch { throw new HttpError(400, "invalid run id") }
       if (!safeId(id)) throw new HttpError(400, "invalid run id")
       const reveal = flag(query.get("ideal"))
+      // Before the run is even looked up: without the token the flag gets nothing, not even whether the run exists.
+      if (reveal && !(options.hasToken ?? hasSessionToken)(req)) return json(res, 401, tokenNeeded("showing ideal answers", TOKEN_FILE), { "cache-control": "no-store" })
       const loaded = loadRun(id, { profile, withJudgeText: reveal })
       if (!loaded) throw new HttpError(404, "no such run")
       if (profile && !loaded.run.gradingProfiles.includes(profile)) {

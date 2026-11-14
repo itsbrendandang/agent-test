@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""run.py — BixBench3 single-agent baseline runner.
+"""run.py — BixBench v1 (futurehouse/BixBench) single-agent baseline runner.
 
     python run.py --studies all|id1,id2 --repeats N --seed S \
         --budget-tokens X --out results/ [--data SRC] [--workers W]
+
+Calls real models, so it is refused unless NO_PAID_CALLS=0 (see
+bixbase/paid.py), and --budget-tokens is required. Model-written code runs in
+the macOS sandbox; elsewhere pass --unsafe-no-sandbox (see bixbase/sandbox.py).
 
 Layout of --out:
   results/<study_id>/rep<k>/transcript.jsonl   full message/tool/usage log
   results/<study_id>/rep<k>/final_script.py   reproducible code cells
   results/<study_id>/rep<k>/result.json       answers, grades, budget
+                                              (never the ideal answers)
 """
 
 from __future__ import annotations
@@ -27,16 +32,25 @@ from bixbase.budget import Budget, BudgetCaps
 from bixbase.grader import compute_metrics, grade_answer
 from bixbase.llm import LLMClient, default_model, detect_provider
 from bixbase.loader import load_studies, prepare_study_data
+from bixbase.paid import PaidCallsOff, enforce, refuse_paid
+from bixbase.sandbox import NO_SANDBOX_MESSAGE, Sandbox, sandbox_available
 
 
 def parse_args(argv=None):
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--studies", default="all",
                    help="'all' or comma-separated study ids")
     p.add_argument("--repeats", type=int, default=1)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--budget-tokens", type=int, default=None,
-                   help="combined input+output token cap per run")
+                   help="combined input+output token cap per run (required: "
+                        "every run here uses a real model)")
+    p.add_argument("--unsafe-no-sandbox", action="store_true",
+                   help="run model-written code with NO file or network "
+                        "isolation. Needed off macOS, where there is no "
+                        "sandbox; only inside a throwaway container/VM")
     p.add_argument("--budget-seconds", type=float, default=None)
     p.add_argument("--budget-tool-calls", type=int, default=60)
     p.add_argument("--data", default="hf",
@@ -57,7 +71,11 @@ def parse_args(argv=None):
     p.add_argument("--no-grade", action="store_true")
     p.add_argument("--skip-existing", action="store_true",
                    help="skip (study,repeat) pairs with a successful result.json")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.budget_tokens is None or args.budget_tokens <= 0:
+        p.error("--budget-tokens is required (a positive token cap per run): "
+                "an uncapped run with a real model is not allowed")
+    return args
 
 
 def run_one(study, repeat_idx, args, run_root: Path) -> dict:
@@ -77,7 +95,9 @@ def run_one(study, repeat_idx, args, run_root: Path) -> dict:
                     seed=args.seed + repeat_idx)
 
     prepare_study_data(study, Path(args.cache_dir))
-    result = solve(study, budget, llm=llm, run_dir=run_dir)
+    sandbox = Sandbox(study.data_dir, run_dir / "work",
+                      unsafe_no_sandbox=args.unsafe_no_sandbox)
+    result = solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox)
 
     row = {
         "study_id": study.study_id,
@@ -121,7 +141,7 @@ def run_one(study, repeat_idx, args, run_root: Path) -> dict:
                 continue
             row["grades"][q.question_id] = {
                 "predicted": predicted,
-                "ideal": q.ideal,
+                # no "ideal" here: results/ must never hold the answers
                 "grade": g.grade,
                 "grade_type": g.grade_type.value,
                 "judge_raw": g.raw_response,
@@ -137,8 +157,18 @@ def run_one(study, repeat_idx, args, run_root: Path) -> dict:
 
 
 def main(argv=None) -> int:
-    load_dotenv()  # secrets from .env, never logged
+    enforce()  # paid switch on: blank the provider keys before .env loads
     args = parse_args(argv)
+    try:
+        refuse_paid("run.py (every run calls a real solver model, and a "
+                    "real judge unless --no-grade)")
+    except PaidCallsOff as e:
+        print(e, file=sys.stderr)
+        return 2
+    if not sandbox_available() and not args.unsafe_no_sandbox:
+        print(NO_SANDBOX_MESSAGE, file=sys.stderr)
+        return 2
+    load_dotenv()  # secrets from .env, never logged
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     random.seed(args.seed)

@@ -3,13 +3,18 @@
 Order of events, which is the integrity boundary:
   1. the capsule zip is staged (allow-list, staging.py), re-verified and scanned for leaks;
   2. the questions are split into the public view and the grading key (dataset.public_view);
-     the prompt is built from the public view and checked for the capsule's secret strings;
+     multiple-choice options are shuffled with a salt made for this run and kept in the run
+     folder on the host (`shuffle_salt.json`), nowhere else; the prompt is built from the
+     public view and checked for the capsule's secret strings;
   3. Inspect runs the solver in a sandbox with no network that mounts the staged data
-     read-only and the outputs directory; the key is not passed to Inspect;
-  4. only after Inspect has returned and the sandbox is gone does `grade_run` read
-     outputs/answers.json and compare it with the key.
+     read-only and an outputs directory, both under a neutral, random host path
+     (`neutral_mount`) so /proc/self/mountinfo names no capsule, run, model or solver; the
+     two paths go into this run's own compose file, not into environment variables; the key
+     is not passed to Inspect;
+  4. the outputs are moved into the run folder, and only after Inspect has returned and the
+     sandbox is gone does `grade_run` read outputs/answers.json and compare it with the key.
 
-Layout of a run directory: outputs/ logs/ run.json grade.json
+Layout of a run directory: outputs/ logs/ run.json grade.json shuffle_salt.json
 """
 
 from __future__ import annotations
@@ -18,8 +23,11 @@ import asyncio
 import json
 import os
 import platform
+import secrets
+import shutil
 import subprocess
 import time
+from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -28,8 +36,16 @@ from inspect_ai import eval as inspect_eval
 from inspect_ai.model import Model, ModelOutput, get_model
 
 from . import roles, staging
-from .dataset import HF_REVISION, AnswerMode, Capsule, KeyEntry, PublicQuestion, public_view
-from .grading import PROFILES, Judge, Profile, grade_answers
+from .dataset import (
+    HF_REVISION,
+    AnswerMode,
+    Capsule,
+    KeyEntry,
+    PublicQuestion,
+    new_shuffle_salt,
+    public_view,
+)
+from .grading import PROFILES, Judge, Profile, grade_answers, judge_record
 from .solvers import (
     COMPACTION_THRESHOLD_TOKENS,
     DERIVATION_SHARE,
@@ -40,10 +56,11 @@ from .solvers import (
     swarm_budget_mode,
 )
 from .stats import summarise
-from .task import COMPOSE, backstop_tokens, bixbench_v1
+from .task import DEFAULT_IMAGE, backstop_tokens, bixbench_v1, write_compose
 
 MOCK = "mockllm/model"
-DEFAULT_IMAGE = "futurehouse/bixbench:aviary-notebook-env"
+SALT_FILE = "shuffle_salt.json"
+MOUNTS_DIR = "mounts"  # beside the staged capsules; one random folder per run, removed after
 
 
 def load_env(path: Path) -> list[str]:
@@ -146,6 +163,55 @@ def _image_digest(image: str) -> str | None:
     return result.stdout.strip() or None
 
 
+def write_salt(out_dir: Path) -> str:
+    """Make this run's option-shuffle salt and keep it in the run folder, readable by the
+    owner only. The folder is on the host and is not mounted into the sandbox (only a neutral
+    outputs folder is); the salt is put in no prompt, task, environment variable or run.json."""
+    salt = new_shuffle_salt()
+    path = out_dir / SALT_FILE
+    path.unlink(missing_ok=True)
+    path.touch(mode=0o600)
+    path.write_text(
+        json.dumps({"salt": salt, "note": "host only; grading needs it to rebuild the key"})
+    )
+    return salt
+
+
+def read_salt(out_dir: Path) -> str | None:
+    path = out_dir / SALT_FILE
+    if not path.exists():
+        return None
+    return str(json.loads(path.read_text(encoding="utf-8"))["salt"])
+
+
+def neutral_mount(staged_root: Path, data_dir: Path, manifest: staging.Manifest) -> Path:
+    """A host folder for one run whose path says nothing: `<staged_root>/../mounts/<random>/`
+    with `data/` (hard links to the staged files; copies if links are not possible) and an
+    empty `outputs/`. A bind mount's host path is readable inside the container in
+    /proc/self/mountinfo, so the capsule's uuid and the run folder (which names the model and
+    the solver) must not be in it."""
+    root = staged_root.resolve().parent / MOUNTS_DIR / secrets.token_hex(8)
+    (root / "outputs").mkdir(parents=True)
+    for relative in sorted(manifest.paths):
+        source, target = data_dir / relative, root / "data" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+    return root
+
+
+def _collect_outputs(mount: Path, outputs: Path) -> None:
+    """Move what the run wrote from the neutral folder into the run folder; drop the folder."""
+    produced = mount / "outputs"
+    if produced.is_dir():
+        if outputs.exists():
+            shutil.rmtree(outputs)
+        shutil.move(str(produced), str(outputs))
+    shutil.rmtree(mount, ignore_errors=True)
+
+
 def run_capsule(
     capsule: Capsule,
     *,
@@ -166,8 +232,10 @@ def run_capsule(
     mock_outputs: list[ModelOutput] | None = None,
     swarm_budget: str | None = None,
     budget_policy: dict[str, Any] | None = None,
+    repeat: int = 0,
 ) -> dict[str, Any]:
     """Run the solver. Does not grade and never touches the key beyond building the public view.
+    `repeat` numbers repeated runs of the same unit with the same solver and model (0 first).
     `question_ids` restricts the run to some of the capsule's questions (one per run mirrors the
     official protocol). `mock_outputs` replaces the fixed script of `--model mock` (tests).
 
@@ -178,7 +246,6 @@ def run_capsule(
     `critic_hints` is accepted for the command line and ignored: the critic is always blind."""
     out_dir = out_dir.resolve()
     outputs = out_dir / "outputs"
-    outputs.mkdir(parents=True, exist_ok=True)
     asked = [q for q in capsule.questions if question_ids is None or q.question_id in question_ids]
     if not asked:
         raise ValueError(f"{capsule.key}: none of {question_ids} is a question of this capsule")
@@ -192,7 +259,11 @@ def run_capsule(
 
     # 1. Stage and verify the data the sandbox will see.
     staged = staged_root.resolve() / capsule.uuid
-    data_dir = staging.stage_capsule(hub_dir / capsule.zip_name, staged)
+    data_dir = staging.stage_capsule(
+        hub_dir / capsule.zip_name,
+        staged,
+        data_folder=staging.DATA_FOLDER_PREFIX + capsule.uuid,  # exactly the dataset's uuid
+    )
     manifest = staging.verify_staged(staged)
     secrets = [s for q in capsule.questions for s in q.long_secrets()]
     leaks = staging.leak_scan(data_dir, secrets)
@@ -200,16 +271,12 @@ def run_capsule(
         raise staging.IntegrityError(f"{capsule.key}: staged files contain a secret field: {leaks}")
 
     # 2. Public view for the solver; the key stays here and is not used until grading.
-    public, _key = public_view(asked, answer_mode, seed)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    public, _key = public_view(asked, answer_mode, seed, write_salt(out_dir))
     del _key
     check_prompt(roles.brief(public), capsule, answer_mode)
 
     image = image or os.environ.get("BIXBENCH_V1_IMAGE") or DEFAULT_IMAGE
-    os.environ.update(
-        BIXBENCH_V1_IMAGE=image,
-        BIXBENCH_V1_DATA_DIR=str(data_dir),
-        BIXBENCH_V1_OUTPUTS_DIR=str(outputs),
-    )
     if model == "mock":
         if role_models:
             raise ValueError("role models cannot be combined with --model mock")
@@ -251,6 +318,8 @@ def run_capsule(
             "critic_hints": "none" if swarm else None,  # always blind; "route" is ignored
             "critic_hints_requested": critic_hints if swarm else None,
             "seed": seed,
+            "repeat": repeat,
+            "option_shuffle": None if answer_mode == "open" else f"host-only salt ({SALT_FILE})",
             "image": image,
             "image_id": _image_digest(image),
             "network": "none",
@@ -277,28 +346,33 @@ def run_capsule(
     }
     (out_dir / "run.json").write_text(json.dumps(summary, indent=2))
 
-    # 3. Solve. The task receives public questions only.
-    role_args: dict[str, Any] = {}
+    # 3. Solve. The task receives public questions only; the sandbox mounts neutral paths.
+    role_args: dict[str, Any] = {"budget_policy": budget_policy}
     if swarm:
-        role_args = {f"{role}_model": name for role, name in (role_models or {}).items()}
+        role_args |= {f"{role}_model": name for role, name in (role_models or {}).items()}
         role_args["critic_hints"] = critic_hints
         role_args["swarm_budget"] = mode
-        role_args["budget_policy"] = budget_policy
-    logs = inspect_eval(
-        bixbench_v1(
-            questions=[q.model_dump() for q in public],
-            sample_id=capsule.key,
-            solver=solver,
-            time_limit_seconds=time_limit_seconds,
-            max_tokens=max_tokens,
-            max_messages_per_role=max_messages_per_role,
-            seed=seed,
-            **role_args,
-        ),
-        model=resolved,
-        log_dir=str(out_dir / "logs"),
-        display="none",
-    )
+    mount = neutral_mount(staged_root, data_dir, manifest)
+    try:
+        compose = write_compose(mount / "compose.yaml", image, mount / "data", mount / "outputs")
+        logs = inspect_eval(
+            bixbench_v1(
+                questions=[q.model_dump() for q in public],
+                sample_id=capsule.key,
+                solver=solver,
+                time_limit_seconds=time_limit_seconds,
+                max_tokens=max_tokens,
+                max_messages_per_role=max_messages_per_role,
+                seed=seed,
+                compose_file=str(compose),
+                **role_args,
+            ),
+            model=resolved,
+            log_dir=str(out_dir / "logs"),
+            display="none",
+        )
+    finally:
+        _collect_outputs(mount, outputs)
     log = logs[0]
     usage: dict[str, dict[str, int | None]] = {}
     for name, u in (log.stats.model_usage or {}).items():
@@ -361,25 +435,30 @@ def run_capsule(
     return summary
 
 
-def key_for(capsule: Capsule, run: dict[str, Any]) -> dict[str, KeyEntry]:
-    """Rebuild the grading key of a finished run from the question file and the run's settings."""
+def key_for(capsule: Capsule, run: dict[str, Any], out_dir: Path) -> dict[str, KeyEntry]:
+    """Rebuild the grading key of a finished run from the question file, the run's settings
+    and, for multiple choice, the salt kept in the run folder."""
     asked = [q for q in capsule.questions if q.question_id in run["question_ids"]]
     settings = run["settings"]
-    _, key = public_view(asked, settings["answer_mode"], settings["seed"])
+    _, key = public_view(asked, settings["answer_mode"], settings["seed"], read_salt(out_dir))
     return key
 
 
 def grade_run(
     out_dir: Path,
     capsule: Capsule,
-    judge: Judge | None = None,
+    judge: Judge | Mapping[str, Judge | None] | None = None,
     judge_name: str | None = None,
     profiles: tuple[Profile, ...] = ("per-mode",),
+    judge_temperature: float | None = None,
 ) -> dict[str, Any]:
     """Grade outputs/answers.json of a finished run. Host only; the sandbox no longer exists.
 
-    The judge is given the question, the ideal answer and the submitted answer string, nothing
-    from the solver's transcript. grade.json holds verdicts, not ideal answers."""
+    `judge` is one judge for every profile, or a judge per profile. The judge is given the
+    question, the ideal answer and the submitted answer string, nothing from the solver's
+    transcript. grade.json holds verdicts, not ideal answers, and per profile the judge model
+    and temperature used (taken from the judge object, else `judge_name` and
+    `judge_temperature`) with every deviation from that profile's default judge."""
     run = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
     if run.get("status") == "running":
         raise RuntimeError(f"{out_dir}: the solver has not finished; refusing to grade")
@@ -388,28 +467,39 @@ def grade_run(
     if answers_file.exists():
         recorded = json.loads(answers_file.read_text(encoding="utf-8"))
         answers = {q: str(a.get("answer", "")) for q, a in recorded["answers"].items()}
-    key = key_for(capsule, run)
+    key = key_for(capsule, run, out_dir)
     answer_mode: AnswerMode = run["settings"]["answer_mode"]
     result: dict[str, Any] = {
         "capsule": capsule.key,
         "solver": run["settings"]["solver"],
         "answer_mode": answer_mode,
-        "judge_model": judge_name,
+        "judge_model": None,  # the first profile's judge; each profile records its own below
         "graded_at": time.time(),
         "profiles": {},
     }
-    for profile in profiles:
+    for index, profile in enumerate(profiles):
         if profile not in PROFILES:
             raise ValueError(f"unknown grading profile {profile!r}")
-        grades = asyncio.run(grade_answers(key, answers, answer_mode, judge, profile))
+        mine = judge.get(profile) if isinstance(judge, Mapping) else judge
+        name = (getattr(mine, "model", None) or judge_name or "unnamed") if mine else None
+        temperature = getattr(mine, "temperature", judge_temperature) if mine else None
+        if index == 0:
+            result["judge_model"] = name
+        grades = asyncio.run(grade_answers(key, answers, answer_mode, mine, profile))
         rows = [g.to_dict() for g in grades]
-        result["profiles"][profile] = {"summary": summarise(rows), "grades": rows}
+        result["profiles"][profile] = {
+            # Multiple choice is a letter match: no judge is asked whatever was configured.
+            "judge": judge_record(profile, name if answer_mode == "open" else None, temperature)
+            if answer_mode == "open"
+            else {"model": None, "temperature": None, "deviations": [], "letter_match": True},
+            "summary": summarise(rows),
+            "grades": rows,
+        }
     (out_dir / "grade.json").write_text(json.dumps(result, indent=2))
     return result
 
 
 __all__ = [
-    "COMPOSE",
     "DEFAULT_IMAGE",
     "PublicQuestion",
     "check_prompt",

@@ -7,7 +7,7 @@ Verifies, without spending tokens:
   3. budget exhaustion forces a final answer
   4. str_verifier grader + compute_metrics
 
-Run: python selftest.py
+Run: python selftest.py   (or: python -m pytest tests, which also runs this)
 """
 
 from __future__ import annotations
@@ -21,6 +21,14 @@ from bixbase.budget import Budget, BudgetCaps
 from bixbase.grader import compute_metrics, grade_str_verifier
 from bixbase.llm import LLMResponse, ToolCall
 from bixbase.loader import Question, Study
+from bixbase.sandbox import Sandbox, sandbox_available
+
+
+def scripted_sandbox(study: Study, run_dir: Path) -> Sandbox:
+    """Off macOS there is no cell sandbox. The cells in this file are written
+    here, not by a model, so they may run without one."""
+    return Sandbox(study.data_dir, Path(run_dir) / "work",
+                   unsafe_no_sandbox=not sandbox_available())
 
 
 class ScriptedLLM:
@@ -101,7 +109,8 @@ def main() -> int:
             "answers": {"selftest-q1": "2.5"}}}]},
     ])
     budget = Budget(BudgetCaps(max_total_tokens=10_000, max_tool_calls=10))
-    res = solve(study, budget, llm=llm, run_dir=tmp / "run1")
+    res = solve(study, budget, llm=llm, run_dir=tmp / "run1",
+                sandbox=scripted_sandbox(study, tmp / "run1"))
     assert res.submitted and not res.forced, res.stop_reason
     assert res.answers["selftest-q1"] == "2.5"
     assert (tmp / "run1" / "transcript.jsonl").is_file()
@@ -113,7 +122,8 @@ def main() -> int:
         if '"event": "tool_result"' in line and '"name": "run_code"' in line
     )
     if "WRITE SUCCEEDED" in run_result:
-        print("note: data dir writable (sandbox-exec unavailable?)")
+        assert not sandbox_available(), "sandbox on, but data dir writable"
+        print("note: data dir writable (no sandbox on this platform)")
     else:
         assert "write blocked" in run_result
     g = grade_str_verifier("2.5", res.answers["selftest-q1"])
@@ -129,7 +139,8 @@ def main() -> int:
         tokens_per_call=(100, 100),
     )
     tiny = Budget(BudgetCaps(max_tool_calls=1))
-    res2 = solve(study, tiny, llm=llm2, run_dir=tmp / "run2")
+    res2 = solve(study, tiny, llm=llm2, run_dir=tmp / "run2",
+                 sandbox=scripted_sandbox(study, tmp / "run2"))
     assert res2.forced, res2.stop_reason
     assert "budget_exhausted" in res2.stop_reason
     assert res2.answers["selftest-q1"] == "2.5"  # forced submit still lands
@@ -142,7 +153,8 @@ def main() -> int:
         tokens_per_call=(5, 5),
     )
     none_budget = Budget(BudgetCaps(max_tool_calls=0))
-    res3 = solve(study, none_budget, llm=llm3, run_dir=tmp / "run3")
+    res3 = solve(study, none_budget, llm=llm3, run_dir=tmp / "run3",
+                 sandbox=scripted_sandbox(study, tmp / "run3"))
     assert res3.answers["selftest-q1"] == "<no_answer>"
     assert "no_answer_submitted" in res3.stop_reason
     m = compute_metrics([0], [False])
