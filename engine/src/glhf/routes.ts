@@ -56,10 +56,17 @@ const json = (res: ServerResponse, code: number, body: unknown) => {
   res.end(JSON.stringify(body))
 }
 
-const hasToken = (req: IncomingMessage) => {
+/**
+ * Does the request carry this server's token? Compared with the token in memory, not with the file: a file
+ * left by an earlier engine must not open this one.
+ */
+export const hasSessionToken = (req: Pick<IncomingMessage, "headers">) => {
   const sent = Buffer.from(String(req.headers["x-glhf-token"] ?? "")), mine = Buffer.from(token)
   return sent.length === mine.length && timingSafeEqual(sent, mine)
 }
+const hasToken = hasSessionToken
+/** This server's token, for the CLI and for tests in the same process. Never send it in a response. */
+export const sessionToken = () => token
 
 /** Handles a request under /api/glhf. `parts` is the path split on "/": api, glhf, runs, :id. */
 export async function handleGlhf(req: IncomingMessage, res: ServerResponse, parts: string[]): Promise<void> {

@@ -21,6 +21,9 @@ export class TrackerBusy extends Error {
 }
 export class BadRequest extends Error {}
 
+/** A model id: starts with a letter or digit, no spaces. So it can never be read as a command-line option. */
+const MODEL_ID = /^[A-Za-z0-9][\w./:@~-]{0,199}$/
+
 const read = (file: string) => { try { return readFileSync(file, "utf8") } catch { return null } }
 
 /**
@@ -73,13 +76,13 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   if (typeof body !== "object" || body === null || Array.isArray(body)) bad("the request body must be a JSON object")
   if (body.mode !== "local" && body.mode !== "cloud") bad('mode must be "local" or "cloud"')
   if (body.solver !== "single" && body.solver !== "glhf") bad('solver must be "single" or "glhf"')
-  if (typeof body.model !== "string" || !body.model || body.model.length > 200 || !/^[\w./:@-]+$/.test(body.model)) bad("model is required (a model id such as anthropic/claude-sonnet-5-5, or mock)")
+  if (typeof body.model !== "string" || !MODEL_ID.test(body.model)) bad("model is required (a model id such as anthropic/claude-sonnet-5-5, or mock)")
   if (body.task !== undefined && (typeof body.task !== "string" || body.task.length > 100)) bad("task must be a short text")
   if (body.caseDir !== undefined && typeof body.caseDir !== "string") bad("caseDir must be a path")
   const roleModels = body.roleModels ?? {}
   if (typeof roleModels !== "object" || Array.isArray(roleModels)) bad("roleModels must be an object")
   for (const [role, model] of Object.entries(roleModels)) {
-    if (!ROLES.includes(role) || typeof model !== "string" || !model.includes("/")) bad(`roleModels: ${role} must be one of ${ROLES.join(", ")} and name a provider/model`)
+    if (!ROLES.includes(role) || typeof model !== "string" || !model.includes("/") || !MODEL_ID.test(model)) bad(`roleModels: ${role} must be one of ${ROLES.join(", ")} and name a provider/model`)
   }
   if (Object.keys(roleModels).length && body.solver !== "glhf") bad("roleModels need solver glhf")
   if (Object.keys(roleModels).length && body.model === "mock") bad("roleModels cannot be combined with the mock model")

@@ -1,5 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { ENGINE } from "@/board/api"
+import { EngineOffline, PageHead, runState, StatusPill } from "@/components/Shared"
+import { fmtScore } from "@/lib/format"
 
 interface Hit {
   kind: "swarm" | "board"; id: string; title: string; status: string; startedAt: number; score?: number
@@ -42,6 +44,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
   const [kind, setKind] = useState<Kind>("all")
   const [hits, setHits] = useState<Hit[]>()
   const [error, setError] = useState(false)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     const stop = new AbortController()
@@ -52,7 +55,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
         .catch((e) => { if (e.name !== "AbortError") setError(true) })
     }, 200)
     return () => { window.clearTimeout(timer); stop.abort() }
-  }, [query])
+  }, [query, retry])
 
   const [asked, setAsked] = useState<Asked>(lastAsked)
   const [question, setQuestion] = useState(() => (asked.state === "done" ? asked.question : ""))
@@ -99,12 +102,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Experiments</h1>
-          <p className="muted small">Ask a question about the runs, or search them by task, model, status, or any text in their claims, problems, reports and memos.</p>
-        </div>
-      </header>
+      <PageHead title="Experiments" about="Find any past run. Ask a question in plain words, or search by task, model, status, or any text in the claims, problems, reports and memos." />
       <section className="exp-ask card-surface" aria-label="Ask about experiments">
         <form onSubmit={ask}>
           <label htmlFor="experiment-ask">Ask</label>
@@ -137,8 +135,8 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
                   {asked.result.runs.map((r) => (
                     <li key={`${r.kind}:${r.id}`}>
                       <button type="button" className="exp-hit card-surface" onClick={() => open(r)}>
-                        <span className="exp-head"><b>{r.title}</b><span className="pill">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
-                        <span className="muted small">{r.id}</span>
+                        <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
+                        <span className="muted small run-id" title={r.id}>{r.id}</span>
                         {r.why && <span className="exp-match small">{r.why}</span>}
                       </button>
                     </li>
@@ -161,7 +159,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
           ))}
         </div>
       </div>
-      {error && <p role="alert" className="exp-error">Search needs the engine. Start it with npm run engine.</p>}
+      {error && <EngineOffline needs="Search and Ask read the runs through the engine." onRetry={() => { setError(false); setRetry((n) => n + 1) }} />}
       {!hits && !error && <p className="muted small" role="status">Loading experiments…</p>}
       {hits && <p className="muted small">{shown.length} {shown.length === 1 ? "experiment" : "experiments"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>}
       <ul className="exp-list" aria-label="Experiments">
@@ -170,10 +168,11 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
             <button type="button" className="exp-hit card-surface" onClick={() => open(h)}>
               <span className="exp-head">
                 <b>{mark(h.title)}</b>
-                <span className="pill" data-kind={h.status === "failed" ? "danger" : undefined}>{h.status}</span>
-                {h.score !== undefined && <span className="exp-score">{h.score.toFixed(3)}</span>}
+                <StatusPill state={runState(h.status, h.kind !== "swarm" || h.score !== undefined)} />
+                <span className="pill exp-kind">{h.kind === "swarm" ? "swarm run" : "drug board"}</span>
+                {h.score !== undefined && <span className="exp-score" title="Score from the grader, out of 1">{fmtScore(h.score)}</span>}
               </span>
-              <span className="muted small">{mark(h.id)} · {new Date(h.startedAt).toLocaleString()}</span>
+              <span className="muted small"><span className="run-id" title={h.id}>{mark(h.id)}</span> · started {new Date(h.startedAt).toLocaleString()}</span>
               {h.matches.filter((m) => m.where !== "run").map((m, i) => (
                 <span key={i} className="exp-match small"><i>{m.where}:</i> {mark(m.text)}</span>
               ))}
@@ -181,7 +180,9 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
           </li>
         ))}
       </ul>
-      {hits && shown.length === 0 && !error && <p className="muted">No experiments match. Every word has to appear in the run.</p>}
+      {hits && shown.length === 0 && !error && (query.trim()
+        ? <p className="empty-note">No experiments match. Every word has to appear in the run. Try fewer words, or ask a question in the box above.</p>
+        : <p className="empty-note">No {kind === "swarm" ? "swarm runs" : kind === "board" ? "drug board reviews" : "experiments"} yet. Start a run in the Swarm view, or convene the board in the Board view. Finished runs appear here.</p>)}
     </div>
   )
 }

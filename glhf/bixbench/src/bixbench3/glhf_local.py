@@ -136,6 +136,12 @@ def mock_script(
             evidence=f"wc -l {first_path} -> 1",
         ),
         _call(
+            "register_falsification_test",
+            claim_id="C2",
+            test_name="row count",
+            method="Count data rows of every output; an output with none contradicts the claim.",
+        ),
+        _call(
             "record_falsification_test",
             claim_id="C2",
             test_name="row count",
@@ -156,6 +162,12 @@ def mock_script(
         # methods auditor, round 2
         _done("no undisclosed deviations"),
         # critic, round 2
+        _call(
+            "register_falsification_test",
+            claim_id="C1",
+            test_name="label permutation",
+            method="Permute sample labels 10000 times; a p-value near 1 contradicts the claim.",
+        ),
         _call(
             "record_falsification_test",
             claim_id="C1",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
+import { EngineOffline, PageHead, RunId } from "@/components/Shared"
 import { useSwarm } from "@/swarm/api"
 import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
 import { SPECIES, Buddy } from "@/components/Buddy"
@@ -38,10 +39,11 @@ export function AgentsView() {
 
   return (
     <div className="page">
+      <PageHead title="Agents" about="Who does the work: the nine roles of the swarm with their instructions, and the crew characters shown in the side rail." />
       <SwarmTeam />
-      <header className="page-head crew-head">
+      <header className="section-head">
         <div>
-          <h1>Your crew</h1>
+          <h2>Your crew</h2>
           <p className="muted small">The characters in the side rail. Give each a name, a role, a look and a SKILL.md. They are not connected to AI agents, so the skill is saved but not used.</p>
         </div>
       </header>
@@ -137,10 +139,11 @@ function SwarmTeam() {
   const { runs, detail, offline } = useSwarm(undefined, 0)
   const [catalog, setCatalog] = useState<RoleCatalog>()
   const [failed, setFailed] = useState(false)
+  const [retry, setRetry] = useState(0)
   useEffect(() => {
     fetch(`${ENGINE}/api/glhf/roles`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(setCatalog).catch(() => setFailed(true))
-  }, [])
+      .then((c) => { setCatalog(c); setFailed(false) }).catch(() => setFailed(true))
+  }, [retry])
 
   const run = runs?.find((r) => r.solver === "glhf")
   const ledger = detail?.run.id === run?.id ? detail?.ledger : undefined
@@ -152,16 +155,16 @@ function SwarmTeam() {
 
   return (
     <>
-      <header className="page-head crew-head">
+      <header className="section-head">
         <div>
-          <h1>Swarm team</h1>
+          <h2>Swarm team</h2>
           <p className="muted small">
             Nine roles, in the order they run. Each is a separate agent with its own instructions; they share only the files and the ledger.
-            {run ? ` Status is from the latest swarm run (${run.id}).` : ""}
+            {run ? <> Status is from the latest swarm run, <RunId id={run.id} />.</> : !offline && runs ? " No swarm run yet: start one in the Swarm view to see which roles ran." : ""}
           </p>
         </div>
-        {(offline || failed) && <span className="pill pill-warning">Start the engine to load instructions</span>}
       </header>
+      {(offline || failed) && !catalog && <EngineOffline needs="Each role's instructions, time share and model come from the engine." onRetry={() => setRetry((n) => n + 1)} />}
       <section className="cast">
         {ROLES.map((r, i) => {
           const spec = catalog?.roles.find((x) => x.key === r.key)

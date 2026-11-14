@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react"
+import { ENGINE } from "@/board/api"
+import { EngineOffline, PageHead } from "@/components/Shared"
 import { call, isDesktop } from "@/system/desktop"
 
 const PROVIDERS = [
@@ -44,11 +46,10 @@ export function SettingsView() {
 
   return (
     <div className="page settings">
-      <header className="page-head">
-        <h1>Settings</h1>
-      </header>
+      <PageHead title="Settings" about="What the engine on this machine can use, and the API keys kept by the desktop app." />
+      <EngineSection />
       <section className="keys" aria-labelledby="keys-title">
-        <h2 id="keys-title">API keys</h2>
+        <h2 id="keys-title">Desktop app API keys</h2>
         <p className="muted small">
           Connect a model provider to test it. Keys are stored in your Mac's keychain, not in this window, and are
           sent only to the provider they belong to. No agent uses them yet.
@@ -87,5 +88,38 @@ export function SettingsView() {
         </ul>
       </section>
     </div>
+  )
+}
+
+interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean> }
+
+// Read-only: which tools and keys the engine found. Key values never leave the engine; it reports set or not set.
+function EngineSection() {
+  const [facts, setFacts] = useState<EngineFacts | null>()
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let stale = false
+    const read = (path: string) => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    Promise.all([read("/api/glhf/status"), read("/api/status")])
+      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys } }) })
+      .catch(() => { if (!stale) setFacts(null) })
+    return () => { stale = true }
+  }, [retry])
+  const row = (name: string, on: boolean, yes: string, no: string) => (
+    <li key={name}><div className="keys-name"><strong>{name}</strong></div><span className="pill" data-kind={on ? "success" : "warning"}>{on ? yes : no}</span></li>
+  )
+  return (
+    <section className="keys" aria-labelledby="engine-title">
+      <h2 id="engine-title">Engine</h2>
+      <p className="muted small">The engine starts runs and stores them. It reads its keys from the <code>.env</code> file in the repo root. Address: <code>{ENGINE}</code></p>
+      {facts === undefined && <p className="muted small" role="status">Checking the engine…</p>}
+      {facts === null && <EngineOffline needs="Tools and keys cannot be checked." onRetry={() => { setFacts(undefined); setRetry((n) => n + 1) }} />}
+      {facts && (
+        <ul className="engine-facts">
+          {Object.entries(facts.tools).map(([name, on]) => row(name, on, "found", "not found"))}
+          {Object.entries(facts.keys).sort(([a], [b]) => a.localeCompare(b)).map(([name, on]) => row(name, on, "set", "not set"))}
+        </ul>
+      )}
+    </section>
   )
 }

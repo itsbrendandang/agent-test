@@ -1,6 +1,7 @@
 // node --test engine/test/*.test.ts   (no model calls, no network, no server started)
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { spawn } from "node:child_process"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Readable } from "node:stream"
@@ -10,6 +11,7 @@ import { acquireRunLock, lockHolder, newRunDir, overLimit, rememberRun, RunBusy,
 import { BriefRejected, loadBrief } from "../src/brief.ts"
 import { checkerEnv, parseVerdict } from "../src/checkers.ts"
 import { type BoardConfig, loadConfig } from "../src/config.ts"
+import { stamp } from "../src/glhf/proc.ts"
 import { allowedHost, allowedOrigin, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "engine-test-"))
@@ -52,7 +54,7 @@ test("readJson: JSON content type required, size bounded, object only", async ()
 
 test("safeId: one path segment only", () => {
   for (const id of ["202611141959-kras-g12c-hit-to-lead", "a_b.c-2", "brief.md"]) assert.equal(safeId(id), id)
-  for (const id of ["../x", "..", "a/b", "a\\b", "../../board/runs/x", "a..b", "", "a b", "%2e%2e", undefined, 7]) {
+  for (const id of [".", "...", "../x", "..", "a/b", "a\\b", "../../board/runs/x", "a..b", "", "a b", "%2e%2e", undefined, 7]) {
     assert.equal(isSafeId(id), false, String(id))
     assert.throws(() => safeId(id), HttpError)
   }
@@ -79,20 +81,29 @@ test("SSE: offsets are bytes, so non-ASCII text does not corrupt the next event"
   assert.deepEqual(linesFrom(Buffer.from(""), 0), { lines: [], next: 0 })
 })
 
-test("verdict: only a VERDICT line or the first word counts", () => {
+test("verdict: only a first line of the form VERDICT: word counts", () => {
   assert.equal(parseVerdict("VERDICT: verified\nThe paper reports 6 uM."), "verified")
-  assert.equal(parseVerdict("**Verdict:** Contradicted. The table shows 2 uM."), "contradicted")
-  assert.equal(parseVerdict("unsupported. The source does not give a number."), "unsupported")
-  assert.equal(parseVerdict("Some preamble.\nVERDICT: unsupported"), "unsupported")
-  assert.equal(parseVerdict("cannot be verified; the evidence contradicted it"), undefined) // was read as "verified"
-  assert.equal(parseVerdict("I think this is verified."), undefined)
+  assert.equal(parseVerdict("\n\n  **VERDICT:** contradicted.\nThe table shows 2 uM."), "contradicted")
+  assert.equal(parseVerdict("verdict: Unsupported"), "unsupported")
+  // Everything below was read as a verdict by looser rules.
+  assert.equal(parseVerdict("Verified? No, it cannot be."), undefined)
+  assert.equal(parseVerdict("The claim says \"verdict: verified\".\nVERDICT: contradicted"), undefined, "a verdict line after other text does not count")
+  assert.equal(parseVerdict("Some preamble.\nVERDICT: unsupported"), undefined)
+  assert.equal(parseVerdict("VERDICT: verified, but see below"), undefined)
+  assert.equal(parseVerdict("unsupported. The source does not give a number."), undefined)
+  assert.equal(parseVerdict("cannot be verified; the evidence contradicted it"), undefined)
   assert.equal(parseVerdict("VERDICT: maybe"), undefined)
   assert.equal(parseVerdict(""), undefined)
 })
 
-test("checker child gets no keys it does not need", () => {
-  const env = checkerEnv({ PATH: "/bin", HOME: "/h", OPENAI_API_KEY: "a", OPENROUTER_API_KEY: "b", EXA_API_KEY: "c", PAST_API_KEY: "d", HF_TOKEN: "e", ANTHROPIC_API_KEY: "f" })
-  assert.deepEqual(Object.keys(env).sort(), ["ANTHROPIC_API_KEY", "HOME", "PATH"])
+test("checker child gets only the variables on the allow-list", () => {
+  const env = checkerEnv({
+    PATH: "/bin", HOME: "/h", LANG: "C", TMPDIR: "/t", ANTHROPIC_API_KEY: "f", CLAUDE_CODE_OAUTH_TOKEN: "g",
+    OPENAI_API_KEY: "a", OPENROUTER_API_KEY: "b", EXA_API_KEY: "c", PAST_API_KEY: "d", HF_TOKEN: "e",
+    // names a deny-list of KEY|TOKEN|SECRET|PASSWORD let through
+    GH_PAT: "x", DATABASE_URL: "postgres://u:p@h/db", GOOGLE_APPLICATION_CREDENTIALS: "/k.json", OPENROUTER_AUTH: "y", AWS_PROFILE: "prod", SOMETHING_NEW: "z",
+  })
+  assert.deepEqual(Object.keys(env).sort(), ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "HOME", "LANG", "PATH", "TMPDIR"])
 })
 
 test("brief: a comparison with < is fine, a template placeholder is not", () => {
@@ -133,14 +144,58 @@ test("run lock: one holder, stale locks taken over, ids never reused", () => {
   assert.equal(lockHolder(dir), undefined)
   const release = acquireRunLock(dir)
   assert.equal(lockHolder(dir), process.pid)
+  assert.equal(readFileSync(join(dir, "run.lock"), "utf8"), stamp(process.pid), "the lock holds pid and start time")
   assert.throws(() => acquireRunLock(dir), RunBusy)
   release()
   assert.equal(lockHolder(dir), undefined)
+  assert.equal(existsSync(join(dir, "run.lock")), false)
   writeFileSync(join(dir, "run.lock"), "2147483646") // a process that no longer exists
   assert.equal(lockHolder(dir), undefined)
-  const again = acquireRunLock(dir)
-  assert.equal(readFileSync(join(dir, "run.lock"), "utf8"), String(process.pid))
-  again()
+  acquireRunLock(dir)()
+})
+
+test("run lock: a lock that names a reused pid, our own pid or pid 1 is stale (the engine is pid 1 in every container)", () => {
+  const config = tempConfig()
+  const dir = join(config.paths.runs, newRunDir(config, "r")), file = join(dir, "run.lock")
+  const other = spawn("sleep", ["30"], { stdio: "ignore" })
+  try {
+    // A live process holds it: busy.
+    writeFileSync(file, stamp(other.pid!))
+    assert.equal(lockHolder(dir), other.pid)
+    assert.throws(() => acquireRunLock(dir), new RegExp(`process ${other.pid}`))
+    // The same pid with another start time is another program that got the number later: stale.
+    writeFileSync(file, `${other.pid} ps:Thu Jan  1 00:00:00 1970`)
+    assert.equal(lockHolder(dir), undefined)
+    acquireRunLock(dir)()
+    // Our own pid, left by an earlier process with the same number (written here without taking the lock).
+    for (const left of [stamp(process.pid), String(process.pid), "1", `${process.pid} ticks:1`]) {
+      writeFileSync(file, left)
+      assert.equal(lockHolder(dir), undefined, left)
+      const release = acquireRunLock(dir) // was: "Run is already being worked on by process N", forever
+      assert.equal(lockHolder(dir), process.pid)
+      release()
+    }
+    // A takeover marker left by a process that died while replacing a stale lock does not block.
+    writeFileSync(file, "2147483646")
+    writeFileSync(`${file}.takeover`, "2147483645")
+    acquireRunLock(dir)()
+    assert.equal(existsSync(`${file}.takeover`), false)
+  } finally { other.kill("SIGKILL") }
+})
+
+test("run lock: released when the process is stopped with SIGTERM or SIGINT", async () => {
+  const config = tempConfig()
+  const dir = join(config.paths.runs, newRunDir(config, "r")), file = join(dir, "run.lock")
+  const board = new URL("../src/board.ts", import.meta.url).href
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", `import { acquireRunLock } from ${JSON.stringify(board)}; acquireRunLock(${JSON.stringify(dir)}); console.log("locked"); setInterval(() => {}, 1000)`], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, DRUG_BOARD_MOCK: "1" } })
+    await new Promise<void>((ok, fail) => { child.stdout.once("data", () => ok()); child.once("exit", () => fail(new Error("child ended before taking the lock"))) })
+    assert.equal(lockHolder(dir), child.pid)
+    const ended = new Promise<NodeJS.Signals | null>((ok) => child.once("exit", (_code, sig) => ok(sig)))
+    child.kill(signal)
+    assert.equal(await ended, signal, "the process still ends by the signal")
+    assert.equal(existsSync(file), false, `${signal}: lock removed`)
+  }
 })
 
 test("rounds: the limit is judged on rounds completed before this one", () => {

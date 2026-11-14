@@ -11,7 +11,7 @@ import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
 import { alive, parseStamp, stamp } from "./proc.ts"
-import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, tail, trackerLog } from "./store.ts"
+import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, type Stored, tail, trackerLog } from "./store.ts"
 import type { GlhfRun, RunRequest, Usage } from "./types.ts"
 
 export type RunInput = RunRequest & { id: string }
@@ -113,9 +113,11 @@ export function manifestSolver(manifest: unknown): "single" | "glhf" | undefined
  * The run manifest `bixbench3 run` wrote before it created the VM, for a launch whose output was lost. It must
  * match the task, the model and the solver, be no older than the launch, and not belong to another tracked run.
  * When manifests do not name their solver and more than one fits, none is adopted: attributing a score to the
- * wrong solver is worse than asking a person. Returns the candidates in that case.
+ * wrong solver is worse than asking a person. The same holds for a single such manifest while `rival` is true
+ * (another unfinished run of the other solver, same task and model, has no cloud run yet). Returns the
+ * candidates in those cases.
  */
-export function findManifest(input: Pick<RunInput, "task" | "model" | "solver">, since: number, root = manifestsRoot(), taken: string[] = []): { id?: string; ambiguous?: string[] } {
+export function findManifest(input: Pick<RunInput, "task" | "model" | "solver">, since: number, root = manifestsRoot(), taken: string[] = [], rival = false): { id?: string; ambiguous?: string[] } {
   const found: { id: string; at: number; solver?: "single" | "glhf" }[] = []
   const walk = (dir: string) => {
     if (!existsSync(dir)) return
@@ -133,9 +135,17 @@ export function findManifest(input: Pick<RunInput, "task" | "model" | "solver">,
   const fits = found.filter((f) => f.solver === undefined || f.solver === input.solver).sort((a, b) => a.at - b.at)
   const sure = fits.filter((f) => f.solver === input.solver)
   if (sure.length) return { id: sure[0].id }
-  if (fits.length > 1) return { ambiguous: fits.map((f) => f.id) }
+  // No manifest names our solver. One that names none is ours only if nobody else could have written it:
+  // not when several fit, and not when a run of the other solver for the same task and model (`rival`) is
+  // still waiting for its own cloud run.
+  if (fits.length > 1 || (fits.length === 1 && rival)) return { ambiguous: fits.map((f) => f.id) }
   return { id: fits[0]?.id }
 }
+
+/** Is another cloud run of the other solver, for the same task and model, unfinished and still without its cloud run id? */
+export const hasRival = (input: Pick<RunInput, "id" | "task" | "model" | "solver">, stored: Stored[] = listStored()) => stored.some((s) =>
+  s.run.id !== input.id && s.run.mode === "cloud" && s.run.solver !== input.solver && s.run.task === input.task && s.run.model === input.model &&
+  s.run.phase !== "done" && s.run.phase !== "failed" && !s.run.remoteId)
 
 /** Cloud runs other tracked runs already follow. */
 const takenRemoteIds = (except: string) => listStored().filter((s) => s.run.id !== except).flatMap((s) => (s.run.remoteId ? [s.run.remoteId] : []))
@@ -231,7 +241,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       }
       if (stuck) state = "gone" // treated like a launcher that died: follow what it created, or fail
       const printed = leadingJson(readText(`${dir}/launch.out`) ?? "")?.run_id
-      const manifest = typeof printed === "string" ? { id: printed } : findManifest(input, started, manifestsRoot(), takenRemoteIds(input.id))
+      const manifest = typeof printed === "string" ? { id: printed } : findManifest(input, started, manifestsRoot(), takenRemoteIds(input.id), hasRival(input))
       const remoteId = manifest.id
       if (state === 0 && remoteId) {
         patchRun(input.id, { phase: "running", remoteId, detail: `cloud run ${remoteId}: detached` }, `cloud run ${remoteId} launched`)

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Sequence
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 from inspect_ai.tool import Tool, ToolError, tool
@@ -18,6 +20,7 @@ from ...network_gateway.policy import (
     normalize_url,
 )
 from ..models import ExpectedOutput, NetworkAccessPolicy
+from .guards import names_person, normalise, shared_phrase, study_identifier
 from .ledger import Ledger
 
 WORK = "/workspace/work/glhf"
@@ -26,11 +29,21 @@ WORK = "/workspace/work/glhf"
 # "problems" mean the grader is likely to score the artifact zero or wrongly as it stands;
 # "fatal" marks the ones the finisher is for (missing, empty, unparseable, no row-key column);
 # "warnings" are legitimate in some tasks (one column, no rows, empty JSON) and need a human look.
+# The delimiter follows the grader exactly (grading/loaders.py: load_table): the kind is the
+# declared format, else the file suffix; csv and csv.gz are comma-separated; tsv, tab, txt,
+# tsv.gz, bed and bed.gz are tab-separated. Files are read as utf-8-sig, because pandas (the
+# grader) drops a byte-order mark and so must this check.
 _CONTRACT_SCRIPT = r"""
-import csv, json, os, sys
+import csv, gzip, json, os, sys
 specs = json.loads(sys.argv[1])
 csv.field_size_limit(1 << 30)
-TABLE_FORMATS = ("csv", "tsv", "txt", "tab", "table", "tabular")
+COMMA, TAB = ("csv", "csv.gz"), ("tsv", "tab", "txt", "tsv.gz", "bed", "bed.gz")
+SNIFFED = ("table", "tabular")
+NAME = {"\t": "tab", ",": "comma"}
+def opened(path):
+    with open(path, "rb") as fh: magic = fh.read(2)
+    if magic == b"\x1f\x8b": return gzip.open(path, "rt", encoding="utf-8-sig", newline="")
+    return open(path, encoding="utf-8-sig", newline="")
 report = []
 for s in specs:
     path, fmt, key = s["sandbox_path"], (s.get("format") or "").lower(), s.get("row_key")
@@ -41,37 +54,37 @@ for s in specs:
     size = os.path.getsize(path); r["bytes"] = size
     if size == 0:
         r["problems"].append("empty file"); r["fatal"] = True; continue
-    ext = os.path.splitext(path)[1].lower()
+    kind = fmt or os.path.splitext(path)[1].lstrip(".").lower()
     try:
-        if fmt == "json" or (ext == ".json" and fmt not in TABLE_FORMATS):
-            with open(path) as fh: data = json.load(fh)
+        if kind == "json":
+            with opened(path) as fh: data = json.load(fh)
             r["json_type"] = type(data).__name__
             if not data: r["warnings"].append("empty JSON (fine only if the result really is empty)")
-        elif fmt in TABLE_FORMATS or ext in (".csv", ".tsv", ".txt", ".tab"):
-            with open(path, newline="") as fh:
+        elif kind in COMMA or kind in TAB or kind in SNIFFED:
+            with opened(path) as fh:
                 first = fh.readline()
             tabs, commas = first.count("\t"), first.count(",")
-            if fmt == "tsv" or ext in (".tsv", ".tab"): expected = "\t"
-            elif fmt == "csv" or ext == ".csv": expected = ","
-            else: expected = None
-            # No declared delimiter (.txt, "table"): take the one the header line uses.
-            delim = expected or ("\t" if tabs >= commas and tabs else ",")
-            name = {"\t": "tab", ",": "comma"}
-            r["delimiter"] = name[delim]
-            with open(path, newline="") as fh:
+            if kind in COMMA: delim = ","
+            elif kind in TAB: delim = "\t"
+            else:
+                # Not a format the grader's table loader names: take the header line's delimiter.
+                delim = "\t" if tabs >= commas and tabs else ","
+                r["warnings"].append(f"format {kind!r} is not one the grader's table loader names (csv, tsv, tab, txt, bed); read as {NAME[delim]}-separated")
+            r["delimiter"] = NAME[delim]
+            with opened(path) as fh:
                 rows = csv.reader(fh, delimiter=delim)
                 header = next(rows, [])
                 body = [row for _, row in zip(range(200000), rows)]
             r["columns"] = header[:40]; r["rows_checked"] = len(body)
             other = "," if delim == "\t" else "\t"
             if len(header) <= 1 and first.count(other):
-                r["problems"].append(f"wrong delimiter: expected {name[delim]}-separated, the header line uses {name[other]}s")
+                r["problems"].append(f"wrong delimiter: the grader reads {kind} as {NAME[delim]}-separated, the header line uses {NAME[other]}s")
                 r["fatal"] = True
             elif len(header) <= 1:
                 r["warnings"].append("single column (fine only if the brief asks for one column)")
             if not body:
                 r["warnings"].append("header only, no rows (fine only if the result really is empty)")
-            if key:
+            if key and not r["fatal"]:
                 if key not in header:
                     r["problems"].append(f"row_key column {key!r} not in header"); r["fatal"] = True
                 else:
@@ -130,9 +143,17 @@ def contract_text(report: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def check_failed(report: list[dict[str, Any]]) -> bool:
+    """The check itself could not run (reported as artifact "*"): nothing is known about any file."""
+    return any(r.get("artifact_id") == "*" for r in report)
+
+
 def needs_rescue(report: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Artifacts the finisher is for: missing, empty, unparseable or without the row-key column."""
-    return [r for r in report if r.get("fatal") or r.get("artifact_id") == "*"]
+    """Artifacts the finisher is for: missing, empty, unparseable or without the row-key column.
+
+    A check that could not run names no artifact and is not a reason to start the finisher: it
+    has nothing to fix and could only damage artifacts that are fine."""
+    return [r for r in report if r.get("fatal") and r.get("artifact_id") != "*"]
 
 
 # Runs inside the sandbox. Lists (and with "kill", stops) processes that are not the container's
@@ -216,25 +237,57 @@ def propose_claim(ledger: Ledger, role: str) -> Tool:
 
 
 @tool
+def register_falsification_test(ledger: Ledger, role: str) -> Tool:
+    async def execute(claim_id: str, test_name: str, method: str) -> str:
+        """Pre-register a falsification test for a claim, BEFORE you run it or any other test of
+        that claim. Only registered tests can support a claim.
+
+        Decide the tests first: at most 3 per claim, each one a check whose result would be
+        unlikely if the claim were false (permutation of sample labels, held-out replicate,
+        negative-control gene set, alternative method, direction check against a known marker).
+        Registration closes when the claim gets its first result, and every registered test
+        must then be run and recorded: one left without a result counts as zero and the claim
+        cannot be supported. Do not try a test first and register it afterwards.
+
+        Args:
+            claim_id: Claim id, e.g. "C3".
+            test_name: Short name; use the same name when you record the result.
+            method: What you will run (data, statistic, number of permutations) and which
+                outcome would contradict the claim.
+        """
+        if claim_id not in ledger.claims:
+            raise ToolError(f"unknown claim {claim_id}; known: {', '.join(ledger.claims)}")
+        try:
+            claim = ledger.register_test(claim_id, test_name, method, role)
+        except ValueError as e:
+            raise ToolError(str(e)) from e
+        await save_ledger(ledger)
+        return f"{claim.id}: registered {len(claim.registered)} test(s): " + ", ".join(
+            r.name for r in claim.registered
+        )
+
+    return execute
+
+
+@tool
 def record_falsification_test(ledger: Ledger, role: str) -> Tool:
     async def execute(
         claim_id: str, test_name: str, p_value: float, contradicts: bool, note: str
     ) -> str:
         """Record the result of a falsification test you actually ran in the sandbox.
 
-        Design each test so that, if the claim were false, the observed result would be unlikely
-        only by chance (permutation of sample labels, held-out replicate, negative-control gene set,
-        alternative method on the same data, direction check against a known marker). Report the
-        p-value of the observed result under the claim's null hypothesis. Set contradicts=true when
-        the result goes against the claim. The verdict is computed by code (e-values, alpha=0.1 shared
-        across all claims). Every recorded test counts, a test name is accepted once per claim, and
-        a claim takes at most 3 tests, so decide the tests before you run them. Tests on one claim
-        must be independent of each other: different data splits or different methods, never the
-        same test rerun or renamed.
+        The test must have been registered with register_falsification_test before any test of
+        the claim was run; use the registered name. Report the p-value of the observed result
+        under the claim's null hypothesis, from code you ran. Set contradicts=true when the result
+        goes against the claim; a contradicting result is always accepted, registered or not.
+        The verdict is computed by code: alpha=0.1 is shared across all claims, and a claim is
+        supported only when every registered test has a result and the mean of their e-values
+        reaches the threshold read_ledger shows. Record every registered test, favourable or not;
+        one result per test name, and the first result stands.
 
         Args:
             claim_id: Claim id, e.g. "C3".
-            test_name: Short name of the test.
+            test_name: The registered name of the test.
             p_value: p-value under the null, from code you ran. Never estimate it.
             contradicts: True if the observed effect goes against the claim.
             note: What you ran (script path) and what you observed.
@@ -246,7 +299,8 @@ def record_falsification_test(ledger: Ledger, role: str) -> Tool:
         except ValueError as e:
             raise ToolError(str(e)) from e
         await save_ledger(ledger)
-        return f"{claim.id}: verdict {claim.verdict}, combined e-value {claim.e_value:.3g}."
+        waiting = f" Still without a result: {', '.join(claim.pending)}." if claim.pending else ""
+        return f"{claim.id}: verdict {claim.verdict}, mean e-value {claim.e_value:.3g}.{waiting}"
 
     return execute
 
@@ -325,42 +379,43 @@ def read_ledger(ledger: Ledger) -> Tool:
 # --- Optional documentation search (Exa). Off unless the run sets exa=True. -----------------------
 # The benchmark asks agents to reproduce a published analysis, so an open web search could surface
 # the paper's own results. This tool therefore searches an allow-list of software documentation
-# and community help sites only: no journals, preprint servers, code hosts or data repositories.
+# only: no journals, preprint servers, code hosts, code mirrors, data repositories, package
+# indexes (anyone can publish a data package or a project page there) or question-and-answer
+# sites (threads can be about one paper). Where a host also serves data packages or arbitrary
+# projects, only named path prefixes or named projects are allowed.
 # The allow-list is enforced twice: Exa is asked for these domains only, and every returned URL is
-# checked here again, against the list and against the case's own network policy.
+# checked here again, against the list, its path rules and the case's own network policy.
+# Residual risk: a tool's own manual can quote a public dataset in an example.
 DOC_DOMAINS = [
     "bioconductor.org",
-    "support.bioconductor.org",
-    "biostars.org",
     "readthedocs.io",
-    "rdrr.io",
-    "cran.r-project.org",
-    "r-project.org",
-    "pypi.org",
-    "python.org",
     "htslib.org",
     "support.10xgenomics.com",
     "nf-co.re",
     "training.galaxyproject.org",
     "hbctraining.github.io",
-    "stackoverflow.com",
-    "bioinformatics.stackexchange.com",
-    "stats.stackexchange.com",
     "satijalab.org",
+    "docs.python.org",
 ]
-MAX_SEARCHES = 20  # per run, all roles together
-# Identifiers of a study or its data. A query that carries one is looking for the study.
-_STUDY_ID = re.compile(
-    r"\b10\.\d{4,9}/\S+"  # DOI
-    r"|\b(?:GSE|GSM|GDS|GPL)\d{3,}\b"  # GEO
-    r"|\b[SED]R[RXPSA]\d{4,}\b"  # SRA / ENA / DDBJ runs, experiments, projects, samples
-    r"|\bPRJ(?:NA|EB|DB)\d+\b|\bSAM(?:N|EA|D)\d+\b"  # BioProject, BioSample
-    r"|\bE-[A-Z]{4}-\d+\b"  # ArrayExpress
-    r"|\bPMC\d{4,}\b|\bPMID:?\s*\d{5,}\b|\bpubmed\s*\d{5,}\b"
-    r"|\b(?:phs|EGA[SDCN])\d{6,}\b"  # dbGaP, EGA
-    r"|\b(?:doi\.org|zenodo|figshare|biorxiv|medrxiv)\b",
-    re.IGNORECASE,
+# bioconductor.org: software package pages, manuals and vignettes only. Experiment-data packages
+# (/packages/*/data/experiment/), annotation data and workflows can carry a study's own data.
+_PATH_RULES: dict[str, re.Pattern[str]] = {
+    "bioconductor.org": re.compile(
+        r"^/(?:packages/(?:release|devel|\d+\.\d+)/bioc/|help/|install/?)"
+    ),
+}
+# readthedocs.io hosts any project anyone creates; only these tool manuals are allowed.
+READTHEDOCS_PROJECTS = frozenset(
+    "subread star-aligner hisat2 salmon kallisto pachterlab-kallisto bowtie-bio bowtie2 bwa "
+    "samtools pysam bedtools deeptools macs3 macs2 multiqc fastqc cutadapt trimgalore htseq "
+    "rsem stringtie gffread gffutils pyranges pybedtools scanpy anndata scvi-tools squidpy muon "
+    "episcanpy scvelo cellrank harmonypy bbknn leidenalg umap-learn pandas numpy scipy "
+    "statsmodels scikit-learn matplotlib seaborn snakemake nextflow biopython gseapy pydeseq2 "
+    "decoupler pertpy mudata snapatac2 pyensembl mygene goatools sourmash khmer qiime2 dada2 "
+    "bismark methylpy pyfaidx cyvcf2 pyvcf bcbio-gff umi-tools fastp spades quast busco prokka "
+    "bakta gatk picard varscan freebayes snpeff cnvkit homer chipseeker rseqc qualimap".split()
 )
+MAX_SEARCHES = 20  # per run, all roles together; a failed call counts
 # Verbatim from Exa's build-with-exa skill: the description of the `objective` parameter.
 _OBJECTIVE = (
     "Goal for this search turn; say which documents should rank first, which should be excluded, "
@@ -368,25 +423,47 @@ _OBJECTIVE = (
 )
 
 
-def query_refusal(text: str, doi: str | None = None) -> str | None:
-    """Why a search text is refused, or None. Checked on the query and on the objective."""
-    found = _STUDY_ID.search(text)
+def query_refusal(
+    text: str,
+    doi: str | None = None,
+    titles: Sequence[str] = (),
+    authors: Sequence[str] = (),
+) -> str | None:
+    """Why a search text is refused, or None. Checked on the query and on the objective.
+
+    `titles` (the paper's title) and `authors` (surnames) are compared when the case provides
+    them; the BixBench3 case record has neither today, so the solver passes none."""
+    found = study_identifier(text)
     if found:
-        return f"it contains a study or dataset identifier ({found.group(0)[:40]!r})"
-    if doi and doi.lower() in text.lower():
-        return "it contains the study's DOI"
+        return f"it contains a study or dataset identifier ({found!r})"
+    plain = normalise(text).lower()
+    if doi:
+        squeeze = re.compile(r"[\s/]|%2f")
+        if doi.lower() in plain or squeeze.sub("", doi.lower()) in squeeze.sub("", plain):
+            return "it contains the study's DOI"
+    for title in titles:
+        phrase = shared_phrase(text, title)
+        if phrase:
+            return f"it repeats words of the study's title ({phrase!r})"
+    surname = names_person(text, list(authors))
+    if surname:
+        return f"it names an author of the study ({surname!r})"
     return None
 
 
 def result_block_reason(url: str, policy: NetworkAccessPolicy | None = None) -> str | None:
     """Why a returned URL is dropped, or None. The case's policy wins over the allow-list."""
+    raw = url.strip()
+    if "\\" in raw or any(ord(c) < 33 for c in raw):
+        return "URL contains a backslash, a space or a control character"
     try:
-        normalized = normalize_url(url)
-        host = host_from_url(url)
+        parts = urlsplit(raw)
+        if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+            return "URL carries user information before the host"
+        normalized = normalize_url(raw)
+        host = host_from_url(raw)
     except ValueError:
         return "not an http(s) URL"
-    if not any(domain_matches(host, d) for d in DOC_DOMAINS):
-        return "host is not on the documentation allow-list"
     restricted = [*RESTRICTED_DOMAIN_SCOPES, *(policy.restricted_domain_scopes if policy else [])]
     if any(domain_matches(host, d) for d in restricted):
         return "host is a restricted code or data host"
@@ -399,6 +476,21 @@ def result_block_reason(url: str, policy: NetworkAccessPolicy | None = None) -> 
                     return "URL is an answer source for this task"
             except ValueError:
                 continue
+    domain = next((d for d in DOC_DOMAINS if domain_matches(host, d)), None)
+    if domain is None:
+        return "host is not on the documentation allow-list"
+    if domain == "readthedocs.io":
+        project = host.removesuffix(".readthedocs.io")
+        if host == "readthedocs.io" or project not in READTHEDOCS_PROJECTS:
+            return "not one of the named tool manuals on readthedocs.io"
+    rule = _PATH_RULES.get(domain)
+    if rule:
+        # A host with path rules is allowed as itself only: its subdomains (for example the
+        # support forum) are other sites.
+        if host not in (domain, f"www.{domain}"):
+            return f"only {domain} itself is allowed, not its subdomains"
+        if not rule.match(urlsplit(normalized).path):
+            return f"path is outside the documentation part of {domain}"
     return None
 
 
@@ -423,10 +515,15 @@ async def exa_docs(query: str, objective: str, api_key: str) -> dict[str, Any]:
 
 @tool
 def search_docs(
-    ledger: Ledger, role: str, policy: NetworkAccessPolicy | None = None, doi: str | None = None
+    ledger: Ledger,
+    role: str,
+    policy: NetworkAccessPolicy | None = None,
+    doi: str | None = None,
+    titles: Sequence[str] = (),
+    authors: Sequence[str] = (),
 ) -> Tool:
     async def execute(query: str, objective: str) -> str:
-        """Search software documentation and bioinformatics help sites (not papers, not data).
+        """Search software documentation (tool manuals; not papers, not data, not forums).
 
         Use it for tool usage, parameters, file formats, error messages and version differences.
         It cannot and must not be used to look up the study being reproduced or its results:
@@ -447,13 +544,22 @@ def search_docs(
             await save_ledger(ledger)
             return ToolError(f"search refused: {reason}")
 
-        used = sum(1 for e in ledger.events if e.get("kind") == "search")
+        # Calls that reached the search engine, finished or not. The slot is taken before the
+        # first await, so parallel calls cannot pass the cap together, and a failed call counts.
+        used = sum(1 for e in ledger.events if e.get("kind") in ("search", "search.started"))
         if used >= MAX_SEARCHES:
             raise await refuse(f"the run's limit of {MAX_SEARCHES} searches is used up")
-        reason = query_refusal(f"{query}\n{objective}", doi)
+        reason = query_refusal(f"{query}\n{objective}", doi, titles, authors)
         if reason:
             raise await refuse(reason + "; search_docs is for software documentation only")
-        body = await exa_docs(query, objective, key)
+        started: dict[str, object] = {"kind": "search.started", "by": role, "query": query}
+        ledger.events.append(started)
+        try:
+            body = await exa_docs(query, objective, key)
+        except Exception as error:
+            started.update(kind="search", urls=[], dropped=[], failed=str(error)[:200])
+            await save_ledger(ledger)
+            raise
         results, dropped = [], []
         for r in body.get("results", []):
             why = result_block_reason(str(r.get("url") or ""), policy)
@@ -461,9 +567,7 @@ def search_docs(
                 dropped.append({"url": r.get("url"), "reason": why})
             else:
                 results.append(r)
-        ledger.log(
-            "search", by=role, query=query, urls=[r.get("url") for r in results], dropped=dropped
-        )
+        started.update(kind="search", urls=[r.get("url") for r in results], dropped=dropped)
         await save_ledger(ledger)
         if not results:
             return "Nothing relevant found on the documentation sites."

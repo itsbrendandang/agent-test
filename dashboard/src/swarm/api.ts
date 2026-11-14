@@ -49,15 +49,23 @@ export interface RunDetail { run: GlhfRun; ledger: Ledger | null; findings: stri
 const get = <T,>(path: string): Promise<T> =>
   fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
 
-export const startDemo = (solver: Solver): Promise<{ id: string }> =>
-  fetch(`${ENGINE}/api/glhf/runs`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode: "local", task: "demo", solver, model: "mock" }),
-  }).then(async (r) => {
-    if (r.ok) return r.json()
-    const body = await r.json().catch(() => ({}))
-    throw new Error(body.error ?? `Engine answered ${r.status}`)
-  })
+/** POST /api/glhf/runs body for a local run. Mirrors RunRequest in engine/src/glhf/types.ts; the engine checks it again. */
+export interface StartRequest {
+  mode: "local"; task: "demo"; solver: Solver; model: string
+  timeLimit: number; maxTokens?: number; reviewRounds?: number; exa?: boolean; memory?: boolean; seed?: number
+}
+/** Limits the engine enforces (checkRequest in engine/src/glhf/tracker.ts and the constants in types.ts). */
+export const LIMITS = { minutes: [1, 1440], tokens: [1_000, 500_000_000], reviewRounds: [1, 10], seed: [1, 2 ** 31 - 1] } as const
+export const MODEL_ID = /^[\w./:@-]{1,200}$/
+
+/** Starts one run. Rejects with the engine's own message when it refuses the request. */
+export const startRun = (body: StartRequest): Promise<{ id: string }> =>
+  fetch(`${ENGINE}/api/glhf/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    .then(async (r) => {
+      const reply = await r.json().catch(() => ({}))
+      if (r.ok && typeof reply.id === "string") return reply as { id: string }
+      throw new Error(typeof reply.error === "string" ? reply.error : `The engine answered ${r.status}.`)
+    }, () => { throw new Error("The engine cannot be reached. Start it with npm run engine.") })
 
 export const isLive = (r: GlhfRun) => r.phase !== "done" && r.phase !== "failed"
 /** Demo case or scripted model: never a benchmark result. */

@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
+import { EngineOffline, PageHead, runState, StatusPill } from "@/components/Shared"
+import { fmtDuration } from "@/lib/format"
 import "@/board/board.css"
 
 type Of<T extends BoardEvent["type"]> = Extract<BoardEvent, { type: T }>
@@ -21,6 +23,7 @@ function sections(md: string): Record<string, string> {
 }
 const bullets = (s = "") => s.split("\n").map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim()).filter(Boolean)
 const plain = (s = "") => s.replace(/[*_`]+/g, "").trim()
+const ABOUT = "A board of AI specialists reviews a drug candidate brief, checks each claim against evidence, and writes a decision memo."
 
 export function BoardView() {
   const [status, setStatus] = useState<Status>()
@@ -37,11 +40,13 @@ export function BoardView() {
 
   useEffect(() => localStorage.setItem("board.details", details ? "1" : "0"), [details])
   const refresh = () => get<RunSummary[]>("/api/runs").then((r) => { setRuns(r); setRunId((id) => id ?? r[0]?.id) })
-  useEffect(() => {
+  const load = () => {
+    setOffline(false)
     Promise.all([get<Status>("/api/status"), get<RosterMember[]>("/api/roster"), get<string[]>("/api/briefs")])
-      .then(([s, r, b]) => { setStatus(s); setRoster(r); setBriefs(b); setBrief(b[0] ?? ""); return refresh() })
+      .then(([s, r, b]) => { setStatus(s); setRoster(r); setBriefs(b); setBrief((old) => old || (b[0] ?? "")); return refresh() })
       .catch(() => setOffline(true))
-  }, [])
+  }
+  useEffect(load, [])
 
   const memoWritten = events.some((e) => e.type === "memo.written")
   useEffect(() => { if (runId && memoWritten) void fetchMemo(runId).then(setMemoText); else setMemoText("") }, [runId, memoWritten])
@@ -85,16 +90,16 @@ export function BoardView() {
   const maxRounds = status?.meeting.max_rounds ?? 4
 
   if (offline) return (
-    <div className="page"><div className="offline card-surface">
-      <h1>Engine not running</h1>
-      <p className="muted">Start it from the repo root with <code>npm run engine</code> (mock models, no keys needed), then reload.</p>
-    </div></div>
+    <div className="page board">
+      <PageHead title="Drug Candidate Board" about={ABOUT} />
+      <EngineOffline needs="The board runs in the engine. Without API keys it uses scripted models, which are free." onRetry={load} />
+    </div>
   )
 
   // One plain sentence about where the run is.
   const known = runs.some((r) => r.id === runId)
   const headline = !status ? "Loading the board…"
-    : !runId ? "Pick a brief and convene the board."
+    : !runId ? "No reviews yet. Pick a brief and press Convene board. Without API keys the board uses scripted models, which are free."
     : runs.length > 0 && !known && events.length === 0 ? `Run ${runId} was not found. Pick another run from the list.`
     : failed ? "The run stopped with an error."
     : done ? "The board has decided."
@@ -105,23 +110,28 @@ export function BoardView() {
 
   return (
     <div className="page board">
-      <header className="board-banner card-surface">
-        <h1>Drug Candidate Board</h1>
-        {status?.mock && <span className="pill" data-kind="warning" title="No OPENROUTER_API_KEY set; scripted models">Demo mode</span>}
-        <select aria-label="Run" value={runId ?? ""} onChange={(e) => setRunId(e.target.value || undefined)}>
+      <PageHead title="Drug Candidate Board" about={ABOUT}>
+        {status?.mock && <span className="pill" data-kind="warning" title="The engine has no OPENROUTER_API_KEY, so the board uses scripted models.">Demo mode</span>}
+      </PageHead>
+      <div className="board-banner card-surface">
+        <h2 id="board-run-label">Review</h2>
+        <select aria-labelledby="board-run-label" value={runId ?? ""} title={runId} onChange={(e) => setRunId(e.target.value || undefined)}>
           {runs.length === 0 && <option value="">No runs yet</option>}
           {runId && !known && runs.length > 0 && <option value={runId}>{runId}</option>}
-          {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.status}</option>)}
+          {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {runState(r.status)}</option>)}
         </select>
-        <select aria-label="Brief" value={brief} onChange={(e) => setBrief(e.target.value)}>
+        {runId && (known || events.length > 0) && <StatusPill state={failed ? "failed" : runState(runs.find((r) => r.id === runId)?.status ?? (done ? "done" : "running"))} />}
+        <span className="board-new">
+        <select aria-label="Brief for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
           {briefs.map((b) => <option key={b} value={b}>{b.replace(/\.md$/, "").replace(/-/g, " ")}</option>)}
         </select>
-        <button type="button" className="primary" onClick={start} disabled={!brief || live}>{live ? "Board in session" : "Convene board"}</button>
+        <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Board in session" : "Convene board"}</button>
+        </span>
         <label className="toggle">
           <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
           <span>Show details</span>
         </label>
-      </header>
+      </div>
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
       <section className="card-surface summary" aria-label="Status">
@@ -148,7 +158,7 @@ export function BoardView() {
             {memo["unresolved tensions"] && <div><h3>Open questions</h3><ul>{bullets(memo["unresolved tensions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
             {memo["next actions"] && <div><h3>Next steps</h3><ul>{bullets(memo["next actions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
           </div>
-          {done && <p className="muted small">{rounds.length} rounds · {done.minutes.toFixed(1)} min · ${done.usd.toFixed(2)}</p>}
+          {done && <p className="muted small">{rounds.length} rounds · took {fmtDuration(done.minutes * 60_000)} · cost ${done.usd.toFixed(2)}</p>}
         </section>
       )}
 

@@ -9,6 +9,9 @@ services:
   engine:
     build: .
     image: glhf-platform
+    # A small init process is pid 1 and the engine its child: signals from `docker compose down` reach the
+    # engine (which then releases its run locks), and processes it leaves behind are cleaned up.
+    init: true
     working_dir: ${PWD}
     command: ["node", "engine/src/server.ts"]
     ports:
@@ -33,6 +36,7 @@ services:
   dashboard:
     image: glhf-platform
     depends_on: [engine]
+    init: true
     entrypoint: []
     command: ["node", "/srv/serve.mjs"]
     ports:

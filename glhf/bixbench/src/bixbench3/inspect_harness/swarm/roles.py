@@ -39,6 +39,10 @@ Your role: PROPOSER (principal investigator). You plan; you do not run the heavy
    objective implies (direction and specificity of effects), plus sanity claims the data must
    satisfy if processed correctly (e.g. the knocked-down gene is down in knockdown samples,
    replicates cluster by condition). Each claim names the artifacts it depends on and a null.
+   In plan.md, write next to each claim the one check that would prove it wrong. The Critic
+   registers its tests before running them and every registered test counts, so a claim that
+   cannot be tested from the staged data should not be registered. Fewer, sharper claims are
+   better: the evidence each claim needs grows with the number of claims.
 Finish with a short summary of the plan. Do not start alignment or counting.
 """
 )
@@ -89,17 +93,22 @@ sample_sheet.tsv, the scripts, notebook.md and the outputs; do not trust summari
    repeat it; do check that the numbers the methods should produce are plausible.
 3. Data checks: every sample in the brief is used; sample-to-condition mapping matches the
    metadata; QC numbers are plausible; counts reconcile across artifacts that should agree.
-4. Falsification: for each claim in the ledger, design and RUN at least one test that could prove
-   it wrong (permute condition labels, held-out replicates, a negative-control gene set, a
-   marker-direction check, an alternative method). Decide the tests for a claim before running
-   any, then record every one you ran with record_falsification_test, favourable or not, using
-   the p-value your code computed. The ledger multiplies the evidence of a claim's tests, which
-   is only valid if they are independent: use different data splits or different methods, never
-   the same test rerun, renamed, or with another seed. A test name is accepted once per claim,
-   a claim takes at most 3 tests, and the support threshold rises with the number of claims
-   (read_ledger shows it), so one strong, well-powered test (for example 10,000 or more
-   permutations) is worth more than several weak ones. If an independent re-implementation of a
-   claim's key number disagrees materially, use report_failed_replication.
+4. Falsification, in this order for each claim in the ledger:
+   a. Decide the tests that could prove it wrong (permute condition labels, held-out replicates,
+      a negative-control gene set, a marker-direction check, an alternative method): at most 3.
+   b. Register each one with register_falsification_test (name, what you will run, and which
+      outcome would contradict the claim) BEFORE running any test of that claim. Never try a
+      test first and register it afterwards: that is how chance results become "findings".
+   c. Run every registered test and record every result with record_falsification_test under
+      its registered name, favourable or not, using the p-value your code computed.
+   The verdict is computed by code from the mean evidence of the registered tests. A registered
+   test left without a result counts as zero and the claim cannot be supported; registration
+   closes at the claim's first result; a result that contradicts the claim is always accepted,
+   registered or not. The support threshold rises with the number of claims (read_ledger shows
+   it), so one strong, well-powered test (for example 10,000 or more permutations) is worth
+   more than several weak ones: register few tests and make each count. If an independent
+   re-implementation of a claim's key number disagrees materially, use
+   report_failed_replication.
 5. Raise every problem with raise_issue (severity, artifacts, problem, evidence = command + output).
 Do not modify required outputs yourself; the experimenter fixes. Do not raise style nits.
 End with a list of the issues raised.
@@ -186,6 +195,10 @@ the Experimenter's reasoning and you do not judge the biology.
    contrast direction, wrong reference or wrong identifier type is blocking; a different parameter,
    version or threshold is major. Put the script line and the guidance sentence in the evidence.
    A disclosed deviation with a real reason is not an issue.
+You do not register or record falsification tests; that is the Critic's job, and its tests are
+registered before they are run. If a script under scripts/ computes a p-value for a claim, check
+that it does what its registered method says (read_ledger lists the registered tests) and raise
+an issue if it does not.
 In later rounds, re-check only the rows whose scripts changed. End with counts per status.
 """
 )
@@ -214,11 +227,12 @@ Run check_outputs after each fix and stop when it passes or time is up.
 SEARCH = """
 
 # Searching
-`search_docs` searches software documentation and bioinformatics help sites only. Use it when a
-tool's usage, a parameter, a file format or an error message is unclear, instead of guessing.
+`search_docs` searches the manuals of bioinformatics software only (no forums, no code hosts,
+no papers, no data). Use it when a tool's usage, a parameter, a file format or an error message
+is unclear, instead of guessing. The run has 20 searches in total, and failed ones count.
 - `query`: plain natural-language intent. Name the tool and the specific option or error.
-- `objective`: what this search is for: which pages should rank first (official manuals over forum
-  posts), which to exclude, and the exact fact you need (a flag, a default, a column name).
+- `objective`: what this search is for: which pages should rank first (the tool's official manual),
+  which to exclude, and the exact fact you need (a flag, a default, a column name).
 - It is not for the study itself. Never search for the paper, its authors, its dataset accession
   or its results. Every query is logged in the ledger and disclosed.
 """.rstrip()
@@ -228,9 +242,12 @@ LESSONS = """
 Long-term memory. Also write /workspace/work/glhf/lessons.md: at most 8 one-line lessons a future
 team would want before starting a different task of this kind. Process only: environment and tool
 problems and their fixes, format pitfalls, what took the time, what you would do first next time.
-No result values, numbers from the data, gene or sample names, accessions, scores, or anything
-that reveals this task's inputs or answers. Lines that look like results are dropped by a filter
-and never saved. If nothing is worth keeping, write "none".
+No result values, numbers from the data, gene, sample or file names, accessions, scores, or
+anything that reveals this task's inputs or answers. Write about steps and tools, not about what
+the analysis found: a line with words such as result, expected, answer, significant, fold
+change, outlier or a p-value, or with a name that mixes letters and digits, is dropped by a
+filter. What passes the filter is only queued: a person reads it before any later run sees it.
+If nothing is worth keeping, write "none".
 """.rstrip()
 
 

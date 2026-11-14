@@ -4,8 +4,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { alive, parseStamp, stamp, startTime } from "../src/glhf/proc.ts"
-import { BadId, runDir, safeId, settingsOf } from "../src/glhf/store.ts"
-import { findManifest, manifestSolver, processState, startOnce } from "../src/glhf/task.ts"
+import { BadId, runDir, safeId, settingsOf, type Stored } from "../src/glhf/store.ts"
+import type { GlhfRun, RunRequest } from "../src/glhf/types.ts"
+import { findManifest, hasRival, manifestSolver, processState, startOnce } from "../src/glhf/task.ts"
 import { BadRequest, checkRequest, lock, TrackerBusy } from "../src/glhf/tracker.ts"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "glhf-test-"))
@@ -61,7 +62,7 @@ test("settings recorded for a run", () => {
 
 test("run ids are one safe path segment", () => {
   for (const id of ["202611141959-demo-glhf", "a.b_c-1"]) assert.ok(safeId(id))
-  for (const id of ["../../board/runs/x", "..", "a/b", "a\\b", "", "a..b", "a b", "%2e%2e", "x".repeat(201), 5, undefined]) assert.ok(!safeId(id), String(id))
+  for (const id of [".", "...", "../../board/runs/x", "..", "a/b", "a\\b", "", "a..b", "a b", "%2e%2e", "x".repeat(201), 5, undefined]) assert.ok(!safeId(id), String(id))
   assert.throws(() => runDir("../../board/runs/x"), BadId)
   assert.match(runDir("ok-run"), /glhf\/runs\/ok-run$/)
 })
@@ -90,9 +91,36 @@ test("a manifest is adopted only for the same solver", () => {
   const m = (id: string) => JSON.stringify({ run_id: id, paper_id: "9", model: { id: "anthropic/m" }, started_at: new Date().toISOString() })
   writeFileSync(join(plain, "a", "run_manifest.json"), m("a"))
   assert.deepEqual(findManifest({ ...input, solver: "glhf" }, since, plain), { id: "a" })
+  // ...but not while a run of the other solver, same task and model, still waits for its own cloud run:
+  // the one manifest may be that run's.
+  assert.deepEqual(findManifest({ ...input, solver: "glhf" }, since, plain, [], true), { ambiguous: ["a"] })
+  assert.deepEqual(findManifest({ ...input, solver: "glhf" }, since, root, [], true), { id: "run-swarm" }, "a manifest that names our solver is still adopted")
   writeFileSync(join(plain, "b", "run_manifest.json"), m("b"))
   assert.deepEqual(findManifest({ ...input, solver: "glhf" }, since, plain).ambiguous?.sort(), ["a", "b"])
   assert.deepEqual(findManifest({ ...input, solver: "glhf" }, since, plain, ["b"]), { id: "a" })
+})
+
+test("a rival is an unfinished cloud run of the other solver, same task and model, without its cloud run yet", () => {
+  const me = { id: "mine", task: "9", model: "anthropic/m", solver: "glhf" as const }
+  const other = (over: Partial<GlhfRun>): Stored => ({ request: {} as RunRequest, run: { id: "other", mode: "cloud", task: "9", solver: "single", model: "anthropic/m", roleModels: {}, phase: "launching", startedAt: 1, ...over } })
+  assert.equal(hasRival(me, [other({})]), true)
+  assert.equal(hasRival(me, [other({ id: "mine" })]), false, "not itself")
+  assert.equal(hasRival(me, [other({ solver: "glhf" })]), false)
+  assert.equal(hasRival(me, [other({ task: "10" })]), false)
+  assert.equal(hasRival(me, [other({ model: "openai/x" })]), false)
+  assert.equal(hasRival(me, [other({ phase: "done" })]), false)
+  assert.equal(hasRival(me, [other({ phase: "failed" })]), false)
+  assert.equal(hasRival(me, [other({ remoteId: "run-1" })]), false, "it already follows its own cloud run")
+  assert.equal(hasRival(me, [other({ mode: "local" })]), false)
+})
+
+test("model ids cannot look like command-line options", () => {
+  const base = { mode: "local" as const, solver: "glhf" as const }
+  for (const model of ["--help", "-x", "--x/y z", "a b", ".hidden", "/abs/path", "", "x".repeat(201)]) assert.throws(() => checkRequest({ ...base, model }, CLI), /model/, model)
+  for (const model of ["mock", "anthropic/claude-sonnet-5-5", "openai/gpt-5.5", "ollama/qwen3:32b", "openrouter/~anthropic/claude-opus-latest"]) assert.equal(checkRequest({ ...base, model }, CLI).model, model)
+  const real = { ...base, model: "anthropic/claude-sonnet-5-5" }
+  for (const critic of ["--x/y", "--x/y z", "-/a", "a /b"]) assert.throws(() => checkRequest({ ...real, roleModels: { critic } }, CLI), /roleModels/, critic)
+  assert.deepEqual(checkRequest({ ...real, roleModels: { critic: "openai/gpt-5.5" } }, CLI).roleModels, { critic: "openai/gpt-5.5" })
 })
 
 test("a pid counts as alive only with the start time it was recorded with", () => {

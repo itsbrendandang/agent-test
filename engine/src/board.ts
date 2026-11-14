@@ -8,8 +8,8 @@
 // is shown. Kill the process at any point and `resumeRun()` continues where it stopped: tools are
 // replay-safe, member inputs carry stable request IDs, and every claim ruling is saved under a stable key
 // as soon as it is made, so a finished model turn or claim check is not asked or paid for again. (A
-// check that was in flight when the process died is run again.) A lock file keeps two processes off the
-// same run.
+// check that was in flight when the process died is run again.) A lock file (runlock.ts) keeps two
+// processes off the same run.
 //
 // Lessons from multi-agent failure research (acyclic-labs/sdk research/experiments) built in:
 // - Round 1 is blind: members answer before seeing each other (fan-out, not chain), against
@@ -22,7 +22,7 @@
 //   reports tokens but no cost is charged at meeting.fallback_usd_per_mtok and the run is marked
 //   costEstimated, so an unpriced model still reaches the budget.
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { bool, obj, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
@@ -36,10 +36,11 @@ import { type Checker, EventLog, type EvidenceItem, type Verdict } from "./event
 import { exaSearch, OBJECTIVE_DESCRIPTION } from "./exa.ts"
 import { Jev } from "./jev.ts"
 import { buildModels, modelFor } from "./models.ts"
+import { holder, take } from "./runlock.ts"
 
 const ctx = BACKGROUND_CONTEXT
 
-interface RunState {
+export interface RunState {
   runId: string
   briefFile: string
   startedAt: number
@@ -52,6 +53,8 @@ interface RunState {
   checkerUsd: number
   jevUsd?: number // Jev spend, kept here because the Jev client's own counter restarts with the process
   usd?: number // running total for the run: models + Jev + escalation checkers
+  day?: string // the local day (YYYY-MM-DD) the run last worked on, and what it had spent before that day,
+  dayBase?: number // so the daily cap counts only today's part of a run that started on an earlier day
   costEstimated?: boolean // true once a model reported tokens with no cost and the fallback price was used
   mock?: boolean
   finalRound?: number // the round that asked for final positions; no round may follow it
@@ -64,55 +67,56 @@ export class BudgetReached extends Error {}
 
 export class RunBusy extends Error {}
 
-const alive = (pid: number) => {
-  try { process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM" }
-}
-
-/** The process that holds the run's lock, if it is still alive. */
-export function lockHolder(dir: string): number | undefined {
-  try {
-    const pid = Number(readFileSync(`${dir}/run.lock`, "utf8").trim())
-    return Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : undefined
-  } catch { return undefined }
-}
+/** The process that holds the run's lock (board/runs/<run>/run.lock), if it is still alive. See runlock.ts. */
+export const lockHolder = (dir: string): number | undefined => holder(`${dir}/run.lock`)
 
 /**
- * Take the run's lock (board/runs/<run>/run.lock holds our pid) and return the function that releases it.
- * Throws RunBusy while a live process holds it. A lock left by a dead process is taken over.
+ * Take the run's lock and return the function that releases it. Throws RunBusy while a live process holds
+ * it (also this process, if it is already working on the run). A lock left by a dead process is taken over.
+ * The lock is also released when the process exits or is stopped with SIGTERM or SIGINT.
  */
 export function acquireRunLock(dir: string): () => void {
-  const file = `${dir}/run.lock`
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      writeFileSync(file, String(process.pid), { flag: "wx" })
-      return () => { try { if (readFileSync(file, "utf8").trim() === String(process.pid)) rmSync(file, { force: true }) } catch { /* already gone */ } }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
-      const holder = lockHolder(dir)
-      if (holder !== undefined) throw new RunBusy(`Run is already being worked on by process ${holder}.`)
-      // Stale. Only one process wins this rename, so two cannot both take the lock over.
-      try { renameSync(file, `${file}.stale.${process.pid}`); rmSync(`${file}.stale.${process.pid}`, { force: true }) } catch { /* another process took it */ }
-    }
-  }
-  throw new RunBusy("Could not take the run lock.")
+  const taken = take(`${dir}/run.lock`)
+  if (typeof taken === "function") return taken
+  throw new RunBusy(`Run is already being worked on by process ${taken.busy}.`)
+}
+
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
+/** Note that the run is working today. On the first call of a new day, what it had spent before becomes the day's base. */
+export function rollDay(state: Pick<RunState, "day" | "dayBase" | "usd" | "startedAt">, now = new Date()): void {
+  const today = dayKey(now)
+  if (state.day === today) return
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  // On the day a run started, everything it spends counts. On a later day, only what it spends from now on.
+  state.dayBase = state.day === undefined && state.startedAt >= midnight ? 0 : state.usd ?? 0
+  state.day = today
+}
+
+/** What a run spent today: all of it on the day it started, and only the part since midnight when resumed later. */
+export function todaySpend(state: Partial<RunState>, spent: number, now = new Date()): number {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  if (state.day === dayKey(now)) return Math.max(0, spent - (state.dayBase ?? 0))
+  if (state.day !== undefined) return 0 // it last worked on an earlier day
+  return (state.startedAt ?? 0) >= midnight ? spent : 0 // a run from before `day` was saved
 }
 
 /**
- * Dollars counted against today's cap: every run started today (local time), whatever its state, at the
- * spend saved in its run.json. A run a live process is working on counts for at least its full per-run
- * cap, so several runs started together cannot each pass the check at $0. Scripted runs reserve nothing.
+ * Dollars counted against today's cap (local time): what every run spent today, whatever its state, from
+ * the spend saved in its run.json. A run started on an earlier day and resumed today counts with what it
+ * spent since the resume. A run a live process is working on counts for at least its full per-run cap, so
+ * several runs started together cannot each pass the check at $0. Scripted runs reserve nothing.
+ * (Two starts in the same instant can still both pass: the check and the lock are not one step.)
  */
 export function spentToday(config: BoardConfig, now = new Date()): number {
   const dir = path(config, "runs")
   if (!existsSync(dir)) return 0
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   let usd = 0
   for (const id of readdirSync(dir)) {
     const file = `${dir}/${id}/run.json`
     if (!existsSync(file)) continue
     let state: Partial<RunState>
     try { state = JSON.parse(readFileSync(file, "utf8")) as Partial<RunState> } catch { continue }
-    if ((state.startedAt ?? 0) < midnight) continue
     let spent = state.usd
     if (spent === undefined) { // a run from before spend was saved in run.json: use its closing event
       spent = 0
@@ -121,17 +125,148 @@ export function spentToday(config: BoardConfig, now = new Date()): number {
         if (line.includes('"run.finished"')) try { spent = (JSON.parse(line) as { usd?: number }).usd ?? spent } catch { /* partial line */ }
       }
     }
+    const today = todaySpend(state, spent, now)
     const inFlight = !state.finished && !state.mock && lockHolder(`${dir}/${id}`) !== undefined
-    usd += inFlight ? Math.max(spent, config.meeting.max_usd) : spent
+    usd += inFlight ? Math.max(today, config.meeting.max_usd) : today
   }
   return usd
 }
 
 /** Throws BudgetReached once today's runs have used the daily cap. Scripted runs cost nothing and always pass. */
-export function checkDailyBudget(config: BoardConfig, now = new Date()): void {
-  if (MOCK) return
+export function checkDailyBudget(config: BoardConfig, now = new Date(), mock = MOCK): void {
+  if (mock) return
   const today = spentToday(config, now)
-  if (today >= config.meeting.daily_usd) throw new BudgetReached(`Daily budget reached: $${today.toFixed(2)} of $${config.meeting.daily_usd} counted for runs started today (running ones count at their full cap). Raise meeting.daily_usd in board/config.yaml or wait until tomorrow.`)
+  if (today >= config.meeting.daily_usd) throw new BudgetReached(`Daily budget reached: $${today.toFixed(2)} of $${config.meeting.daily_usd} counted for today's runs (running ones count at their full cap). Raise meeting.daily_usd in board/config.yaml or wait until tomorrow.`)
+}
+
+/**
+ * Rounds and checked claims of a run for the run list. Read from run.json and from the event log, and the
+ * larger number wins: the two can disagree for runs written by older versions, and the event log is what
+ * the dashboard shows when the run is opened.
+ */
+export function summarize(dir: string, state: Pick<RunState, "rounds" | "ledger">): { rounds: number; claims: number } {
+  let rounds = state.rounds ?? 0
+  const claims = new Set<string>()
+  try {
+    for (const line of readFileSync(`${dir}/events.jsonl`, "utf8").split("\n")) {
+      if (!line.includes('"round.started"') && !line.includes('"claim.checked"')) continue
+      try {
+        const e = JSON.parse(line) as { type?: string; key?: string; round?: number }
+        if (e.type === "round.started" && typeof e.round === "number") rounds = Math.max(rounds, e.round)
+        if (e.type === "claim.checked") claims.add(e.key ?? line)
+      } catch { /* partial line */ }
+    }
+  } catch { /* no event log */ }
+  return { rounds, claims: Math.max(state.ledger?.length ?? 0, claims.size) }
+}
+
+/**
+ * The run's model spend from the harness's usage. A model that reports tokens but no cost is charged at
+ * `fallbackPerMtok` dollars per million tokens (and `estimated` is true), so it cannot run under the budget
+ * for free. Scripted models cost nothing.
+ */
+export function usdOf(models: Record<string, { cost?: { total?: number }; totalTokens?: number }>, fallbackPerMtok: number, mock: boolean): { usd: number; estimated: boolean } {
+  let usd = 0, estimated = false
+  for (const u of Object.values(models)) {
+    const cost = u.cost?.total ?? 0
+    if (cost > 0 || mock || !u.totalTokens) { usd += cost; continue }
+    usd += (u.totalTokens / 1e6) * fallbackPerMtok
+    estimated = true
+  }
+  return { usd, estimated }
+}
+
+export type Memo = <T extends string | number>(name: string, candidate: T) => Promise<T>
+
+/**
+ * Decide whether the lead's next converse call runs a round. The round number and the decision are
+ * memoised (`memo` returns the stored value on a replay), so a replay after a crash runs the same round
+ * again instead of counting it as used and refusing it. Returns the refusal text, "" when the round runs.
+ * - After a round that asked for final positions, no round may follow.
+ * - Past a limit (rounds, minutes, dollars), only one round with final=true may still run.
+ */
+export async function gateRound(
+  state: Pick<RunState, "rounds" | "startedAt" | "finalRound">, config: BoardConfig, final: boolean, memo: Memo, spend: () => Promise<number>,
+  onLimit?: (round: number, limit: NonNullable<ReturnType<typeof overLimit>>) => void,
+): Promise<{ round: number; refusal: string }> {
+  const round = await memo<number>("round", state.rounds + 1)
+  const fresh = round > state.rounds
+  let refusal = ""
+  if (fresh) {
+    const limit = overLimit(config, round - 1, state.startedAt, await spend())
+    if (state.finalRound !== undefined) refusal = `Final positions are in (round ${state.finalRound}). No further rounds: call write_memo now.`
+    else if (limit && !final) refusal = `WRAP UP: ${limit.detail}. Call converse once with final=true to ask for final positions, then write_memo.`
+    if (refusal && limit) onLimit?.(round, limit)
+  }
+  refusal = await memo<string>("gate", refusal)
+  return { round, refusal }
+}
+
+/** What claim checking needs from the run. The checkers are passed in, so tests can count their calls. */
+export interface ClaimDeps {
+  state: Pick<RunState, "ledger" | "escalations" | "checkerUsd">
+  maxEscalations: number
+  /** Jev rules on several claims against one piece of evidence. */
+  jevCheck: (claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; p?: number }[]>
+  computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number }>
+  literatureCheck: (claim: Claim, evidence: string) => Promise<{ verdict: Verdict; note: string; usd: number }>
+  /** The screened evidence text for a source ("brief" for the brief), or undefined when it is not in the pool. */
+  evidenceFor: (source: string) => string | undefined
+  save: () => void
+  emit: (key: string, event: { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string }) => void
+}
+
+/**
+ * Rule on a member's claims: Jev first, the expensive checkers only for what Jev leaves undecided (and for
+ * computed claims). Returns one "[verdict] claim" line per claim. Each ruling is one ledger row under a
+ * stable key, saved as soon as it is made. A row that exists is a ruling already made (and paid for): a
+ * replay after a crash reuses it instead of calling a checker again.
+ */
+export async function checkClaims(deps: ClaimDeps, round: number, member: string, claims: Claim[]): Promise<string[]> {
+  const { state } = deps
+  const lines: string[] = []
+  const keyOf = (claim: Claim) => `${round}:${member}:${createHash("sha1").update(`${claim.kind}\n${claim.text}\n${claim.source}`).digest("hex").slice(0, 16)}`
+  const ruled = (claim: Claim) => {
+    const row = state.ledger.find((e) => e.key === keyOf(claim))
+    if (row && !lines.includes(`[${row.verdict}] ${claim.text}`)) lines.push(`[${row.verdict}] ${claim.text}`)
+    return Boolean(row)
+  }
+  const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string) => {
+    const key = keyOf(claim)
+    if (state.ledger.some((e) => e.key === key)) return // the same claim twice in one reply
+    state.ledger.push({ key, round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
+    deps.save()
+    deps.emit(`claim:${key}`, { type: "claim.checked", round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
+    lines.push(`[${verdict}] ${claim.text}`)
+  }
+  const escalate = async (claim: Claim, evidence: string) => {
+    if (state.escalations >= deps.maxEscalations) return record(claim, "unchecked", "jev", undefined, "escalation budget used up")
+    state.escalations++
+    deps.save()
+    const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence)
+    state.checkerUsd += ruling.usd
+    record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, ruling.note)
+  }
+
+  // Group claims by the evidence they cite, so Jev reads each piece of evidence once.
+  const groups = new Map<string, Claim[]>()
+  for (const claim of claims) {
+    if (ruled(claim)) continue
+    if (claim.kind === "computed") { await escalate(claim, ""); continue } // Jev is not a calculator
+    const key = claim.kind === "brief" ? "brief" : claim.source
+    groups.set(key, [...(groups.get(key) ?? []), claim])
+  }
+  for (const [source, group] of groups) {
+    const evidence = deps.evidenceFor(source)
+    if (!evidence) { for (const c of group) record(c, "unsupported", "jev", undefined, "source is not in the screened evidence pool"); continue }
+    const results = await deps.jevCheck(group.map((c) => c.text), evidence)
+    for (const [i, r] of results.entries()) {
+      if (r.verdict === "escalate") await escalate(group[i], evidence)
+      else record(group[i], r.verdict, "jev", r.p)
+    }
+  }
+  deps.save()
+  return lines
 }
 
 const MEMORY_MARK = "## From earlier runs"
@@ -196,11 +331,14 @@ export function newRunDir(config: BoardConfig, base: string): string {
   }
 }
 
-/** Run or continue a board. Throws RunBusy if another process is on this run, BudgetReached past the daily cap. */
-export async function runBoard(runId: string, onLog?: (log: EventLog) => void): Promise<void> {
-  const config = loadConfig()
+/**
+ * Run or continue a board. Throws RunBusy if another process is on this run, BudgetReached past the daily
+ * cap. `options` replace the config file and the mock switch (for tests).
+ */
+export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean } = {}): Promise<void> {
+  const config = options.config ?? loadConfig()
   if (loadState(config, runId).finished) return
-  checkDailyBudget(config) // also on resume, so a restart cannot spend past the cap
+  checkDailyBudget(config, new Date(), options.mock ?? MOCK) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
   try { await runLocked(config, runId, onLog) } finally { release() }
 }
@@ -217,6 +355,8 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
   const jev = new Jev(models, config)
   const jevBefore = state.jevUsd ?? 0
   const save = () => saveState(config, state)
+  rollDay(state) // from here on the run counts against today's cap
+  save()
 
   // ── Tools ──────────────────────────────────────────────────────────────────────────────────────
   const exaTool = defineTool({
@@ -250,18 +390,9 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
     parameters: obj({ message: str(), final: bool({ description: "true to ask for final positions" }) }),
     replay: "safe",
     execute: async (args, api) => {
-      // The round number and the decision to run it are memoised first, so a replay after a crash runs
-      // the same round again instead of counting it as used and refusing it.
-      const round = await api.memo<number>("round", state.rounds + 1, ctx)
-      const fresh = round > state.rounds
-      let refusal = ""
-      if (fresh) {
-        const limit = overLimit(config, round - 1, state.startedAt, await spend())
-        if (state.finalRound !== undefined) refusal = `Final positions are in (round ${state.finalRound}). No further rounds: call write_memo now.`
-        else if (limit && !args.final) refusal = `WRAP UP: ${limit.detail}. Call converse once with final=true to ask for final positions, then write_memo.`
-        if (refusal && limit) log.emit(`constraint:${round}`, { type: "constraint", reason: limit.reason, detail: limit.detail })
-      }
-      refusal = await api.memo<string>("gate", refusal, ctx)
+      // The round number and the decision to run it are memoised first (see gateRound).
+      const { round, refusal } = await gateRound(state, config, args.final, <T extends string | number>(name: string, candidate: T) => api.memo<T>(name, candidate, ctx), spend,
+        (r, limit) => log.emit(`constraint:${r}`, { type: "constraint", reason: limit.reason, detail: limit.detail }))
       if (refusal) { save(); return { output: [{ type: "text", text: refusal }] } }
       state.rounds = Math.max(state.rounds, round)
       if (args.final) state.finalRound = round // one final round may pass the limits; nothing runs after it
@@ -288,7 +419,7 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
       state.lastRound = []
       for (const { agent, reply } of replies) {
         log.emit(`reply:${round}:${agent.name}`, { type: "member.replied", round, member: agent.name, text: stripClaims(reply), usd: 0 })
-        const verdicts = await checkClaims(round, agent, parseClaims(reply))
+        const verdicts = await checkClaims(claimDeps, round, agent.name, parseClaims(reply))
         state.lastRound.push({ member: agent.title, reply: stripClaims(reply), verdicts })
       }
       const after = overLimit(config, state.rounds, state.startedAt, await spend())
@@ -313,56 +444,16 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
     },
   })
 
-  // ── Claim checking: Jev first, escalate only the uncertain band ────────────────────────────────
-  async function checkClaims(round: number, agent: AgentDef, claims: Claim[]): Promise<string[]> {
-    const lines: string[] = []
-    // One ledger row per claim per round, under a stable key. A row that exists is a ruling already made
-    // (and paid for): a replay after a crash reuses it instead of calling the checker again.
-    const keyOf = (claim: Claim) => `${round}:${agent.name}:${createHash("sha1").update(`${claim.kind}\n${claim.text}\n${claim.source}`).digest("hex").slice(0, 16)}`
-    const ruled = (claim: Claim) => {
-      const row = state.ledger.find((e) => e.key === keyOf(claim))
-      if (row && !lines.includes(`[${row.verdict}] ${claim.text}`)) lines.push(`[${row.verdict}] ${claim.text}`)
-      return Boolean(row)
-    }
-    const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string) => {
-      const key = keyOf(claim)
-      if (state.ledger.some((e) => e.key === key)) return // the same claim twice in one reply
-      state.ledger.push({ key, round, member: agent.name, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
-      state.jevUsd = jevBefore + jev.usd
-      save()
-      log.emit(`claim:${key}`, { type: "claim.checked", round, member: agent.name, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
-      lines.push(`[${verdict}] ${claim.text}`)
-    }
-    const escalate = async (claim: Claim, evidence: string) => {
-      if (state.escalations >= (config.meeting.max_escalations ?? 12)) return record(claim, "unchecked", "jev", undefined, "escalation budget used up")
-      state.escalations++
-      save()
-      const ruling = claim.kind === "computed"
-        ? await claudeCodeCheck(config, claim.text, claim.source)
-        : await openaiCheck(models, config, claim.text, evidence)
-      state.checkerUsd += ruling.usd
-      record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, ruling.note)
-    }
-
-    // Group claims by the evidence they cite, so Jev reads each piece of evidence once.
-    const groups = new Map<string, Claim[]>()
-    for (const claim of claims) {
-      if (ruled(claim)) continue
-      if (claim.kind === "computed") { await escalate(claim, ""); continue } // Jev is not a calculator
-      const key = claim.kind === "brief" ? "brief" : claim.source
-      groups.set(key, [...(groups.get(key) ?? []), claim])
-    }
-    for (const [source, group] of groups) {
-      const evidence = source === "brief" ? briefEvidence(brief) : state.evidence[source]?.text
-      if (!evidence) { for (const c of group) record(c, "unsupported", "jev", undefined, "source is not in the screened evidence pool"); continue }
-      const results = await jev.check(group.map((c) => c.text), evidence)
-      for (const [i, r] of results.entries()) {
-        if (r.verdict === "escalate") await escalate(group[i], evidence)
-        else record(group[i], r.verdict, "jev", r.p)
-      }
-    }
-    save()
-    return lines
+  // ── Claim checking: Jev first, escalate only the uncertain band (see checkClaims) ─────────────────
+  const claimDeps: ClaimDeps = {
+    state,
+    maxEscalations: config.meeting.max_escalations ?? 12,
+    jevCheck: (claims, evidence) => jev.check(claims, evidence),
+    computedCheck: (claim) => claudeCodeCheck(config, claim.text, claim.source),
+    literatureCheck: (claim, evidence) => openaiCheck(models, config, claim.text, evidence),
+    evidenceFor: (source) => (source === "brief" ? briefEvidence(brief) : state.evidence[source]?.text),
+    save: () => { state.jevUsd = jevBefore + jev.usd; save() },
+    emit: (key, event) => log.emit(key, event),
   }
 
   // ── Harness ────────────────────────────────────────────────────────────────────────────────────
@@ -377,15 +468,11 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
   // cost is charged at the fallback price, so it cannot run under the budget for free.
   const spend = async () => {
     const usage = await harness.usage(ctx)
-    let usd = 0
-    for (const u of Object.values(usage.models)) {
-      const cost = u.cost?.total ?? 0
-      if (cost > 0 || MOCK || !u.totalTokens) { usd += cost; continue }
-      usd += (u.totalTokens / 1e6) * (config.meeting.fallback_usd_per_mtok ?? 15)
-      state.costEstimated = true
-    }
+    const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, MOCK)
+    if (models.estimated) state.costEstimated = true
+    rollDay(state) // before the total changes: a run that works past midnight starts a new day's count
     state.jevUsd = jevBefore + jev.usd
-    state.usd = usd + state.jevUsd + state.checkerUsd
+    state.usd = models.usd + state.jevUsd + state.checkerUsd
     return state.usd
   }
 

@@ -1,9 +1,10 @@
 // The scoreboard: single agent against swarm. Pure functions (no file or network access), shared by the CLI
 // and GET /api/glhf/scoreboard, so the dashboard and the terminal always agree.
 //
-// Two runs are compared only when they had the same task, model, time limit and token budget. Within such a
-// group the row shows the latest settled run of each solver, also when that run failed: an older success
-// never stands in for a newer failure. Extras that one side had and the other did not are listed per run.
+// Two runs are compared only when they had the same task, case folder, model, place (local or cloud), effort,
+// time limit and token budget. Within such a group the row shows the latest settled run of each solver, also
+// when that run failed: an older success never stands in for a newer failure. Extras that one side had and
+// the other did not are listed per run, and named in the row's note.
 import type { GlhfRun } from "./types.ts"
 
 export interface Cell {
@@ -44,7 +45,7 @@ export function extras(run: GlhfRun): string[] {
 }
 
 /** Runs with the same key may be compared. */
-export const pairKey = (run: GlhfRun) => JSON.stringify([run.task, run.model, run.settings?.timeLimit ?? null, run.settings?.maxTokens ?? null])
+export const pairKey = (run: GlhfRun) => JSON.stringify([run.task, run.settings?.caseId ?? null, run.model, run.mode, run.settings?.effort ?? null, run.settings?.timeLimit ?? null, run.settings?.maxTokens ?? null])
 
 const cell = (run: GlhfRun): Cell => {
   const out: Cell = { id: run.id, phase: run.phase as "done" | "failed", startedAt: run.startedAt, extras: extras(run) }
@@ -71,15 +72,19 @@ export function scoreboard(runs: GlhfRun[]): Row[] {
   for (const row of rows.values()) {
     const { single, swarm } = row
     if (!single || !swarm) {
-      row.note = `no matching ${single ? "swarm run" : "baseline"}: no ${single ? "swarm" : "single-agent"} run has this task, model, time limit and token budget`
+      row.note = `no matching ${single ? "swarm run" : "baseline"}: no ${single ? "swarm" : "single-agent"} run has this task, case, model, place, effort, time limit and token budget`
       continue
     }
     const failed = [single.phase === "failed" && "single agent", swarm.phase === "failed" && "swarm"].filter(Boolean)
     if (failed.length) { row.note = `the latest ${failed.join(" and ")} run failed`; continue }
     if (single.score === undefined || swarm.score === undefined) { row.note = "not graded"; continue }
     row.diff = swarm.score - single.score
-    const only = swarm.extras.filter((e) => /^(Exa search|memory|role models)/.test(e))
-    if (only.length) row.note = `the swarm also had ${only.join(", ")}; the single agent did not`
+    // Everything one side had and the other did not: Exa, memory, role models, review rounds, messages per
+    // role, a different seed. (Effort and place are part of the key, so they never differ here.)
+    const onlySwarm = swarm.extras.filter((e) => !single.extras.includes(e))
+    const onlySingle = single.extras.filter((e) => !swarm.extras.includes(e))
+    const parts = [onlySwarm.length && `swarm only: ${onlySwarm.join(", ")}`, onlySingle.length && `single agent only: ${onlySingle.join(", ")}`].filter(Boolean)
+    if (parts.length) row.note = `settings that differ. ${parts.join("; ")}`
   }
   return [...rows.values()].sort((a, b) => Math.max(b.single?.startedAt ?? 0, b.swarm?.startedAt ?? 0) - Math.max(a.single?.startedAt ?? 0, a.swarm?.startedAt ?? 0))
 }

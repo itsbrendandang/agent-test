@@ -152,6 +152,40 @@ def test_swarm_token_budget_skips_phases_and_still_reports(tmp_path: Path) -> No
     assert "Your budget for this phase" in transcript and "500 tokens" in transcript
 
 
+def test_a_critic_cut_off_with_nothing_raised_is_not_convergence(tmp_path: Path) -> None:
+    methods = _write("/outputs/METHODS.md", "# Methods\n\nNo artifact was produced.\n")
+    outputs = [
+        _spend(_done("inputs listed"), 100),  # scout
+        _spend(_done("planned"), 100),  # proposer
+        _spend(_done("pilot done"), 100),  # pilot
+        _spend(_done("first pass"), 100),  # experimenter
+        _spend(_done("no deviations"), 100),  # auditor, round 1
+        _busy(1500),  # critic, round 1: cut off by its 20% token share, nothing raised
+        _busy(1500),
+        _spend(_done("no deviations"), 100),  # auditor, round 2
+        _spend(_done("no issues"), 100),  # critic, round 2: completes
+        _spend(_done("nothing to rescue from"), 100),  # finisher (the artifacts are missing)
+        _spend(methods, 100),  # reporter
+        _spend(_done("reported"), 100),
+    ]
+    summary = run_local(
+        DEMO_CASE, tmp_path, solver="glhf", model="mock", max_tokens=10_000, mock_outputs=outputs
+    )
+    assert summary["status"] == "done", summary["error"]
+    events = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())["events"]
+    review = [
+        (e["kind"], e["round"]) for e in events if e["kind"].startswith("review.") and "round" in e
+    ]
+    # Round 1 found nothing only because the critic did not finish: it must not count as
+    # agreement. The review converges in round 2, when the critic completed.
+    assert review == [("review.incomplete", 1), ("review.converged", 2)]
+    assert [e["reason"] for e in events if e["kind"] == "review.incomplete"] == [
+        "critic stopped by the token limit"
+    ]
+    started = [e["phase"] for e in events if e["kind"] == "phase.started"]
+    assert started[4:8] == ["audit 1", "critique 1", "audit 2", "critique 2"]
+
+
 def test_single_agent_token_budget_keeps_a_reserve_for_methods(tmp_path: Path) -> None:
     methods = _write("/outputs/METHODS.md", "# Methods\n\nStopped by the token budget.\n")
     outputs = [
@@ -201,7 +235,14 @@ def test_run_settings_are_recorded_for_disclosure(tmp_path: Path) -> None:
     }
     ledger = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())
     kinds = [e["kind"] for e in ledger["events"]]
-    assert "memory.saved" in kinds and "issues.rechecked" in kinds
+    assert "memory.pending" in kinds and "memory.saved" not in kinds
+    assert "issues.rechecked" in kinds
+    # The run's lesson is only queued for a person: there is no approved file yet.
+    memory_dir = tmp_path / "memory"
+    assert (
+        "check that every output has data rows" in (memory_dir / "lessons.pending.md").read_text()
+    )
+    assert not (memory_dir / "lessons.md").exists()
     # The fix made in round 1 went through the critic's second pass.
     assert [(i["id"], i["rechecked"]) for i in ledger["issues"]] == [("I1", True)]
     assert "not re-checked" not in (tmp_path / "outputs" / "glhf" / "FINDINGS.md").read_text()

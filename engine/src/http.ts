@@ -90,8 +90,8 @@ export function readJson<T = Record<string, unknown>>(req: IncomingMessage, limi
 
 const SAFE_ID = /^[\w.-]+$/
 
-/** True for a name that is safe as one path segment: letters, digits, "_", "." and "-", and no "..". */
-export const isSafeId = (id: unknown): id is string => typeof id === "string" && id.length <= 200 && SAFE_ID.test(id) && !id.includes("..")
+/** True for a name that is safe as one path segment: letters, digits, "_", "." and "-"; not "." and no "..". */
+export const isSafeId = (id: unknown): id is string => typeof id === "string" && id.length <= 200 && SAFE_ID.test(id) && !/^\.+$/.test(id) && !id.includes("..")
 
 /** Returns the id, or throws HttpError 400. Use before any path is built from a run id or file name. */
 export function safeId(id: unknown): string {

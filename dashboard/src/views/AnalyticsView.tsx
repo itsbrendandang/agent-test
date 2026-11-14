@@ -30,7 +30,7 @@ export function AnalyticsView({ sim, history, events, tick }: Props) {
       <header className="page-head">
         <div>
           <h1>Analytics</h1>
-          <p className="muted small">{sim.name} · tick {tick.toLocaleString()} · last {history.length} samples</p>
+          <p className="muted small">Metrics and events of the simulation that is running, over time. {sim.name} · tick {tick.toLocaleString()} · last {history.length} samples</p>
         </div>
       </header>
 

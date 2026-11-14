@@ -60,16 +60,70 @@ def test_legitimate_shapes_are_warnings_not_problems(
     )
 
 
-@pytest.mark.parametrize("spec", [{"format": "table"}, {"format": None}, {"format": "txt"}])
+@pytest.mark.parametrize("spec", [{"format": None}, {"format": "txt"}, {"format": "tab"}])
 def test_tab_separated_text_files_are_read_as_tabs(tmp_path: Path, spec: dict[str, Any]) -> None:
     r = _check(tmp_path, "t.txt", "gene_id\tlog2fc\ng1\t1.5\ng2\t-2\n", row_key="gene_id", **spec)
     assert r["problems"] == [] and r["warnings"] == [] and r["delimiter"] == "tab"
     assert r["columns"] == ["gene_id", "log2fc"]
 
 
-def test_comma_separated_text_files_are_read_as_commas(tmp_path: Path) -> None:
+def _graded(tmp_path: Path, name: str, text: str, fmt: str | None, key: str) -> bool:
+    """Whether the benchmark's own table loader finds the row-key column in the file."""
+    from bixbench3.grading.loaders import load_table
+
+    path = tmp_path / f"graded-{name}"
+    path.write_bytes(text.encode("utf-8"))
+    try:
+        return key in load_table(path, fmt).columns
+    except ValueError:
+        return False
+
+
+@pytest.mark.parametrize(
+    ("name", "text", "fmt", "usable"),
+    [
+        # The disagreements with the grader found in review, and their neighbours.
+        ("bom.csv", "\ufeffgene,a\ng1,1\n", "csv", True),  # pandas drops the BOM
+        ("bom.tsv", "\ufeffgene\ta\ng1\t1\n", None, True),
+        ("commas.txt", "gene,a\ng1,1\n", None, False),  # the grader reads txt as tabs
+        ("commas2.txt", "gene,a\ng1,1\n", "txt", False),
+        ("commas.tab", "gene,a\ng1,1\n", "tab", False),
+        ("tabs.txt", "gene\ta\ng1\t1\n", None, True),
+        ("tabs.csv", "gene\ta\ng1\t1\n", "csv", False),
+        ("named.dat", "gene,a\ng1,1\n", "csv", True),  # the declared format wins over the suffix
+    ],
+)
+def test_the_check_reads_a_table_the_way_the_grader_does(
+    tmp_path: Path, name: str, text: str, fmt: str | None, usable: bool
+) -> None:
+    assert _graded(tmp_path, name, text, fmt, "gene") is usable  # what the grader will do
+    path = tmp_path / name
+    path.write_bytes(text.encode("utf-8"))
+    r = _check(tmp_path, name, None, format=fmt, row_key="gene")
+    if usable:
+        assert r["problems"] == [] and not r["fatal"], r
+        assert r["columns"][0] == "gene"  # no byte-order mark left on the first column name
+    else:
+        assert r["fatal"] and any("wrong delimiter" in p for p in r["problems"]), r
+        assert tools.needs_rescue([r]) == [r]
+
+
+def test_a_format_the_grader_does_not_name_is_read_by_its_header_with_a_warning(
+    tmp_path: Path,
+) -> None:
     r = _check(tmp_path, "t.txt", "gene_id,log2fc\ng1,1.5\n", format="table", row_key="gene_id")
     assert r["problems"] == [] and r["delimiter"] == "comma"
+    assert any("not one the grader's table loader names" in w for w in r["warnings"])
+
+
+def test_gzipped_tables_are_read(tmp_path: Path) -> None:
+    import gzip
+
+    path = tmp_path / "t.csv.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        fh.write("gene_id,a\ng1,1\n")
+    r = _check(tmp_path, "t.csv.gz", None, format="csv.gz", row_key="gene_id")
+    assert r["problems"] == [] and r["columns"] == ["gene_id", "a"]
 
 
 @pytest.mark.parametrize(
@@ -105,9 +159,13 @@ def test_duplicate_keys_and_ragged_rows_are_problems_but_not_for_the_finisher(
     assert not r["fatal"] and tools.needs_rescue([r]) == []  # the critic raises these
 
 
-def test_a_check_that_could_not_run_counts_as_needing_rescue() -> None:
+def test_a_check_that_could_not_run_never_starts_the_finisher() -> None:
+    # The finisher cannot fix a check that failed to run, and could damage good artifacts.
     failed = [{"artifact_id": "*", "problems": ["contract check failed to run: boom"]}]
-    assert tools.needs_rescue(failed) == failed
+    assert tools.check_failed(failed) and tools.needs_rescue(failed) == []
+    mixed = [*failed, {"artifact_id": "a", "problems": ["missing"], "fatal": True}]
+    assert tools.needs_rescue(mixed) == [mixed[1]]
+    assert not tools.check_failed([mixed[1]])
 
 
 # --- Token budget -------------------------------------------------------------------------------
@@ -174,3 +232,44 @@ def test_each_role_is_told_its_own_budget() -> None:
     assert "40 minutes (2400 s)" in note and "150,000 tokens" in note and "300 messages" in note
     assert "whole team's" in note
     assert "tokens" not in solver._budget_note(90, None, None)
+
+
+def test_a_default_local_run_gets_a_review_round() -> None:
+    # 1800 s: after scout, plan, pilot and the first pass used their full shares, the time left
+    # before the reserves is about five minutes. A fixed 15-minute minimum skipped every review.
+    budget = 1800 * (1 - solver.RUN_MARGIN)
+    hold = solver.REPORT_RESERVE + solver.finish_hold(budget)
+    used = (
+        solver.SCOUT_SHARE + solver.PLAN_SHARE + solver.PILOT_SHARE + solver.FIRST_PASS_SHARE
+    ) * budget
+    review_left = budget - used - budget * hold
+    assert review_left < solver.MIN_REVIEW_SECONDS  # the old rule: no review
+    assert review_left >= solver.min_review_seconds(budget)  # the scaled rule: one round
+    assert solver.min_review_seconds(24 * 3600) == solver.MIN_REVIEW_SECONDS  # long runs unchanged
+
+
+@pytest.mark.parametrize("total", [600, 1800, 3600, 24 * 3600])
+@pytest.mark.parametrize("spent_share", [0.0, 0.5, 0.9, 0.95, 0.97, 0.99, 1.2])
+def test_the_report_ends_inside_the_sample_time_limit(total: int, spent_share: float) -> None:
+    spent = total * spent_share
+    clock = solver.Clock(total * (1 - solver.RUN_MARGIN), time.monotonic() - spent, float(total))
+    seconds = clock.report_seconds()
+    final = max(solver.MIN_FINAL_WRITES_SECONDS, total * solver.FINAL_WRITES_SHARE)
+    assert seconds >= 0
+    assert spent + seconds + final <= total + 1 or seconds == 0  # room left for the final writes
+    if spent_share <= 0.9 and total >= 1800:
+        assert seconds >= 60  # the reserves leave the reporter real time
+
+
+def test_review_converges_only_when_the_critic_finished_looking() -> None:
+    done, cut, skipped = (
+        solver.PhaseResult(ran=True),
+        solver.PhaseResult(ran=True, limit="token"),
+        solver.PhaseResult(ran=False),
+    )
+    assert solver.review_step(done, 0) == "converged"
+    assert solver.review_step(done, 2) == "revise"
+    # Cut off with nothing raised: that is not agreement, the critic did not finish looking.
+    assert solver.review_step(cut, 0) == "again"
+    assert solver.review_step(cut, 1) == "revise"
+    assert solver.review_step(skipped, 0) == "stop" and solver.review_step(skipped, 3) == "stop"

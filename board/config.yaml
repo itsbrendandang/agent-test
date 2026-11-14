@@ -53,8 +53,11 @@ checkers:
     literature: openai                  # contested literature claims: OpenAI reads the source
     computed: claude-code               # contested computed claims: Claude Code reruns them
   openai_model: "gpt-5-mini"
-  claude_code_cmd: "claude -p --output-format json"
-  claude_code_tools: "Bash(python3:*) Bash(python:*) Write Read"  # the only tools the checker may use; it runs in an empty temp folder
+  # --restricted: no tools that run commands or code, no WebFetch, file tools only inside the working folder,
+  # user and project settings ignored. --strict-mcp-config: no MCP servers. Without them the checker can read
+  # any file you can (including .env) when a claim carries hidden instructions; remove them only in a container.
+  claude_code_cmd: "claude -p --output-format json --restricted --strict-mcp-config"
+  claude_code_tools: "Read Write"     # approved without asking; it runs in an empty temp folder. Add "Bash(python3:*)" only in a container
   timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member

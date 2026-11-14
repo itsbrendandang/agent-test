@@ -15,6 +15,8 @@ export interface RunSettings {
   memory?: boolean
   seed?: number
   effort?: string
+  /** A short fingerprint of the case directory, when the run did not use the built-in demo case. */
+  caseId?: string
 }
 
 export interface GlhfRun {

@@ -1,6 +1,7 @@
 // Run records on disk. The durable task is the source of truth for what happens next; record.json is its
 // projection for the CLI, the server and the dashboard, rewritten (atomically) at every transition.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { resolve } from "node:path"
 import { ROOT } from "../config.ts"
 import type { GlhfRun, RunRequest, RunSettings } from "./types.ts"
@@ -13,7 +14,7 @@ export const RUNS = resolve(GLHF, "runs")
 export const DEMO_CASE = resolve(GLHF, "demo_case")
 
 /** A run id is one path segment of letters, digits, "_", "." and "-". Anything else could leave glhf/runs. */
-export const safeId = (id: unknown): id is string => typeof id === "string" && /^[\w.-]+$/.test(id) && !id.includes("..") && id.length <= 200
+export const safeId = (id: unknown): id is string => typeof id === "string" && /^[\w.-]+$/.test(id) && !/^\.+$/.test(id) && !id.includes("..") && id.length <= 200
 export class BadId extends Error {}
 export const runDir = (id: string) => {
   if (!safeId(id)) throw new BadId(`not a run id: ${JSON.stringify(String(id).slice(0, 80))}`)
@@ -32,6 +33,8 @@ export function settingsOf(request: Partial<RunRequest>): RunSettings {
   if (request.memory) out.memory = true
   if (request.seed) out.seed = request.seed
   if (request.effort) out.effort = request.effort
+  // Two different case folders under the same task label are different experiments.
+  if (request.caseDir && resolve(request.caseDir) !== DEMO_CASE) out.caseId = createHash("sha1").update(resolve(request.caseDir)).digest("hex").slice(0, 8)
   return out
 }
 

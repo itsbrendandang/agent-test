@@ -3,17 +3,21 @@
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
+import { EngineOffline, PageHead, RunId, runState, StatusPill } from "@/components/Shared"
+import { fmtDuration, fmtScore, fmtTokens } from "@/lib/format"
 import {
-  isDemo, isLive, startDemo, useSwarm,
+  isDemo, isLive, useSwarm,
   type GlhfRun, type Ledger, type LedgerEvent, type ScoreCell, type ScoreRow, type Solver,
 } from "@/swarm/api"
+import { NewRun } from "@/swarm/NewRun"
 import { takeOpen } from "@/views/ExperimentsView"
 import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
 import "@/swarm/swarm.css"
 
 const round = (phase: string) => phase.match(/\d+/)?.[0]
 const num = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : String(Number(x.toPrecision(3))))
-const score = (x: number | undefined) => (x === undefined ? "–" : x.toFixed(3))
+const score = fmtScore
+const ABOUT = "Compares one agent working alone with a team of nine agents on the same task, and shows what each run scored."
 const solverName = (s: Solver) => (s === "glhf" ? "Swarm" : "Single agent")
 const text = (x: unknown) => (typeof x === "string" || typeof x === "number" ? String(x) : "")
 
@@ -27,10 +31,10 @@ function phases(ledger: Ledger | null) {
 
 function headline(run: GlhfRun | undefined, current: string | undefined, missing?: string): string {
   if (!run && missing) return `Run ${missing} was not found. Pick another run from the list.`
-  if (!run) return "No runs yet. Press Run demo to watch the team work on a small practice case."
+  if (!run) return "No runs yet. Press New run to watch the team work on a small practice case. The default is free."
   const who = run.solver === "glhf" ? "The swarm" : "The single agent"
   if (run.phase === "failed") return "This run stopped with an error."
-  if (run.phase === "done") return `${who} finished, and the official grader scored its outputs.`
+  if (run.phase === "done") return run.score === undefined ? `${who} finished, but its outputs were not graded.` : `${who} finished, and the official grader scored its outputs.`
   if (run.phase === "queued" || run.phase === "launching") return "Starting the run…"
   if (run.phase === "completing") return "Collecting the results and grading them…"
   if (run.solver === "single") return "One agent is working through the whole analysis alone."
@@ -66,19 +70,20 @@ function describe(e: LedgerEvent): string | undefined {
 }
 
 const budget = (row: ScoreRow) => [
-  row.timeLimit ? duration(row.timeLimit * 1000) : "benchmark time limit",
-  row.maxTokens ? `${row.maxTokens.toLocaleString()} tokens` : "no token cap",
+  row.timeLimit ? `time limit ${fmtDuration(row.timeLimit * 1000)}` : "benchmark time limit",
+  row.maxTokens ? `${fmtTokens(row.maxTokens)} tokens` : "no token budget",
 ].join(" · ")
 
 /** One side of a scoreboard row: the score, a failed mark, the extras this run had, and a way to open it. */
 function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: (id: string) => void }) {
   if (!cell) return <span className="muted">no run</span>
-  const what = cell.phase === "failed" ? "failed" : cell.score === undefined ? "no score" : `score ${cell.score.toFixed(3)}`
+  const state = runState(cell.phase, cell.score !== undefined)
+  const what = state === "done" ? `score ${fmtScore(cell.score)}` : state
   return (
     <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open ${cell.id}`}
       aria-label={`Open run ${cell.id}: ${[what, ...cell.extras].join(", ")}`}>
-      <b>{cell.score === undefined ? "–" : cell.score.toFixed(3)}</b>
-      {cell.phase === "failed" && <span className="pill" data-kind="danger">failed</span>}
+      <b>{fmtScore(cell.score)}</b>
+      {state !== "done" && <StatusPill state={state} />}
       {cell.extras.map((e) => <span key={e} className="swarm-extra">{e}</span>)}
     </button>
   )
@@ -87,24 +92,23 @@ function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: 
 export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) {
   const [picked, setPicked] = useState<string | undefined>(() => takeOpen("swarm"))
   const [nudge, setNudge] = useState(0)
-  const [solver, setSolver] = useState<Solver>("glhf")
-  const [error, setError] = useState("")
-  const [starting, setStarting] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [details, setDetails] = useState(() => localStorage.getItem("swarm.details") === "1")
   useEffect(() => localStorage.setItem("swarm.details", details ? "1" : "0"), [details])
   const { status, runs, detail, offline, scoreboard } = useSwarm(picked, nudge)
   const page = useRef<HTMLDivElement>(null)
-  // A scoreboard cell sits below the run it opens, so bring the run back into view.
-  const openRun = (id: string) => { setPicked(id); page.current?.scrollTo({ top: 0, behavior: "smooth" }) }
+  const runCard = useRef<HTMLElement>(null)
+  // The run a scoreboard cell opens is shown below the scoreboard, so bring it into view.
+  const openRun = (id: string) => { setPicked(id); runCard.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }
 
   if (offline && !runs) return (
-    <div className="page"><div className="swarm-offline card-surface">
-      <h1>Engine not running</h1>
-      <p className="muted">Start it from the repo root with <code>npm run engine</code>, then reload. The demo needs Docker running and no API keys.</p>
-    </div></div>
+    <div className="page swarm">
+      <PageHead title="AI Scientist Swarm" about={ABOUT} />
+      <EngineOffline needs="Runs and the scoreboard come from the engine. The demo also needs Docker, but no API keys." onRetry={() => setNudge((n) => n + 1)} />
+    </div>
   )
 
-  if (!runs) return <div className="page"><p className="muted" role="status">Loading runs…</p></div>
+  if (!runs) return <div className="page swarm"><PageHead title="AI Scientist Swarm" about={ABOUT} /><p className="muted" role="status">Loading runs…</p></div>
 
   const list = runs
   const runId = picked ?? list[0]?.id
@@ -134,70 +138,127 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   const mood = (key: RoleKey): Mood =>
     !run ? "sleeping" : activeRole === key ? "working" : seen.has(key) || run.phase === "done" ? "happy" : "sleeping"
 
-  const start = async () => {
-    setError(""); setStarting(true)
-    try { const { id } = await startDemo(solver); setPicked(id); setNudge((n) => n + 1) }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { setStarting(false) }
-  }
-
   return (
     <div className="page swarm" ref={page}>
-      <form className="swarm-search" role="search" onSubmit={(e) => {
-        e.preventDefault()
-        onSearch?.(String(new FormData(e.currentTarget).get("q") ?? ""))
-      }}>
-        <input type="search" name="q" aria-label="Search experiments" autoComplete="off" placeholder="Search experiments: task, model, claim, problem… then press Enter" />
-        <button type="submit">Search</button>
-      </form>
-      <header className="swarm-banner card-surface">
-        <h1>AI Scientist Swarm</h1>
-        {noKeys && <span className="pill" data-kind="warning" title="No model API keys set. The demo uses a scripted model.">Demo mode</span>}
-        {offline && <span className="pill" data-kind="danger">Engine offline</span>}
-        <select aria-label="Run" value={runId ?? ""} onChange={(e) => setPicked(e.target.value || undefined)}>
-          {list.length === 0 && <option value="">No runs yet</option>}
-          {runId && !list.some((r) => r.id === runId) && <option value={runId}>{runId} · {run ? run.phase : "not found"}</option>}
-          {list.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.phase}</option>)}
-        </select>
-        <select aria-label="Who does the work" value={solver} onChange={(e) => setSolver(e.target.value as Solver)}>
-          <option value="glhf">Swarm (9 roles)</option>
-          <option value="single">Single agent</option>
-        </select>
-        <button type="button" className="primary" onClick={start} disabled={starting || anyLive}>
-          {anyLive ? "Demo running…" : "Run demo"}
-        </button>
-        <label className="swarm-toggle">
-          <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
-          <span>Show details</span>
-        </label>
-      </header>
-      {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
+      <PageHead title="AI Scientist Swarm" about={ABOUT}>
+        {noKeys && <span className="pill" data-kind="warning" title="The engine has no model API keys. Only the scripted mock model can run.">Demo mode</span>}
+        {offline && <span className="pill" data-kind="danger" title="Showing the last data received. Retrying every 15 seconds.">Engine offline</span>}
+        <form className="swarm-search" role="search" onSubmit={(e) => {
+          e.preventDefault()
+          onSearch?.(String(new FormData(e.currentTarget).get("q") ?? ""))
+        }}>
+          <input type="search" name="q" aria-label="Search experiments" autoComplete="off" placeholder="Search experiments…" />
+          <button type="submit" className="btn">Search</button>
+        </form>
+        <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>
+      </PageHead>
+      <NewRun open={creating} busy={anyLive} keys={status?.keys} onClose={() => setCreating(false)}
+        onStarted={(ids, complete) => { setPicked(ids[0]); setNudge((n) => n + 1); if (complete) setCreating(false) }} />
 
-      <section className="card-surface swarm-card swarm-status" aria-label="Status">
+      <section className="card-surface swarm-card swarm-board" aria-label="Scoreboard">
+        <div className="swarm-cardhead">
+          <h2>Scoreboard: single agent against swarm</h2>
+          <span className="muted small">Latest run of each kind, per task and settings. Click a score to open that run.</span>
+        </div>
+        {scoreboard === undefined ? <p className="muted small" role="status">Loading the scoreboard…</p>
+          : scoreboard === null ? <p role="alert" className="swarm-rownote">The engine did not return a scoreboard. Restart it with <code>npm run engine</code> to get the current version.</p>
+          : scoreboard.length === 0 ? (
+            <p className="swarm-empty">No finished runs yet. Press <b>New run</b> and choose <b>Both, to compare</b>. The two runs then appear here side by side.</p>
+          ) : (
+          <div className="swarm-scroll">
+          <table className="swarm-table" aria-label="Single agent against swarm, per task and settings">
+            <thead><tr>
+              <th scope="col">Task and shared settings</th><th scope="col">Single agent</th><th scope="col">Swarm</th>
+              <th scope="col" className="num">Difference</th><th scope="col" className="num">Record to beat</th>
+            </tr></thead>
+            <tbody>
+              {scoreboard.map((row) => {
+                const label = [row.task === "demo" && "demo case", row.model === "mock" && "scripted model"].filter(Boolean).join(", ")
+                return (
+                  <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
+                    <td>
+                      {row.task}{label && <> <span className="pill" data-kind="warning">{label}</span></>}
+                      <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
+                      {row.note && <div className="swarm-rownote">{row.note}</div>}
+                    </td>
+                    <td><ScoreCellView cell={row.single} onOpen={openRun} /></td>
+                    <td><ScoreCellView cell={row.swarm} onOpen={openRun} /></td>
+                    <td className="num">{row.diff === undefined ? "–" : `${row.diff >= 0 ? "+" : "−"}${fmtScore(Math.abs(row.diff))}`}</td>
+                    <td className="num">{row.task === "demo" ? <span className="muted">does not apply</span> : fmtScore(record)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          </div>
+        )}
+        <details className="swarm-help">
+          <summary>How to read this</summary>
+          <div>
+            <h3>Score</h3>
+            <p>A grader program checks the files that a run wrote. The score goes from 0 to 1. A score of 1 means every required output was correct. No model decides the score.</p>
+            <h3>Claims</h3>
+            <p>The swarm writes down what it thinks it found. Each of these is a claim. Then it tests each claim and tries to prove it wrong.</p>
+            <ul>
+              <li><span className="sv sv-supported">supported</span> The claim passed its tests. It counts as a finding.</li>
+              <li><span className="sv sv-refuted">refuted</span> A test went against the claim. It is rejected and is not reported as a finding.</li>
+              <li><span className="sv sv-untested">not established</span> There was not enough evidence, or no test was run. It is not reported as a finding.</li>
+            </ul>
+            <p>Code decides each result from the test numbers. A single agent has no reviewer, so it has no checked claims.</p>
+            <h3>Difference</h3>
+            <p>The difference is the swarm score minus the single-agent score. It is shown only when both runs had the same task, model, time limit and token budget.
+              If these settings are not the same, a higher score could come from more time or more tokens, and not from the team. Then the row shows a note and no difference.</p>
+            <p>Extras, such as Exa search, memory or the number of review rounds, are listed next to each run. They show what one run had and the other did not.</p>
+            <h3>Record to beat</h3>
+            <p>{fmtScore(record)} is the best published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only. The score of one task is not the same measure as the score of the whole benchmark.
+              A run on the demo case, or with the scripted model, is never a benchmark result.</p>
+          </div>
+        </details>
+      </section>
+
+      <section className="card-surface swarm-card swarm-status" aria-label="Run" ref={runCard}>
+        <div className="swarm-runbar">
+          <h2 id="swarm-run-label">Run</h2>
+          <select aria-labelledby="swarm-run-label" value={runId ?? ""} title={runId} onChange={(e) => setPicked(e.target.value || undefined)}>
+            {list.length === 0 && <option value="">No runs yet</option>}
+            {runId && !list.some((r) => r.id === runId) && <option value={runId}>{runId} · {run ? runState(run.phase, run.score !== undefined) : "not found"}</option>}
+            {list.map((r) => <option key={r.id} value={r.id}>{r.id} · {runState(r.phase, r.score !== undefined)}</option>)}
+          </select>
+          {run && <StatusPill state={runState(run.phase, run.score !== undefined)} />}
+          {run && isDemo(run) && <span className="pill" data-kind="warning">{demoLabel(run)}</span>}
+          <label className="swarm-toggle">
+            <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
+            <span>Show details</span>
+          </label>
+        </div>
         <div className="swarm-roles">
           {run?.solver === "single" ? (
             <div className="swarm-role" data-active={live || undefined} data-done={!live || undefined}>
-              <Buddy seed="single-agent" mood={live ? "working" : run.phase === "done" ? "happy" : "alert"} size={56} />
+              <span className="swarm-face"><Buddy seed="single-agent" mood={live ? "working" : run.phase === "done" ? "happy" : "alert"} size={56} /></span>
               Single agent
             </div>
           ) : ROLES.map((r) => (
             <div key={r.key} className="swarm-role" title={r.does}
               data-active={activeRole === r.key || undefined} data-done={mood(r.key) === "happy" || undefined}>
-              <Buddy species={r.species} mood={mood(r.key)} size={activeRole === r.key ? 56 : 44} />
+              <span className="swarm-face"><Buddy species={r.species} mood={mood(r.key)} size={activeRole === r.key ? 56 : 44} /></span>
               {r.name}
             </div>
           ))}
         </div>
         <p className="swarm-headline" role="status">{headline(run, activePhase, runId)}</p>
-        {run && live && <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
-        {run && live && run.detail && <p className="swarm-note">{run.detail}</p>}
-        {run && live && run.solver === "glhf" && (claims.length > 0 || issues.length > 0) && (
-          <p className="swarm-note">
-            So far: {claims.length} claim{claims.length === 1 ? "" : "s"} written down, {count.supported} supported, {count.refuted} rejected,
-            {" "}{issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.
-          </p>
+        {!run && list.length === 0 && <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>}
+        {run && live && (
+          <div className="swarm-live">
+            <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>
+            <p className="swarm-note">{run.detail ?? "Working…"} · running for {fmtDuration(Date.now() - run.startedAt)}</p>
+            <p className="swarm-note">
+              {run.solver === "glhf"
+                ? <>So far: {claims.length} claim{claims.length === 1 ? "" : "s"} written down, {count.supported} supported, {count.refuted} rejected, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
+                : "A single agent keeps no list of claims, so there is nothing to count until it finishes."}
+            </p>
+          </div>
         )}
-        {run?.phase === "failed" && <p className="pill" data-kind="danger">{run.error ?? "No error message was recorded."}</p>}
+        {run?.phase === "failed" && <p className="pill swarm-failure" data-kind="danger" role="alert">{run.error ?? "No error message was recorded."}</p>}
       </section>
 
       {run?.phase === "done" && (
@@ -205,8 +266,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
           <span className="swarm-eyebrow">Result · {solverName(run.solver)} · task {run.task}</span>
           <div className="swarm-score">
             <strong>{score(run.score)}</strong>
-            <span className="muted">out of 1, from the official grader</span>
-            {isDemo(run) && <span className="pill" data-kind="warning">{demoLabel(run)}</span>}
+            <span className="muted">{run.score === undefined ? "not graded: the grader gave no score for this run" : "out of 1, from the official grader"}</span>
           </div>
           {run.artifacts && run.artifacts.length > 0 && (
             <ul className="swarm-artifacts" aria-label="Score per required output">
@@ -231,46 +291,6 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         </section>
       )}
 
-      <section className="card-surface swarm-card" aria-label="Scoreboard">
-        <h2>Scoreboard</h2>
-        {scoreboard === undefined ? <p className="muted small" role="status">Loading the scoreboard…</p>
-          : scoreboard === null ? <p role="alert" className="swarm-rownote">The engine did not return a scoreboard. Restart it with <code>npm run engine</code> to get the current version.</p>
-          : scoreboard.length === 0 ? <p className="muted small">No finished runs yet.</p> : (
-          <div className="swarm-scroll">
-          <table className="swarm-table" aria-label="Single agent against swarm, per task and settings">
-            <thead><tr>
-              <th scope="col">Task and shared settings</th><th scope="col">Single agent</th><th scope="col">Swarm</th>
-              <th scope="col" className="num">Difference</th><th scope="col" className="num">Record to beat</th>
-            </tr></thead>
-            <tbody>
-              {scoreboard.map((row) => {
-                const label = [row.task === "demo" && "demo case", row.model === "mock" && "scripted model"].filter(Boolean).join(", ")
-                return (
-                  <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
-                    <td>
-                      {row.task}{label && <> <span className="pill" data-kind="warning">{label}</span></>}
-                      <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
-                      {row.note && <div className="swarm-rownote">{row.note}</div>}
-                    </td>
-                    <td><ScoreCellView cell={row.single} onOpen={openRun} /></td>
-                    <td><ScoreCellView cell={row.swarm} onOpen={openRun} /></td>
-                    <td className="num">{row.diff === undefined ? "–" : `${row.diff >= 0 ? "+" : "−"}${Math.abs(row.diff).toFixed(3)}`}</td>
-                    <td className="num">{row.task === "demo" ? <span className="muted">does not apply</span> : record.toFixed(3)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          </div>
-        )}
-        <p className="swarm-note">
-          A difference is shown only when both runs had the same task, model, time limit and token budget. Each row shows the latest
-          run per solver, also when it failed, and lists what each run had beyond the shared settings. {record.toFixed(3)} is the best
-          published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only, and one task's score is not the same
-          measure as the whole benchmark.
-        </p>
-      </section>
-
       {!details && run && (
         <button type="button" className="swarm-link" onClick={() => setDetails(true)}>See every claim, test and problem, and the reports →</button>
       )}
@@ -294,7 +314,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
             )}
             <h2>Run settings</h2>
             <dl className="swarm-settings">
-              <dt>Run</dt><dd><code>{run.id}</code></dd>
+              <dt>Run</dt><dd><RunId id={run.id} /></dd>
               <dt>Task</dt><dd>{run.task}</dd>
               <dt>Who</dt><dd>{solverName(run.solver)}</dd>
               <dt>Where</dt><dd>{run.mode === "cloud" ? "Cloud VM" : "This machine"}</dd>
@@ -302,14 +322,14 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
               {Object.entries(run.roleModels).map(([role, model]) => (
                 <div key={role} style={{ display: "contents" }}><dt>{role}</dt><dd><code>{model}</code></dd></div>
               ))}
-              <dt>Time limit</dt><dd>{run.settings?.timeLimit ? duration(run.settings.timeLimit * 1000) : "benchmark default"}</dd>
-              <dt>Token budget</dt><dd>{run.settings?.maxTokens ? run.settings.maxTokens.toLocaleString() : "none"}</dd>
+              <dt>Time limit</dt><dd>{run.settings?.timeLimit ? fmtDuration(run.settings.timeLimit * 1000) : "benchmark default"}</dd>
+              <dt>Token budget</dt><dd>{run.settings?.maxTokens ? fmtTokens(run.settings.maxTokens) : "none"}</dd>
               {run.solver === "glhf" && <><dt>Review rounds</dt><dd>{run.settings?.reviewRounds ?? 3}</dd></>}
               {run.settings?.maxMessagesPerRole !== undefined && <><dt>Messages per role</dt><dd>{run.settings.maxMessagesPerRole}</dd></>}
               {run.solver === "glhf" && <><dt>Exa search</dt><dd>{run.settings?.exa ? "on" : "off"}</dd><dt>Memory</dt><dd>{run.settings?.memory ? "on" : "off"}</dd></>}
               {run.settings?.seed !== undefined && <><dt>Seed</dt><dd>{run.settings.seed}</dd></>}
               <dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd>
-              {run.finishedAt !== undefined && <><dt>Took</dt><dd>{duration(run.finishedAt - run.startedAt)}</dd></>}
+              {run.finishedAt !== undefined && <><dt>Took</dt><dd>{fmtDuration(run.finishedAt - run.startedAt)}</dd></>}
             </dl>
             {run.usage && Object.keys(run.usage).length > 0 && (
               <>
@@ -318,7 +338,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
                   <thead><tr><th scope="col">Model</th><th scope="col" className="num">In</th><th scope="col" className="num">Out</th></tr></thead>
                   <tbody>
                     {Object.entries(run.usage).map(([model, u]) => (
-                      <tr key={model}><td><code>{model}</code></td><td className="num">{u.input_tokens.toLocaleString()}</td><td className="num">{u.output_tokens.toLocaleString()}</td></tr>
+                      <tr key={model}><td><code>{model}</code></td><td className="num">{fmtTokens(u.input_tokens)}</td><td className="num">{fmtTokens(u.output_tokens)}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -389,4 +409,3 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
 }
 
 const demoLabel = (r: GlhfRun) => [r.task === "demo" && "demo case", r.model === "mock" && "scripted model"].filter(Boolean).join(", ")
-const duration = (ms: number) => (ms < 90_000 ? `${Math.round(ms / 1000)} s` : ms < 5_400_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1)} h`)

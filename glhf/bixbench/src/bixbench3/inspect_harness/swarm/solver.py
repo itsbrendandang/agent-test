@@ -29,11 +29,12 @@ from ..models import RuntimeCase
 from ..tools import request_web_access
 from . import baseline, past_memory, roles
 from .ledger import Ledger
-from .memory import append_memory, filter_lessons, read_memory
+from .memory import add_pending, filter_lessons, load_memory
 from .tools import (
     WORK,
     background_processes,
     check_contract,
+    check_failed,
     check_outputs,
     contract_text,
     needs_rescue,
@@ -41,6 +42,7 @@ from .tools import (
     raise_issue,
     read_ledger,
     record_falsification_test,
+    register_falsification_test,
     report_failed_replication,
     resolve_issue,
     save_ledger,
@@ -54,7 +56,11 @@ PILOT_SHARE = 0.08
 FIRST_PASS_SHARE = 0.45
 FINISH_RESERVE = 0.05  # kept back so a missing artifact can still be rescued after review
 REPORT_RESERVE = 0.05  # always kept for the reporter and final writes
-MIN_REVIEW_SECONDS = 15 * 60
+MIN_REVIEW_SECONDS = 15 * 60  # for long runs; short runs use min_review_seconds()
+MIN_REVIEW_SHARE = 0.15
+RUN_MARGIN = 0.03  # of the sample's time limit, kept out of every phase's share
+FINAL_WRITES_SHARE = 0.015  # of the sample's time limit, kept after the report for final writes
+MIN_FINAL_WRITES_SECONDS = 30
 MIN_FINISH_SECONDS = 5 * 60
 MAX_FINISH_HOLD = 0.25  # the finisher's reserve never takes more than this share of the run
 MIN_PHASE_SECONDS = 10  # a phase with less time than this is skipped, not started
@@ -78,6 +84,25 @@ def finish_hold(budget: float) -> float:
     return FINISH_RESERVE
 
 
+def min_review_seconds(budget: float) -> float:
+    """Review time a round needs before it is started: 15 minutes, or 15% of a short run.
+
+    A fixed 15 minutes meant the default 30-minute local run never reviewed: after the first
+    pass about 5 minutes are left before the reserves. Scaled, such a run gets one round."""
+    return min(float(MIN_REVIEW_SECONDS), budget * MIN_REVIEW_SHARE)
+
+
+def review_step(critic: PhaseResult, open_issues: int) -> str:
+    """What follows a critique: "stop" (the critic could not run), "converged" (it finished
+    and nothing is open), "again" (it was cut off with nothing open: no verdict, look again),
+    or "revise". "No open issues" means nothing when the critic did not finish looking."""
+    if not critic.ran:
+        return "stop"
+    if open_issues:
+        return "revise"
+    return "converged" if critic.completed else "again"
+
+
 def token_allowance(title: str, max_tokens: int, used: int) -> int:
     """Tokens a phase may spend; <= 0 means skip it. The report always gets at least the reserve:
     limits are checked after each call, so earlier phases can overshoot slightly, and a run must
@@ -92,11 +117,21 @@ def token_allowance(title: str, max_tokens: int, used: int) -> int:
 
 @dataclass
 class Clock:
-    budget: float
+    budget: float  # what the phases share: the sample's time limit minus RUN_MARGIN
     started: float
+    total: float = 0.0  # the sample's own time limit; 0 = same as budget
 
     def left(self) -> float:
         return self.budget - (time.monotonic() - self.started)
+
+    def report_seconds(self) -> int:
+        """Time for the reporter, from the time the sample really has left: everything up to
+        its limit except what the final writes need. Never more, so the sample's limit cannot
+        cut the report or the files written after it; under MIN_PHASE_SECONDS it is skipped."""
+        total = self.total or self.budget
+        sample_left = total - (time.monotonic() - self.started)
+        final = max(float(MIN_FINAL_WRITES_SECONDS), total * FINAL_WRITES_SHARE)
+        return int(max(0.0, sample_left - final))
 
     def slice(self, share: float, reserve: float = 0.0) -> int:
         """Seconds for a phase: its share of the run, never into `reserve` (a share of the run).
@@ -159,19 +194,24 @@ def glhf_swarm(
         ledger = Ledger()
         from .. import tasks  # late import: avoids a cycle with tasks.py
 
-        clock = Clock(float(budget_seconds or tasks.TIME_LIMIT_SECONDS) * 0.97, time.monotonic())
+        total = float(budget_seconds or tasks.TIME_LIMIT_SECONDS)
+        clock = Clock(total * (1 - RUN_MARGIN), time.monotonic(), total)
         await sandbox().exec(["mkdir", "-p", f"{WORK}/scripts", "/outputs/glhf"])
         await save_ledger(ledger)
         if exa and not os.environ.get("EXA_API_KEY"):
             raise RuntimeError("exa=True needs EXA_API_KEY in the runner's environment")
-        # Lessons from runs on other tasks only; never from an earlier run on this task.
-        memory = read_memory(memory_dir, case.task_id)
+        # Approved lessons from runs on other tasks only: never from an earlier run on this task,
+        # nor from a run that had read this task's lessons.
+        loaded = load_memory(memory_dir, case.task_id)
+        memory, memory_sources = loaded.text, set(loaded.sources)
         past_used = False
         if memory_dir and past_memory.enabled():
             try:  # past.dev ranks the lessons; the local file is the fallback
-                recalled = await past_memory.recall(task_id=case.task_id)
+                recalled, recalled_from = await past_memory.recall_with_sources(
+                    task_id=case.task_id
+                )
                 if recalled:
-                    memory, past_used = recalled, True
+                    memory, memory_sources, past_used = recalled, recalled_from, True
                 ledger.log("memory.recalled", source="past.dev", chars=len(recalled))
             except Exception as error:
                 ledger.log(
@@ -189,6 +229,7 @@ def glhf_swarm(
             memory=bool(memory_dir),
             memory_source="past.dev" if past_used else ("file" if memory else None),
             memory_chars=len(memory),
+            memory_from_tasks=sorted(memory_sources),
             role_models={
                 "planner": planner_model,
                 "experimenter": experimenter_model,
@@ -293,6 +334,7 @@ def glhf_swarm(
             critic_model,
             [
                 raise_issue(ledger, "critic"),
+                register_falsification_test(ledger, "critic"),
                 record_falsification_test(ledger, "critic"),
                 report_failed_replication(ledger, "critic"),
             ],
@@ -331,7 +373,7 @@ def glhf_swarm(
                 clock.slice(FIRST_PASS_SHARE, hold),
             )
             for n in range(1, review_rounds + 1):
-                if review_left() < MIN_REVIEW_SECONDS:
+                if review_left() < min_review_seconds(clock.budget):
                     ledger.log("review.skipped", round=n, reason="time")
                     break
                 contract = contract_text(await check_contract(outputs))
@@ -349,11 +391,11 @@ def glhf_swarm(
                     f"Current ledger:\n{ledger.summary()}",
                     int(review_left() * CRITIQUE_SHARE),
                 )
+                step = review_step(critique, len(ledger.open_issues()))
                 if critique.completed:
                     # Fixes made before this round have now been through a full critic pass.
                     ledger.mark_rechecked()
                 else:
-                    # "No open issues" means nothing when the critic did not finish looking.
                     ledger.log(
                         "review.incomplete",
                         round=n,
@@ -361,12 +403,12 @@ def glhf_swarm(
                         if critique.ran
                         else "critic did not run (no budget left)",
                     )
-                    if not critique.ran:
-                        break
-                if not ledger.open_issues():
-                    if critique.completed:
-                        ledger.log("review.converged", round=n)
-                        break
+                if step == "stop":
+                    break
+                if step == "converged":
+                    ledger.log("review.converged", round=n)
+                    break
+                if step == "again":
                     continue  # nothing to revise; the next round gives the critic another pass
                 await phase(
                     f"revise {n}",
@@ -381,7 +423,11 @@ def glhf_swarm(
                 ledger.log("review.fixes_not_rechecked", issues=unchecked)
             # Last line of defence for completeness: only for artifacts that would score zero
             # because they are missing or unreadable. Warnings never trigger it.
-            failing = needs_rescue(await check_contract(outputs))
+            last_check = await check_contract(outputs)
+            if check_failed(last_check):
+                # Nothing is known about the artifacts, so the finisher is not started on a guess.
+                ledger.log("contract.check_failed", detail=contract_text(last_check)[:500])
+            failing = needs_rescue(last_check)
             finish_time = int(clock.left() - clock.budget * REPORT_RESERVE)
             # A run too short for the full reserve (under 20 minutes) still gets a rescue attempt.
             needed = min(MIN_FINISH_SECONDS, int(clock.budget * finish_hold(clock.budget)))
@@ -418,12 +464,12 @@ def glhf_swarm(
                     f"{WORK}/pilot_report.md {WORK}/adherence.md /outputs/glhf/ 2>/dev/null; true",
                 ]
             )
-            await phase(
-                "report", reporter, "Write /outputs/METHODS.md.", max(120, int(clock.left()) - 60)
-            )
+            await phase("report", reporter, "Write /outputs/METHODS.md.", clock.report_seconds())
             if memory_dir:
                 # Written before grading, so a lesson can never contain a score. Lines that look
-                # like results are dropped in code (memory.filter_lessons), not left to the prompt.
+                # like results are dropped in code (memory.filter_lessons). What is left is only
+                # queued: no later run sees it, and nothing goes to past.dev, until a person
+                # approves it (python -m bixbench3.inspect_harness.swarm.memory approve ...).
                 try:
                     lessons = await sandbox().read_file(f"{WORK}/lessons.md")
                     kept, rejected = filter_lessons(lessons)
@@ -431,23 +477,13 @@ def glhf_swarm(
                         ledger.log("memory.rejected", lines=rejected)
                     clean = "\n".join(kept)
                     await sandbox().write_file("/outputs/glhf/lessons.md", clean + "\n")
-                    saved = append_memory(memory_dir, case.task_id, clean)
+                    queued = add_pending(memory_dir, case.task_id, clean, memory_sources)
                     ledger.log(
-                        "memory.saved" if saved else "memory.nothing_to_save",
-                        source="file",
-                        lines=len(kept),
+                        "memory.pending" if queued else "memory.nothing_to_save",
+                        lines=queued,
+                        context=sorted(memory_sources - {case.task_id}),
+                        note="waiting for a person to approve; not shown to any run yet",
                     )
-                    if saved and past_memory.enabled():
-                        try:
-                            receipt = await past_memory.remember(case.task_id, clean)
-                            ledger.log("memory.saved", source="past.dev", ingestion=receipt)
-                        except Exception as error:
-                            ledger.log(
-                                "memory.failed",
-                                source="past.dev",
-                                step="ingest",
-                                error=str(error)[:200],
-                            )
                 except Exception as error:  # a missing lessons file must not fail the run
                     ledger.log("memory.failed", error=str(error)[:200])
             final = contract_text(await check_contract(outputs))
