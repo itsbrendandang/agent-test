@@ -10,7 +10,8 @@ export const GLHF = resolve(ROOT, "glhf")
 export const BIXBENCH = resolve(GLHF, "bixbench")
 /** Lessons the swarm keeps between runs. In git, so the whole team shares them. */
 export const MEMORY = resolve(GLHF, "memory")
-export const RUNS = resolve(GLHF, "runs")
+/** Where runs and the tracker's database live. GLHF_RUNS_DIR replaces it (tests and throwaway servers use a temporary folder). */
+export const RUNS = process.env.GLHF_RUNS_DIR ? resolve(process.env.GLHF_RUNS_DIR) : resolve(GLHF, "runs")
 export const DEMO_CASE = resolve(GLHF, "demo_case")
 
 /** A run id is one path segment of letters, digits, "_", "." and "-". Anything else could leave glhf/runs. */
@@ -60,10 +61,14 @@ export function saveStored(stored: Stored) {
   writeJson(`${runDir(stored.run.id)}/record.json`, stored)
 }
 
-/** Change the public record. Returns the new record, or undefined when the run is unknown. */
+/**
+ * Change the public record. Returns the new record, or undefined when the run is unknown. A cancelled run stays
+ * cancelled: a phase that was half-way through when the cancel arrived cannot write "running" or "failed" over it.
+ */
 export function patchRun(id: string, patch: Partial<GlhfRun>, log?: string): GlhfRun | undefined {
   const stored = loadStored(id)
   if (!stored) return undefined
+  if (stored.run.phase === "cancelled" && patch.phase !== "cancelled") return stored.run
   const before = stored.run.phase
   stored.run = { ...stored.run, ...patch }
   for (const key of Object.keys(stored.run) as (keyof GlhfRun)[]) if (stored.run[key] === undefined) delete stored.run[key]

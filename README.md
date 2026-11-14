@@ -198,6 +198,7 @@ Known limits:
 | [glhf/bixbench_v1/README.md](glhf/bixbench_v1/README.md) | The BixBench v1 adapter. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | For teammates: setup, tests, what not to commit. |
 | [AGENTS.md](AGENTS.md) | Rules for coding agents. |
+| [docs/pi-setup.md](docs/pi-setup.md) | Optional: the Pi agent harness this was built with, and the reviewer, advisor, docs and QA profiles in `.pi/agents/`. |
 
 ## Tests
 

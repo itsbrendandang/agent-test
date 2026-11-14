@@ -1,5 +1,9 @@
 // The GLHF run-tracker contract. The dashboard's Swarm view is built against these shapes; do not rename.
-export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed"
+// "cancelled": stopped on request (POST /api/glhf/runs/:id/cancel). It is settled like done and failed, but it is
+// not a result: the scoreboard leaves it out.
+export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed" | "cancelled"
+/** A run that will not change any more. */
+export const settled = (phase: GlhfPhase) => phase === "done" || phase === "failed" || phase === "cancelled"
 export type Solver = "single" | "glhf"
 export type Mode = "local" | "cloud"
 export type Usage = Record<string, { input_tokens: number; output_tokens: number; total_tokens: number }>
@@ -38,6 +42,12 @@ export interface GlhfRun {
   artifacts?: { artifact_id: string; score: number }[]
   usage?: Usage
   error?: string
+  /** The run this one waits for: it starts only when that run is settled (the second run of a matched pair). */
+  after?: string
+  /** The other run of a matched pair (POST /api/glhf/runs with `solvers`). */
+  pairedWith?: string
+  /** Something to keep in mind when reading this run, such as "started although <id> failed: ...". Kept to the end. */
+  note?: string
 }
 
 /** POST /api/glhf/runs body, and the input of the durable task. JSON only (it is stored in the task). */
@@ -63,12 +73,41 @@ export interface RunRequest {
   memory?: boolean
   /** Sent to providers that support a seed. */
   seed?: number
+  /** Start only when this run is settled. Set by the tracker for the second run of a pair, never by a caller. */
+  after?: string
 }
 
-/** Largest budgets a request may ask for. */
-export const MAX_TIME_LIMIT = 86_400 // seconds: the benchmark's 24 hours
-export const MAX_TOKENS = 500_000_000
-export const MAX_MESSAGES_PER_ROLE = 5_000
-export const MAX_REVIEW_ROUNDS = 10
+/**
+ * POST /api/glhf/runs body: a RunRequest, where `solvers` may replace `solver`. Two solvers start a matched pair of
+ * local runs, one after the other in the order given, with the same task, model, time limit, token budget and seed.
+ */
+export type StartBody = Partial<Omit<RunRequest, "after">> & { solvers?: Solver[] }
+
+/** A field of the New-run form that a refusal is about, so the form can show the message next to the right input. */
+export type Field = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver"
+
+/**
+ * What a request may ask for, as [smallest, largest]. The one place these numbers live: checkRequest enforces them
+ * and GET /api/glhf/status publishes them, so the dashboard does not keep a copy.
+ */
+export const LIMITS = {
+  timeLimit: [60, 86_400], // seconds; the largest is the benchmark's 24 hours
+  maxTokens: [1_000, 500_000_000],
+  reviewRounds: [1, 10],
+  maxMessagesPerRole: [2, 5_000],
+} as const
+export const MAX_SEED = 2 ** 31 - 1
+
+/**
+ * The models the New-run form offers, after "mock", and the key each needs. Any other model id can still be typed.
+ */
+export const MODEL_CHOICES = [
+  { id: "anthropic/claude-sonnet-5-5", key: "ANTHROPIC_API_KEY" },
+  { id: "anthropic/claude-haiku-5-5", key: "ANTHROPIC_API_KEY" },
+  { id: "openai/gpt-5.5", key: "OPENAI_API_KEY" },
+] as const
+
+/** "mock" first, then the models whose key is set. */
+export const modelsFor = (env: NodeJS.ProcessEnv = process.env): string[] => ["mock", ...MODEL_CHOICES.filter((m) => Boolean(env[m.key])).map((m) => m.id)]
 
 export const RECORD = 0.523 // BixBench3 best published score (the bar to beat)

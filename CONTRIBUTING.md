@@ -187,3 +187,17 @@ git diff --cached --stat
 - Define a word once (README, "Words used in these documents") and use the same word everywhere.
 - Use tables for flags and keys. Put commands in code blocks.
 - Check that each command and path you write exists.
+
+## 10. Coding agents (optional)
+
+This project was built with [Pi](https://pi.dev), an agent harness. You do not need it. If you
+want it, `docs/pi-setup.md` has the install and what the repository configures for it:
+shared skills in `.agents/skills/`, and four agent profiles in `.pi/agents/` (reviewer,
+advisor, docs-writer, dashboard-qa).
+
+Whatever agent you use, hold it to the rules in `AGENTS.md`. The two that cost real money or
+invalidate a result:
+
+- Never start a real-model run unless you asked for one. The default everywhere is the
+  scripted mock model.
+- Never let an agent read benchmark answers or a grader. That voids the run.
