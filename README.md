@@ -39,7 +39,7 @@ inputs   plan,       subsample  full run       methods diff,       │ no       
 | Sponsor | Used for | Status in this repo |
 |---|---|---|
 | [Exa](https://exa.ai) | Research search | Working. Literature search for the drug board, and the swarm's documentation search (`--exa`). Tested with live searches. |
-| [past.dev](https://past.dev) | Long-term memory | Built, not yet tested live. With `PAST_API_KEY` set, `--memory` sends each run's process lessons to past.dev and recalls the relevant ones at the start of the next run. Without the key, memory is the shared file `glhf/memory/lessons.md`. |
+| [past.dev](https://past.dev) | Long-term memory | Working. Sending lessons and recalling them is tested against the live API; a full swarm run using it has not been done yet. With `PAST_API_KEY` set, `--memory` sends each run's process lessons to past.dev and recalls the relevant ones at the start of the next run. Without the key, memory is the shared file `glhf/memory/lessons.md`. |
 | [Modal](https://modal.com) | Cloud computing | Planned. The design for running tasks on Modal is written up; no run has used Modal yet. |
 
 ## Quick start (no keys needed)
