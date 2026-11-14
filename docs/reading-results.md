@@ -21,6 +21,19 @@ Each local run has a folder `glhf/runs/<run-id>/`. Run folders are not in git.
 | `outputs/glhf/lessons.md` | Code (`memory.py`) | Only with `--memory`. The lessons of this run that passed the filter. They are also queued for approval. |
 | `outputs/glhf/scripts/`, `plan.md`, `notebook.md` and others | The roles | Swarm only. Working files copied from the sandbox. |
 
+Fields of a run record that tell you how to read the run (`GlhfRun` in
+`engine/src/glhf/types.ts`):
+
+| Field | Meaning |
+|---|---|
+| `phase` | `done`, `failed` and `cancelled` are final. See the list of phases in [running.md](running.md#phases-of-a-run). |
+| `pairedWith` | The other run of a matched pair. |
+| `after` | The run that this run waited for. |
+| `note` | Something to keep in mind, for example `started although <id> ... failed: ...` or `cancelled because <id> ... was cancelled`. `show` does not print it; read it in `record.json` or in the API answer. |
+
+A cancelled run is not a result. It has no score, and the scoreboard leaves it out. Do not
+count it as a failed run when you report results; say that it was cancelled.
+
 Quick view in the terminal:
 
 ```bash
@@ -128,7 +141,11 @@ Rules (`engine/src/glhf/scoreboard.ts`):
 
 - Two runs are compared only when all of these are the same: task, case folder, model, mode
   (local or cloud), effort, time limit and token budget (`pairKey`).
-- Each row shows the latest finished run of each solver, also when that run failed.
+- Each row shows the latest finished run of each solver, also when that run failed. Cancelled
+  runs and runs that are still queued or going are left out.
+- A matched pair (one request with both solvers) always has the same pairing settings, so its
+  two runs land in one row. If the first run of a pair failed, the second still ran; the row
+  then says that the latest run of that solver failed.
 - A difference (swarm minus single agent) is shown only when both runs finished and were graded.
 - Extras of each run are listed, for example Exa search, memory, role models, review rounds,
   seed. Extras do not stop the pairing. When they differ, the row has a note that names them.

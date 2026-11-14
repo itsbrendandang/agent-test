@@ -32,6 +32,7 @@ npm run glhf -- run --mode local|cloud --solver single|glhf --model MODEL [flags
 npm run glhf -- run --help
 npm run glhf -- list
 npm run glhf -- show <run-id>
+npm run glhf -- cancel <run-id>
 npm run glhf -- resume
 npm run glhf -- scoreboard
 ```
@@ -43,12 +44,27 @@ npm run glhf -- scoreboard
 | `run` | Starts a run. With `--follow` it waits and prints each change. |
 | `list` | All runs, newest first. |
 | `show <run-id>` | One run: phase, score, claims, issues. |
+| `cancel <run-id>` | Stops a local run and marks it cancelled. See [Run control](#run-control). |
 | `resume` | Continues to track unfinished runs when the engine is not running. |
 | `scoreboard` | Single agent and swarm side by side. See [reading-results.md](reading-results.md). |
 
 If the engine is running, the CLI sends the request to the engine. If not, the CLI process
 tracks the run itself. Only one process can track runs at a time (lock file
 `glhf/runs/tracker.lock`).
+
+### Phases of a run
+
+| Phase | Meaning | Settled |
+|---|---|---|
+| `queued` | The run is recorded but not started. The second run of a pair stays here while it waits for the first. | no |
+| `launching` | The runner or the sandbox is starting. | no |
+| `running` | The agents are working. | no |
+| `completing` | Cloud runs only: grades are collected and the machine is deleted. | no |
+| `done` | Finished and graded. | yes |
+| `failed` | Ended with an error, or went far past its time limit. | yes |
+| `cancelled` | Stopped on request. It is not a result, and the scoreboard leaves it out. | yes |
+
+A settled run does not change any more (`settled` in `engine/src/glhf/types.ts`).
 
 ### Flags of `run`
 
@@ -61,7 +77,7 @@ tracks the run itself. Only one process can track runs at a time (lock file
 | `--review-rounds N` | both | swarm | Rounds of audit, critique and revise. 1 to 10. Default 3. |
 | `--follow` | both | both | Wait until the run ends. |
 | `--time-limit S` | local | both | Seconds for the whole run. 60 to 86,400. Default 1,800. |
-| `--max-tokens N` | local | both | Token budget for the whole run. 1,000 to 500,000,000. |
+| `--max-tokens N` | local | both | Token budget for the whole run. 1,000 to 500,000,000. **Required for a local run with a real model.** Optional with `mock`. |
 | `--max-messages-per-role N` | local | swarm | Message limit per phase. 2 to 5,000. A model call with one tool call is two messages. |
 | `--seed N` | local | both | Sent to model providers that support a seed. |
 | `--exa` | local | swarm | Gives the roles the `search_docs` tool. Needs `EXA_API_KEY`. |
@@ -85,7 +101,7 @@ Example: run the Critic and the Methods Auditor on a second vendor.
 
 ```bash
 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 \
-    --role-model critic=openai/gpt-5.5 --follow
+    --role-model critic=openai/gpt-5.5 --max-tokens 4000000 --follow
 ```
 
 ### Budgets
@@ -102,7 +118,9 @@ npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5
   The swarm also limits some phases (scout 5%, propose 8%, pilot 15%, audit 8%, critique 20% of
   the budget) and skips a phase when the budget is spent. Limits are checked after each model
   call, so a run can end a little over the budget.
-- **Money.** There is no dollar limit for swarm runs. Tokens are the budget.
+- **Money.** There is no dollar limit for swarm runs. Tokens are the budget. This is why the
+  engine refuses a local run with a real model that has no `--max-tokens`
+  (`checkRequest` in `engine/src/glhf/tracker.ts`).
 
 ### Documentation search (`--exa`)
 
@@ -203,6 +221,102 @@ API. Memory was not used in a run with a real model.
 `--exa` and `--memory` give the swarm help that the single agent does not have. Say so when
 you report a run that used them.
 
+## Run control
+
+Code: `engine/src/glhf/tracker.ts`, `task.ts`, `routes.ts`. Tests:
+`engine/test/glhf-runs.test.ts`. These tests use a stand-in for the local runner (no Docker, no
+model). Run control was not tested with a real model.
+
+### One local run at a time
+
+Local runs share this machine's CPU under a time limit. Two at the same time would make their
+timing hard to compare. So the engine starts a local run only when no other local run is
+queued or going.
+
+| Case | What happens |
+|---|---|
+| You start a local run while another local run is not settled | Refused. HTTP 409 with `{"error": "...", "run": "<id of the run that is going>"}`. The CLI prints the message. |
+| The queued second run of a pair | Not refused. It belongs to the pair. |
+| Cloud runs | Not limited by this rule. Each has its own machine. |
+
+Wait for the run to end, or cancel it.
+
+### A matched pair (swarm and single agent)
+
+One request can start both solvers. Send `solvers` in place of `solver` to
+`POST /api/glhf/runs`:
+
+```json
+{"mode": "local", "model": "mock", "solvers": ["glhf", "single"], "timeLimit": 600, "seed": 7}
+```
+
+Answer (HTTP 201): `{"id": "<first run>", "ids": ["<first run>", "<second run>"]}`.
+
+| Rule | Detail |
+|---|---|
+| Order | The runs go one after the other, in the order of `solvers`. |
+| Same settings | Both get the same mode, task, case, model, time limit, token budget and seed. So the scoreboard pairs them. |
+| Swarm-only settings | Role models, review rounds, message limit, Exa and memory go to the swarm run only. |
+| The waiting run | It has the phase `queued`, the detail `waiting for <id> to finish`, and the field `after`. Both runs have the field `pairedWith`. |
+| The clock | The time limit of the second run counts from its own start, not from the request. |
+| The first run fails | The second run still starts. Its `note` says `started although <id> ... failed: ...`. |
+| The first run is cancelled | The second run is cancelled too. It never starts. Its `note` says why. |
+| Engine restart | The queue is stored in the run record and in the durable task. A queued run still starts after a restart. |
+| Checks | Both requests are checked before either starts. A pair is never half refused. |
+| Limits | A pair is for local runs only. `solvers` takes one or two different solvers. Do not send `solver` and `solvers` together. |
+
+From the CLI:
+
+```bash
+npm run glhf -- run --mode local --solvers glhf,single --model mock --follow
+```
+
+`--solvers` takes one or two names with a comma between them. Do not give it together with
+`--solver`. With `--follow`, the CLI follows each run of the pair in turn; the exit code is 0
+only when every run ends as `done`.
+
+### Cancel a run
+
+```bash
+npm run glhf -- cancel <run-id>
+```
+
+Or `POST /api/glhf/runs/<run-id>/cancel`. The answer is the run record.
+
+| Case | What happens |
+|---|---|
+| Local run that is going | The record is marked `cancelled` first. Then the runner and the processes it started get SIGTERM. If they are still there after 5 seconds (`GLHF_CANCEL_GRACE_MS`), they get SIGKILL. The machine is free for the next run. |
+| Queued run | It is marked `cancelled` and never starts. |
+| A run with a queued partner behind it | The partner is cancelled too. Its `note` says `cancelled because <id>, the run it was queued behind, was cancelled`. |
+| The queued partner only | Only the partner is cancelled. The first run goes on. |
+| Run that is already settled | Returned unchanged (HTTP 200). Nothing behind it is touched. |
+| Cloud run | Refused (HTTP 409, `{"error": "..."}`). A virtual machine may be billing, so you remove it yourself. The message gives the command: `uv run bixbench3 cancel --run <cloud-run-id> --project <project>`, run from `glhf/bixbench`. If the run has no cloud run id yet, the message says to stop its launcher (`launch.pid` in the run folder) and to check for a machine. |
+| Unknown run id | HTTP 404. |
+
+Notes:
+
+- A cancelled run stays cancelled. A step that was half done cannot write `running` or
+  `failed` over it.
+- A cancelled run has no score. Tokens that it used before the cancel are spent.
+- If the detail says the runner could not be stopped, look for a leftover process
+  (`runner.pid` in the run folder) or container (`docker ps`).
+- The cancel was tested with a stand-in runner. It was not tested with a real Docker sandbox,
+  so check `docker ps` after you cancel a real run.
+- Cancel needs no token. The dashboard page and callers on this machine may use it, like the
+  other routes.
+
+### Refusals
+
+A refused request gets a JSON body with `error`. Some have one more field.
+
+| Status | Body | When |
+|---|---|---|
+| 400 | `{"error", "field"?}` | The request is not valid. `field` names the input that the refusal is about, when there is one: `timeLimit`, `maxTokens`, `seed`, `reviewRounds`, `maxMessagesPerRole`, `model`, `exa`, `memory`, `mode`, `caseDir` or `solver`. |
+| 404 | `{"error"}` | No such run. |
+| 409 | `{"error", "run"}` | A local run is still going. `run` is its id. |
+| 409 | `{"error"}` | A cloud run cannot be cancelled from here. |
+| 503 | `{"error"}` | Another process (a CLI command) holds the run tracker. Try again shortly. |
+
 ## Cloud runs
 
 Not done yet (see [status.md](status.md)). A cloud run creates a 32-core virtual machine
@@ -298,6 +412,8 @@ The engine can start runs that cost money, so it checks each request (`engine/sr
 | The dashboard page (allowed `Origin`) | Local runs on the demo case, also with a real model, `--exa` or `--memory`. |
 | Any other caller | The scripted demo only. |
 
+For every caller, a local run with a real model needs a token budget (`maxTokens`).
+
 ### Starting a run from the dashboard
 
 The Swarm view has a **New run** button. It opens a form (`dashboard/src/swarm/NewRun.tsx`)
@@ -308,7 +424,7 @@ that starts a local run on the demo case.
 | Who does the work | Swarm, Single agent, or Both | "Both" starts two runs with the same model, time limit, token budget and seed, so the scoreboard can pair them. They run at the same time. |
 | Model | `mock` (default, free), two Claude models, or another model id | |
 | Time limit | 1 to 1,440 minutes. Default 30. | |
-| Token budget | 1,000 to 500,000,000 | Required for a real model. Optional for `mock`. |
+| Token budget | 1,000 to 500,000,000 | Required for a real model, by the form and by the engine. Optional for `mock`. |
 | Seed | optional | |
 | Review rounds | 1 to 10. Default 3. | Swarm only. |
 | Exa documentation search | off by default | Swarm only. Same as `--exa`. |
@@ -317,8 +433,7 @@ that starts a local run on the demo case.
 Safety steps for a real model:
 
 1. The form shows the note "This run costs money".
-2. The form refuses to continue without a token budget. (The CLI and the engine do not require
-   a token budget; only the form does.)
+2. The form refuses to continue without a token budget. The engine has the same rule.
 3. A second page, "Confirm a paid run", repeats the model, the number of runs, the time limit
    and the token budget.
 4. The start button works only after you tick "I understand that this spends money on the
@@ -327,7 +442,13 @@ Safety steps for a real model:
 Other behaviour:
 
 - The form warns when the engine has no key for an Anthropic or OpenAI model.
-- The form does not start a run while another run is still going.
+- The form does not start a run while another local run is still going.
+- **"Both" does not work with the present engine.** The form still sends two separate
+  requests. The engine now allows one local run at a time, so the second request gets 409.
+  The swarm run starts and the form says that the single-agent run did not. The form does not
+  yet use `solvers`. Until it does, start a pair from the CLI (`--solvers glhf,single`).
+- The dashboard has no cancel button yet, and its types do not know the phase `cancelled`.
+  Cancel from the CLI.
 - The engine checks every field again. If it refuses, the form shows the engine's message.
 
 The form cannot start cloud runs, runs on another case (`--case`), per-role models
@@ -345,11 +466,12 @@ starts the server and listens; the request handler is in `app.ts`, so tests can 
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/glhf/status` | The record to beat, tools and keys present (never the key values). |
+| `GET /api/glhf/status` | The record to beat, tools and keys present, limits and models. See the table below. |
 | `GET /api/glhf/roles` | The nine roles: instructions and budget shares, read from the Python code. |
 | `GET /api/glhf/runs` | Swarm and single-agent runs, newest first. |
-| `POST /api/glhf/runs` | Starts a run. Body: see `RunRequest` in `engine/src/glhf/types.ts`. |
+| `POST /api/glhf/runs` | Starts a run, or a pair with `solvers`. Body: see `StartBody` and `RunRequest` in `engine/src/glhf/types.ts`. Answers 201 `{id, ids}`; `id` is the first run. See [Run control](#run-control). |
 | `GET /api/glhf/runs/:id` | One run with ledger, `FINDINGS.md` and `METHODS.md`. |
+| `POST /api/glhf/runs/:id/cancel` | Stops a local run and marks it cancelled. Answers the run record. |
 | `GET /api/glhf/scoreboard` | Scoreboard rows. |
 | `GET /api/search?q=...` | Word search over all runs. Every word must appear. |
 | `POST /api/ask` | A question about the runs, answered by a small model. See below. |
@@ -360,6 +482,21 @@ starts the server and listens; the request handler is in `app.ts`, so tests can 
 | `POST /api/runs/:id/resume` | Continue a drug board run. |
 | `GET /api/runs/:id/events` | Drug board run events (server-sent events). |
 | `GET /api/runs/:id/memo` | The memo of a drug board run (Markdown). |
+
+Fields of `GET /api/glhf/status` (`statusBody` in `engine/src/glhf/doctor.ts`). The answer is
+kept for 30 seconds.
+
+| Field | Content |
+|---|---|
+| `record` | The BixBench3 record to beat (0.523). |
+| `tools` | `docker`, `uv`, `gcloud`: true or false. |
+| `keys` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `HF_TOKEN`, `EXA_API_KEY`: true or false only. Never the key values. |
+| `project` | The Google Cloud project selected in `gcloud`, or null. |
+| `limits` | The smallest and largest value a request may ask for: `timeLimit` [60, 86400] seconds, `maxTokens` [1000, 500000000], `reviewRounds` [1, 10], `maxMessagesPerRole` [2, 5000], `seed` [1, 2147483647]. From `LIMITS` in `engine/src/glhf/types.ts`, the same numbers the engine enforces. |
+| `models` | Model ids to offer in a form: `mock` first, then each of `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` and `openai/gpt-5.5` whose key is set. Any other model id can still be sent. |
+
+The dashboard does not read `limits` and `models` yet. It keeps its own copy in
+`dashboard/src/swarm/api.ts`.
 
 ## Ask and search
 

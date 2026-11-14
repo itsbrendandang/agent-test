@@ -1,17 +1,11 @@
 import logoUrl from "@/assets/logo.png"
 
 // Simple flat characters that stand in for agents. Pure SVG, no assets.
-export const SPECIES = ["bunny", "flame", "egg", "mountain", "sprout"] as const
-export type Species = (typeof SPECIES)[number]
-export type Mood = "happy" | "working" | "sleeping" | "alert"
+import { speciesFor, type Mood, type Species } from "./species"
+export type { Mood, Species }
 
 const INK = "#1b1a17"
 
-export function speciesFor(seed: string): Species {
-  let h = 0
-  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return SPECIES[h % SPECIES.length]
-}
 
 const FACE: Record<Species, { x: number; y: number; spread: number }> = {
   bunny: { x: 50, y: 66, spread: 11 },

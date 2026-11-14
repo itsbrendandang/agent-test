@@ -3,14 +3,16 @@
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
-import { EngineOffline, PageHead, RunId, runState, StatusPill } from "@/components/Shared"
+import { EngineOffline, PageHead, RunId, StatusPill } from "@/components/Shared"
+import { runState } from "@/lib/status"
 import { fmtDuration, fmtScore, fmtTokens } from "@/lib/format"
 import {
   isDemo, isLive, useSwarm,
-  type GlhfRun, type Ledger, type LedgerEvent, type ScoreCell, type ScoreRow, type Solver,
+  type GlhfRun, type Ledger, type LedgerClaim, type LedgerEvent, type ScoreCell, type ScoreRow, type Solver,
 } from "@/swarm/api"
+import { CancelRun } from "@/swarm/CancelRun"
 import { NewRun } from "@/swarm/NewRun"
-import { takeOpen } from "@/views/ExperimentsView"
+import { takeOpen } from "@/lib/open"
 import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
 import "@/swarm/swarm.css"
 
@@ -34,6 +36,8 @@ function headline(run: GlhfRun | undefined, current: string | undefined, missing
   if (!run) return "No runs yet. Press New run to watch the team work on a small practice case. The default is free."
   const who = run.solver === "glhf" ? "The swarm" : "The single agent"
   if (run.phase === "failed") return "This run stopped with an error."
+  if (run.phase === "cancelled") return "This run was cancelled. It has no score."
+  if (run.phase === "queued" && run.after) return "Waiting in the queue. This run starts when the run before it has ended."
   if (run.phase === "done") return run.score === undefined ? `${who} finished, but its outputs were not graded.` : `${who} finished, and the official grader scored its outputs.`
   if (run.phase === "queued" || run.phase === "launching") return "Starting the run…"
   if (run.phase === "completing") return "Collecting the results and grading them…"
@@ -58,6 +62,7 @@ function describe(e: LedgerEvent): string | undefined {
     case "claim.added": return `Claim ${text(e.claim)} written down: ${text(e.text)}`
     case "test.recorded":
       return `Test on ${text(e.claim)} (${text(e.name)}): p = ${num(Number(e.p))}${e.contradicts ? ", goes against the claim" : ""}. Claim is now ${text(e.verdict)}.`
+    case "test.registered": return `Test planned for ${text(e.claim)} (${text(e.name)}), before any result: ${text(e.method)}`
     case "replication.failed": return `${text(e.claim)} could not be reproduced independently: ${text(e.note)}`
     case "issue.raised": return `Problem ${text(e.issue)} raised (${text(e.severity)}): ${text(e.problem)}`
     case "issue.resolved": return `Problem ${text(e.issue)} ${e.status === "fixed" ? "fixed" : "closed without a fix"}`
@@ -93,6 +98,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   const [picked, setPicked] = useState<string | undefined>(() => takeOpen("swarm"))
   const [nudge, setNudge] = useState(0)
   const [creating, setCreating] = useState(false)
+  const [cancelling, setCancelling] = useState<string>()
   const [details, setDetails] = useState(() => localStorage.getItem("swarm.details") === "1")
   useEffect(() => localStorage.setItem("swarm.details", details ? "1" : "0"), [details])
   const { status, runs, detail, offline, scoreboard } = useSwarm(picked, nudge)
@@ -130,8 +136,9 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
   }
   const noKeys = status && !status.keys.ANTHROPIC_API_KEY && !status.keys.OPENAI_API_KEY
   const record = status?.record ?? 0.523
-  // Only a local run blocks another demo; cloud runs take hours and run elsewhere.
-  const anyLive = list.some((r) => isLive(r) && r.mode === "local")
+  const byId = (id: string | undefined) => list.find((r) => r.id === id)
+  const partner = byId(run?.pairedWith)
+  const queuedBehind = (id: string | undefined) => list.find((r) => r.after === id && isLive(r))
   const stage = activeRole ? ROLES.findIndex((r) => r.key === activeRole) : -1
   const progress = !run ? 0 : !live ? 1 : run.solver === "single" || stage < 0 ? 0.1 : (stage + 0.5) / ROLES.length
 
@@ -152,8 +159,9 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         </form>
         <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>
       </PageHead>
-      <NewRun open={creating} busy={anyLive} keys={status?.keys} onClose={() => setCreating(false)}
-        onStarted={(ids, complete) => { setPicked(ids[0]); setNudge((n) => n + 1); if (complete) setCreating(false) }} />
+      <NewRun open={creating} status={status} onClose={() => setCreating(false)}
+        onStarted={(ids) => { setPicked(ids[0]); setNudge((n) => n + 1) }} onOpenRun={openRun} />
+      <CancelRun run={byId(cancelling)} queuedBehind={queuedBehind(cancelling)} onClose={() => setCancelling(undefined)} onCancelled={() => setNudge((n) => n + 1)} />
 
       <section className="card-surface swarm-card swarm-board" aria-label="Scoreboard">
         <div className="swarm-cardhead">
@@ -202,7 +210,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
             <ul>
               <li><span className="sv sv-supported">supported</span> The claim passed its tests. It counts as a finding.</li>
               <li><span className="sv sv-refuted">refuted</span> A test went against the claim. It is rejected and is not reported as a finding.</li>
-              <li><span className="sv sv-untested">not established</span> There was not enough evidence, or no test was run. It is not reported as a finding.</li>
+              <li><span className="sv sv-untested">not established</span> There was not enough evidence, or a planned test has no result, or no test was run. It is not reported as a finding.</li>
             </ul>
             <p>Code decides each result from the test numbers. A single agent has no reviewer, so it has no checked claims.</p>
             <h3>Difference</h3>
@@ -226,6 +234,7 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
           </select>
           {run && <StatusPill state={runState(run.phase, run.score !== undefined)} />}
           {run && isDemo(run) && <span className="pill" data-kind="warning">{demoLabel(run)}</span>}
+          {run && live && <button type="button" className="btn" onClick={() => setCancelling(run.id)}>Cancel run</button>}
           <label className="swarm-toggle">
             <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
             <span>Show details</span>
@@ -249,13 +258,30 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
         {!run && list.length === 0 && <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>}
         {run && live && (
           <div className="swarm-live">
-            <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>
-            <p className="swarm-note">{run.detail ?? "Working…"} · running for {fmtDuration(Date.now() - run.startedAt)}</p>
+            <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${run.phase === "queued" ? 0 : progress * 100}%` }} /></div>
+            <p className="swarm-note">{run.detail ?? "Working…"} · {run.phase === "queued" ? "waiting" : "running"} for <Elapsed since={run.startedAt} /></p>
             <p className="swarm-note">
-              {run.solver === "glhf"
+              {run.phase === "queued" ? "Nothing has run yet."
+                : run.solver === "glhf"
                 ? <>So far: {claims.length} claim{claims.length === 1 ? "" : "s"} written down, {count.supported} supported, {count.refuted} rejected, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
                 : "A single agent keeps no list of claims, so there is nothing to count until it finishes."}
             </p>
+          </div>
+        )}
+        {run?.phase === "cancelled" && run.detail && <p className="swarm-note">{run.detail}</p>}
+        {run && (run.pairedWith || run.after || run.note) && (
+          <div className="swarm-relations">
+            {run.pairedWith && (
+              <p>
+                Paired with <RunLink id={run.pairedWith} onOpen={openRun} />
+                {partner && <> ({solverName(partner.solver).toLowerCase()}) <StatusPill state={runState(partner.phase, partner.score !== undefined)} /></>}
+                <span className="muted"> · same task, model, time limit, token budget and seed</span>
+              </p>
+            )}
+            {run.after && (
+              <p>{run.phase === "queued" ? "Starts when" : "Was queued behind"} <RunLink id={run.after} onOpen={openRun} />{run.phase === "queued" ? " has ended." : "."}</p>
+            )}
+            {run.note && <p className="swarm-rownote">Note: {run.note}</p>}
           </div>
         )}
         {run?.phase === "failed" && <p className="pill swarm-failure" data-kind="danger" role="alert">{run.error ?? "No error message was recorded."}</p>}
@@ -351,8 +377,13 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
             {ledger && (
               <p className="swarm-note">
                 A claim counts as a finding only if it survives attempts to disprove it. Each test gives a p-value, which code turns into
-                an evidence score (e-value). Scores multiply across tests, and a claim is supported at {num(1 / ledger.alpha)} or more.
-                No model decides a verdict.
+                an evidence score (e-value).{" "}
+                {ledger.combination
+                  ? <>Tests are planned (registered) before any result exists. A claim's score is the average over its planned tests, and a planned test
+                    with no result counts as 0. With {ledger.claims_in_family ?? claims.length} claim{(ledger.claims_in_family ?? claims.length) === 1 ? "" : "s"} in
+                    this run, a claim is supported at {num(ledger.support_threshold ?? 1 / ledger.alpha)} or more, and only when every planned test has a result.</>
+                  : <>Scores multiply across tests, and a claim is supported at {num(1 / ledger.alpha)} or more.</>}
+                {" "}No model decides a verdict.
               </p>
             )}
             {claims.length === 0 && <p className="muted small">{run.solver === "single" ? "A single agent registers no claims." : "No claims yet."}</p>}
@@ -362,21 +393,10 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
                 <p>{c.text}</p>
                 <p className="swarm-note">If the claim were false: {c.null_hypothesis}</p>
                 <p className="swarm-note">
-                  Combined evidence score {num(c.e_value)} against a threshold of {num(1 / (ledger?.alpha ?? 0.1))}
+                  Combined evidence score {num(c.e_value)} against a threshold of {num(c.threshold ?? 1 / (ledger?.alpha ?? 0.1))}
                   {c.replication_failed && " · independent replication failed"} · outputs: {c.artifact_ids.join(", ") || "none"}
                 </p>
-                {c.tests.length === 0 ? <p className="swarm-note">No test has been run on this claim.</p> : (
-                  <ul className="swarm-tests">
-                    {c.tests.map((t, i) => (
-                      <li key={i}>
-                        <b>{t.name}</b> · p = {num(t.p_value)} · e = {num(t.e_value)}
-                        {t.contradicts && <> · <span className="sv sv-refuted">goes against the claim</span></>}
-                        <span className="muted"> · by {t.by}</span>
-                        {t.note && <div className="muted">{t.note}</div>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ClaimTests claim={c} />
               </article>
             ))}
             <h2>Problems the reviewers raised ({issues.length})</h2>
@@ -409,3 +429,62 @@ export function SwarmView({ onSearch }: { onSearch?: (query: string) => void }) 
 }
 
 const demoLabel = (r: GlhfRun) => [r.task === "demo" && "demo case", r.model === "mock" && "scripted model"].filter(Boolean).join(", ")
+
+/** Shows a duration that keeps counting, without reading the clock during render. */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState<number>()
+  useEffect(() => {
+    const tick = () => setNow(Date.now())
+    const first = window.setTimeout(tick, 0), timer = window.setInterval(tick, 1000)
+    return () => { window.clearTimeout(first); window.clearInterval(timer) }
+  }, [])
+  return <span className="swarm-elapsed">{now === undefined ? "–" : fmtDuration(Math.max(0, now - since))}</span>
+}
+
+/** A run id that opens that run. Cut to fit; the whole id is in the title. */
+function RunLink({ id, onOpen }: { id: string; onOpen: (id: string) => void }) {
+  return <button type="button" className="link-btn swarm-runlink" title={`Open ${id}`} onClick={() => onOpen(id)}>{id}</button>
+}
+
+/**
+ * The tests of one claim: the results recorded, then the planned tests that have no result. A planned test without
+ * a result counts as 0, so it is the usual reason a claim reads "insufficient" or "untested" (not established).
+ */
+function ClaimTests({ claim: c }: { claim: LedgerClaim }) {
+  const planned = c.registered ?? []
+  const pending = c.pending_tests ?? []
+  const plan = (name: string) => planned.find((r) => r.name === name)
+  if (c.tests.length === 0 && planned.length === 0) return <p className="swarm-note">No test has been planned or run on this claim.</p>
+  return (
+    <>
+      {planned.length > 0 && (
+        <p className="swarm-note">
+          {planned.length} test{planned.length === 1 ? " was" : "s were"} planned before any result: {planned.length - pending.length} with a result, {pending.length} without.
+        </p>
+      )}
+      {pending.length > 0 && c.verdict !== "refuted" && (
+        <p className="swarm-pendingnote">
+          Not established because {pending.length === 1 ? "a planned test has" : `${pending.length} planned tests have`} no result. Each one counts as 0 in the score, and a claim is supported only when every planned test has a result.
+        </p>
+      )}
+      <ul className="swarm-tests">
+        {c.tests.map((t, i) => (
+          <li key={`r${i}`}>
+            <b>{t.name}</b> · p = {num(t.p_value)} · e = {num(t.e_value)}
+            {t.contradicts && <> · <span className="sv sv-refuted">goes against the claim</span></>}
+            {t.registered === false && <> · <span className="sv sv-untested" title="A result that goes against a claim is always accepted, planned or not.">not planned beforehand</span></>}
+            <span className="muted"> · by {t.by}</span>
+            {plan(t.name) && <div className="muted">Planned: {plan(t.name)!.method}</div>}
+            {t.note && <div className="muted">{t.note}</div>}
+          </li>
+        ))}
+        {pending.map((name) => (
+          <li key={`p${name}`} data-pending>
+            <b>{name}</b> · <span className="sv sv-insufficient">no result recorded</span> · counts as e = 0
+            {plan(name) && <><span className="muted"> · planned by {plan(name)!.by}</span><div className="muted">Planned: {plan(name)!.method}</div></>}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}

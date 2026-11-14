@@ -17,14 +17,14 @@ or OpenAI subscription or API key works.
 ## First run in this repo
 
 ```bash
-cd drug-board
+cd agent-test     # the folder you cloned; the GitHub repository is named agent-test
 pi
 ```
 
 Pi asks whether you trust the project. Answer yes once. Trust is what lets it
 read `.pi/settings.json`; until then it ignores everything below.
 
-Then it loads, in this order:
+Then it loads these:
 
 | What | Where | Why it matters |
 |---|---|---|
@@ -58,14 +58,21 @@ These are in `AGENTS.md`, and they are the ones that cost real money or
 invalidate a result when broken:
 
 1. **Never run a real model without being asked.** The default everywhere is
-   the scripted mock model.
-2. **Never read the benchmark's answers.** Agents see only their task's inputs.
-   Reading a grader or a ground-truth bucket voids the run.
+   the scripted model (`--model mock`). `AGENTS.md` states this rule for cloud
+   runs and for the BixBench v1 adapter; apply it to every paid run.
+2. **Never read the benchmark's answers.** That means the ground-truth bucket
+   (`gs://bixbench3-ground-truth`) and the published results of a benchmark
+   paper. Reading them voids the run. The grader's code is in this repository
+   and may be read, but it must not be changed.
 3. **Do not commit** `.env`, run folders under `glhf/runs/`, benchmark data, or
    anything with a key in it.
 4. **Lessons are not automatic.** A run queues them; a person approves them.
 
 ## Using something else
 
-Claude Code reads `AGENTS.md` and `.claude/` and works fine here. Cursor and
-plain `git` plus `npm test` work too. Nothing in the build depends on Pi.
+Other coding agents work here too. The repository has a `.claude/` folder with
+the Exa skill for Claude Code. If your agent does not read `AGENTS.md` by
+itself, tell it to read that file first. Plain `git` plus `npm test` also
+works. Nothing in the build depends on Pi.
+
+Not tested by us: a first run of Pi on a new clone, and agents other than Pi.

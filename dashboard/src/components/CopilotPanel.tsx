@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ChatStatus } from "ai"
 import { Buddy } from "./Buddy"
 import {
@@ -31,7 +31,7 @@ export function CopilotPanel({ context }: { context: CopilotContext }) {
   const [status, setStatus] = useState<ChatStatus>("ready")
   const nextId = useRef(0)
   const ctxRef = useRef(context)
-  ctxRef.current = context
+  useEffect(() => { ctxRef.current = context }, [context])
 
   const send = async (text: string) => {
     if (!text.trim() || status !== "ready") return

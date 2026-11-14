@@ -1,5 +1,5 @@
 // Client for the engine (engine/src/server.ts). The engine owns runs; the dashboard only watches and starts them.
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 export const ENGINE = (import.meta.env.VITE_ENGINE_URL as string | undefined) ?? "http://localhost:8787"
 
@@ -33,16 +33,16 @@ export const memo = (runId: string) => fetch(`${ENGINE}/api/runs/${encodeURIComp
 
 /** Every event of a run, replayed then live. Events with the same key replace each other (replays after a crash). */
 export function useRunEvents(runId: string | undefined): BoardEvent[] {
-  const [events, setEvents] = useState<BoardEvent[]>([])
+  // Events are kept with the run they belong to, so another run's events are never shown while a new stream opens.
+  const [got, setGot] = useState<{ runId: string; events: BoardEvent[] }>()
   useEffect(() => {
-    setEvents([])
     if (!runId) return
     const source = new EventSource(`${ENGINE}/api/runs/${encodeURIComponent(runId)}/events`)
     source.onmessage = (m) => {
       const e = JSON.parse(m.data) as BoardEvent
-      setEvents((all) => [...all.filter((x) => x.key !== e.key), e])
+      setGot((old) => ({ runId, events: [...(old?.runId === runId ? old.events : []).filter((x) => x.key !== e.key), e] }))
     }
     return () => source.close()
   }, [runId])
-  return events
+  return useMemo(() => (got && got.runId === runId ? got.events : []), [got, runId])
 }

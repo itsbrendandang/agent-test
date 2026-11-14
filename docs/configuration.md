@@ -56,8 +56,14 @@ Set these in `.env` or in your shell. All are optional.
 | `GLHF_CLOUD_POLL_MS` | 5 minutes | Time between status checks of a cloud run. |
 | `GLHF_BIXBENCH3_CMD` | `uv run bixbench3` | The command for cloud runs. Tests can replace it. |
 | `GLHF_BIXBENCH3_RUNS` | `glhf/bixbench/runs` | Where the cloud runner writes run manifests. |
+| `GLHF_LOCAL_CMD` | `uv run python -m bixbench3.glhf_local` | The command for local runs. The arguments stay the same. Tests replace it with a stand-in script. |
+| `GLHF_CANCEL_GRACE_MS` | `5000` | On cancel, the time between SIGTERM and SIGKILL for the runner and the processes it started. |
+| `GLHF_RUNS_DIR` | `glhf/runs` | Folder for run folders, the tracker's database (`tracker.sqlite`), the tracker lock and the token file. Tests use a temporary folder, so they do not touch real runs. Read in `engine/src/glhf/store.ts`. |
 
-All are read in `engine/src/glhf/task.ts`.
+All others are read in `engine/src/glhf/task.ts`.
+
+If you set `GLHF_RUNS_DIR`, set it for the engine and for the CLI. The CLI reads the token
+and the run records from the same folder.
 
 ### Sandbox and Docker
 

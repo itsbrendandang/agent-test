@@ -80,6 +80,12 @@ Known limits:
 | Feature | Status |
 |---|---|
 | Run tracker: no second launch after a restart | The parts are tested (start-once marker file, lock file, process check) in `engine/test/glhf-tracker.test.ts`. No automated test stops and restarts the engine during a run. |
+| Run control: a pair in one request (`solvers`), one local run at a time (409), a queued partner that survives an engine restart, a partner that starts after a failure | Automated tests through the real routes, with a stand-in for the local runner (`engine/test/glhf-runs.test.ts`). **Not tested with a real model or a real Docker sandbox.** |
+| Cancel (`POST /api/glhf/runs/:id/cancel`, `npm run glhf -- cancel`): stops the runner and its processes, cancels a queued partner, refuses cloud runs | Same test file, same stand-in. Not tested on a run with a real sandbox container; check `docker ps` after a cancel. Not tested on a cloud run (none exists). |
+| A real model needs a token budget (local runs) | Automated tests (same file). |
+| `--solvers` in the CLI | Automated test (same file). |
+| `GET /api/glhf/status`: limits, models, keys as true or false | Automated tests (same file). |
+| Refusals name the field (`{error, field}`) | Automated tests (same file). |
 | HTTP checks (Host, Origin, token, JSON bodies) | Automated tests that call the real request handler (`engine/test/app.test.ts`, `engine/test/board-http.test.ts`). The handler is in `engine/src/app.ts`; `server.ts` only listens. |
 | Scoreboard pairing rules (task, case, model, mode, effort, time limit, token budget) | Automated tests (`engine/test/glhf-scoreboard.test.ts`). |
 | Drug board run lock (`engine/src/runlock.ts`): survives a restart, and a process id that the system uses again | Automated tests (`engine/test/board-http.test.ts`, `engine/test/app.test.ts`). No test restarts a real container. |

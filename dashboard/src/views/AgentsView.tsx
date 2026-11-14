@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead, RunId } from "@/components/Shared"
-import { useSwarm } from "@/swarm/api"
+import { isLive, useSwarm } from "@/swarm/api"
 import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
-import { SPECIES, Buddy } from "@/components/Buddy"
+import { Buddy } from "@/components/Buddy"
+import { SPECIES } from "@/components/species"
 import { CrewSprite } from "@/crew/CrewSprite"
 import { buildSkill, SKILL_STARTERS, suggestStarter } from "@/crew/skills"
 import { readCharacterImage, useCrew, type CrewMember } from "@/crew/store"
@@ -150,7 +151,7 @@ function SwarmTeam() {
   const events = ledger?.events ?? []
   const started = new Set(events.filter((e) => e.kind === "phase.started").map((e) => roleOf(e.phase)))
   const last = events.findLast((e) => e.kind === "phase.started" || e.kind === "phase.finished")
-  const live = run && run.phase !== "done" && run.phase !== "failed"
+  const live = run && isLive(run)
   const active = live && last?.kind === "phase.started" ? roleOf(last.phase) : undefined
 
   return (

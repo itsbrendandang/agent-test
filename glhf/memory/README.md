@@ -8,7 +8,11 @@ later run sees it.
 | `lessons.pending.md` | runs with `--memory` | never |
 | `lessons.md` | a person, with the `approve` command | yes |
 
-Both files are in git, so the team shares them.
+`lessons.pending.md` does not exist until the first lesson is queued. A new clone has only
+`lessons.md`. With no pending file, `list` prints `0 pending`.
+
+Neither file is ignored by git, so the team can share them. Commit `lessons.pending.md` if
+you want a teammate to review the lessons.
 
 ## How a lesson is written
 

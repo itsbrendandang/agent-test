@@ -764,3 +764,5 @@ td { border-bottom: 1px solid var(--line); }
 .exp-kind::before { display: none; }
 .placeholder { flex-shrink: 0; }
 .page .engine-offline h2 { font-size: 16px; font-weight: 650; text-transform: none; letter-spacing: 0; color: var(--text); }
+.pill[data-kind="neutral"] { background: #e9e6dd; color: #55504a; }
+.pill[data-kind="waiting"] { background: transparent; color: var(--text-muted); border: 1px dashed #b9b2a0 !important; }

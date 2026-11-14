@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { ENGINE } from "@/board/api"
-import { EngineOffline, PageHead, runState, StatusPill } from "@/components/Shared"
+import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
+import { runState } from "@/lib/status"
 import { fmtScore } from "@/lib/format"
 
 interface Hit {
@@ -12,14 +13,6 @@ type Kind = "all" | "swarm" | "board"
 interface Cited { kind: "swarm" | "board"; id: string; title: string; why: string }
 interface Answer { answer: string; runs: Cited[]; mode: "ai" | "keyword"; note?: string }
 type Asked = { state: "idle" } | { state: "loading"; question: string } | { state: "done"; question: string; result: Answer } | { state: "error"; question: string; message: string }
-
-/** A run another view should open on its next mount. Read once, then cleared. */
-export function takeOpen(kind: "swarm" | "board"): string | undefined {
-  const key = `open.${kind}`
-  const id = sessionStorage.getItem(key) ?? undefined
-  if (id) window.setTimeout(() => sessionStorage.removeItem(key), 0) // after React's double call in development
-  return id
-}
 
 // The last answer is kept for the browser session, so coming back from a cited run does not cost a second model call.
 const ASKED = "experiments.ask"

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { CrewSprite } from "@/crew/CrewSprite"
 import { useCrew } from "@/crew/store"
 import { UsageBars } from "@/system/UsageBars"
@@ -16,7 +17,7 @@ interface Props {
 // Home: no cards or boxes. One line of type, a plain ledger, and the crew standing on a hairline.
 export function OverviewView({ simCount, tick, eventCount, active, onOpenSimulations, onMeetCrew, onOpenKeys }: Props) {
   const { crew } = useCrew()
-  const today = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })
+  const [today] = useState(() => new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }))
   return (
     <div className="page home">
       <header className="home-top">

@@ -3,13 +3,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { fmtMetric } from "@/lib/format"
 import type { Metrics } from "@/sim/types"
 
-export const CHART_COLORS = ["#ff5fa2", "#3f7cc4", "#2bb673", "#ff9a2e", "#ff4a4a"]
-
-export { fmtMetric }
-
-export function series(history: Metrics[], key: string) {
-  return history.map((m, i) => ({ step: i, value: m[key] ?? 0 }))
-}
+import { CHART_COLORS, series } from "@/lib/chart"
 
 interface SeriesChartProps {
   history: Metrics[]

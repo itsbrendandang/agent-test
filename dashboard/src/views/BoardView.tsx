@@ -1,11 +1,12 @@
 // Board room. By default a plain summary: is the board working, and what did it decide and why can you trust it.
 // "Show details" opens the full room: roster, every reply with per-claim verdicts, the ledger, evidence and memo.
-import { takeOpen } from "@/views/ExperimentsView"
+import { takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
-import { EngineOffline, PageHead, runState, StatusPill } from "@/components/Shared"
+import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
+import { runState } from "@/lib/status"
 import { fmtDuration } from "@/lib/format"
 import "@/board/board.css"
 
@@ -34,22 +35,23 @@ export function BoardView() {
   const [brief, setBrief] = useState("")
   const [runId, setRunId] = useState<string | undefined>(() => takeOpen("board"))
   const [error, setError] = useState("")
-  const [memoText, setMemoText] = useState("")
+  const [memoOf, setMemoOf] = useState<{ runId: string; text: string }>()
   const [details, setDetails] = useState(() => localStorage.getItem("board.details") === "1")
   const events = useRunEvents(runId)
 
   useEffect(() => localStorage.setItem("board.details", details ? "1" : "0"), [details])
   const refresh = () => get<RunSummary[]>("/api/runs").then((r) => { setRuns(r); setRunId((id) => id ?? r[0]?.id) })
   const load = () => {
-    setOffline(false)
     Promise.all([get<Status>("/api/status"), get<RosterMember[]>("/api/roster"), get<string[]>("/api/briefs")])
-      .then(([s, r, b]) => { setStatus(s); setRoster(r); setBriefs(b); setBrief((old) => old || (b[0] ?? "")); return refresh() })
+      .then(([s, r, b]) => { setOffline(false); setStatus(s); setRoster(r); setBriefs(b); setBrief((old) => old || (b[0] ?? "")); return refresh() })
       .catch(() => setOffline(true))
   }
   useEffect(load, [])
 
   const memoWritten = events.some((e) => e.type === "memo.written")
-  useEffect(() => { if (runId && memoWritten) void fetchMemo(runId).then(setMemoText); else setMemoText("") }, [runId, memoWritten])
+  useEffect(() => { if (runId && memoWritten) void fetchMemo(runId).then((text) => setMemoOf({ runId, text })) }, [runId, memoWritten])
+  // The memo belongs to one run: another run's memo is never shown while the new one loads.
+  const memoText = memoOf && memoOf.runId === runId && memoWritten ? memoOf.text : ""
   const finished = events.some((e) => e.type === "run.finished" || e.type === "run.failed")
   useEffect(() => { if (finished) void refresh() }, [finished])
 

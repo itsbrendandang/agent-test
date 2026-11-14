@@ -109,19 +109,33 @@ For real models, copy `.env.example` to `.env` and add your keys. Key list:
 ## How to run
 
 ```bash
-# Demo case with a real model, swarm and single agent:
-npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --follow
-npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --follow
+# Demo case with a real model, swarm and single agent. A real model needs a token budget.
+npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
+npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
 
 npm run glhf -- list            # all runs
 npm run glhf -- show <run-id>   # one run: phase, score, claims, issues
+npm run glhf -- cancel <run-id> # stop a local run
 npm run scoreboard              # single agent and swarm side by side
 ```
 
 All commands, flags and the rules for cloud runs: [docs/running.md](docs/running.md).
 
+Rules for local runs (details: [docs/running.md](docs/running.md#run-control)):
+
+| Rule | Detail |
+|---|---|
+| One local run at a time | A second start is refused until the first run ends or is cancelled. |
+| Token budget | A local run with a real model is refused without `--max-tokens`. |
+| Pair | One request can start the swarm and the single agent with the same settings, one after the other (`--solvers glhf,single`, or `solvers` in the HTTP API). |
+| Cancel | `cancel` stops a local run and a partner that is queued behind it. A cloud run is not cancelled this way; the command prints what to run. |
+
+These rules were tested with a stand-in for the runner, not with a real model.
+
 The dashboard's Swarm view can also start a local run on the demo case (button **New run**).
-A run with a real model needs a token budget and a confirm step there.
+A run with a real model needs a token budget and a confirm step there. The dashboard cannot
+cancel a run yet, and its "Both, to compare" choice does not work with the one-at-a-time rule
+yet; use the CLI for a pair.
 
 Cloud runs create a billed 32-core virtual machine. Do not start one unless the team agrees.
 
@@ -189,7 +203,8 @@ Known limits:
 | Document | Content |
 |---|---|
 | [docs/status.md](docs/status.md) | What was tested, and how. |
-| [docs/running.md](docs/running.md) | Commands, flags, Docker, cloud runs, who can start a run, HTTP API. |
+| [docs/running.md](docs/running.md) | Commands, flags, run control (pair, cancel), Docker, cloud runs, who can start a run, HTTP API. |
+| [docs/pi-setup.md](docs/pi-setup.md) | Optional: the Pi coding agent in this repository. |
 | [docs/configuration.md](docs/configuration.md) | Keys, environment variables, ports, `board/config.yaml`. |
 | [docs/reading-results.md](docs/reading-results.md) | Output files, verdict rules, scoreboard, fair comparison. |
 | [docs/drug-board.md](docs/drug-board.md) | The drug candidate board. |

@@ -1,6 +1,8 @@
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { CHART_COLORS, fmtMetric, SeriesChart } from "@/components/MetricsChart"
+import { SeriesChart } from "@/components/MetricsChart"
+import { CHART_COLORS } from "@/lib/chart"
+import { fmtMetric } from "@/lib/format"
 import type { EventKind, Metrics, Simulation, TimelineEvent } from "@/sim/types"
 
 const KINDS: { kind: EventKind; label: string; color: string }[] = [

@@ -114,3 +114,17 @@
 @media (max-width: 560px) { .newrun-row { grid-template-columns: 1fr; } .newrun-row .newrun-check { padding-top: 0; } }
 .newrun { margin: auto; }
 .newrun .newrun-head h2 { text-transform: none; letter-spacing: 0; color: var(--text); }
+
+/* pairs, queue, cancel */
+.swarm-relations { display: flex; flex-direction: column; gap: 4px; align-items: center; font-size: 13px; align-self: stretch; }
+.swarm-relations p { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; }
+.swarm-runlink { max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.swarm-idfull { font-size: 12px; overflow-wrap: anywhere; }
+.swarm-elapsed { font-variant-numeric: tabular-nums; }
+.newrun-body { display: flex; flex-direction: column; gap: 14px; padding: 20px 24px; font-size: 14px; line-height: 1.5; }
+.btn-danger { background: #9c1414; border-color: #9c1414; color: #fff; font-weight: 550; }
+.btn-danger:hover:not(:disabled) { background: #9c1414; opacity: .85; }
+.newrun-refused .link-btn { color: inherit; font-size: inherit; overflow-wrap: anywhere; }
+.newrun-check[data-off] { opacity: .5; cursor: default; }
+.swarm-tests li[data-pending] { background: #fff4e5; }
+.swarm-pendingnote { font-size: 12px; line-height: 1.45; color: #7a4300; }

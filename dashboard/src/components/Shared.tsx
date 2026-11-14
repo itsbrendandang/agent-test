@@ -1,5 +1,6 @@
 // Small pieces every engine-backed view uses, so titles, status words and the offline state look the same everywhere.
 import type { ReactNode } from "react"
+import { STATE_KIND, type RunState } from "@/lib/status"
 
 /** Page title with one sentence that says what the view is for. Controls go in `children`. */
 export function PageHead({ title, about, children }: { title: string; about: ReactNode; children?: ReactNode }) {
@@ -14,20 +15,8 @@ export function PageHead({ title, about, children }: { title: string; about: Rea
   )
 }
 
-/** The four states a run can be in, plus a paused board review. Same word and colour in every view. */
-export type RunState = "running" | "done" | "failed" | "not graded" | "paused"
-const KIND: Record<RunState, string> = { running: "info", done: "success", failed: "danger", "not graded": "warning", paused: "warning" }
-
-/** From a swarm phase or a board status. A finished swarm run without a score is "not graded". */
-export function runState(status: string, graded = true): RunState {
-  if (status === "failed") return "failed"
-  if (status === "paused") return "paused"
-  if (status === "done") return graded ? "done" : "not graded"
-  return "running" // queued, launching, running, completing
-}
-
 export function StatusPill({ state }: { state: RunState }) {
-  return <span className="pill status-pill" data-kind={KIND[state]}>{state}</span>
+  return <span className="pill status-pill" data-kind={STATE_KIND[state]}>{state}</span>
 }
 
 /** A long id cut to fit, with the whole id on hover and for screen readers. */

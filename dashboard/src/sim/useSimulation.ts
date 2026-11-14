@@ -17,7 +17,7 @@ export function useSimulation(sim: Simulation, params: Params, running: boolean,
   const eventsRef = useRef<TimelineEvent[]>([])
   const nextId = useRef(0)
 
-  paramsRef.current = params
+  useEffect(() => { paramsRef.current = params }, [params])
 
   const pushEvents = useCallback((list: SimEvent[]) => {
     if (!list.length) return

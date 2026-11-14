@@ -191,7 +191,7 @@ git diff --cached --stat
 ## 10. Coding agents (optional)
 
 This project was built with [Pi](https://pi.dev), an agent harness. You do not need it. If you
-want it, `docs/pi-setup.md` has the install and what the repository configures for it:
+want it, [docs/pi-setup.md](docs/pi-setup.md) has the install and what the repository configures for it:
 shared skills in `.agents/skills/`, and four agent profiles in `.pi/agents/` (reviewer,
 advisor, docs-writer, dashboard-qa).
 
@@ -200,4 +200,6 @@ invalidate a result:
 
 - Never start a real-model run unless you asked for one. The default everywhere is the
   scripted mock model.
-- Never let an agent read benchmark answers or a grader. That voids the run.
+- Never let an agent read benchmark answers: the bucket `gs://bixbench3-ground-truth` or the
+  published results of a benchmark paper. That voids the run. The grader's code may be read,
+  but it must not be changed.

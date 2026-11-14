@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Buddy, SPECIES } from "./Buddy"
+import { Buddy } from "./Buddy"
+import { SPECIES } from "./species"
 
 const SHOW_MS = 2200
 const FADE_MS = 450
