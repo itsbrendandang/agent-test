@@ -80,7 +80,9 @@ Open `.env` and add the keys you have. You need no key for the scripted demo. Th
 | What works without it? | The scripted demo, runs with `--model mock`, the scripted drug board, the dashboard, all tests. |
 | What is refused without it? | Real models, cloud runs, `--exa`, the drug board's real models and checkers. Ask answers by word search. |
 | How do I see the state? | `npm run doctor` prints `Paid calls: OFF ...` or `Paid calls: ON ...`. The engine prints the same line when it starts. |
-| What is not covered? | At commit `05600b1`: Python commands that you run yourself, for example `uv run bixbench3 run ...` or `uv run bixbench-v1 run ...`. They do not go through the engine. A Python guard was added after that commit, but it has no automated tests yet. Treat these commands as able to spend. |
+| Are Python commands covered? | Yes. `uv run bixbench3 run`, `python -m bixbench3.glhf_local` and `uv run bixbench-v1 run` refuse a real model, a cloud launch and Exa. `bixbench-v1 grade` needs `--no-judge`. |
+| Where is the value read? | First your shell (an exported value wins), then `.env`. |
+| What is not covered? | `inspect eval` on `inspect_harness/tasks.py`, and scripts that call `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly; credentials other than the seven named keys (Google, AWS, Azure, a saved Hugging Face login); a cloud run that is already on its virtual machine. |
 
 When you finish paid work, remove the line (or set `NO_PAID_CALLS=1`) and start the engine
 again. Details: [docs/running.md](docs/running.md#paid-calls-no_paid_calls).
@@ -112,13 +114,23 @@ npm test
 | Part | Command | Tests |
 |---|---|---|
 | Everything below except the adapter | `npm test` | |
-| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 359 |
-| Engine | `npm run test:engine` | 159 with all test files (142 pass, 1 skipped, 16 marked "todo" for known problems). 101 in the committed files at commit `5177a0e`, all pass. |
+| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 370 |
+| Engine | `npm run test:engine` | 115 |
 | Type checks (engine and dashboard) | `npm run typecheck` | |
-| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 117 |
+| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 122 |
+| Dashboard (not part of `npm test`) | `npm --prefix dashboard test` | 105 |
 
-Some tests start a Docker sandbox. They are skipped when Docker is not running. The dashboard
-has no automated tests.
+The counts are for the committed files at commit `58c0935`. Files that are not committed yet
+add more; see the table in [README.md](README.md#tests).
+
+Some tests start a Docker sandbox. They are skipped when Docker is not running.
+
+### Tests and the paid-calls switch
+
+A test that checks what happens when paid calls are allowed must set `NO_PAID_CALLS=0` inside
+that test (pytest: `monkeypatch.setenv("NO_PAID_CALLS", "0")`) or at the top of that test file
+(engine: `process.env.NO_PAID_CALLS = "0"`). It must use fakes and must not reach the network.
+Do not depend on `.env` or on your shell: on a new clone the switch is on.
 
 ## 6. Add a run
 
@@ -216,9 +228,9 @@ Whatever agent you use, hold it to the rules in `AGENTS.md`. The two that cost r
 invalidate a result:
 
 - An agent never makes a paid call and never sets `NO_PAID_CALLS=0`. Only the person who pays
-  may. Paid calls are off unless `.env` has `NO_PAID_CALLS=0`. The switch is tested for the
-  engine only. The check for a paid Python command that an agent runs directly is new and has
-  no automated tests, so the rule still matters.
+  may. Paid calls are off unless `NO_PAID_CALLS` is exactly `0`, in the engine and in the
+  Python command lines. The switch does not cover `inspect eval` or a script that calls the
+  library functions directly, so the rule still matters.
 - Never let an agent read benchmark answers: the bucket `gs://bixbench3-ground-truth` or the
   published results of a benchmark paper. That voids the run. The grader's code may be read,
   but it must not be changed.

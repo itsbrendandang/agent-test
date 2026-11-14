@@ -293,42 +293,68 @@ by itself while the engine is down, so the engine deals with it at its next chec
 
 ### Python commands that you run yourself
 
-A Python command that you start yourself does not go through the engine.
+The Python packages have the same switch (`glhf/bixbench/src/bixbench3/paid.py`, and
+`glhf/bixbench_v1/src/bixbench_v1/paid.py`, which uses the first). So a Python command that
+you start yourself, without the engine, is also refused while the switch is on.
 
-| Commit | State |
+Tests: `glhf/bixbench/tests/unit/test_paid.py` (11 tests) and
+`glhf/bixbench_v1/tests/test_paid.py` (5 tests). They use fakes; nothing reaches the network.
+
+| Command or step | While the switch is on | Code |
+|---|---|---|
+| `uv run bixbench3 run ...`, `uv run bixbench3 setup-runtime ...` | Refused before the task is looked up. These start a billed virtual machine. With `--dry-run` they are allowed, because a dry run starts nothing. `status`, `complete` and `cancel` of a cloud run that exists still work. | `bixbench3/cli.py` |
+| `uv run python -m bixbench3.glhf_local` with a real model, a `--role-model`, or `--exa` | Refused before anything is created, with one line of text. `--model mock` runs. | `refuse_run` in `paid.py`, `glhf_local.py` |
+| The `search_docs` tool | Refused before the key, the ledger or the network is touched. | `swarm/tools.py` |
+| past.dev: recall of lessons in a run, and sending lessons (ingest) | Refused. A run reads the local file `glhf/memory/lessons.md`. | `swarm/past_memory.py` |
+| Lesson approval (`... swarm.memory approve`) | The lesson is approved in the local file `lessons.md`. Nothing is sent to past.dev, and the command says so. | `swarm/memory.py` |
+| `uv run bixbench-v1 run` with a real model or a real role model | Refused before anything starts. `--model mock` runs. | `bixbench_v1/cli.py` |
+| The BixBench v1 LLM judge (`bixbench-v1 run` or `bixbench-v1 grade` with a judge model) | Refused. Grade with `--no-judge`: this grades by the code rules only. | `refuse_judge` in `bixbench_v1/paid.py` |
+| Provider keys | The seven keys are set to empty in the Python process, so Inspect and what it starts have no key. Inspect cannot read them back from `.env`. | `enforce` in `paid.py` |
+
+Still free and allowed: `--model mock`, grading without the judge, and `bixbench-v1 download`,
+`list`, `audit` and `report`.
+
+### Where the switch is read from
+
+| Order | Place | Read by |
+|---|---|---|
+| 1 | The process environment (a value that you exported in the shell, or that the engine passed on) | Engine and Python |
+| 2 | The nearest `.env` file above the working folder | Python (this is the file Inspect loads). The engine loads the repository's `.env` at start. |
+| 3 | The repository's `.env` | Python (this is the file the BixBench v1 adapter loads) |
+
+The first place that has a value decides. **An exported value wins over `.env`.** So
+`export NO_PAID_CALLS=0` allows paid calls even when `.env` says nothing, and
+`export NO_PAID_CALLS=1` keeps them off even when `.env` says `0`. Check your shell
+(`echo $NO_PAID_CALLS`) if the doctor line is not what you expect. The Python code reads only
+this one line of `.env` and never prints a value.
+
+The rule is the same everywhere: paid calls are off unless the value is exactly `0`.
+
+### What is not covered
+
+These limits are real. Know them before you trust the switch.
+
+| Not covered | Why |
 |---|---|
-| `05600b1` (the commit that added the switch) | **Not covered.** The Python code has no check for `NO_PAID_CALLS`. With keys in `.env` or in your shell, `uv run bixbench3 run ...` or `uv run bixbench-v1 run ...` can spend. |
-| After it | A Python guard was added: `glhf/bixbench/src/bixbench3/paid.py` and `glhf/bixbench_v1/src/bixbench_v1/paid.py`. When this text was written the guard was new, not committed, and **had no automated tests**. Check that these two files exist in your clone (`git ls-files glhf/bixbench/src/bixbench3/paid.py`). If they do not, your clone is not covered. |
-
-What the Python guard does, as read from the code (not tested by us):
-
-| Command | While the switch is on |
-|---|---|
-| `uv run python -m bixbench3.glhf_local --model <real model> ...`, also with `--role-model` or `--exa` | Refused before anything is created (`refuse_run`). `--model mock` runs. |
-| `uv run bixbench3 run ...`, `uv run bixbench3 setup-runtime ...` | Refused (a cloud launch on a billed machine). `--dry-run`, `status`, `complete` and `cancel` still work. |
-| The `search_docs` tool inside a run | Refused before the key is read. |
-| past.dev: recall in a run, and sending on `memory approve` | Not done. The run reads the local `lessons.md`. `approve` still moves the lesson to `lessons.md` and prints that nothing was sent. |
-| `uv run bixbench-v1 run --model <real model> ...` and `bixbench-v1 grade` with the LLM judge | Refused. `--model mock`, `--no-judge`, `download`, `list`, `audit` and `report` work. |
-| Provider keys | Set to empty in the Python process, the same seven keys as in the engine. |
-
-The Python guard reads `NO_PAID_CALLS` from the environment first. If it is not set there, it
-reads that one line from the nearest `.env` above the working folder, then from the
-repository's `.env`. The rule is the same: on unless the value is exactly `0`.
-
-### What is still not covered
-
-| Case | Why |
-|---|---|
-| A clone or branch without the two `paid.py` files | The Python commands above are then not checked at all. |
-| `inspect eval` on the task file, or a script that calls the cloud runner class, `run_capsule` or the judge class itself | These do not pass through the guarded entry points. |
-| A key that is not in the list of seven | It is not blanked. |
-| A cloud run that is already on its virtual machine | See the table above. Its keys are on the machine. |
+| `inspect eval` on `glhf/bixbench/src/bixbench3/inspect_harness/tasks.py` | It starts the task without our command line, so the check at the start does not run. (A `search_docs` call and a past.dev call inside it are still refused.) |
+| A script that calls `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly | These functions and classes have no check of their own. Only the command lines and the tools above do. |
+| Credentials other than the seven named keys | Only `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN` and `TINKER_API_KEY` are blanked. Google, AWS and Azure credentials pass through. A saved Hugging Face login (from `hf auth login`) also passes through, because it is a file, not the `HF_TOKEN` variable. |
+| A cloud run that is already on its virtual machine | It is not stopped. Its keys are on the machine. Stop it yourself with `uv run bixbench3 cancel --run <cloud-run-id> --project <project>`. |
 | A coding agent (Pi, Claude Code) and its own model use | A separate program with its own account. |
 | The desktop app's Settings view (it tests provider keys that you type in) | It does not go through the engine. |
 
-So the switch protects against a mistake. It does not protect against a person or an agent
-who works around it. The rule for that is in [AGENTS.md](../AGENTS.md): an agent never makes a
-paid call and never sets `NO_PAID_CALLS=0`.
+So the switch protects against a mistake in the normal commands. It does not protect against
+code that goes around them. The rule for that is in [AGENTS.md](../AGENTS.md): an agent never
+makes a paid call and never sets `NO_PAID_CALLS=0`.
+
+### Rule for tests
+
+A test that checks what happens when paid calls are allowed (with fakes, never with a real
+service) must set `NO_PAID_CALLS=0` **inside that test or test file**, for example
+`monkeypatch.setenv("NO_PAID_CALLS", "0")` in pytest or `process.env.NO_PAID_CALLS = "0"` at
+the top of an engine test file. Do not depend on the value in `.env` or in your shell: on a
+new clone the switch is on, and the test would fail or be skipped there. Such a test must
+also block the network or replace the client with a fake.
 
 ## Run control
 
@@ -566,7 +592,8 @@ Other behaviour:
 The form cannot start cloud runs, runs on another case (`--case`), per-role models
 (`--role-model`) or a message limit (`--max-messages-per-role`). Use the CLI for these.
 
-The form and the cancel dialog have no automated tests. Type checks only.
+The form's logic has automated tests in the dashboard (`dashboard/src/swarm/NewRun.test.tsx`,
+`runForm.test.ts`, with the network blocked). The cancel dialog has none.
 
 Drug board runs (`POST /api/runs`) are allowed from the dashboard page, with the token, or when
 the board runs on scripted models.
@@ -641,7 +668,8 @@ The numbers are computed from `run.json` and `grade.json` of each capsule run, n
 ### When two runs are compared
 
 A "side" is the capsule runs of one solver in one run folder. A single-agent side and a swarm
-side are compared only when all of these are the same (`pairKey` in `scoreboard.ts`):
+side are compared like for like only when all of these are the same (`pairKey` in
+`scoreboard.ts`):
 
 | Must be the same |
 |---|
@@ -650,26 +678,89 @@ side are compared only when all of these are the same (`pairKey` in `scoreboard.
 | The set of capsules, and in each capsule the same questions |
 | The solver's model |
 | The grading profile |
-| The token budget of every capsule run (it may differ between capsules, not between the two sides) |
+| The **effective** token budget of every capsule run: what that solver could really spend in total |
 | The time limit of every capsule run |
+
+The effective budget is not the `--max-tokens` value that the run was started with:
+
+| Solver and budget mode | Effective budget |
+|---|---|
+| Single agent | `max_tokens` |
+| Swarm, `equal` | `max_tokens` |
+| Swarm, `extended` | 2.25 times `max_tokens` |
+| Swarm, `legacy` | `max_tokens`. A legacy run is a run from before budget modes were recorded. It is counted as the pilot's split (analyst 42%, critic 42%, reconciler 16%) inside the single agent's budget. The pilot is a legacy run. |
+
+Every row says what kind of comparison it is. **Read `comparison` and `likeForLike` before any
+number in the row.**
+
+| `comparison` | `likeForLike` | Meaning |
+|---|---|---|
+| `same budget` | true | Both sides could spend the same total. This is the fair comparison. |
+| `more budget` | **false** | An `extended` swarm next to the single agent it was run against (the one whose budget is the swarm's stated `max_tokens`). The swarm could spend 2.25 times as much. The conclusion starts with "Not a like-for-like comparison" and says that a difference may come from the budget and not from the design. |
+| `none` | false | One side only. Nothing to compare. |
+
+A "more budget" row is always a separate row. It is never merged with a "same budget" row and
+never shown in its place. Swarm sides with different budget modes (`equal`, `extended`,
+`legacy`) never share a row. The row also has `budgetLabel` (the kind in plain words),
+`budgetRatio` (swarm budget divided by single-agent budget) and `tokensUsedRatio` (tokens the
+swarm used divided by tokens the single agent used).
 
 Other rules:
 
 - A side that still has a capsule run going is left out until it ends.
+- A side with a stalled capsule run (see below) is never paired. It gets its own row that says
+  so.
 - The row shows the newest single-agent side and the newest swarm side of the group. Two sides
   from the same run folder are preferred.
 - A side with no match still gets a row, with a note and no comparison. A number is never taken
   from a run with other settings.
 - Settings that may differ inside a pair are named in the row's note: role models, seed, judge
-  model.
+  model. A legacy swarm side is also named in the note.
 - A question counts as correct only when its grade says so. Wrong, refused, no answer, a
   failed capsule run and a judge error all count as not correct, for both sides.
 - A row from the scripted model always says: "Scripted mock model: this tests the plumbing and
   is not a result."
 
-Note on budgets: in `extended` mode the swarm's own total is larger than the token budget that
-the run was started with. Check `budget` in the swarm's `run.json` before you read a pair as
-"same budget".
+### Stalled runs
+
+A capsule run that crashed keeps the status "running" in its `run.json` for ever. The API
+reports it as `stalled` when nothing has been written to its folder for longer than its time
+limit plus a margin.
+
+| Item | Value |
+|---|---|
+| Margin | 600 seconds. Change with `BIXV1_STALL_MARGIN_SECONDS`. |
+| State of a run folder | `running` (a capsule run is at work), `stalled` (none is at work, but at least one is stalled), `done`, or `empty`. |
+| Questions of a stalled capsule run | "not graded", which counts as not correct. |
+| Scoreboard | The side is not compared until the capsule run is run again. |
+| `?ideal=1` | Allowed on a stalled folder, because no solver is at work. Refused (409) on `running` and `empty`. |
+
+### Design counts
+
+For the swarm, each run in the list has `design`: counts that show how the swarm's steps did,
+over its questions. They are counts, not conclusions.
+
+| Count | Meaning |
+|---|---|
+| `compared`, `agreed`, `disagreed` | Questions with an analyst answer and a critic answer, and how many of these agreed. |
+| `agreedCorrect`, `agreedWrong`, `agreedNotGraded` | How the agreed answers were graded. |
+| `agreedSameMethod` (with `...Correct`, `...Wrong`) | Agreed answers where both sides used the same method. Such an agreement is not an independent check. |
+| `sameMethodKnown` | Agreed answers for which "same method" was recorded at all. It is 0 for legacy runs; then `agreedSameMethod` says nothing. |
+| `oneDerivation` | Questions with one derivation only, or none. |
+| `forced` | Questions where a side's answer was a forced estimate at its budget limit. |
+| `reconcilerRan`, `reconcilerChanged`, `reconcilerChangedToCorrect`, `reconcilerChangedToWrong` | What the reconciler did, and how its changed answers were graded. |
+
+`GET /api/bixv1/runs/:id` also gives, for each question of the swarm: the analyst's answer, the
+critic's answer, if they agreed, if the method was the same, and what the reconciler did. These
+come from the swarm's `questions.json`, or from its ledger for older runs.
+
+### Cache
+
+A loaded run folder is kept in memory. It is used again while the modification times and
+sizes of its folders and files are unchanged, so the dashboard's polling costs only a few file
+checks. A change in a file, a new capsule run, or a running capsule run that reaches its stall
+time makes the engine read the folder again. At most 300 entries are kept. Nothing is written
+to disk. A `?ideal=1` answer is built from a copy, so the cache never holds an ideal answer.
 
 ### Statistics
 
@@ -704,20 +795,20 @@ the answers were.
 | A scripted run | Always `tooSmall: true`. |
 
 Example: the pilot (8 questions, 4 of 8 for each solver, no question answered differently) is
-"too small". Its interval runs from -20.1 to +20.1 percentage points.
+a "same budget" row with a legacy swarm side, and it is "too small". Its interval runs from -20.1 to +20.1 percentage points.
 
 ### Ideal answers
 
 An ideal answer is the benchmark's correct answer to a question.
 
 **Rule: no response holds an ideal answer, unless the request is
-`GET /api/bixv1/runs/:id?ideal=1` and every capsule run in that folder has finished.**
+`GET /api/bixv1/runs/:id?ideal=1` and no capsule run in that folder is still at work.**
 
 | Case | Result |
 |---|---|
 | Any route without `?ideal=1` | No ideal answers. Also no raw judge reply and no grader note, because these can quote the ideal. `idealsRevealed` is false. |
 | `?ideal=1` on a finished run | Each question gets `ideal`. The response has `idealsRevealed: true` and the header `cache-control: no-store`. |
-| `?ideal=1` on a run that is still going, or that has no capsule runs | Refused with 409. |
+| `?ideal=1` on a run that is still going, or that has no capsule runs | Refused with 409. (A stalled run is allowed: nothing is at work.) |
 | `?ideal=1` on the list or the scoreboard | Refused with 400. |
 | The dataset's question file is not on this machine | No ideals; `idealNote` says to run `uv run bixbench-v1 download`. |
 

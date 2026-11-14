@@ -86,7 +86,7 @@ Other behaviour:
 Not in the form: cloud runs, BixBench3 tasks, other case folders, per-role models, a message
 limit per role. Start these from the CLI ([../docs/running.md](../docs/running.md)).
 
-The form has no automated tests.
+The form's logic has automated tests (`src/swarm/NewRun.test.tsx`, `src/swarm/runForm.test.ts`).
 
 ### Run control in the dashboard
 
@@ -105,7 +105,8 @@ The dashboard uses it in this way:
 | `{error, field}` in a 400 answer | The message is shown next to the input that `field` names. Other refusals are shown under the form. | `NewRun.tsx` |
 | Registered tests of a claim | The claim list shows planned tests, tests with no result, and results that were "not planned beforehand". | `SwarmView.tsx` |
 
-None of this has automated tests in the dashboard. The engine side is tested in
+The form's logic and the API client have unit tests in the dashboard. The cancel dialog and the
+run page have none. The engine side is tested in
 `engine/test/glhf-runs.test.ts`.
 
 ## Characters
@@ -136,7 +137,8 @@ and expose the same actions as tools to use a real model.
 - The BixBench v1 results (`GET /api/bixv1/...` in the engine). No view reads them.
 - Claims and issues of cloud runs (they are in the results bucket).
 - Simulations: none is registered.
-- No automated tests. `npm run typecheck` in the repository root checks the types.
+- Tests that drive a browser against a real engine. There are 105 unit tests (vitest, `npm test`
+  in this folder), with the network blocked.
 
 ## Structure
 ```

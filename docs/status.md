@@ -47,14 +47,14 @@ capsules, in 64 zip files). It is not BixBench3 and not the nine-role swarm. Ful
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Staging of data, integrity rules, both solvers, three grading profiles, report | Tested with the scripted model. | 117 automated tests in `glhf/bixbench_v1/tests/`. Run: `cd glhf/bixbench_v1 && uv run pytest -q tests`. Not part of `npm test`. |
+| Staging of data, integrity rules, both solvers, three grading profiles, report | Tested with the scripted model. | 122 automated tests in `glhf/bixbench_v1/tests/`. Run: `cd glhf/bixbench_v1 && uv run pytest -q tests`. Not part of `npm test`. |
 | Pilot with a real model | Done once. 3 capsules, 8 questions, `anthropic/claude-sonnet-5-5`. | Single agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). Report in `glhf/bixbench_v1/runs/pilot-sonnet-5-5/report.md` (local file, not in git). |
 | Full run (205 questions) | **Not done.** | |
 | One run per question (`--unit question`) | Not tried with a real model. | |
 | Multiple-choice mode (`--answer-mode mcq`) | Not tried with a real model. | |
 | Swarm changes after the pilot: blind critic (no hint, analyst's files moved away, checked), reconciler that derives again by running a script, same-method flag, budget floors with refusal before the start, forced final turn, equal or extended budget (`BIXBENCH_V1_SWARM_BUDGET`) | **Tested with the scripted model only. No real-model run has checked these fixes.** | `glhf/bixbench_v1/tests/test_swarm_rules.py`, `test_swarm_e2e.py` (needs Docker). Commit `cfac205`. |
 | `--critic-hints` | Still accepted, now ignored. The critic is always blind. | `runner.py`, `solvers.py` in `glhf/bixbench_v1/src/bixbench_v1/`. |
-| Results API in the engine: `GET /api/bixv1/runs`, `/api/bixv1/runs/:id`, `/api/bixv1/scoreboard` | Automated tests with fixture run folders (15 tests). Read-only. Not shown in the dashboard yet. Not used on a full run (none exists). | `engine/test/bixv1-api.test.ts`, `engine/test/bixv1-stats.test.ts`. |
+| Results API in the engine: `GET /api/bixv1/runs`, `/api/bixv1/runs/:id`, `/api/bixv1/scoreboard`. Pairing on effective budget, separate "more budget" row (`likeForLike` false), legacy label, design counts, stalled runs, cache | Automated tests with fixture run folders. Read-only. Not shown in the dashboard yet. Not used on a full run (none exists). | `engine/test/bixv1-api.test.ts`, `engine/test/bixv1-stats.test.ts`. |
 | Statistics of the results API (exact McNemar, Newcombe paired interval, Wilson) | Automated tests on worked examples. Not checked by us against a statistics package. | `engine/test/bixv1-stats.test.ts`. |
 
 The pilot is too small to conclude anything. Both solvers answered the same 4 questions
@@ -124,14 +124,15 @@ sample.
 | `GET /api/glhf/status`: limits, models, keys as true or false | Automated tests (same file). |
 | Refusals name the field (`{error, field}`) | Automated tests (same file). |
 | Paid-calls switch (`NO_PAID_CALLS`, `engine/src/paid.ts`): on unless the value is `0`; refuses real-model and cloud runs, Exa, the board's models and three checkers; Ask falls back to word search; keys blank in child processes; a paid local run in progress is stopped; `paidCalls` and `models` in the status; the doctor line | Automated tests (`engine/test/paid.test.ts`, 12 tests). The tests check that no request left the process. **Not tested:** a real cloud run that is already on its machine (none exists); the switch inside Docker Compose. |
-| Paid-calls switch for Python commands run directly (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`, `python -m bixbench3.glhf_local`) | **Not covered at commit `05600b1`.** A Python guard was added after it (`glhf/bixbench/src/bixbench3/paid.py`, `glhf/bixbench_v1/src/bixbench_v1/paid.py`). **No automated tests yet.** We checked by hand only that the on/off rule and the blanking of keys work on given inputs; no command was run against it. |
+| Paid-calls switch for Python commands run directly: `bixbench3 run` and `setup-runtime`, `python -m bixbench3.glhf_local` with a real model or `--exa`, `search_docs`, past.dev recall and ingest, lesson approval, `bixbench-v1 run` with a real model, the v1 LLM judge | Automated tests with fakes: 11 in `glhf/bixbench/tests/unit/test_paid.py`, 5 in `glhf/bixbench_v1/tests/test_paid.py`. All pass. **Not tested:** a real refused command on a machine with real keys. |
+| Paid-calls switch: what it does not cover | `inspect eval` on `inspect_harness/tasks.py`; scripts that call `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly; credentials other than the seven named keys (Google, AWS, Azure, a saved Hugging Face login); a cloud run that is already on its virtual machine. No code guards these. |
 | HTTP checks (Host, Origin, token, JSON bodies) | Automated tests that call the real request handler (`engine/test/app.test.ts`, `engine/test/board-http.test.ts`). The handler is in `engine/src/app.ts`; `server.ts` only listens. |
 | Scoreboard pairing rules (task, case, model, mode, effort, time limit, token budget) | Automated tests (`engine/test/glhf-scoreboard.test.ts`). |
 | Drug board run lock (`engine/src/runlock.ts`): survives a restart, and a process id that the system uses again | Automated tests (`engine/test/board-http.test.ts`, `engine/test/app.test.ts`). No test restarts a real container. |
 | Claude Code checker runs with `--restricted` by default and cannot run code | The command and the tool list are tested (`engine/test/board-core.test.ts`). **The `--restricted` mode was not tested with a live call.** Its behaviour is taken from `claude --help`. |
 | Ask (question answering over runs) | Automated tests with a stand-in for the model API (`engine/test/glhf-ask.test.ts`). |
 | Docker Compose setup | Tested by hand on macOS on a new clone: `docker compose up --build`, then `docker compose exec engine npm run demo` (score 1.000) and `npm run doctor`. Not tested on Linux or Windows. Windows needs WSL2. |
-| Dashboard | No automated tests. Type checks only (`npm run typecheck`). |
+| Dashboard | 105 automated tests (vitest, 5 files in `dashboard/src`; run `npm --prefix dashboard test`). They cover the New run form's logic, the API client and formatting helpers, with the network blocked. No test drives a browser against a real engine. |
 | Dashboard: New run form (real models with a confirm step, pair with "Both"), Cancel run button, queued and cancelled states | No automated tests in the dashboard. The engine's side is tested (`engine/test/glhf-tracker.test.ts`, `engine/test/glhf-runs.test.ts`). |
 
 ## Drug candidate board

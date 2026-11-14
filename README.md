@@ -27,10 +27,12 @@ NO_PAID_CALLS=0
 | | |
 |---|---|
 | Who may set it | Only the person who pays for the API keys. A coding agent never sets it. |
+| Where it is read | First the process environment (an exported value wins), then `.env`. |
 | When is the switch on | Always, unless the value is exactly `0`. No value, `1`, `true` or a typing mistake all mean: no paid calls. |
 | Refused while on | Runs with a real model, cloud runs, Exa search, the drug board's real models and its three checkers. The Ask box answers by word search, with no model. |
 | Still works | `npm run demo`, runs with `--model mock`, the scripted drug board, the dashboard, all tests. |
-| **Not covered at commit `05600b1`** | Python commands that you run yourself (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`, `python -m bixbench3...`). They do not go through the engine. A Python guard was added after that commit (`glhf/bixbench/src/bixbench3/paid.py`); it is new and has no automated tests yet. Do not rely on it: without `NO_PAID_CALLS=0`, use `--model mock` only. |
+| Python commands | Covered too: `uv run bixbench3 run`, `python -m bixbench3.glhf_local` and `uv run bixbench-v1 run` refuse a real model, a cloud launch and Exa in the same way. |
+| **Not covered** | `inspect eval` on `inspect_harness/tasks.py`, and scripts that call `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly. Credentials other than seven named provider keys (Google, AWS, Azure, a saved Hugging Face login). A cloud run that is already on its virtual machine. |
 
 Details: [docs/running.md](docs/running.md#paid-calls-no_paid_calls).
 
@@ -187,7 +189,7 @@ from BixBench3, and this swarm is not the nine-role swarm. Full text:
 
 | Item | Status |
 |---|---|
-| Staging, the integrity rules, both solvers, grading, report | Built. Tested with the scripted model (117 automated tests). |
+| Staging, the integrity rules, both solvers, grading, report | Built. Tested with the scripted model (122 automated tests). |
 | Pilot with a real model (`anthropic/claude-sonnet-5-5`) | 3 capsules, 8 questions. Single agent 4 of 8 correct. Swarm 4 of 8 correct. The swarm used about 1.7 times the tokens. **This was the older swarm**, before the changes below. |
 | Changes to the swarm after the pilot (table below) | **Tested with the scripted model only. No run with a real model has checked them.** |
 | Full run (205 questions) | **Not done.** |
@@ -267,32 +269,36 @@ Known limits:
 npm test
 ```
 
-This runs 359 harness tests (pytest), the type checks for the engine and the dashboard, and the
-engine tests.
+This runs the harness tests (pytest), the type checks for the engine and the dashboard, and the
+engine tests. Counts at commit `58c0935`:
 
-| Engine tests | Count |
-|---|---|
-| All test files in `engine/test/` | 159: 142 pass, 0 fail, 1 skipped, 16 marked "todo" |
-| The 10 committed test files only (at commit `5177a0e`) | 101, all pass |
+| Part | In committed files | With files not yet committed |
+|---|---|---|
+| Harness (`glhf/bixbench/tests`) | 370 | 2,390. Three new files add 2,020 (most are generated cases in `test_redteam_guards.py`). |
+| Engine (`engine/test`) | 115 | 188: 171 pass, 0 fail, 1 skipped, 16 marked "todo". One new file, `glhf-timeouts.test.ts`, adds 58. Uncommitted changes to `glhf-runs.test.ts` add 15. |
+| BixBench v1 adapter (`glhf/bixbench_v1/tests`) | 122 | the same |
+| Dashboard (`dashboard/src`, vitest) | 105, all pass | the same |
 
-The other 58 tests are in one new file that was not committed when this was counted
-(`glhf-timeouts.test.ts`). The 16 "todo" tests and the skipped test are in that file. Each one describes a known problem in how the engine handles a
-run that passes its time limit. They do not count as failures, but the problems are real.
- Some harness tests start a Docker sandbox; they are skipped when Docker is not running.
+- The 16 "todo" tests are in `glhf-timeouts.test.ts`. Each one describes a known problem in how
+  the engine handles a run that passes its time limit. They do not count as failures, but the
+  problems are real.
+- Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
+- The harness and adapter numbers are counts of collected tests. We ran only the paid-calls
+  tests of both (11 and 5, all pass) for this count.
 
-`npm test` does not run the tests of the BixBench v1 adapter (117 tests). Run them with:
+`npm test` does not run the adapter tests or the dashboard tests. Run them with:
 
 ```bash
 cd glhf/bixbench_v1 && uv run pytest -q tests
+npm --prefix dashboard test
 ```
-
-The dashboard has no automated tests.
 
 ## Limits
 
-- The `NO_PAID_CALLS` switch is tested for the engine only. The guard for Python commands that
-  you run yourself is new and has no automated tests. Some paths are not covered at all; see
-  [docs/running.md](docs/running.md#what-is-still-not-covered).
+- The `NO_PAID_CALLS` switch does not cover `inspect eval` on the task file, scripts that call
+  the library functions directly, credentials other than seven named keys, or a cloud run that
+  is already on its virtual machine. See
+  [docs/running.md](docs/running.md#what-is-not-covered).
 - No BixBench3 task has been run. We do not know if the swarm is better than the single agent.
 - On the demo case the swarm cost about 15 times the tokens for the same score.
 - The budget flags (`--time-limit`, `--max-tokens`, `--max-messages-per-role`, `--seed`, `--exa`,

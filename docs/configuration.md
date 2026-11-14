@@ -36,11 +36,21 @@ While paid calls are off, the engine gives these keys as empty values to every p
 starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`,
 `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`.
 
-The switch covers the engine, the dashboard and the `npm run glhf` and `npm run board` CLIs;
-this part has automated tests. At commit `05600b1` it did **not** cover Python commands that
-you run yourself. A Python guard was added after that (`glhf/bixbench/src/bixbench3/paid.py`);
-it reads the same variable, also from `.env`, and has no automated tests yet. Full list:
-[running.md](running.md#python-commands-that-you-run-yourself).
+The switch covers the engine, the dashboard, the `npm run glhf` and `npm run board` CLIs, and
+the Python command lines (`bixbench3`, `python -m bixbench3.glhf_local`, `bixbench-v1`).
+
+Where the value comes from, in this order. The first place that has a value decides:
+
+| Order | Place |
+|---|---|
+| 1 | The process environment. An exported value wins over `.env`. |
+| 2 | The nearest `.env` above the working folder (Python commands). |
+| 3 | The repository's `.env`. |
+
+Not covered: `inspect eval` on `inspect_harness/tasks.py`; scripts that call `run_capsule`,
+`InspectJudge`, `GCPRunner` or `exa_docs` directly; credentials other than the seven keys above
+(Google, AWS, Azure, a saved Hugging Face login); a cloud run that is already on its virtual
+machine. Full text: [running.md](running.md#what-is-not-covered).
 
 ## Ports
 
@@ -92,6 +102,7 @@ and the run records from the same folder.
 | Variable | Default | Meaning | Code |
 |---|---|---|---|
 | `BIXV1_RUNS_DIR` | `glhf/bixbench_v1/runs` | Where the results API looks for the adapter's run folders. Tests use a fixture folder. | `engine/src/bixv1/store.ts` |
+| `BIXV1_STALL_MARGIN_SECONDS` | `600` | Quiet time beyond a capsule run's time limit after which a "running" capsule run is reported as "stalled". | `engine/src/bixv1/store.ts` |
 | `BIXV1_QUESTIONS_FILE` | `glhf/data/bixbench_v1/hub/BixBench.jsonl` | The dataset's question file. The results API opens it only for a `?ideal=1` request. | `engine/src/bixv1/store.ts` |
 | `BIXBENCH_V1_SWARM_BUDGET` | `equal` | Token budget of the adapter's swarm. `equal`: the same total as the single agent. `extended`: 2.25 times that; read the result as "more budget". Read by the Python adapter, not by the engine. There is no command-line option for it. | `glhf/bixbench_v1/src/bixbench_v1/solvers.py` |
 

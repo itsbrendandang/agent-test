@@ -81,9 +81,9 @@ invalidate a result when broken:
    the person who pays may. Paid calls are off unless `.env` has
    `NO_PAID_CALLS=0`, so a new clone can only do scripted runs
    (`--model mock`). Before this switch existed (commit `05600b1`), nothing
-   made the scripted model the default: a run with keys in `.env` could spend. The check for a Python command that an agent runs directly
-   (`uv run bixbench3 ...`, `uv run bixbench-v1 run ...`) is new and has no
-   automated tests, so the agent must follow the rule itself. Pi's own model use is separate: it
+   made the scripted model the default: a run with keys in `.env` could spend. The Python command lines have the same switch. It does not cover
+   `inspect eval` or a script that calls the library functions directly, so
+   the agent must still follow the rule itself. Pi's own model use is separate: it
    is paid by your Pi account, not by this repository's keys.
 2. **Never read the benchmark's answers.** That means the ground-truth bucket
    (`gs://bixbench3-ground-truth`) and the published results of a benchmark

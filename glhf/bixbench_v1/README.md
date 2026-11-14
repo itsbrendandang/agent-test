@@ -27,7 +27,8 @@ docker pull futurehouse/bixbench:aviary-notebook-env    # the official environme
 uv run bixbench-v1 list                   # capsules, question counts, eval modes, zip sizes
 uv run bixbench-v1 audit                  # what staging keeps and drops for every capsule
 
-# One capsule, both solvers, real model (keys come from the repo's .env, never printed):
+# One capsule, both solvers, real model (keys come from the repo's .env, never printed).
+# Refused unless NO_PAID_CALLS=0; see "Paid calls" below.
 uv run bixbench-v1 run --capsules bix-46 --solvers single,glhf \
     --model anthropic/claude-sonnet-5-5 --max-tokens 320000 --time-limit 1800 \
     --out runs/bix-46
@@ -63,6 +64,31 @@ method, reconciler answer, whether the reconciler changed it) and `outputs/glhf/
 `budget` (single-agent budget, the solver's total, tokens used, tokens per phase, forced
 answers, and whether the run reads as "same budget" or "more budget"). `runs/` and `glhf/data/` are
 gitignored. Never commit benchmark data.
+
+## Paid calls (`NO_PAID_CALLS`)
+
+Paid calls are off unless `NO_PAID_CALLS` is exactly `0`. This package uses the switch of
+`bixbench3` (`../bixbench/src/bixbench3/paid.py`) through `src/bixbench_v1/paid.py`. Tests:
+`tests/test_paid.py` (5 tests, with fakes).
+
+| While the switch is on | What happens |
+|---|---|
+| `bixbench-v1 run` with a real model or a real `--role-model` | Refused before anything starts. |
+| The LLM judge, in `run` or in `grade` | Refused. Use `--no-judge`: the code rules grade what they can and the rest stays ungraded. |
+| `--model mock` | Runs. With the default judge setting it uses no judge. If you name a judge model, that is refused. |
+| `download`, `list`, `audit`, `report` | Work. They call no model. |
+| Provider keys | Set to empty in the process before `.env` is loaded, so `.env` cannot put them back. |
+
+The value is read from the process environment first (an exported value wins), then from the
+nearest `.env` above the working folder, then from the repository's `.env`. Only the person
+who pays sets `NO_PAID_CALLS=0`.
+
+Not covered: code that calls `run_capsule` or `InspectJudge` directly and not through this
+command line. Only seven named provider keys are blanked (see
+[docs/running.md](../../docs/running.md#what-is-not-covered)); Google, AWS and Azure
+credentials and a saved Hugging Face login pass through.
+
+The real-model commands under "Commands" above need `NO_PAID_CALLS=0`.
 
 ## Integrity boundary
 

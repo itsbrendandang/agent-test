@@ -30,13 +30,19 @@ documents are in `docs/`.
     (`bixbench-v1 run`), and sending lessons to past.dev.
   - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid.ts`).
     Do not edit `.env`, do not export the variable, and do not change or go around `paid.ts`.
-  - Do not rely on the switch for a Python command that you run directly (`uv run bixbench3
-    ...`, `uv run bixbench-v1 run ...`, `python -m bixbench3.glhf_local ...`). The engine's
-    switch does not see these. The Python guard (`glhf/bixbench/src/bixbench3/paid.py`) is new
-    and has no tests yet. The rule covers them: use `--model mock` only.
+  - The Python command lines have the same switch (`glhf/bixbench/src/bixbench3/paid.py`,
+    `glhf/bixbench_v1/src/bixbench_v1/paid.py`). The value is read from the process
+    environment first, then from `.env`.
+  - The switch does not cover `inspect eval` on `inspect_harness/tasks.py`, or a script that
+    calls `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly. Do not use these
+    with a real model. Only seven provider keys are blanked; Google, AWS and Azure
+    credentials and a saved Hugging Face login are not.
   - New code that can spend must call `refusePaid()` from `engine/src/paid.ts` (Python:
     `refuse_paid()` from `bixbench3/paid.py`) right before the paid step. The engine must
     start child processes with `childEnv()`.
+  - A test that exercises paid-allowed logic with fakes must set `NO_PAID_CALLS=0` inside
+    that test (or at the top of that test file). This is the only place where an agent may
+    set the value, and the test must not reach the network.
 - Never read, download or reference `gs://bixbench3-ground-truth` or any published result of a
   benchmark paper while working on a solver, a prompt or a run. It holds the answers.
 - Benchmark agents get no open web search. The optional `search_docs` tool (`--exa`) is limited
