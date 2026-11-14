@@ -163,9 +163,7 @@ def _trace_digest(messages: list[Any]) -> str:
     if tool_call_counts:
         sections.append(
             "- Tool calls: "
-            + ", ".join(
-                f"{name}={count}" for name, count in tool_call_counts.most_common(12)
-            )
+            + ", ".join(f"{name}={count}" for name, count in tool_call_counts.most_common(12))
         )
     if file_mentions:
         sections.append("## Output File Mentions\n" + _bullet_list(sorted(file_mentions)[:80]))
@@ -322,8 +320,4 @@ def _truncate_middle(text: str, max_chars: int) -> str:
         return text
     keep = max_chars // 2
     omitted = len(text) - (keep * 2)
-    return (
-        text[:keep]
-        + f"\n\n... [truncated {omitted} chars] ...\n\n"
-        + text[-keep:]
-    )
+    return text[:keep] + f"\n\n... [truncated {omitted} chars] ...\n\n" + text[-keep:]

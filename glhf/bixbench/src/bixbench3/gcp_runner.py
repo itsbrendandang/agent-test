@@ -1404,10 +1404,7 @@ def build_inspect_argv(
         "/opt/bixbench3",
         "inspect",
         "eval",
-        (
-            "/opt/bixbench3/src/bixbench3/"
-            "inspect_harness/tasks.py@bixbench3_cases"
-        ),
+        ("/opt/bixbench3/src/bixbench3/inspect_harness/tasks.py@bixbench3_cases"),
         "--model",
         model.model_id,
         "--sample-id",
@@ -2482,9 +2479,7 @@ def result_run_uri(results_bucket: str, layout: RunLayout) -> str:
 
 
 def lifecycle_command(action: str, run_id: str, project: str) -> str:
-    return shlex.join(
-        ("uv", "run", "bixbench3", action, "--run", run_id, "--project", project)
-    )
+    return shlex.join(("uv", "run", "bixbench3", action, "--run", run_id, "--project", project))
 
 
 def resolve_run_manifest(runs_root: Path, run_id: str) -> Path:

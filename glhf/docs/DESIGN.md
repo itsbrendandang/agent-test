@@ -107,3 +107,20 @@ bixbench/src/bixbench3/inspect_harness/
   swarm/tools.py       contract check and ledger tools
 bixbench/src/bixbench3/cli.py   --solver, --role-model, --review-rounds
 ```
+
+
+## Update: nine roles
+
+Four roles were added, each tied to a way the benchmark loses points. Order:
+scout, propose, pilot, experiment, then rounds of (audit, critique, revise), finish if needed, report.
+
+- **Scout** (3% of the budget): inventories inputs, sample mapping and installed tools before planning.
+- **Pilot** (8%): runs the whole pipeline on a subsample into `work/glhf/pilot/outputs`; code then
+  shape-checks those files and hands the result to the Experimenter. Pilot files never go to `/outputs`.
+- **Methods Auditor** (10% of each review round): checks scripts against the Method Guidance and
+  writes `adherence.md`. It shares the Critic's model setting, so `--role-model critic=...` moves both.
+- **Finisher** (5% held back): runs only when the final shape check still fails; real data only.
+
+The Experimenter's share dropped from 50% to 45%. Tested with the scripted model only, including a
+test where review is off and the Finisher rescues a broken artifact. Whether nine roles beat five,
+or one, on a real task is not known yet.

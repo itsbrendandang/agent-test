@@ -1,10 +1,12 @@
-"""GLHF swarm solver: propose -> experiment -> criticise/falsify -> revise (loop) -> report.
+"""GLHF swarm solver, nine roles:
+scout -> propose -> pilot -> experiment -> [audit + critique -> revise] (loop) -> finish -> report.
 
 Same sandbox, tools, time limit and grader as the single-agent baseline (`bixbench3_agent`).
 Orchestration is code, not a supervisor model: phases, budgets and the stop rule are fixed here.
 
-Per-role models (task args, default = the eval's --model):
-  planner_model, experimenter_model, critic_model, reporter_model
+Per-role models (task args, default = the eval's --model), one per group of roles:
+  planner_model (scout, proposer), experimenter_model (pilot, experimenter, reviser, finisher),
+  critic_model (methods auditor, critic), reporter_model
 e.g. -T critic_model=openai/gpt-5.5 to put the critic on a second vendor (Claude + OpenAI credits).
 """
 
@@ -38,10 +40,17 @@ from .tools import (
 )
 
 # Fractions of the run's time budget. Whatever a phase does not use rolls forward.
-PLAN_SHARE = 0.05
-FIRST_PASS_SHARE = 0.50
+SCOUT_SHARE = 0.03
+PLAN_SHARE = 0.04
+PILOT_SHARE = 0.08
+FIRST_PASS_SHARE = 0.45
+FINISH_RESERVE = 0.05  # kept back so a missing artifact can still be rescued after review
 REPORT_RESERVE = 0.05  # always kept for the reporter and final writes
 MIN_REVIEW_SECONDS = 15 * 60
+MIN_FINISH_SECONDS = 5 * 60
+AUDIT_SHARE = 0.10  # of the review time left in a round
+CRITIQUE_SHARE = 0.30
+PILOT_OUT = f"{WORK}/pilot/outputs"
 
 
 @dataclass
@@ -116,8 +125,12 @@ def glhf_swarm(
             )
             await save_ledger(ledger)
 
+        scout = agent("scout", roles.SCOUT, planner_model, [])
         planner = agent("planner", roles.PLANNER, planner_model, [propose_claim(ledger, "planner")])
+        pilot = agent("pilot", roles.PILOT, experimenter_model, [])
         experimenter = agent("experimenter", roles.EXPERIMENTER, experimenter_model, [])
+        auditor = agent("auditor", roles.AUDITOR, critic_model, [raise_issue(ledger, "auditor")])
+        finisher = agent("finisher", roles.FINISHER, experimenter_model, [])
         reviser = agent(
             "reviser", roles.REVISER, experimenter_model, [resolve_issue(ledger, "experimenter")]
         )
@@ -133,31 +146,52 @@ def glhf_swarm(
         )
         reporter = agent("reporter", roles.REPORTER, reporter_model, [])
 
+        hold = REPORT_RESERVE + FINISH_RESERVE  # time the early phases may not spend
+
+        def review_left() -> float:
+            return clock.left() - clock.budget * hold
+
         try:
             await phase(
-                "propose",
-                planner,
-                "Plan the reproduction.",
-                clock.slice(PLAN_SHARE, REPORT_RESERVE),
+                "scout",
+                scout,
+                "Inventory the inputs and the environment.",
+                clock.slice(SCOUT_SHARE, hold),
             )
+            await phase("propose", planner, "Plan the reproduction.", clock.slice(PLAN_SHARE, hold))
+            await phase(
+                "pilot",
+                pilot,
+                "Run the whole pipeline on a small subsample and shape every required artifact.",
+                clock.slice(PILOT_SHARE, hold),
+            )
+            pilot_contract = contract_text(await check_contract(outputs, root=PILOT_OUT))
+            ledger.log("pilot.checked", contract=pilot_contract)
             await phase(
                 "experiment",
                 experimenter,
-                "Produce every required artifact.",
-                clock.slice(FIRST_PASS_SHARE, REPORT_RESERVE),
+                "Produce every required artifact on the full data.\n\n"
+                f"Shape check of the pilot's subsampled artifacts under {PILOT_OUT}:\n{pilot_contract}",
+                clock.slice(FIRST_PASS_SHARE, hold),
             )
             for n in range(1, review_rounds + 1):
-                review_time = clock.left() - clock.budget * REPORT_RESERVE
-                if review_time < MIN_REVIEW_SECONDS:
+                if review_left() < MIN_REVIEW_SECONDS:
                     ledger.log("review.skipped", round=n, reason="time")
                     break
                 contract = contract_text(await check_contract(outputs))
+                await phase(
+                    f"audit {n}",
+                    auditor,
+                    f"Audit round {n}. Check the scripts against the Method Guidance.\n\n"
+                    f"Current ledger:\n{ledger.summary()}",
+                    int(review_left() * AUDIT_SHARE),
+                )
                 await phase(
                     f"critique {n}",
                     critic,
                     f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
                     f"Current ledger:\n{ledger.summary()}",
-                    int(review_time * 0.35),
+                    int(review_left() * CRITIQUE_SHARE),
                 )
                 if not ledger.open_issues():
                     ledger.log("review.converged", round=n)
@@ -166,11 +200,21 @@ def glhf_swarm(
                     f"revise {n}",
                     reviser,
                     f"Revision round {n}. Fix the open issues.\n\n{ledger.summary()}",
-                    int(
-                        (clock.left() - clock.budget * REPORT_RESERVE)
-                        * (0.6 if n < review_rounds else 0.9)
-                    ),
+                    int(review_left() * (0.6 if n < review_rounds else 0.9)),
                 )
+            # Last line of defence for completeness: only runs when an artifact would score zero.
+            failing = [r for r in await check_contract(outputs) if r.get("problems")]
+            finish_time = int(clock.left() - clock.budget * REPORT_RESERVE)
+            if failing and finish_time >= MIN_FINISH_SECONDS:
+                await phase(
+                    "finish",
+                    finisher,
+                    "These required artifacts are missing or malformed:\n"
+                    f"{contract_text(await check_contract(outputs))}",
+                    finish_time,
+                )
+            elif failing:
+                ledger.log("finish.skipped", reason="time", failing=len(failing))
         finally:
             # Reporting always runs, even after a failure or a limit, so the run ends documented.
             await save_ledger(ledger)
@@ -181,7 +225,8 @@ def glhf_swarm(
                     "sh",
                     "-c",
                     f"cp -r {WORK}/scripts {WORK}/plan.md {WORK}/notebook.md "
-                    f"{WORK}/deviations.md {WORK}/sample_sheet.tsv /outputs/glhf/ 2>/dev/null; true",
+                    f"{WORK}/deviations.md {WORK}/sample_sheet.tsv {WORK}/data_report.md "
+                    f"{WORK}/pilot_report.md {WORK}/adherence.md /outputs/glhf/ 2>/dev/null; true",
                 ]
             )
             await phase(

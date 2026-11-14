@@ -3,7 +3,7 @@
 Hackathon Track 3, AI Scientist Swarms. Can a team of agents reproduce a computational biology study
 from raw data better than one frontier model on the same compute budget?
 
-GLHF is a five-role swarm that runs **inside Edison's BixBench3 harness**. Only the solver changes;
+GLHF is a nine-role swarm that runs **inside Edison's BixBench3 harness**. Only the solver changes;
 the sandbox, tools, time limit, grader and judge are the benchmark's own. Nothing is reported until a
 critic has tried to break it, and every verdict is computed by code from tests the critic ran.
 
@@ -14,12 +14,25 @@ critic has tried to break it, and every verdict is computed by code from tests t
 Design schematic: [glhf/docs/DESIGN.md](glhf/docs/DESIGN.md).
 
 ```
-Proposer ─▶ Experimenter ─▶ contract check ─▶ Critic ─▶ open issues? ─yes─▶ Reviser ─┐
- plan, claims  runs pipeline    (code only)    falsification    │ no                  │
-                                               tests, issues    ▼                     │
-                                                             Reporter ◀───────────────┘
-            shared ledger: claims, tests, issues. Verdicts are computed in code.
+Scout ─▶ Proposer ─▶ Pilot ─▶ Experimenter ─▶ Auditor + Critic ─▶ open issues? ─yes─▶ Reviser ─┐
+inputs   plan,       subsample  full run       methods diff,       │ no          (loops back    │
+         claims      dry run                   falsification       ▼              to review) ◀──┘
+                                                         Finisher (only if an output is
+                                                         still missing) ─▶ Reporter
+      shared ledger: claims, tests, issues. Verdicts are computed in code.
 ```
+
+| Role | Why it is there (what it protects in the score) |
+|---|---|
+| Scout | Wrong samples or identifiers ruin every artifact. Inventories inputs and tools before planning. |
+| Proposer | Plans each artifact and registers falsifiable claims. |
+| Pilot | A missing or malformed artifact scores zero. Runs the whole pipeline on a subsample first, so format and tool failures surface in minutes, not hours. |
+| Experimenter | The full run. |
+| Methods Auditor | Diffs the scripts against the stated methods line by line (tool, version, contrast direction, thresholds). |
+| Critic | Tries to disprove each claim with tests; raises issues. |
+| Reviser | Fixes what the two reviewers raised. |
+| Finisher | Runs only if an artifact is still missing or malformed after review; never fabricates. |
+| Reporter | Writes METHODS.md from what actually ran. |
 
 ## Quick start (no keys needed)
 
@@ -127,7 +140,7 @@ Dockerfile, docker-compose.yml   the platform in containers
 ## Tests
 
 ```bash
-npm test    # 154 harness tests (ledger, Type-I simulation, end-to-end in Docker) + type checks
+npm test    # 155 harness tests (ledger, Type-I simulation, end-to-end in Docker) + type checks
 ```
 
 ## Also in this repo: the drug candidate board

@@ -10,10 +10,14 @@ import {
 import "@/swarm/swarm.css"
 
 const ROLES = [
+  { key: "scout", species: "bunny", name: "Scout", does: "Inspects the data and the tools before anyone plans" },
   { key: "propose", species: "sprout", name: "Proposer", does: "Plans the analysis and writes down claims to test" },
+  { key: "pilot", species: "egg", name: "Pilot", does: "Proves the whole pipeline on a small sample first" },
   { key: "experiment", species: "flame", name: "Experimenter", does: "Runs the analysis and writes the outputs" },
+  { key: "audit", species: "sprout", name: "Auditor", does: "Checks the scripts against the stated methods, line by line" },
   { key: "critique", species: "mountain", name: "Critic", does: "Checks the work and tries to disprove each claim" },
-  { key: "revise", species: "egg", name: "Reviser", does: "Fixes the problems the Critic found" },
+  { key: "revise", species: "egg", name: "Reviser", does: "Fixes the problems the reviewers found" },
+  { key: "finish", species: "flame", name: "Finisher", does: "Rescues any output still missing at the end (only if needed)" },
   { key: "report", species: "bunny", name: "Reporter", does: "Writes up what was actually done" },
 ] as const
 type RoleKey = (typeof ROLES)[number]["key"]
@@ -43,10 +47,14 @@ function headline(run: GlhfRun | undefined, current: string | undefined): string
   if (run.solver === "single") return "One agent is working through the whole analysis alone."
   const n = current ? round(current) : undefined
   switch (roleOf(current)) {
+    case "scout": return "The Scout is inspecting the data and the tools."
+    case "pilot": return "The Pilot is proving the whole pipeline on a small sample."
+    case "audit": return `The Auditor is checking the scripts against the stated methods${n ? ` (review round ${n})` : ""}.`
+    case "finish": return "The Finisher is rescuing outputs that were still missing."
     case "propose": return "The Proposer is planning the analysis and writing down claims to test."
     case "experiment": return "The Experimenter is running the analysis and writing the outputs."
     case "critique": return `The Critic is checking the work and trying to disprove each claim${n ? ` (review round ${n})` : ""}.`
-    case "revise": return `The Reviser is fixing the problems the Critic found${n ? ` (round ${n})` : ""}.`
+    case "revise": return `The Reviser is fixing the problems the reviewers found${n ? ` (round ${n})` : ""}.`
     case "report": return "The Reporter is writing up what was actually done."
     default: return "The swarm is working…"
   }
@@ -144,7 +152,7 @@ export function SwarmView() {
           {list.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.phase}</option>)}
         </select>
         <select aria-label="Who does the work" value={solver} onChange={(e) => setSolver(e.target.value as Solver)}>
-          <option value="glhf">Swarm (5 roles)</option>
+          <option value="glhf">Swarm (9 roles)</option>
           <option value="single">Single agent</option>
         </select>
         <button type="button" className="primary" onClick={start} disabled={starting || anyLive}>
@@ -178,7 +186,7 @@ export function SwarmView() {
         {run && live && run.solver === "glhf" && (claims.length > 0 || issues.length > 0) && (
           <p className="swarm-note">
             So far: {claims.length} claim{claims.length === 1 ? "" : "s"} written down, {count.supported} supported, {count.refuted} rejected,
-            {" "}{issues.length} problem{issues.length === 1 ? "" : "s"} raised by the Critic.
+            {" "}{issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.
           </p>
         )}
         {run?.phase === "failed" && <p className="pill" data-kind="danger">{run.error ?? "No error message was recorded."}</p>}
@@ -328,7 +336,7 @@ export function SwarmView() {
                 )}
               </article>
             ))}
-            <h2>Problems the Critic raised ({issues.length})</h2>
+            <h2>Problems the reviewers raised ({issues.length})</h2>
             {issues.length === 0 && <p className="muted small">None.</p>}
             {issues.map((i) => (
               <article key={i.id} className="swarm-issue">

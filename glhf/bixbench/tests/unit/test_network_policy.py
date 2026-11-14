@@ -78,9 +78,7 @@ def test_ground_truth_bucket_match_has_path_boundary() -> None:
     policy = _policy()
 
     assert (
-        policy.block_reason(
-            "https://storage.googleapis.com/bixbench3-ground-truth-copy/file"
-        )
+        policy.block_reason("https://storage.googleapis.com/bixbench3-ground-truth-copy/file")
         is None
     )
 

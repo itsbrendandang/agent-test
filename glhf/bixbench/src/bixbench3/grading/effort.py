@@ -25,8 +25,7 @@ def resolve_reasoning_effort(model_name: str, effort_name: str) -> str:
         if not supports_anthropic_effort(lowered):
             return "high" if normalized in {"max", "xhigh"} else normalized
         if normalized == "xhigh" and not any(
-            marker in lowered
-            for marker in ("claude-opus-5", "claude-fable-5", "claude-opus-4-8")
+            marker in lowered for marker in ("claude-opus-5", "claude-fable-5", "claude-opus-4-8")
         ):
             return "high"
         if normalized == "max" and not supports_anthropic_max(lowered):

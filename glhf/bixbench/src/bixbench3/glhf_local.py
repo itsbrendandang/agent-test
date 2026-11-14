@@ -44,7 +44,7 @@ def _done(answer: str) -> ModelOutput:
     return _call("submit", answer=answer)
 
 
-def mock_script(solver: str, truths: dict[str, str]) -> list[ModelOutput]:
+def mock_script(solver: str, truths: dict[str, str], review_rounds: int = 3) -> list[ModelOutput]:
     """A fixed script for `--model mock`. `truths` maps each required sandbox path to correct content.
 
     Swarm story: the first pass leaves the first artifact with a header and no rows; the critic
@@ -60,7 +60,24 @@ def mock_script(solver: str, truths: dict[str, str]) -> list[ModelOutput]:
     first_path, first_text = next(iter(truths.items()))
     header = first_text.splitlines()[0] + "\n"
     artifact = Path(first_path).stem
+    if review_rounds == 0:
+        # No review: the first pass stays broken, so the finisher has to rescue the artifact.
+        return [
+            _done("inputs listed"),  # scout
+            _done("planned"),  # proposer
+            _done("pilot skipped in the scripted run"),  # pilot
+            _write(first_path, header),  # experimenter
+            *correct[1:],
+            _done("first pass written"),
+            correct[0],  # finisher
+            _done("rescued"),
+            methods,  # reporter
+            _done("reported"),
+        ]
     return [
+        # scout
+        _call("bash_session", action="type_submit", input="ls -la /data"),
+        _done("inputs listed"),
         # proposer
         _call(
             "propose_claim",
@@ -75,11 +92,15 @@ def mock_script(solver: str, truths: dict[str, str]) -> list[ModelOutput]:
             null_hypothesis="At least one output is incomplete after the first pass.",
         ),
         _done("planned"),
+        # pilot
+        _done("pilot skipped in the scripted run"),
         # experimenter: first pass is wrong (header only)
         _call("bash_session", action="type_submit", input="ls /data"),
         _write(first_path, header),
         *correct[1:],
         _done("first pass written"),
+        # methods auditor, round 1
+        _done("no undisclosed deviations"),
         # critic, round 1
         _call(
             "raise_issue",
@@ -106,6 +127,8 @@ def mock_script(solver: str, truths: dict[str, str]) -> list[ModelOutput]:
             resolution="Reran the counting script; rows present.",
         ),
         _done("fixed"),
+        # methods auditor, round 2
+        _done("no undisclosed deviations"),
         # critic, round 2
         _call(
             "record_falsification_test",
@@ -160,7 +183,7 @@ def run_local(
             for a in spec["artifacts"]
         }
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
-        resolved: Model = get_model(MOCK, custom_outputs=mock_script(solver, truths))
+        resolved: Model = get_model(MOCK, custom_outputs=mock_script(solver, truths, review_rounds))
     else:
         resolved = get_model(model)
 

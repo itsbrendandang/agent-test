@@ -133,9 +133,7 @@ def grade_paper(
             "agent_artifacts_dir is required when run_effort_dir is not provided",
         )
     if artifact_grades_dir is None:
-        raise ValueError(
-            "artifact_grades_dir is required when run_effort_dir is not provided"
-        )
+        raise ValueError("artifact_grades_dir is required when run_effort_dir is not provided")
     artifact_grades_dir.mkdir(parents=True, exist_ok=True)
 
     paper_id = _optional_string(normalized.get("paper_id"), "paper_id")

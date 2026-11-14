@@ -52,9 +52,7 @@ def _report_payload(paper_id: str = "paper", artifact_id: str = "counts") -> dic
                     rubric: dict(score) for rubric in INSTRUCTION_FOLLOWING_RUBRICS
                 },
                 "transparency": {rubric: dict(score) for rubric in TRANSPARENCY_RUBRICS},
-                "analytical_rigor": {
-                    rubric: dict(score) for rubric in ANALYTICAL_RIGOR_RUBRICS
-                },
+                "analytical_rigor": {rubric: dict(score) for rubric in ANALYTICAL_RIGOR_RUBRICS},
             }
         ],
         "failure_modes": [],
@@ -89,9 +87,7 @@ def test_report_normalizes_same_eight_rubrics() -> None:
 
 
 def test_prompt_rendering_matches_phdval_source_when_available() -> None:
-    phdval_judge = (
-        Path(__file__).parents[3] / "PhDval-1" / "source" / "grading" / "judge.py"
-    )
+    phdval_judge = Path(__file__).parents[3] / "PhDval-1" / "source" / "grading" / "judge.py"
     if not phdval_judge.is_file():
         pytest.skip("sibling PhDval-1 checkout is unavailable")
     canonical = _load_module("phdval_judge_contract", phdval_judge)
@@ -244,9 +240,7 @@ def test_run_dir_assembles_phdval_inputs_and_writes_report(
     monkeypatch.setattr(
         process_judge,
         "load_eval_log",
-        lambda *args, **kwargs: {
-            "samples": [{"input": exact_agent_prompt, "messages": []}]
-        },
+        lambda *args, **kwargs: {"samples": [{"input": exact_agent_prompt, "messages": []}]},
     )
     monkeypatch.setattr(
         process_judge,

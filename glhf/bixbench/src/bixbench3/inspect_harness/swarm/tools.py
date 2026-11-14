@@ -63,8 +63,14 @@ print(json.dumps(report))
 """
 
 
-async def check_contract(outputs: list[ExpectedOutput]) -> list[dict[str, Any]]:
+async def check_contract(
+    outputs: list[ExpectedOutput], root: str | None = None
+) -> list[dict[str, Any]]:
+    """Shape-check the required artifacts. `root` checks a copy of the tree, e.g. the pilot's."""
     specs = [{**o.model_dump(), "sandbox_path": o.sandbox_path} for o in outputs]
+    if root:
+        for spec in specs:
+            spec["sandbox_path"] = root.rstrip("/") + spec["sandbox_path"].removeprefix("/outputs")
     result = await sandbox().exec(
         ["python3", "-c", _CONTRACT_SCRIPT, json.dumps(specs)], timeout=600
     )

@@ -705,9 +705,7 @@ def _validate_task_rows(rows: Sequence[HFTaskRow]) -> None:
     if [row.task_number for row in rows] != list(range(1, RELEASE_TASK_COUNT + 1)):
         raise ValueError("HF task numbers must be contiguous")
     if sum(row.artifact_count for row in rows) != RELEASE_ARTIFACT_COUNT:
-        raise ValueError(
-            f"HF task table must describe exactly {RELEASE_ARTIFACT_COUNT} artifacts"
-        )
+        raise ValueError(f"HF task table must describe exactly {RELEASE_ARTIFACT_COUNT} artifacts")
 
 
 def _validate_source_layout(sources: HubSourceLayout) -> None:

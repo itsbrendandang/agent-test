@@ -40,7 +40,18 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
     assert {c["id"]: c["verdict"] for c in ledger["claims"]} == {"C1": "supported", "C2": "refuted"}
     assert [(i["id"], i["status"]) for i in ledger["issues"]] == [("I1", "fixed")]
     phases = [e["phase"] for e in ledger["events"] if e["kind"] == "phase.started"]
-    assert phases == ["propose", "experiment", "critique 1", "revise 1", "critique 2", "report"]
+    assert phases == [
+        "scout",
+        "propose",
+        "pilot",
+        "experiment",
+        "audit 1",
+        "critique 1",
+        "revise 1",
+        "audit 2",
+        "critique 2",
+        "report",
+    ]  # no "finish": every artifact passed the shape check after review
     assert any(e["kind"] == "review.converged" for e in ledger["events"])
 
     findings = (outputs / "glhf" / "FINDINGS.md").read_text()
@@ -64,3 +75,13 @@ def test_single_agent_baseline_runs_on_the_same_case(tmp_path: Path) -> None:
     assert summary["status"] == "done", summary["error"]
     assert summary["score"] == 1.0
     assert not (tmp_path / "outputs" / "glhf").exists()
+
+
+def test_finisher_rescues_an_artifact_left_broken(tmp_path: Path) -> None:
+    # With review switched off, the scripted first pass leaves one artifact with no rows.
+    summary = run_local(DEMO_CASE, tmp_path, solver="glhf", model="mock", review_rounds=0)
+    assert summary["status"] == "done", summary["error"]
+    ledger = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())
+    phases = [e["phase"] for e in ledger["events"] if e["kind"] == "phase.started"]
+    assert phases == ["scout", "propose", "pilot", "experiment", "finish", "report"]
+    assert summary["score"] == 1.0
