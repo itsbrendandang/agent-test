@@ -171,29 +171,42 @@ def test_a_check_that_could_not_run_never_starts_the_finisher() -> None:
 # --- Token budget -------------------------------------------------------------------------------
 
 
+def _grant(title: str, used: int, later: tuple[str, ...] = (), budget: int = 1_000_000):
+    """The token grant of a phase that starts with `used` tokens spent (see TokenBook)."""
+    book = solver.TokenBook(solver.plan_budget(budget, 24 * 3600))
+    book.used = used
+    return book.grant(title, list(later))
+
+
 def test_token_allowance_caps_supporting_roles_and_keeps_the_report_reserve() -> None:
-    budget = 1_000_000
-    assert solver.token_allowance("scout", budget, 0) == 50_000  # TOKEN_SHARE caps it
-    assert solver.token_allowance("critique 2", budget, 100_000) == 200_000
-    # Roles without a share take what is left, minus the reporter's 10%.
-    assert solver.token_allowance("experiment", budget, 300_000) == 600_000
-    assert solver.token_allowance("revise 1", budget, 850_000) == 50_000
-    # A capped role near the end gets only what is left before the reserve.
-    assert solver.token_allowance("audit 3", budget, 880_000) == 20_000
+    assert _grant("scout", 0, ("propose",)).tokens == 50_000  # its TOKEN_SHARE target caps it
+    assert _grant("critique 2", 100_000).tokens == 200_000
+    # Roles without a target take what is left, minus the reserves: the reporter's 10%, the
+    # finisher's floor (40,000) and the overshoot reserve (5%).
+    assert _grant("experiment", 300_000).tokens == 510_000
+    assert _grant("revise 1", 700_000).tokens == 110_000
+    # A capped role near the end gets only what is left before the reserves; under its floor
+    # it is not started at all (it would stop before it wrote anything).
+    assert _grant("audit 3", 750_000).tokens == 60_000
+    assert _grant("audit 3", 880_000).skip == "below_floor"
+    assert _grant("revise 1", 850_000).skip == "below_floor"
 
 
 @pytest.mark.parametrize(
     "phase", ["scout", "pilot", "experiment", "audit 1", "critique 1", "finish"]
 )
 def test_phases_are_skipped_once_the_budget_minus_the_reserve_is_spent(phase: str) -> None:
-    assert solver.token_allowance(phase, 1_000_000, 900_000) <= 0
-    assert solver.token_allowance(phase, 1_000_000, 1_200_000) <= 0
+    assert _grant(phase, 900_000).skip is not None
+    assert _grant(phase, 1_200_000).skip is not None
+    assert _grant(phase, 900_000).tokens <= 0 and _grant(phase, 1_200_000).tokens <= 0
 
 
 def test_the_report_always_gets_at_least_the_reserve() -> None:
-    assert solver.token_allowance("report", 1_000_000, 400_000) == 600_000
-    assert solver.token_allowance("report", 1_000_000, 950_000) == 100_000
-    assert solver.token_allowance("report", 1_000_000, 5_000_000) == 100_000  # after an overshoot
+    # All that is left, except the overshoot reserve (5%) that pays for its own last call.
+    assert _grant("report", 400_000).tokens == 550_000
+    assert _grant("report", 950_000).tokens == 100_000
+    assert _grant("report", 5_000_000).tokens == 100_000  # after an overshoot
+    assert all(_grant("report", used).skip is None for used in (0, 950_000, 5_000_000))
 
 
 def test_both_solvers_share_one_token_rule() -> None:

@@ -1,0 +1,342 @@
+# Continuous integration for the drug board / GLHF repository.
+#
+# Runs on every pull request and on every push to main. It uses NO secrets: nothing here reads
+# `secrets.*`, the provider keys are set to empty strings, and DRUG_BOARD_MOCK / NO_PAID_CALLS keep
+# every model on the scripted mock. The guard job fails the build if a secret reference is ever
+# added to a workflow. Do not add a key to this file; real-model runs do not belong in CI.
+#
+# Commands are the ones in CONTRIBUTING.md section 5, split so a failure names the part:
+#   engine     npm ci, tsc --noEmit, node --test          (engine/)
+#   dashboard  npm ci, tsc -b, vite build, oxlint         (dashboard/)
+#   swarm      uv sync, ruff, mypy, pytest unit + e2e     (glhf/bixbench/)
+#   adapter    uv sync, ruff, mypy, pytest                (glhf/bixbench_v1/)
+#   guard      no run folders, no .env, no file over 5 MB, no API key in a commit
+#   ci-ok      one check to require in branch protection
+#
+# The e2e tests start a Docker sandbox from python:3.12-slim with the scripted model. No test in
+# this repository needs the 5.9 GB BixBench dataset or the 18 GB futurehouse/bixbench image: the
+# adapter tests build a synthetic capsule (glhf/bixbench_v1/tests/conftest.py).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: read the code, nothing else. No job raises this.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run of the previous push. Runs on main are never
+# cancelled, so every commit on main gets its own result.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Scripted (mock) models only. engine/src/config.ts: DRUG_BOARD_MOCK=1 forces the faux provider;
+  # NO_PAID_CALLS (anything but "0") is the kill switch for every paid step.
+  DRUG_BOARD_MOCK: "1"
+  NO_PAID_CALLS: "1"
+  # Empty on purpose, so no step can inherit a key from anywhere.
+  ANTHROPIC_API_KEY: ""
+  OPENAI_API_KEY: ""
+  OPENROUTER_API_KEY: ""
+  EXA_API_KEY: ""
+  TYPESAFE_API_KEY: ""
+  PAST_API_KEY: ""
+  TINKER_API_KEY: ""
+  HF_TOKEN: ""
+  # No dataset download: huggingface_hub refuses network calls.
+  HF_HUB_OFFLINE: "1"
+  # Versions the repository uses: Dockerfile (node:26, uv 0.13.7, `uv python install 3.12`) and
+  # pyproject.toml (target-version py312, mypy python_version 3.12).
+  NODE_VERSION: "26"
+  UV_VERSION: "0.13.7"
+  UV_PYTHON: "3.12"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  engine:
+    name: engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+      - name: Install (npm ci)
+        run: npm ci --no-audit --no-fund
+      - name: Type check (tsc --noEmit)
+        run: npx tsc --noEmit
+      - name: Tests (node --test)
+        run: npm test
+
+  dashboard:
+    name: dashboard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install (npm ci)
+        run: npm ci --no-audit --no-fund
+      - name: Type check (tsc -b)
+        run: npx tsc -b
+      - name: Build (vite build)
+        run: npx vite build
+      - name: Lint (oxlint)
+        run: npm run lint
+
+  swarm:
+    name: swarm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: glhf/bixbench
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.UV_PYTHON }}
+          enable-cache: true
+          cache-dependency-glob: glhf/bixbench/uv.lock
+      - name: Install (uv sync --locked)
+        run: uv sync --locked
+      - name: Lint (ruff check)
+        run: uv run --no-sync ruff check src tests
+      - name: Format check (ruff format --check)
+        run: uv run --no-sync ruff format --check
+      - name: Type check (mypy)
+        run: uv run --no-sync mypy
+      - name: Unit tests
+        run: uv run --no-sync pytest -q tests/unit
+      # The e2e tests skip themselves when Docker is not running. Fail here instead, so a runner
+      # without Docker cannot turn them into a silent pass.
+      - name: Docker must be running
+        run: docker info --format '{{.ServerVersion}}' && docker pull python:3.12-slim
+      - name: End-to-end tests (Docker sandbox, scripted model)
+        timeout-minutes: 10
+        run: uv run --no-sync pytest -q tests/e2e
+
+  adapter:
+    name: adapter
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: glhf/bixbench_v1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.UV_PYTHON }}
+          enable-cache: true
+          # The adapter installs ../bixbench as an editable path dependency.
+          cache-dependency-glob: |
+            glhf/bixbench_v1/uv.lock
+            glhf/bixbench/pyproject.toml
+      - name: Install (uv sync --locked)
+        run: uv sync --locked
+      - name: Lint (ruff check)
+        run: uv run --no-sync ruff check src tests
+      - name: Format check (ruff format --check)
+        run: uv run --no-sync ruff format --check
+      - name: Type check (mypy)
+        run: uv run --no-sync mypy
+      # Everything except test_e2e.py: synthetic capsule, no Docker, no dataset, no image.
+      - name: Tests without Docker
+        run: uv run --no-sync pytest -q tests --ignore=tests/test_e2e.py
+      - name: Docker must be running
+        run: docker info --format '{{.ServerVersion}}' && docker pull python:3.12-slim
+      # test_e2e.py passes IMAGE = "python:3.12-slim" itself. BIXBENCH_V1_IMAGE is set as well, so
+      # a test that forgets to pass an image cannot pull the 18 GB default image.
+      - name: End-to-end tests (Docker sandbox, scripted model)
+        timeout-minutes: 10
+        env:
+          BIXBENCH_V1_IMAGE: python:3.12-slim
+        run: uv run --no-sync pytest -q tests/test_e2e.py
+
+  guard:
+    name: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit that was pushed, not the merge commit GitHub makes for a pull request.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Workflows use no secrets
+        run: |
+          # Any secrets.* reference in a workflow fails the build (comment lines are skipped).
+          if grep -rnE --include='*.yml' --include='*.yaml' '^[^#]*\bsecrets\.[A-Za-z_]|^[^#]*secrets:[[:space:]]*inherit|^[[:space:]]*pull_request_target[[:space:]]*:|^[[:space:]]*on:.*pull_request_target' .github/workflows; then
+            echo "::error::A workflow refers to a secret or uses pull_request_target. CI must run without secrets."
+            exit 1
+          fi
+          echo "No secret reference in .github/workflows."
+      - name: No run folders, .env files, large files or keys in the pushed commits
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          MAX_BYTES=$((5 * 1024 * 1024))
+          # A path with a folder named runs/ is a run folder, except these two that are in git on
+          # purpose: the dashboard's source folder src/runs/ and the placeholder board/runs/.gitkeep.
+          RUNS_ALLOWED='^dashboard/src/runs/|^board/runs/\.gitkeep$'
+          # .env and .env.<anything> are refused; .env.example is the template and is allowed.
+          ENV_ALLOWED='(^|/)\.env\.example$'
+          # A line that carries this marker is not scanned for keys (for fake keys in tests).
+          ALLOW_MARKER='guard: not a secret'
+
+          # 'name::extended regular expression'. Matches are reported by file and line; the
+          # matching text is never printed.
+          PATTERNS=(
+            'Anthropic key::(^|[^A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}'
+            'OpenRouter key::(^|[^A-Za-z0-9])sk-or-v1-[A-Za-z0-9]{32,}'
+            'OpenAI key::(^|[^A-Za-z0-9])sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}'
+            'OpenAI key (old format)::(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{32,}'
+            'Hugging Face token::(^|[^A-Za-z0-9])hf_[A-Za-z0-9]{30,}'
+            'GitHub token::(^|[^A-Za-z0-9])(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})'
+            'AWS access key id::(^|[^A-Z0-9])(AKIA|ASIA)[0-9A-Z]{16}([^A-Z0-9]|$)'
+            'Google API key::(^|[^A-Za-z0-9])AIza[0-9A-Za-z_-]{35}'
+            'Slack token::(^|[^A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}'
+            'Private key::-----BEGIN [A-Z ]*PRIVATE KEY-----'
+            "Value assigned to a key variable::[A-Z0-9_]*(API_?KEY|TOKEN|SECRET|PASSWORD)[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[A-Za-z0-9_+/-]{24,}"
+          )
+
+          EMPTY_TREE=$(git hash-object -t tree /dev/null)
+          ZERO=0000000000000000000000000000000000000000
+          failures=0
+
+          refuse() { # refuse <where> <path> <reason>
+            echo "::error file=$2::$3 ($1): $2"
+            failures=$((failures + 1))
+          }
+
+          # check <label> <old tree-ish> <new tree-ish>: every file added or changed between the two.
+          check() {
+            local label=$1 old=$2 new=$3 path size pattern name re hits hit added
+            while IFS= read -r -d '' _ && IFS= read -r -d '' path; do
+              if [[ $path =~ (^|/)runs/ ]] && ! [[ $path =~ $RUNS_ALLOWED ]]; then
+                refuse "$label" "$path" "File under a runs/ folder"
+              fi
+              if [[ $path =~ (^|/)\.env($|\.[^/]*$) ]] && ! [[ $path =~ $ENV_ALLOWED ]]; then
+                refuse "$label" "$path" ".env file"
+              fi
+              size=$(git cat-file -s "$new:$path" 2>/dev/null || echo 0)
+              if [ "$size" -gt "$MAX_BYTES" ]; then
+                refuse "$label" "$path" "File over 5 MB ($((size / 1024 / 1024)) MB)"
+              fi
+            done < <(git diff --no-renames --diff-filter=AM -z --name-status "$old" "$new")
+
+            # Added lines only, as "path:line:text". Binary files have no added lines.
+            added=$(git -c core.quotepath=off diff --no-renames --no-ext-diff --no-color --unified=0 \
+                      --diff-filter=AM "$old" "$new" \
+                    | awk '
+                        /^\+\+\+ /        { file = substr($0, 5); sub(/^b\//, "", file); next }
+                        /^@@ /            { split($3, range, ","); line = substr(range[1], 2) + 0; next }
+                        /^\+/             { print file ":" line ":" substr($0, 2); line++ }
+                      ' | grep -vF -- "$ALLOW_MARKER" || true)
+            [ -n "$added" ] || return 0
+            for pattern in "${PATTERNS[@]}"; do
+              name=${pattern%%::*} re=${pattern#*::}
+              hits=$(grep -E -- "$re" <<<"$added" | cut -d: -f1,2 | sort -u || true)
+              [ -n "$hits" ] || continue
+              while IFS= read -r hit; do
+                echo "::error file=${hit%%:*},line=${hit##*:}::$name ($label): $hit"
+                failures=$((failures + 1))
+              done <<<"$hits"
+            done
+          }
+
+          case "$EVENT" in
+            pull_request)
+              base=$(git merge-base "$PR_BASE" "$HEAD_SHA") ;;
+            push)
+              if [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "$ZERO" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+                base=$BEFORE
+              else
+                # New branch or a force push whose old tip is gone: check the last commit.
+                base=$(git rev-parse -q --verify "$HEAD_SHA^" || echo "$EMPTY_TREE")
+              fi ;;
+            *)
+              # Manual run: check the whole tree.
+              base=$EMPTY_TREE ;;
+          esac
+
+          if [ "$base" = "$EMPTY_TREE" ]; then
+            echo "Checking every file in $HEAD_SHA"
+            check "tree" "$EMPTY_TREE" "$HEAD_SHA"
+          else
+            # Each commit on its own, so a file that is added and then deleted again is still
+            # caught: it stays in the history. Then the whole range, which covers merge commits.
+            count=0
+            while IFS= read -r commit; do
+              count=$((count + 1))
+              parent=$(git rev-parse -q --verify "$commit^" || echo "$EMPTY_TREE")
+              check "commit ${commit:0:7}" "$parent" "$commit"
+            done < <(git rev-list --no-merges --reverse "$base..$HEAD_SHA")
+            echo "Checked $count commit(s) in ${base:0:7}..${HEAD_SHA:0:7}"
+            check "range" "$base" "$HEAD_SHA"
+          fi
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::guard: $failures problem(s). See CONTRIBUTING.md section 7 (Do not commit). If a key was pushed, revoke it now: deleting the file does not remove it from the history."
+            exit 1
+          fi
+          echo "guard: nothing refused."
+
+  # One result for branch protection: require this check, and all the jobs above are required.
+  ci-ok:
+    name: ci-ok
+    if: ${{ always() }}
+    needs: [engine, dashboard, swarm, adapter, guard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "engine dashboard swarm adapter guard: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || { echo "::error::A job did not pass ($result)."; exit 1; }
+          done

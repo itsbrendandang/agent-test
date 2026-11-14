@@ -1,0 +1,13 @@
+# Review rules. They take effect when "Require review from Code Owners" is on for main.
+# The last matching line wins. Add a line for a folder when one person should always see
+# changes to it.
+
+# CI and repository rules: the owner reviews every change, so a check cannot be removed quietly.
+/.github/ @itsbrendandang
+
+# CONTRIBUTING.md section 8: the grader and the upstream solver are not changed.
+/glhf/bixbench/src/bixbench3/grading/ @itsbrendandang
+/glhf/bixbench/src/bixbench3/inspect_harness/solvers.py @itsbrendandang
+
+# The key template: it must never hold a real value.
+/.env.example @itsbrendandang

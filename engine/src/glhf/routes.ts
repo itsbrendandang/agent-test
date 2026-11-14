@@ -5,19 +5,22 @@
 //   GET  /api/glhf/roles         the swarm's roles: instructions and time shares, read from the solver code
 //   GET  /api/glhf/runs          runs, newest first
 //   GET  /api/glhf/scoreboard    single agent against swarm, runs paired only when their settings match
-//   POST /api/glhf/runs          start a run. Who may start what is in tracker.ts (checkRequest):
+//   POST /api/glhf/runs          start a run. Needs the dashboard's Origin or the CLI's token (403 without), also
+//                                for the scripted demo. Who may start what is in tracker.ts (checkRequest):
 //                                cloud runs and case directories need the CLI's token; a real model, Exa and
-//                                memory need the token or the dashboard's own Origin; anyone else gets the demo
+//                                memory need the token or the dashboard's own Origin
 //                                Body: a RunRequest; `solvers: ["glhf", "single"]` instead of `solver` starts a
 //                                matched pair, the second when the first is settled. Answers 201 {id, ids}.
 //                                409 {error, run} while a local run is still going: one local run at a time.
 //                                400 {error, field?}: `field` names the input the refusal is about.
 //   GET  /api/glhf/runs/:id      one run with its ledger, FINDINGS.md and METHODS.md
 //   POST /api/glhf/runs/:id/cancel   stop a local run and mark it cancelled; answers the run. A settled run is
-//                                returned unchanged. Open to the dashboard and to local callers, like every route.
+//                                returned unchanged, and so is one whose runner has written its result. `detail`
+//                                says what was done about the runner and its sandbox containers. Needs the
+//                                dashboard's Origin or the CLI's token (403 without).
 import { execFile } from "node:child_process"
 import { randomBytes, timingSafeEqual } from "node:crypto"
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { allowedOrigin, HttpError, readJson } from "../http.ts"
 import { childEnv } from "../paid.ts"
@@ -40,8 +43,12 @@ let status: { at: number; body: Awaited<ReturnType<typeof statusBody>> } | undef
 /** Take over tracking and continue unfinished runs. Retries while a CLI command holds the tracker. */
 export async function startTracker(): Promise<void> {
   mkdirSync(RUNS, { recursive: true })
-  writeFileSync(TOKEN_FILE, token, { mode: 0o600 })
-  chmodSync(TOKEN_FILE, 0o600) // the mode above applies only when the file is created
+  // Created with mode 600 under another name, then moved into place: the token is never in a file others can read,
+  // also when an older file with a wider mode is in the way.
+  const fresh = `${TOKEN_FILE}.${process.pid}.tmp`
+  rmSync(fresh, { force: true })
+  writeFileSync(fresh, token, { mode: 0o600, flag: "wx" })
+  renameSync(fresh, TOKEN_FILE)
   try {
     tracker = await openTracker()
     const open = tracker.unfinished()
@@ -85,6 +92,13 @@ const hasToken = hasSessionToken
 /** This server's token, for the CLI and for tests in the same process. Never send it in a response. */
 export const sessionToken = () => token
 
+/**
+ * May this request start or stop a run? Only the dashboard's own page (its Origin) or a holder of the token. A
+ * request with no Origin is not a browser, and anything on this machine or network can send one.
+ */
+const mayControl = (req: IncomingMessage) => hasToken(req) || allowedOrigin(req)
+const REFUSED = "starting and cancelling runs needs the dashboard's Origin or this machine's token (the x-glhf-token header; `npm run glhf -- run ...` sends it)"
+
 /** Handles a request under /api/glhf. `parts` is the path split on "/": api, glhf, runs, :id. */
 export async function handleGlhf(req: IncomingMessage, res: ServerResponse, parts: string[]): Promise<void> {
   try {
@@ -96,6 +110,7 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
     if (parts[2] === "runs" && !parts[3] && req.method === "GET") return json(res, 200, listRuns())
     if (parts[2] === "runs" && !parts[3] && req.method === "POST") {
       const body = await readJson<StartBody>(req) // 415 unless application/json, 413 over 1 MB
+      if (!mayControl(req)) return json(res, 403, { error: REFUSED })
       const requests = checkStart(body, { token: hasToken(req), origin: allowedOrigin(req) })
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
       const ids = (await tracker.startChain(requests)).map((run) => run.id)
@@ -113,6 +128,7 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
       let id: string
       try { id = decodeURIComponent(parts[3]) } catch { return json(res, 400, { error: "invalid run id" }) }
       if (!safeId(id)) return json(res, 400, { error: "invalid run id" })
+      if (!mayControl(req)) return json(res, 403, { error: REFUSED })
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
       return json(res, 200, await tracker.cancel(id))
     }

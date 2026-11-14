@@ -1,9 +1,10 @@
 // Starting, queueing and cancelling GLHF runs through the real routes, on a throwaway server. The tracker works in
 // a temporary folder (GLHF_RUNS_DIR), so the engine that may be running and glhf/runs are not touched, and a stub
-// stands in for the local runner (GLHF_LOCAL_CMD): no Docker, no model, no cost.
+// stands in for the local runner (GLHF_LOCAL_CMD), for `docker` (GLHF_DOCKER_CMD) and for `bixbench3`
+// (GLHF_BIXBENCH3_CMD): no Docker, no model, no cloud, no cost.
 import assert from "node:assert/strict"
-import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { spawn, spawnSync } from "node:child_process"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
@@ -20,18 +21,30 @@ const here = dirname(fileURLToPath(import.meta.url))
 const runs = mkdtempSync(join(tmpdir(), "glhf-runs-"))
 const stubLog = join(runs, "stub.log")
 process.env.GLHF_RUNS_DIR = runs
-process.env.GLHF_LOCAL_CMD = `${process.execPath} ${join(here, "fixtures", "local-runner-stub.mjs")}`
+const fixture = (name: string) => `${process.execPath} ${join(here, "fixtures", name)}`
+const PLAIN = fixture("local-runner-stub.mjs"), CONTROL = fixture("control-stub.mjs")
+const dockerState = join(runs, "docker-state.json"), dockerLog = join(runs, "docker.log")
+process.env.GLHF_LOCAL_CMD = PLAIN
+process.env.GLHF_DOCKER_CMD = fixture("docker-stub.mjs") // the real Docker is never asked
+process.env.GLHF_DOCKER_STUB_STATE = dockerState
+process.env.GLHF_DOCKER_STUB_LOG = dockerLog
+process.env.GLHF_BIXBENCH3_CMD = fixture("bixbench3-fail-stub.mjs") // the real `uv run bixbench3` is never the fallback
+process.env.GLHF_BIXBENCH3_RUNS = join(runs, "manifests")
+// How long a cancel waits after SIGINT, after SIGTERM and after SIGKILL.
+process.env.GLHF_CANCEL_INT_MS = "300"
+process.env.GLHF_CANCEL_GRACE_MS = "300"
+process.env.GLHF_CANCEL_KILL_MS = "2000"
 process.env.GLHF_LOCAL_POLL_MS = "40"
 process.env.GLHF_STUB_LOG = stubLog
 
 // Imported only now: store.ts reads GLHF_RUNS_DIR when it loads.
 const { createApp } = await import("../src/app.ts")
-const { startTracker, stopTracker } = await import("../src/glhf/routes.ts")
+const { sessionToken, startTracker, stopTracker, TOKEN_FILE } = await import("../src/glhf/routes.ts")
 const { loadStored, patchRun, RUNS, saveStored } = await import("../src/glhf/store.ts")
 const { pairKey } = await import("../src/glhf/scoreboard.ts")
 const { alive } = await import("../src/glhf/proc.ts")
 const { BadRequest, checkRequest, checkStart } = await import("../src/glhf/tracker.ts")
-const { predecessor } = await import("../src/glhf/task.ts")
+const { cancelDetail, predecessor, removeSandbox, sandboxNote, startOnce, stopAndWait } = await import("../src/glhf/task.ts")
 const { LIMITS, modelsFor } = await import("../src/glhf/types.ts")
 
 delete process.env.EXA_API_KEY // after the imports: env.ts fills it from .env when it loads
@@ -54,8 +67,8 @@ after(async () => {
   rmSync(runs, { recursive: true, force: true })
 })
 
-const call = async (method: string, path: string, body?: unknown, origin: string | null = DASH) => {
-  const res = await fetch(base + path, { method, headers: { ...(origin && { origin }), ...(body !== undefined && { "content-type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) })
+const call = async (method: string, path: string, body?: unknown, origin: string | null = DASH, token?: string) => {
+  const res = await fetch(base + path, { method, headers: { ...(origin && { origin }), ...(token && { "x-glhf-token": token }), ...(body !== undefined && { "content-type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) })
   return { status: res.status, body: (await res.json()) as any }
 }
 const start = (body: object, ms = 300, fail = "") => {
@@ -136,6 +149,7 @@ test("when the first run of a pair fails, the partner still starts and says why"
   assert.deepEqual(predecessor("x", stored("cancelled")), { settled: true, cancel: true, note: "cancelled because x, the run it was queued behind, was cancelled" })
   assert.equal(predecessor("x", stored("failed", "boom")).cancel, undefined, "a failure does not cancel the partner")
   assert.match(predecessor("gone-run", undefined).note ?? "", /record of gone-run.* is gone/)
+  assert.equal(predecessor("gone-run", undefined).settled, true, "a run that is gone altogether does not hold its partner back for ever")
 })
 
 test("one local run at a time: a second start is refused with 409, except the queued partner", async () => {
@@ -146,7 +160,7 @@ test("one local run at a time: a second start is refused with 409, except the qu
     const refused = await start(body, 400)
     assert.equal(refused.status, 409, JSON.stringify(body))
     assert.match(refused.body.error, /a local run is still going/)
-    assert.ok([first, second].includes(refused.body.run))
+    assert.equal(refused.body.run, first, "the run that is at work, not the one waiting behind it")
   }
   assert.equal((await start({ solver: "glhf" }, 400, "")).status, 409)
   await until("the first to finish", () => isSettled(first))
@@ -364,9 +378,406 @@ test("a refusal names the field it is about", async () => {
   assert.equal(refused.status, 400)
   assert.deepEqual(refused.body, { error: "timeLimit (seconds) must be a whole number from 60 to 86400", field: "timeLimit" })
   const real = await call("POST", "/api/glhf/runs", { mode: "local", solver: "glhf", model: "anthropic/claude-sonnet-5-5" }, null)
-  assert.equal(real.status, 400)
-  assert.equal(real.body.field, "model")
-  assert.match(real.body.error, /^runs with a real model cost money/)
+  assert.equal(real.status, 403, "a caller with neither the dashboard's Origin nor the token starts nothing")
   assert.deepEqual((await start({ solver: "glhf", task: 5 })).body, { error: "task must be a short text" }, "no field key when there is none")
   assert.equal((await call("GET", "/api/glhf/runs")).body.filter((r: GlhfRun) => r.detail === "refused").length, 0)
+})
+
+// ---------------------------------------------------------------- run control: what an independent review found
+
+const USAGE = { "mockllm/model": { input_tokens: 120, output_tokens: 30, total_tokens: 150 } }
+const STUB_VARS = ["GLHF_STUB_IGNORE", "GLHF_STUB_ON_INT", "GLHF_STUB_CHILD", "GLHF_STUB_LINGER_MS"]
+/** Start with the control stub (fixtures/control-stub.mjs). `vars` are its GLHF_STUB_* settings for this run. */
+const startControl = async (body: object, vars: Record<string, string> = {}, ms = 60_000) => {
+  for (const key of STUB_VARS) delete process.env[key]
+  Object.assign(process.env, vars, { GLHF_LOCAL_CMD: CONTROL })
+  try { return await start(body, ms) } finally { process.env.GLHF_LOCAL_CMD = PLAIN }
+}
+/** The control stub is launched by the run's task, a moment after the request: wait for it with its settings in place. */
+const going = async (id: string) => {
+  await until(`${id} to be going`, () => run(id).phase === "running" && existsSync(join(runs, id, "child.pid")) || existsSync(join(runs, id, "run.json")) && process.env.GLHF_STUB_CHILD === "none")
+  for (const key of STUB_VARS) delete process.env[key]
+}
+const pidIn = (id: string, file: string) => Number(pidOf(id, file).split(" ")[0])
+const exists = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
+/** Is any process of the group left? */
+const groupLeft = (pgid: number) => { try { process.kill(-pgid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH" } }
+const cancel = (id: string) => call("POST", `/api/glhf/runs/${id}/cancel`)
+const trackerLogOf = (id: string) => readFileSync(join(runs, id, "tracker.log"), "utf8")
+const STOPPED = /^cancelled; the runner was stopped and no process of its group is left; /
+/** A process in its own group that has nothing to do with any run. */
+const bystander = () => {
+  const child = spawn("sleep", ["120"], { detached: true, stdio: "ignore" })
+  child.unref()
+  return child.pid!
+}
+const record = (id: string, extra: Partial<GlhfRun> = {}, request: object = {}) => {
+  mkdirSync(join(runs, id), { recursive: true })
+  saveStored({ request: { mode: "local", solver: "glhf", model: "mock", ...request } as never, run: { id, mode: "local", task: "demo", solver: "glhf", model: "mock", roleModels: {}, phase: "queued", startedAt: Date.now(), ...extra } })
+}
+
+test("H1: cancel does not say stopped while a process of the runner's group is alive; it kills what ignores SIGINT and SIGTERM", async (t) => {
+  await t.test("the runner itself ignores them: SIGINT first, then SIGTERM, then SIGKILL", async () => {
+    const sent = await startControl({ solver: "glhf" }, { GLHF_STUB_IGNORE: "SIGINT,SIGTERM" })
+    const id = sent.body.id as string
+    await going(id)
+    const runner = pidIn(id, "runner.pid"), child = pidIn(id, "child.pid")
+    const began = Date.now()
+    const done = await cancel(id)
+    assert.equal(done.body.phase, "cancelled")
+    assert.match(done.body.detail, STOPPED)
+    assert.ok(!groupLeft(runner), "no process of the runner's group is left when the cancel answers")
+    assert.ok(!exists(child))
+    assert.deepEqual(readFileSync(join(runs, id, "signals.log"), "utf8").trim().split("\n"), ["SIGINT", "SIGTERM"], "the gentle signal first: the real runner removes its sandbox on SIGINT")
+    assert.ok(Date.now() - began >= 600, "each signal got its grace time before the next")
+    assert.ok(!existsSync(join(runs, id, "runner.stuck")))
+  })
+  await t.test("the wrapping shell and the runner die at once, a child of the runner ignores them", async () => {
+    const sent = await startControl({ solver: "glhf" }, { GLHF_STUB_CHILD: "ignore" })
+    assert.equal(sent.status, 201, "the machine was free: the run before is really gone")
+    const id = sent.body.id as string
+    await going(id)
+    const runner = pidIn(id, "runner.pid"), child = pidIn(id, "child.pid")
+    const done = await cancel(id)
+    assert.match(done.body.detail, STOPPED)
+    assert.ok(!exists(child), "the child that ignored SIGTERM is gone too: the group was killed, not only its leader")
+    assert.ok(!groupLeft(runner))
+    const next = await start({ solver: "single" }, 50)
+    assert.equal(next.status, 201)
+    await until("it to finish", () => isSettled(next.body.id))
+  })
+  await t.test("a group that SIGKILL does not empty is reported as stuck, and the machine stays busy until it is gone", async () => {
+    const pid = bystander(), id = "stuck-run", dir = join(runs, id)
+    record(id, { phase: "cancelled", finishedAt: Date.now() })
+    writeFileSync(join(dir, "runner.pid"), String(pid))
+    const signals: string[] = []
+    const result = await stopAndWait(dir, "runner", { intMs: 30, termMs: 30, killMs: 30, kill: (_pid, signal) => void signals.push(String(signal)) })
+    assert.equal(result, "stuck", "never stopped while the group has a member")
+    assert.deepEqual(signals, ["SIGINT", "SIGTERM", "SIGKILL"])
+    assert.ok(existsSync(join(dir, "runner.stuck")))
+    assert.match(cancelDetail({ runner: "stuck", sandbox: { found: 0, left: [] } }), /^cancelled, but the runner could not be stopped: .*still there after SIGKILL.*busy/)
+    const refused = await start({ solver: "glhf" }, 50)
+    assert.equal(refused.status, 409, "a runner that could not be stopped keeps the machine")
+    assert.equal(refused.body.run, id)
+    assert.equal(await stopAndWait(dir, "runner"), "stopped") // for real this time
+    assert.ok(!exists(pid) && !existsSync(join(dir, "runner.stuck")))
+    const next = await start({ solver: "glhf" }, 50)
+    assert.equal(next.status, 201)
+    await until("it to finish", () => isSettled(next.body.id))
+  })
+  await t.test("a pid that now belongs to another program is not signalled (the start time is checked before the kill)", async () => {
+    const pid = bystander(), id = "reused-pid-run"
+    record(id, { phase: "running" })
+    writeFileSync(join(runs, id, "runner.pid"), `${pid} ps:Thu Jan  1 00:00:00 1970`)
+    const done = await cancel(id)
+    assert.equal(done.body.phase, "cancelled")
+    assert.match(done.body.detail, /^cancelled; no runner was running/)
+    await sleep(100)
+    assert.ok(exists(pid), "the other program is still running")
+    process.kill(-pid, "SIGKILL")
+  })
+})
+
+test("H1: at the deadline the runner's whole group is stopped too, with SIGKILL when it has to be; a cancel during that stop wins", async () => {
+  process.env.GLHF_LOCAL_MARGIN_MS = String(600 - 60_000) // the deadline of a run with a 60 s limit is 0.6 s after its start
+  try {
+    const sent = await startControl({ solver: "glhf", timeLimit: 60 }, { GLHF_STUB_IGNORE: "SIGINT,SIGTERM", GLHF_STUB_CHILD: "ignore" })
+    const id = sent.body.id as string
+    await going(id)
+    const runner = pidIn(id, "runner.pid")
+    await until("the run to fail at its deadline", () => isSettled(id))
+    assert.equal(run(id).phase, "failed")
+    assert.match(run(id).error ?? "", /far past its 60 s limit; it was stopped$/)
+    assert.ok(!groupLeft(runner), "\"it was stopped\" is said only when no process of the group is left")
+
+    // The same, and a cancel arrives while the deadline's stop is waiting for the runner to go.
+    process.env.GLHF_CANCEL_INT_MS = "800"
+    const again = await startControl({ solver: "glhf", timeLimit: 60 }, { GLHF_STUB_IGNORE: "SIGINT,SIGTERM" })
+    const late = again.body.id as string
+    await until("the deadline's SIGINT", () => existsSync(join(runs, late, "signals.log")))
+    const done = await cancel(late)
+    assert.equal(done.body.phase, "cancelled")
+    assert.ok(!groupLeft(pidIn(late, "runner.pid")))
+    await sleep(200)
+    assert.equal(run(late).phase, "cancelled")
+    assert.equal(run(late).error, undefined)
+    assert.doesNotMatch(trackerLogOf(late), /finished: /, "the phase that was stopping the runner did not settle the run as failed after the cancel")
+  } finally { delete process.env.GLHF_LOCAL_MARGIN_MS; process.env.GLHF_CANCEL_INT_MS = "300" }
+})
+
+test("M1: cancel removes the sandbox containers of the run, and says only what it checked", async () => {
+  const sent = await start({ solver: "glhf" }, 60_000)
+  const id = sent.body.id as string
+  await until("the run to be going", () => run(id).phase === "running")
+  const dir = join(runs, id)
+  // Docker reports real paths (/private/var/... on a Mac), the tracker knows the folder by the name it was given.
+  const mine = { id: "c".repeat(64), name: "inspect-bixbench3_ca-iabc-default-1", project: "inspect-bixbench3_ca-iabc", mounts: ["/somewhere/data", `${realpathSync(dir)}/outputs`, `${realpathSync(dir)}/workspace`] }
+  const other = { id: "d".repeat(64), name: "inspect-bixbench3_ca-ixyz-default-1", project: "inspect-bixbench3_ca-ixyz", mounts: [`${realpathSync(dir)}-2/workspace`, "/elsewhere/outputs"] }
+  writeFileSync(dockerState, JSON.stringify([mine, other]))
+  rmSync(dockerLog, { force: true })
+  const done = await cancel(id)
+  assert.equal(done.body.detail, "cancelled; the runner was stopped and no process of its group is left; 1 sandbox container removed")
+  assert.deepEqual(JSON.parse(readFileSync(dockerState, "utf8")), [other], "only the container that mounts this run's folder; another run's sandbox is left alone")
+  const calls = readFileSync(dockerLog, "utf8").trim().split("\n")
+  assert.deepEqual(calls.filter((c) => c.startsWith("rm ")), [`rm -f -v ${mine.id}`])
+  assert.ok(calls.indexOf(`rm -f -v ${mine.id}`) < calls.lastIndexOf("ps -aq --no-trunc"), "it looked again after the removal")
+
+  // Nothing found, something that cannot be removed, and no Docker to ask: each says what it is.
+  writeFileSync(dockerState, JSON.stringify([other]))
+  assert.deepEqual(await removeSandbox(dir), { found: 0, left: [] })
+  assert.equal(sandboxNote({ found: 0, left: [] }), "Docker shows no sandbox container of this run")
+  writeFileSync(dockerState, JSON.stringify([{ ...mine, sticky: true }, other]))
+  const left = await removeSandbox(dir)
+  assert.deepEqual(left, { found: 1, left: [mine.name] })
+  assert.match(sandboxNote(left), /^1 of 1 sandbox container could not be removed \(inspect-bixbench3_ca-iabc-default-1\)/)
+  process.env.GLHF_DOCKER_STUB_FAIL = "1"
+  try {
+    assert.equal(await removeSandbox(dir), undefined)
+    assert.match(sandboxNote(undefined), /were not checked \(Docker did not answer\)/)
+    const blind = await start({ solver: "glhf" }, 60_000)
+    await until("the run to be going", () => run(blind.body.id).phase === "running")
+    const said = (await cancel(blind.body.id)).body.detail as string
+    assert.match(said, /^cancelled; the runner was stopped .*; its sandbox containers were not checked/, "no claim about containers without Docker's answer")
+    assert.doesNotMatch(said, /removed|shows no/)
+  } finally { delete process.env.GLHF_DOCKER_STUB_FAIL; rmSync(dockerState, { force: true }) }
+  // A run that was cancelled before its runner started has no sandbox to speak of.
+  const pair = await start({ solvers: ["glhf", "single"] }, 60_000)
+  assert.equal((await cancel(pair.body.ids[1])).body.detail, "cancelled before the runner started")
+  await cancel(pair.body.ids[0])
+})
+
+test("M2: a run whose runner has written its result is not recorded as cancelled, and a cancelled run keeps the usage its runner reported", async () => {
+  // The result is in run.json, the tracker has not looked yet (slow polling), and two cancels arrive at once.
+  process.env.GLHF_LOCAL_POLL_MS = "700"
+  try {
+    for (const linger of ["0", "2000"]) { // the runner is gone already, or still on its way out
+      const sent = await startControl({ solver: "glhf" }, { GLHF_STUB_LINGER_MS: linger, GLHF_STUB_CHILD: "none" }, 150)
+      const id = sent.body.id as string
+      await until("the runner's result", () => /"done"/.test(existsSync(join(runs, id, "run.json")) ? readFileSync(join(runs, id, "run.json"), "utf8") : ""))
+      assert.notEqual(run(id).phase, "done", "the tracker has not read it yet")
+      const [one, two] = await Promise.all([cancel(id), cancel(id)])
+      for (const answer of [one, two]) {
+        assert.equal(answer.status, 200)
+        assert.equal(answer.body.phase, "done", `a finished run stays a result (linger ${linger})`)
+        assert.equal(answer.body.score, 1)
+        assert.deepEqual(answer.body.usage, USAGE)
+      }
+      assert.equal(run(id).phase, "done")
+      assert.doesNotMatch(trackerLogOf(id), /cancel/)
+      assert.ok(!groupLeft(pidIn(id, "runner.pid")), "and a runner that lingered after its result is not left running")
+    }
+  } finally { process.env.GLHF_LOCAL_POLL_MS = "40" }
+
+  // Cancelled mid-run: the runner reports on SIGINT what it had used, and the cancelled record keeps it.
+  const sent = await startControl({ solver: "glhf" }, { GLHF_STUB_ON_INT: "result" })
+  const id = sent.body.id as string
+  await going(id)
+  const done = await cancel(id)
+  assert.equal(done.body.phase, "cancelled", "the runner wrote \"failed\" because it was interrupted; the run is cancelled all the same")
+  assert.deepEqual(done.body.usage, USAGE)
+  assert.deepEqual(run(id).usage, USAGE)
+  assert.equal(done.body.score, undefined)
+  assert.equal(done.body.error, undefined)
+})
+
+test("M3, L3: a first run whose record cannot be read still holds its partner back, keeps the machine, and can be cancelled", async () => {
+  const sent = await start({ solvers: ["glhf", "single"] }, 60_000)
+  const [first, second] = sent.body.ids as string[]
+  await until("the first run to be going", () => run(first).phase === "running")
+  await sleep(100)
+
+  // L3: while nothing changes, the polls of the waiting partner (and of the watcher) do not rewrite the records.
+  const inode = (id: string) => statSync(join(runs, id, "record.json")).ino
+  const before = [inode(first), inode(second)]
+  await sleep(300) // seven polls each
+  assert.deepEqual([inode(first), inode(second)], before, "record.json was not written again")
+  assert.equal(run(second).phase, "queued")
+
+  writeFileSync(join(runs, first, "record.json"), "{ not json") // a torn or damaged record
+  assert.equal(loadStored(first), undefined)
+  const runner = pidIn(first, "runner.pid")
+  await sleep(300)
+  assert.ok(exists(runner))
+  assert.ok(!existsSync(join(runs, second, "runner.pid")), "the partner is not launched on top of a runner that is alive")
+  assert.equal(run(second).phase, "queued")
+  assert.deepEqual(predecessor(first), { settled: false })
+
+  rmSync(join(runs, first, "record.json")) // a deleted record is the same
+  await sleep(200)
+  assert.ok(!existsSync(join(runs, second, "runner.pid")))
+  await cancel(second)
+  const refused = await start({ solver: "glhf" }, 50)
+  assert.equal(refused.status, 409, "the machine is not free while that runner is alive")
+  assert.equal(refused.body.run, first)
+
+  const again = await start({ solver: "single" }, 50) // still refused, so nothing is queued behind it
+  assert.equal(again.status, 409)
+  const done = await cancel(first)
+  assert.equal(done.status, 200, "not 404: the pid file in the run folder is enough to stop it")
+  assert.equal(done.body.id, first)
+  assert.equal(done.body.phase, "cancelled")
+  assert.match(done.body.detail, /^cancelled; the runner was stopped and no process of its group is left; .*record \(record\.json\) could not be read/)
+  assert.ok(!groupLeft(runner))
+  assert.equal(predecessor(first).settled, true, "with its runner gone it no longer holds anything back")
+  assert.equal((await cancel("never-existed")).status, 404)
+  mkdirSync(join(runs, "empty-folder"))
+  assert.equal((await cancel("empty-folder")).status, 404, "a folder without a record and without a runner is not a run")
+  const next = await start({ solver: "single" }, 50)
+  assert.equal(next.status, 201)
+  await until("it to finish", () => isSettled(next.body.id))
+})
+
+test("M3: cancelling a run whose record cannot be read cancels the partner queued behind it", async () => {
+  const sent = await start({ solvers: ["glhf", "single"] }, 60_000)
+  const [first, second] = sent.body.ids as string[]
+  await until("the first run to be going", () => run(first).phase === "running")
+  writeFileSync(join(runs, first, "record.json"), "")
+  assert.equal((await cancel(first)).status, 200)
+  assert.equal(run(second).phase, "cancelled")
+  assert.equal(run(second).note, `cancelled because ${first}, the run it was queued behind, was cancelled`)
+  await sleep(200)
+  assert.ok(!existsSync(join(runs, second, "runner.pid")))
+})
+
+test("L1: starting and cancelling need the dashboard's Origin or the token, also for the scripted model", async () => {
+  const demo = { mode: "local", solver: "glhf", model: "mock" }
+  process.env.GLHF_STUB_MS = "60000"
+  const open = await call("POST", "/api/glhf/runs", demo, null)
+  assert.equal(open.status, 403)
+  assert.match(open.body.error, /needs the dashboard's Origin or this machine's token/)
+  assert.equal((await call("POST", "/api/glhf/runs", demo, null, "0".repeat(48))).status, 403, "a wrong token is no token")
+  assert.ok(listRunsDone(), "nothing was started")
+
+  const sent = await call("POST", "/api/glhf/runs", demo, null, sessionToken())
+  assert.equal(sent.status, 201, "the CLI: no Origin, the token")
+  const id = sent.body.id as string
+  await until("the run to be going", () => run(id).phase === "running")
+  const refused = await call("POST", `/api/glhf/runs/${id}/cancel`, undefined, null)
+  assert.equal(refused.status, 403)
+  assert.equal(run(id).phase, "running", "an unknown caller stops nothing")
+  assert.ok(alive(pidOf(id, "runner.pid")))
+  assert.equal((await call("POST", "/api/glhf/runs/no-such-run/cancel", undefined, null)).status, 403, "and learns nothing about which runs exist")
+  assert.equal((await call("POST", `/api/glhf/runs/${id}/cancel`, undefined, null, sessionToken())).body.phase, "cancelled")
+  assert.equal((await call("GET", "/api/glhf/runs", undefined, null)).status, 200, "reading stays open to local callers")
+})
+
+test("L2: a runner whose pid the engine never recorded is found through the pid its own shell wrote, watched, and stopped", async () => {
+  const sent = await start({ solver: "glhf" }, 100)
+  await until("it to finish", () => isSettled(sent.body.id))
+  assert.equal(pidOf(sent.body.id, "runner.self").trim(), String(pidIn(sent.body.id, "runner.pid")), "every runner writes its own pid before it starts the command")
+
+  const id = "pid-never-recorded", dir = join(runs, id)
+  await stopTracker()
+  record(id, { startedAt: Date.now() })
+  process.env.GLHF_STUB_MS = "60000"
+  assert.equal(startOnce(dir, "runner", [...CONTROL.split(" "), "--solver", "glhf", "--out", dir], join(dir, "runner.log"), null), true)
+  writeFileSync(join(dir, "runner.pid"), "") // the engine died after the spawn, before it wrote the pid
+  await until("the runner to be up", () => existsSync(join(dir, "child.pid")))
+  const runner = pidIn(id, "runner.self")
+  await startTracker() // the record has no task yet: it gets one, and the launch finds that the runner was started
+  await sleep(500) // far more than the five polls after which an unrecorded pid counts as gone
+  assert.equal(run(id).phase, "running", "not failed as \"stopped without finishing\" while its runner works on")
+  assert.equal(pidIn(id, "runner.pid"), runner, "the pid file now names the runner")
+  assert.ok(alive(pidOf(id, "runner.pid")), "with its start time, so it is a full stamp")
+  assert.match(trackerLogOf(id), /already started; not starting again/)
+  assert.equal((await start({ solver: "single" }, 50)).status, 409, "the machine is still taken")
+  assert.match((await cancel(id)).body.detail, STOPPED)
+  assert.ok(!groupLeft(runner))
+})
+
+test("L4: the token file is created with mode 600, never widened and never written in place", async () => {
+  await stopTracker()
+  writeFileSync(TOKEN_FILE, "left by an earlier engine")
+  chmodSync(TOKEN_FILE, 0o644)
+  const old = statSync(TOKEN_FILE)
+  await startTracker()
+  const now = statSync(TOKEN_FILE)
+  assert.equal(now.mode & 0o777, 0o600)
+  assert.notEqual(now.ino, old.ino, "a new file moved into place: the token was never in the file others could read")
+  assert.equal(readFileSync(TOKEN_FILE, "utf8"), sessionToken())
+  assert.deepEqual(readdirSync(runs).filter((name) => name.startsWith(".token.")), [], "no temporary file is left")
+})
+
+test("L6: what reaches the cloud runner's command line cannot start with a dash", () => {
+  const cloud = { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", task: "9", effort: "high", project: "my-project" } as const
+  const ok = checkRequest({ ...cloud, resultsBucket: "gs://my-bucket/results/run_1" }, true)
+  assert.deepEqual([ok.task, ok.effort, ok.project, ok.resultsBucket], ["9", "high", "my-project", "gs://my-bucket/results/run_1"])
+  assert.equal(checkRequest({ ...cloud, task: "bix-12.v2", project: "example.com:proj", resultsBucket: "bucket" }, true).project, "example.com:proj")
+  for (const [key, value] of [["task", "--help"], ["task", "-x"], ["task", "a b"], ["effort", "--results-bucket=gs://x"], ["effort", "-h"], ["effort", "high low"],
+    ["project", "--project"], ["project", "p;rm"], ["project", 5], ["resultsBucket", "--effort"], ["resultsBucket", "gs://--x"], ["resultsBucket", "gs://b/$(id)"], ["resultsBucket", ["a"]]] as const) {
+    assert.throws(() => checkRequest({ ...cloud, [key]: value } as never, true), BadRequest, `${key}: ${JSON.stringify(value)}`)
+  }
+  assert.throws(() => checkRequest({ mode: "local", solver: "glhf", model: "mock", task: "--case" }, true), BadRequest, "a local task label too")
+})
+
+test("a caller cannot queue a run behind another: `after` in a request is dropped", async () => {
+  const base = { mode: "local", solver: "glhf", model: "mock" } as const
+  assert.equal(checkRequest({ ...base, after: "some-run" } as never, true).after, undefined)
+  assert.equal(checkStart({ mode: "local", model: "mock", solvers: ["glhf", "single"], after: "some-run" } as never, true).some((r) => "after" in r), false)
+  const sent = await start({ solver: "glhf", after: "no-such-run" }, 100)
+  assert.equal(sent.status, 201)
+  const stored = loadStored(sent.body.id)!
+  assert.equal(stored.request.after, undefined)
+  assert.equal(stored.run.after, undefined)
+  await until("it to finish", () => isSettled(sent.body.id))
+  assert.equal(run(sent.body.id).phase, "done")
+  assert.equal(run(sent.body.id).note, undefined, "it waited for nothing")
+})
+
+test("after a restart a record without a task gets one, and a run that was already launched does not go back into the queue", async () => {
+  await stopTracker()
+  process.env.GLHF_STUB_MS = "100"; process.env.GLHF_STUB_FAIL = ""
+  record("no-task-yet") // the engine died between writing the record and creating its task
+  // A partner whose runner was started (runner.pid is there) when the engine died, before the task recorded that.
+  record("was-first", { phase: "done", finishedAt: 5_000 })
+  record("was-launched", { after: "was-first", startedAt: 9_000 }, { after: "was-first" })
+  writeFileSync(join(runs, "was-launched", "runner.pid"), "")
+  writeFileSync(join(runs, "was-launched", "run.json"), JSON.stringify({ status: "done", score: 1 }))
+  await startTracker()
+  await until("both to finish", () => isSettled("no-task-yet") && isSettled("was-launched"))
+  assert.equal(run("no-task-yet").phase, "done")
+  assert.equal(typeof loadStored("no-task-yet")!.taskId, "number")
+  assert.equal(run("was-launched").phase, "done")
+  assert.equal(run("was-launched").startedAt, 9_000, "its clock was not started a second time")
+  assert.doesNotMatch(trackerLogOf("was-launched"), /is settled; starting/)
+  assert.match(trackerLogOf("was-launched"), /already started; not starting again/)
+})
+
+test("a cancel that was recorded but never carried out (the engine died) is carried out after the restart", async () => {
+  const sent = await start({ solver: "glhf" }, 60_000)
+  const id = sent.body.id as string
+  await until("the run to be going", () => run(id).phase === "running" && existsSync(join(runs, id, "child.pid")))
+  const runner = pidIn(id, "runner.pid")
+  await stopTracker()
+  patchRun(id, { phase: "cancelled", detail: "cancelled; stopping the runner", finishedAt: Date.now() })
+  assert.ok(groupLeft(runner))
+  await startTracker()
+  await until("the watcher to stop the runner of the cancelled run", () => !groupLeft(runner), 5_000)
+  await until("the record to say so", () => STOPPED.test(run(id).detail ?? ""))
+  assert.equal(run(id).phase, "cancelled")
+})
+
+test("cancel ends the tracking task at once, not at its next poll", async () => {
+  process.env.GLHF_LOCAL_POLL_MS = "60000"
+  try {
+    const sent = await start({ solver: "glhf" }, 60_000)
+    const id = sent.body.id as string
+    await until("the runner to be launched", () => existsSync(join(runs, id, "runner.pid")) && alive(pidOf(id, "runner.pid")))
+    await sleep(150) // its watcher has looked once and now sleeps for a minute
+    assert.equal((await cancel(id)).body.phase, "cancelled")
+    assert.match(trackerLogOf(id), /tracking ended: the run was cancelled/)
+  } finally { process.env.GLHF_LOCAL_POLL_MS = "40" }
+})
+
+test("one local run at a time is about local runs: a cloud run starts while a local run is going", async () => {
+  const local = await start({ solver: "glhf" }, 60_000)
+  await until("the local run to be going", () => run(local.body.id).phase === "running")
+  // `bixbench3` is a stub that fails at once (GLHF_BIXBENCH3_CMD): nothing is provisioned.
+  const cloud = await call("POST", "/api/glhf/runs", { mode: "cloud", solver: "glhf", model: "stub/model", task: "9", effort: "high", project: "stub-project" }, null, sessionToken())
+  assert.equal(cloud.status, 201, JSON.stringify(cloud.body))
+  assert.equal((await start({ solver: "single" }, 50)).status, 409, "a local one is still refused")
+  await until("the cloud launch to fail", () => isSettled(cloud.body.id))
+  assert.match(run(cloud.body.id).error ?? "", /^bixbench3 run exited with status 3\nbixbench3 stub: refusing to launch/)
+  assert.equal(run(local.body.id).phase, "running")
+  await cancel(local.body.id)
 })

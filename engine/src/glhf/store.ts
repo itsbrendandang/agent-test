@@ -64,15 +64,16 @@ export function saveStored(stored: Stored) {
 /**
  * Change the public record. Returns the new record, or undefined when the run is unknown. A cancelled run stays
  * cancelled: a phase that was half-way through when the cancel arrived cannot write "running" or "failed" over it.
+ * The file is rewritten only when the record changed.
  */
 export function patchRun(id: string, patch: Partial<GlhfRun>, log?: string): GlhfRun | undefined {
   const stored = loadStored(id)
   if (!stored) return undefined
   if (stored.run.phase === "cancelled" && patch.phase !== "cancelled") return stored.run
-  const before = stored.run.phase
+  const before = stored.run.phase, was = JSON.stringify(stored.run)
   stored.run = { ...stored.run, ...patch }
   for (const key of Object.keys(stored.run) as (keyof GlhfRun)[]) if (stored.run[key] === undefined) delete stored.run[key]
-  saveStored(stored)
+  if (JSON.stringify(stored.run) !== was) saveStored(stored) // a poll that found nothing new writes nothing
   if (log || before !== stored.run.phase) trackerLog(id, log ?? `${before} -> ${stored.run.phase}`)
   return stored.run
 }

@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Drug Board",
+  "mainBinaryName": "drug-board",
   "version": "0.1.0",
   "identifier": "com.brendandang.drugboard",
   "build": {
@@ -10,8 +11,10 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "Drug Board",
         "width": 1440,
         "height": 900,
@@ -19,14 +22,37 @@
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
-        "center": true,
-        "label": "main"
+        "center": true
       }
     ],
     "security": {
-      "csp": null
-    },
-    "macOSPrivateApi": true
+      "capabilities": ["default"],
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:8787 http://localhost:8787",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost ws://127.0.0.1:5317 http://127.0.0.1:8787 http://localhost:8787",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      },
+      "dangerousDisableAssetCspModification": ["style-src"]
+    }
   },
   "bundle": {
     "active": true,
@@ -37,9 +63,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "android": {
-      "debugApplicationIdSuffix": ".debug"
-    }
+    ]
   }
 }

@@ -7,7 +7,12 @@
 name: glhf
 services:
   engine:
-    build: .
+    build:
+      context: .
+      args:
+        # The dashboard calls the engine at this address, fixed at build time. It follows GLHF_ENGINE_PORT,
+        # so after a port change run `docker compose up --build` once.
+        VITE_ENGINE_URL: http://localhost:${GLHF_ENGINE_PORT:-8787}
     image: glhf-platform
     # A small init process is pid 1 and the engine its child: signals from `docker compose down` reach the
     # engine (which then releases its run locks), and processes it leaves behind are cleaned up.
@@ -31,12 +36,15 @@ services:
       - bixbench_venv:${PWD}/glhf/bixbench/.venv
       # Required: the engine starts the agents' sandbox containers through the host's Docker. This gives
       # the engine container control of the host's Docker (root-equivalent), so run only code you trust
-      # in it and never publish the engine port beyond 127.0.0.1.
+      # in it and never publish the engine port beyond 127.0.0.1. The engine runs as root for this reason:
+      # the socket belongs to root, and whoever can use it is root-equivalent with or without the name.
       - /var/run/docker.sock:/var/run/docker.sock
   dashboard:
     image: glhf-platform
     depends_on: [engine]
     init: true
+    # Serves static files only: no root, no Docker socket, no repo mount.
+    user: node
     entrypoint: []
     command: ["node", "/srv/serve.mjs"]
     ports:

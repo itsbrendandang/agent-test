@@ -16,7 +16,7 @@ import pytest
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import ModelOutput, ModelUsage
 
-from bixbench3.glhf_local import _call, _done, _write, run_local
+from bixbench3.glhf_local import MOCK, _call, _done, _write, run_local
 
 DEMO_CASE = Path(__file__).parents[3] / "demo_case"
 
@@ -98,18 +98,32 @@ def _busy(tokens: int) -> ModelOutput:
     return _spend(_call("python", code="print('working')"), tokens)
 
 
+def _note(text: str, tokens: int) -> ModelOutput:
+    """The scripted forced final turn of a role that was cut off: plain text, no tool call."""
+    return _spend(ModelOutput.from_content(MOCK, text), tokens)
+
+
 def test_swarm_token_budget_skips_phases_and_still_reports(tmp_path: Path) -> None:
     methods = _write("/outputs/METHODS.md", "# Methods\n\nBudget ran out before any artifact.\n")
     outputs = [
-        _spend(_done("inputs listed"), 1000),  # scout: over its 5% share after one call
-        _spend(_done("planned"), 1000),  # proposer: over its 8% share
-        _spend(_done("pilot done"), 1000),  # pilot: within its 15% share, completes
-        *[_busy(1000) for _ in range(7)],  # experimenter: spends the rest, is cut off
-        _spend(methods, 400),  # reporter: runs on the 10% reserve
+        _spend(_done("inputs listed"), 60_000),  # scout: over its 5% target after one call
+        _note("DONE: inputs listed in data_report.md.\nNEXT: plan the run.", 1000),  # hand-off
+        _spend(_done("planned"), 80_000),  # proposer: over its target too
+        _spend(_call("python", code="print('more')"), 500),  # its final turn gives no note
+        _spend(_done("pilot done"), 1000),  # pilot: within its target, completes
+        _busy(300_000),  # experimenter: one huge call takes it far past its limit
+        _busy(440_000),
+        _note("DONE: nothing.\nMISSING: every artifact.", 1000),
+        _spend(methods, 400),  # reporter: runs on its reserve
         _spend(_done("reported"), 400),
     ]
     summary = run_local(
-        DEMO_CASE, tmp_path, solver="glhf", model="mock", max_tokens=10_000, mock_outputs=outputs
+        DEMO_CASE,
+        tmp_path,
+        solver="glhf",
+        model="mock",
+        max_tokens=1_000_000,
+        mock_outputs=outputs,
     )
     assert summary["status"] == "done", summary["error"]
     ledger = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())
@@ -124,32 +138,63 @@ def test_swarm_token_budget_skips_phases_and_still_reports(tmp_path: Path) -> No
         "experiment": "token",
         "report": None,
     }
+    # Each limit is the phase's allowance minus 3,000 kept for its forced final turn. The
+    # proposer and the pilot also got what the phase before them was allowed and did not need;
+    # the experimenter could not touch the floors of the review nor the three reserves.
     allowed = {e["phase"]: e["tokens_allowed"] for e in events if e["kind"] == "phase.started"}
     assert allowed == {
-        "scout": 500,
-        "propose": 800,
-        "pilot": 1500,
-        "experiment": 6000,
-        "report": 1000,
+        "scout": 47_000,
+        "propose": 66_000,
+        "pilot": 135_500,
+        "experiment": 484_500,
+        "report": 97_000,
     }
+    # The experimenter passed its allowance by 253,500 tokens in one call. The overshoot and
+    # finish reserves paid 90,000 of it; the rest came out of the review, which then had less
+    # than its floors and was not started. The report's reserve was never lent.
     skipped = [(e["phase"], e["reason"]) for e in events if e["kind"] == "phase.skipped"]
-    assert skipped == [("audit 1", "tokens"), ("critique 1", "tokens"), ("finish", "tokens")]
+    assert skipped == [
+        ("audit 1", "below_floor"),
+        ("critique 1", "below_floor"),
+        ("finish", "below_floor"),
+    ]
+    borrowed = {e["phase"]: e["from_reserves"] for e in events if e["kind"] == "budget.borrowed"}
+    assert borrowed == {
+        "scout": {"overshoot": 11_000},
+        "propose": {"overshoot": 11_500},
+        "experiment": {"overshoot": 50_000, "finish": 40_000},
+    }
+    exhausted = [e for e in events if e["kind"] == "budget.reserves_exhausted"]
+    assert [(e["phase"], e["not_covered"]) for e in exhausted] == [("experiment", 163_500)]
+    assert not any(e["kind"] == "budget.overdrawn" for e in events)
     # No review ran, so the ledger must not claim that the review converged.
     assert not any(e["kind"] == "review.converged" for e in events)
     assert [e["reason"] for e in events if e["kind"] == "review.incomplete"] == [
         "critic did not run (no budget left)"
     ]
     assert (tmp_path / "outputs" / "METHODS.md").exists()  # the run still ends documented
+    assert "Budget ran out" in (tmp_path / "outputs" / "METHODS.md").read_text()
     assert summary["score"] == 0.0
+    # Even after that overshoot the whole run stayed inside max_tokens.
+    finished = events[-1]
+    assert finished["kind"] == "finished" and finished["tokens"] == 884_300 <= 1_000_000
+    assert finished["within_max_tokens"] is True
     settings = summary["settings"]
     assert (
-        settings["max_tokens"] == 10_000 and "reporter always runs" in settings["token_semantics"]
+        settings["max_tokens"] == 1_000_000
+        and "reporter always runs" in settings["token_semantics"]
     )
     # Each role was told its own slice, not the whole run's limit.
     log = read_eval_log(str(next((tmp_path / "logs").glob("*.eval"))))
     assert log.samples is not None
     transcript = "\n".join(str(m.content) for m in log.samples[0].messages)
-    assert "Your budget for this phase" in transcript and "500 tokens" in transcript
+    assert "Your budget for this phase" in transcript and "47,000 tokens" in transcript
+    # Every role that was cut off left a hand-off: the model's note, or facts written by code.
+    forced = [(e["phase"], e["source"]) for e in events if e["kind"] == "handoff.forced"]
+    assert forced == [("scout", "model"), ("propose", "code"), ("experiment", "model")]
+    assert "DONE: inputs listed in data_report.md." in transcript
+    read = [(e["phase"], e["of"]) for e in events if e["kind"] == "handoff.read"]
+    assert read == [("propose", "scout"), ("pilot", "propose"), ("report", "experiment")]
 
 
 def test_a_critic_cut_off_with_nothing_raised_is_not_convergence(tmp_path: Path) -> None:
@@ -160,8 +205,9 @@ def test_a_critic_cut_off_with_nothing_raised_is_not_convergence(tmp_path: Path)
         _spend(_done("pilot done"), 100),  # pilot
         _spend(_done("first pass"), 100),  # experimenter
         _spend(_done("no deviations"), 100),  # auditor, round 1
-        _busy(1500),  # critic, round 1: cut off by its 20% token share, nothing raised
-        _busy(1500),
+        _busy(100_000),  # critic, round 1: cut off by its 20% token share, nothing raised
+        _busy(100_000),
+        _note("DONE: contract checked.\nMISSING: no test was registered yet.", 1000),
         _spend(_done("no deviations"), 100),  # auditor, round 2
         _spend(_done("no issues"), 100),  # critic, round 2: completes
         _spend(_done("nothing to rescue from"), 100),  # finisher (the artifacts are missing)
@@ -169,7 +215,12 @@ def test_a_critic_cut_off_with_nothing_raised_is_not_convergence(tmp_path: Path)
         _spend(_done("reported"), 100),
     ]
     summary = run_local(
-        DEMO_CASE, tmp_path, solver="glhf", model="mock", max_tokens=10_000, mock_outputs=outputs
+        DEMO_CASE,
+        tmp_path,
+        solver="glhf",
+        model="mock",
+        max_tokens=1_000_000,
+        mock_outputs=outputs,
     )
     assert summary["status"] == "done", summary["error"]
     events = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())["events"]
@@ -184,6 +235,9 @@ def test_a_critic_cut_off_with_nothing_raised_is_not_convergence(tmp_path: Path)
     ]
     started = [e["phase"] for e in events if e["kind"] == "phase.started"]
     assert started[4:8] == ["audit 1", "critique 1", "audit 2", "critique 2"]
+    # The critic's hand-off goes to the role after it and to the critic itself in round 2.
+    read = [(e["phase"], e["of"], e["note"]) for e in events if e["kind"] == "handoff.read"]
+    assert read == [("audit 2", "critique 1", True), ("critique 2", "critique 1", True)]
 
 
 def test_single_agent_token_budget_keeps_a_reserve_for_methods(tmp_path: Path) -> None:

@@ -257,3 +257,53 @@ def with_memory(lessons: str) -> str:
         "\n\n---\nLessons from earlier runs (process notes written by past teams; they may be "
         "wrong or not apply here, so check before relying on them):\n" + lessons.strip()
     )
+
+
+HANDOFF = """
+You are one role in GLHF, a team of AI scientists. Your budget for this phase is used up and you
+were cut off. This is your one final turn. You have no tools. Do not continue the work and do
+not invent results: report only what the log below shows. Write a hand-off note for the role
+that works after you, in plain text, at most 200 words, with these four headings:
+DONE: what exists now, with file paths.
+RUNNING: jobs still running in the background, with their log files (or "nothing").
+MISSING: what you did not finish, most important first.
+NEXT: the one step the next role should take first.
+""".strip()
+
+
+def handoff_request(phase: str, limit: str, log: str) -> str:
+    """The user message of the forced final turn: the end of the role's own log."""
+    return (
+        f'You were the "{phase}" role and you were stopped by the {limit} limit.\n'
+        f"The end of your log (older steps are cut):\n\n{log}\n\nWrite the hand-off note now."
+    )
+
+
+def with_handoff(phase: str, limit: str, path: str, facts: str, note: str | None) -> str:
+    """Block appended to the next role's task after a role was cut off. `note` is the cut-off
+    role's own words; it is left out (None) when the reader must stay independent of them."""
+    block = (
+        f'\n\n---\nThe "{phase}" role before you was stopped by its {limit} limit, so its work '
+        f"may be unfinished. Facts recorded by code:\n{facts.strip()}\n"
+    )
+    if note is None:
+        return block + (
+            f"Its own hand-off note is in {path}. It is an unchecked statement by the role you "
+            "review: check the files, do not take the note's word for anything."
+        )
+    return block + (
+        f"Its hand-off note (also in {path}; written in one short turn, so check it against the "
+        f"files before relying on it):\n{note.strip()}"
+    )
+
+
+def degraded(mode: str, skipped: list[str], reason: str) -> str:
+    """Block appended to every role's task when the budget could not cover the full plan."""
+    return (
+        f"\n\n---\nReduced plan ({mode}): {reason} These phases do not run: "
+        f"{', '.join(skipped)}. Their files (for a skipped scout: data_report.md and "
+        "sample_sheet.tsv; proposer: plan.md and the claims; pilot: pilot_report.md and tested "
+        "scripts; auditor: adherence.md) may not exist. Do not wait for them and do not look for "
+        "them twice: do the smallest part of that work your own task needs, and say in "
+        "/workspace/work/glhf/deviations.md which phases were skipped for budget."
+    )
