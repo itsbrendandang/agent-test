@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 
+from ... import paid
 from .memory import lesson_rejection
 
 API = "https://api.past.dev/api/v1"
@@ -32,7 +33,8 @@ RECALL_QUERY = (
 
 
 def enabled() -> bool:
-    return bool(os.environ.get(KEY_ENV))
+    """False while paid calls are off (NO_PAID_CALLS): the local lessons file is used instead."""
+    return bool(os.environ.get(KEY_ENV)) and not paid.paid_calls_off()
 
 
 def _headers() -> dict[str, str]:
@@ -51,6 +53,7 @@ async def remember(task_id: str, lessons: str, context: Sequence[str] = ()) -> s
 
     `context` (tasks whose lessons the writing run had read) goes in the label, so recall can
     keep these lessons away from those tasks too."""
+    paid.refuse_paid("sending lessons to past.dev")
     now = datetime.now(UTC)
     label = f"GLHF swarm lessons, task {task_id}"
     if context:
@@ -96,6 +99,7 @@ async def recall_with_sources(
 ) -> tuple[str, set[str]]:
     """Lessons from runs on other tasks, as past.dev returns them, filtered, and the tasks they
     came from. Empty if none."""
+    paid.refuse_paid("recalling lessons from past.dev")
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
             f"{API}/recall",

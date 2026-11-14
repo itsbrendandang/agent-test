@@ -13,6 +13,7 @@ import httpx
 from inspect_ai.tool import Tool, ToolError, tool
 from inspect_ai.util import sandbox
 
+from ... import paid
 from ...network_gateway.policy import (
     RESTRICTED_DOMAIN_SCOPES,
     domain_matches,
@@ -535,6 +536,8 @@ def search_docs(
                 reverse-stranded paired-end -s 2 -p option".
             objective: OBJECTIVE_PLACEHOLDER
         """
+        if paid.paid_calls_off():  # NO_PAID_CALLS: before the key, the ledger or the network
+            raise ToolError(f"search is not available: {paid.HOW_TO_ALLOW}")
         key = os.environ.get("EXA_API_KEY")
         if not key:
             raise ToolError("search is not available: EXA_API_KEY is not set on the runner")

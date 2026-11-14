@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from . import paid
 from .config import JsonValue, ResolvedModel, provider_env_for, resolve_model
 from .gcp_runner import (
     GCPRunner,
@@ -125,6 +126,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     arguments = parser.parse_args(argv)
     try:
+        # NO_PAID_CALLS (paid.py): blank keys, and no cloud launch. A --dry-run starts nothing.
+        launch = arguments.command in ("run", "setup-runtime") and not arguments.dry_run
+        if paid.enforce() and launch:
+            paid.refuse_paid(f"bixbench3 {arguments.command} (a cloud launch on a billed VM)")
         if arguments.command == "setup-runtime":
             return _setup_runtime(arguments)
         if arguments.command == "run":

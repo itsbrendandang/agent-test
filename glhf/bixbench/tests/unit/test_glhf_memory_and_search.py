@@ -15,6 +15,13 @@ from bixbench3.inspect_harness.swarm.ledger import Ledger
 from bixbench3.network_gateway.policy import RESTRICTED_DOMAIN_SCOPES
 
 
+@pytest.fixture(autouse=True)
+def _paid_calls_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about what happens when paid calls are allowed. They make none: every
+    HTTP call is a fake. What the NO_PAID_CALLS switch refuses is tested in test_paid.py."""
+    monkeypatch.setenv("NO_PAID_CALLS", "0")
+
+
 def _approve_all(folder: str | Path) -> None:
     _, refused = memory.decide(folder, None, approve=True)
     assert refused == []

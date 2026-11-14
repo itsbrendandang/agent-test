@@ -21,8 +21,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import paid, staging
 from . import report as reporting
-from . import staging
 from .dataset import (
     ANSWER_MODES,
     QUESTION_FILE,
@@ -131,6 +131,7 @@ def _judge(arguments: argparse.Namespace) -> InspectJudge | None:
     # A scripted run makes no paid call unless a judge is named explicitly.
     if arguments.no_judge or (arguments.model == "mock" and arguments.judge_model == DEFAULT_JUDGE):
         return None
+    paid.refuse_judge(arguments.judge_model)  # NO_PAID_CALLS
     return InspectJudge(arguments.judge_model, arguments.judge_temperature)
 
 
@@ -162,6 +163,7 @@ def cmd_run(arguments: argparse.Namespace) -> int:
         if not sep or role not in ("analyst", "critic", "reconciler"):
             sys.exit(f"--role-model expects ROLE=MODEL (analyst, critic, reconciler); got {item!r}")
         role_models[role] = name
+    paid.refuse_models(arguments.model, *role_models.values())  # NO_PAID_CALLS
     out: Path = arguments.out
     out.mkdir(parents=True, exist_ok=True)
     budget_file = out / "budget.json"
@@ -268,6 +270,8 @@ def cmd_run(arguments: argparse.Namespace) -> int:
 def cmd_grade(arguments: argparse.Namespace) -> int:
     load_env(REPO / ".env")
     by_key = {c.key: c for c in _capsules(arguments)}
+    if not arguments.no_judge:
+        paid.refuse_judge(arguments.judge_model)  # NO_PAID_CALLS
     judge = (
         None
         if arguments.no_judge
@@ -371,7 +375,11 @@ def main() -> int:
     sub.set_defaults(run=cmd_report)
 
     arguments = parser.parse_args()
-    return int(arguments.run(arguments))
+    paid.enforce()  # NO_PAID_CALLS: blank the provider keys before .env is loaded
+    try:
+        return int(arguments.run(arguments))
+    except paid.PaidCallsOff as error:
+        sys.exit(f"bixbench-v1: {error}")
 
 
 if __name__ == "__main__":

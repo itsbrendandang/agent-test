@@ -348,9 +348,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     count = sum(len(s.lines) for s in approved)
     print(f"{'approved' if approve else 'rejected'} {count if approve else 'the chosen'} lesson(s)")
     if approved and not args.no_past:
+        from ... import paid
         from . import past_memory  # late import: past_memory imports this module
 
-        if past_memory.enabled():
+        if paid.paid_calls_off():  # NO_PAID_CALLS: the approved file is kept, nothing is sent
+            print(f"past.dev: nothing sent. {paid.HOW_TO_ALLOW}", file=sys.stderr)
+        elif past_memory.enabled():
             for section in approved:
                 try:
                     receipt = asyncio.run(

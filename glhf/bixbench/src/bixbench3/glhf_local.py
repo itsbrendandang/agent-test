@@ -25,6 +25,7 @@ from typing import Any
 from inspect_ai import eval as inspect_eval
 from inspect_ai.model import Model, ModelOutput, get_model
 
+from bixbench3 import paid
 from bixbench3.grading.grader import grade
 from bixbench3.inspect_harness.models import RuntimeCase
 from bixbench3.inspect_harness.swarm.baseline import TOKEN_SEMANTICS
@@ -206,6 +207,8 @@ def run_local(
     mock_outputs: list[ModelOutput] | None = None,
 ) -> dict[str, Any]:
     """`mock_outputs` replaces the fixed script of `--model mock` (tests only)."""
+    # NO_PAID_CALLS (paid.py): before anything is created or started.
+    paid.refuse_run(model, (role_models or {}).values(), exa=exa)
     case_dir, out_dir = case_dir.resolve(), out_dir.resolve()
     case = load_case(case_dir)
     workspace, outputs, data = out_dir / "workspace", out_dir / "outputs", case_dir / "data"
@@ -367,6 +370,10 @@ def main() -> int:
         if not sep or role not in ROLES:
             parser.error(f"--role-model expects ROLE=MODEL with ROLE in {ROLES}; got {item!r}")
         role_models[role] = name
+    try:  # NO_PAID_CALLS (paid.py): a refusal is one line, not a traceback
+        paid.refuse_run(arguments.model, role_models.values(), exa=arguments.exa)
+    except paid.PaidCallsOff as error:
+        parser.error(str(error))
     summary = run_local(
         arguments.case,
         arguments.out,
