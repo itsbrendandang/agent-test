@@ -766,3 +766,23 @@ td { border-bottom: 1px solid var(--line); }
 .page .engine-offline h2 { font-size: 16px; font-weight: 650; text-transform: none; letter-spacing: 0; color: var(--text); }
 .pill[data-kind="neutral"] { background: #e9e6dd; color: #55504a; }
 .pill[data-kind="waiting"] { background: transparent; color: var(--text-muted); border: 1px dashed #b9b2a0 !important; }
+
+/* shell footer: the paid-calls indicator is on screen in every view */
+.app { grid-template-rows: minmax(0, 1fr) auto; row-gap: 6px; padding-bottom: 8px; }
+.rail { grid-row: 1 / -1; }
+.shell-foot { grid-column: 2 / -1; grid-row: 2; display: flex; justify-content: flex-end; min-height: 24px; }
+.paid-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--edge); border-radius: 999px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.paid-indicator span { width: 7px; height: 7px; border-radius: 50%; background: #9a958a; }
+.paid-indicator[data-state="on"] { background: #ffe3bd; color: #7a4300; border-color: #e6b877; font-weight: 600; }
+.paid-indicator[data-state="on"] span { background: #c96f00; }
+.paid-indicator[data-state="unknown"] { border-style: dashed; }
+.paid-indicator[data-state="unknown"] span { background: transparent; border: 1px solid #9a958a; }
+.paid-indicator:hover { color: var(--ink); }
+.paid-indicator:focus-visible { outline: 2px solid #3f7cc4; outline-offset: 2px; }
+@media (max-width: 1000px) {
+  .app { grid-template-rows: none; }
+  .rail { grid-row: auto; }
+  .shell-foot { grid-column: 1; grid-row: auto; }
+}
+.engine-how { grid-column: 1 / -1; max-width: 80ch; }
+.board-scripted { max-width: 70ch; }

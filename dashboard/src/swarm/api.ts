@@ -35,8 +35,10 @@ export interface GlhfStatus {
   project: string | null
   /** What a request may ask for. timeLimit is in seconds. Absent on an older engine; the engine checks in any case. */
   limits?: { timeLimit: Range; maxTokens: Range; reviewRounds: Range; maxMessagesPerRole: Range; seed?: Range }
-  /** Models the form offers: "mock" first, then the models whose key is set. */
+  /** Models the form offers: "mock" first, then the models whose key is set. Only "mock" while paid calls are off. */
   models?: string[]
+  /** false while the engine's NO_PAID_CALLS switch is on (its default): real models, Exa and cloud runs are refused. Absent on an older engine. */
+  paidCalls?: boolean
 }
 
 // Mirrors engine/src/glhf/scoreboard.ts, which does the pairing (GET /api/glhf/scoreboard).

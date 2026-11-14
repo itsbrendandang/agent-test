@@ -88,6 +88,14 @@ export function BoardView() {
     if (m.role === "lead") return "alert"
     return current?.replies.some((r) => r.member === m.name) ? "happy" : "working"
   }
+  const scriptedWhy = status?.paidCalls === false ? "Paid calls are off, so the board runs with scripted models."
+    : "The engine has no OPENROUTER_API_KEY, so the board runs with scripted models."
+  const resume = async () => {
+    if (!runId) return
+    setError("")
+    try { await post(`/api/runs/${encodeURIComponent(runId)}/resume`); await refresh() }
+    catch (e) { setError(`This review was not resumed: ${e instanceof Error ? e.message : String(e)}`) }
+  }
   const memo = sections(memoText)
   const maxRounds = status?.meeting.max_rounds ?? 4
 
@@ -113,7 +121,7 @@ export function BoardView() {
   return (
     <div className="page board">
       <PageHead title="Drug Candidate Board" about={ABOUT}>
-        {status?.mock && <span className="pill" data-kind="warning" title="The engine has no OPENROUTER_API_KEY, so the board uses scripted models.">Demo mode</span>}
+        {status?.mock && <span className="pill" data-kind="warning" title={scriptedWhy}>Scripted models</span>}
       </PageHead>
       <div className="board-banner card-surface">
         <h2 id="board-run-label">Review</h2>
@@ -123,6 +131,7 @@ export function BoardView() {
           {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {runState(r.status)}</option>)}
         </select>
         {runId && (known || events.length > 0) && <StatusPill state={failed ? "failed" : runState(runs.find((r) => r.id === runId)?.status ?? (done ? "done" : "running"))} />}
+        {runs.find((r) => r.id === runId)?.status === "paused" && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
         <span className="board-new">
         <select aria-label="Brief for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
           {briefs.map((b) => <option key={b} value={b}>{b.replace(/\.md$/, "").replace(/-/g, " ")}</option>)}
@@ -141,6 +150,7 @@ export function BoardView() {
           {roster.map((m) => <span key={m.name} title={m.title}><Buddy seed={m.name} mood={mood(m)} size={m.role === "lead" ? 44 : 34} /></span>)}
         </div>
         <p className="headline" role="status">{headline}</p>
+        {status?.mock && <p className="muted small board-scripted">{scriptedWhy} Replies are fixed text, not real analysis, and cost nothing.</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
       </section>
@@ -172,9 +182,6 @@ export function BoardView() {
         <div className="board-grid">
           <section className="card-surface" aria-label="Roster">
             <h2>Board</h2>
-            {runs.find((r) => r.id === runId)?.status === "paused" && (
-              <button type="button" onClick={() => runId && post(`/api/runs/${runId}/resume`).then(refresh)}>Resume run</button>
-            )}
             {roster.map((m) => (
               <div key={m.name} className="member" title={m.deliverable}>
                 <Buddy seed={m.name} mood={mood(m)} size={40} />

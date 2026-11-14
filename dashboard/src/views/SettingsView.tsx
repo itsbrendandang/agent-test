@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead } from "@/components/Shared"
+import { HOW_TO_TURN_ON, PAID_LABEL, paidState, type PaidState } from "@/lib/paid"
 import { call, isDesktop } from "@/system/desktop"
 
 const PROVIDERS = [
@@ -91,7 +92,7 @@ export function SettingsView() {
   )
 }
 
-interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean> }
+interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean>; paid: PaidState }
 
 // Read-only: which tools and keys the engine found. Key values never leave the engine; it reports set or not set.
 function EngineSection() {
@@ -101,7 +102,7 @@ function EngineSection() {
     let stale = false
     const read = (path: string) => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     Promise.all([read("/api/glhf/status"), read("/api/status")])
-      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys } }) })
+      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys }, paid: paidState(swarm) }) })
       .catch(() => { if (!stale) setFacts(null) })
     return () => { stale = true }
   }, [retry])
@@ -116,6 +117,15 @@ function EngineSection() {
       {facts === null && <EngineOffline needs="Tools and keys cannot be checked." onRetry={() => { setFacts(undefined); setRetry((n) => n + 1) }} />}
       {facts && (
         <ul className="engine-facts">
+          <li>
+            <div className="keys-name"><strong>Paid calls</strong></div>
+            <span className="pill" data-kind={facts.paid === "off" ? "neutral" : facts.paid === "on" ? "warning" : "waiting"}>{PAID_LABEL[facts.paid]}</span>
+            <p className="engine-how muted small">
+              {facts.paid === "off" && "Real models, Exa search and cloud runs are refused. Scripted (mock) runs work and cost nothing. "}
+              {facts.paid === "on" && "Runs with real models, Exa search and Ask can spend API credits. To turn paid calls off, remove NO_PAID_CALLS=0 from .env and restart the engine. "}
+              {facts.paid !== "on" && HOW_TO_TURN_ON}
+            </p>
+          </li>
           {Object.entries(facts.tools).map(([name, on]) => row(name, on, "found", "not found"))}
           {Object.entries(facts.keys).sort(([a], [b]) => a.localeCompare(b)).map(([name, on]) => row(name, on, "set", "not set"))}
         </ul>

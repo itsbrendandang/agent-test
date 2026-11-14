@@ -10,7 +10,9 @@ import {
   FlaskConical, Microscope, Search, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
 } from "lucide-react"
 import { Buddy, Mark } from "./components/Buddy"
+import { PaidIndicator } from "./components/Shared"
 import { fmtMetric as fmt } from "./lib/format"
+import { usePaidCalls } from "./lib/paid"
 import { ParamPanel } from "./components/ParamPanel"
 import { SideCrew } from "./components/SideCrew"
 import { SimCard } from "./components/SimCard"
@@ -64,6 +66,7 @@ export default function App() {
   const [tab, setTab] = useState("copilot")
   const [parade, setParade] = useState(0)
   const logoClicks = useRef(0)
+  const paid = usePaidCalls()
   const [view, setView] = useState(() => viewFromHash() ?? "Swarm")
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {
@@ -287,6 +290,7 @@ export default function App() {
       {!["Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Experiments", "Settings"].includes(view) && (
         <PlaceholderView title={view} hint={rail.find((r) => r.label === view)!.hint} />
       )}
+      <footer className="shell-foot"><PaidIndicator state={paid} onOpen={() => go("Settings")} /></footer>
     </div>
     </Suspense>
   )

@@ -3,6 +3,7 @@ import { ENGINE } from "@/board/api"
 import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
 import { runState } from "@/lib/status"
 import { fmtScore } from "@/lib/format"
+import { usePaidCalls } from "@/lib/paid"
 
 interface Hit {
   kind: "swarm" | "board"; id: string; title: string; status: string; startedAt: number; score?: number
@@ -37,6 +38,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
   const [kind, setKind] = useState<Kind>("all")
   const [hits, setHits] = useState<Hit[]>()
   const [error, setError] = useState(false)
+  const paid = usePaidCalls()
   const [retry, setRetry] = useState(0)
 
   useEffect(() => {
@@ -106,7 +108,9 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
           {(asked.state === "done" || asked.state === "error") && <button type="button" className="link-btn" onClick={clearAsked}>Clear</button>}
         </form>
         <p id="experiment-ask-help" className="muted small" hidden={asked.state !== "idle"}>
-          A model reads a summary of {scope || "every run"} and answers from it, naming the runs it used. Open a run to check the answer. Press Enter to ask.
+          {paid === "off"
+            ? <>Paid calls are off, so no model is asked: Ask does a keyword search over {scope || "every run"} and says so. Press Enter to ask.</>
+            : <>A model reads a summary of {scope || "every run"} and answers from it, naming the runs it used. Open a run to check the answer. Press Enter to ask.</>}
         </p>
         <div className="exp-answer" aria-live="polite" aria-busy={asked.state === "loading"}>
           {asked.state === "loading" && <p className="muted small exp-loading"><span className="exp-spinner" aria-hidden="true" />Reading {scope || "the runs"} to answer “{asked.question}”. This can take up to a minute.</p>}

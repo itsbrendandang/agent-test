@@ -9,7 +9,8 @@ export interface RosterMember {
   name: string; title: string; role: "lead" | "member"; model: string; modelId: string; tools: string[]; deliverable?: string
 }
 export interface RunSummary { id: string; brief: string; rounds: number; startedAt: number; status: "done" | "running" | "paused"; claims: number }
-export interface Status { mock: boolean; keys: Record<string, boolean>; meeting: { max_minutes: number; max_usd: number; max_rounds: number } }
+/** `paidCalls` false: the engine's NO_PAID_CALLS switch is on, so the board runs with scripted models only. */
+export interface Status { mock: boolean; paidCalls?: boolean; keys: Record<string, boolean>; meeting: { max_minutes: number; max_usd: number; max_rounds: number } }
 
 // Mirrors engine/src/events.ts
 export type BoardEvent = { key: string; at: number } & (
