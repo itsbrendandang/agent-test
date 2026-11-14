@@ -192,7 +192,7 @@ async function main(): Promise<number> {
       const id = f.positional[0]
       if (!id) { console.error("cancel <run id>"); return 1 }
       if (await serverUp()) {
-        const res = await fetch(`${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+        const res = await fetch(`${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: { "content-type": "application/json", "x-glhf-token": existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, "utf8") : "" }, body: "{}" })
         const body = (await res.json()) as Partial<GlhfRun> & { error?: string }
         if (!res.ok) { console.error(`could not cancel: ${body.error ?? res.status}`); return 1 }
         console.log(`${body.id}: ${body.phase}${body.detail ? ` (${body.detail})` : ""}`)
