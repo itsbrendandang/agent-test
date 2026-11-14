@@ -52,7 +52,7 @@ documents are in `docs/`.
   or acts outside the process (a model, a checker, Exa, a subprocess, a cloud launch) must be
   stored under a stable key before the run can rely on it, and skipped on replay when that key
   exists. The pattern is in `checkClaims` in `engine/src/board.ts` (key: round, member, hash of
-  the claim) and `startOnce` in `engine/src/glhf/tracker.ts`. Do not add a paid call without
+  the claim) and `startOnce` in `engine/src/glhf/task.ts`. Do not add a paid call without
   one, and add a test that replays and counts the calls.
 - The engine's request checks (`engine/src/http.ts`, `checkRequest` in
   `engine/src/glhf/tracker.ts`) decide who may start a paid run. Do not loosen them.
