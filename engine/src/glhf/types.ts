@@ -86,6 +86,8 @@ export type StartBody = Partial<Omit<RunRequest, "after">> & { solvers?: Solver[
 /** A field of the New-run form that a refusal is about, so the form can show the message next to the right input. */
 export type Field = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver"
 
+export const MAX_SEED = 2 ** 31 - 1
+
 /**
  * What a request may ask for, as [smallest, largest]. The one place these numbers live: checkRequest enforces them
  * and GET /api/glhf/status publishes them, so the dashboard does not keep a copy.
@@ -95,8 +97,8 @@ export const LIMITS = {
   maxTokens: [1_000, 500_000_000],
   reviewRounds: [1, 10],
   maxMessagesPerRole: [2, 5_000],
+  seed: [1, MAX_SEED],
 } as const
-export const MAX_SEED = 2 ** 31 - 1
 
 /**
  * The models the New-run form offers, after "mock", and the key each needs. Any other model id can still be typed.

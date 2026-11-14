@@ -7,9 +7,9 @@ import { createModels } from "@earendil-works/pi-ai"
 import { createRegistry, defineExtension, Harness, type TaskId } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { alive, parseStamp, stamp } from "./proc.ts"
-import { DEMO_CASE, listStored, loadStored, newRunId, patchRun, publicRun, runDir, RUNS, saveStored, settingsOf, trackerLog } from "./store.ts"
-import { type RunInput, type RunResult, RunTask, stopAndWait } from "./task.ts"
-import { type Field, type GlhfRun, LIMITS, MAX_SEED, type RunRequest, settled, type Solver, type StartBody } from "./types.ts"
+import { DEMO_CASE, type Stored, listStored, loadStored, newRunId, patchRun, publicRun, runDir, RUNS, saveStored, settingsOf, trackerLog } from "./store.ts"
+import { cancelledWith, type RunInput, type RunResult, RunTask, stopAndWait } from "./task.ts"
+import { type Field, type GlhfRun, LIMITS, type RunRequest, settled, type Solver, type StartBody } from "./types.ts"
 
 const ctx = BACKGROUND_CONTEXT
 const LOCK = `${RUNS}/tracker.lock`
@@ -108,6 +108,8 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
     if ((body.task ?? "demo") !== "demo" && !body.caseDir) bad("local runs cover the demo case only; BixBench3 tasks need the cloud runner (mode cloud)")
   }
   if (body.model !== "mock" && !known) bad(`runs with a real model cost money, so they start from the dashboard or the CLI: ${cli}`, "model")
+  // A real model spends money until something stops it. The token budget is that stop. (The cloud runner has its own.)
+  if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad("maxTokens is required for a real model: it is the limit on what the run can spend", "maxTokens")
   if ((body.exa || body.memory) && !known) bad(`exa and memory are not open to unknown callers: ${cli}`, body.exa ? "exa" : "memory")
   const request: RunRequest = { mode: body.mode!, task: body.task ?? "demo", solver: body.solver!, model: body.model!, roleModels }
   if (body.effort) request.effort = String(body.effort).slice(0, 40)
@@ -120,7 +122,7 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   }
   if (body.timeLimit !== undefined && body.timeLimit !== null) request.timeLimit = whole("timeLimit (seconds)", "timeLimit", body.timeLimit, LIMITS.timeLimit)
   if (body.maxTokens !== undefined) request.maxTokens = whole("maxTokens", "maxTokens", body.maxTokens, LIMITS.maxTokens)
-  if (body.seed !== undefined) request.seed = whole("seed", "seed", body.seed, [1, MAX_SEED])
+  if (body.seed !== undefined) request.seed = whole("seed", "seed", body.seed, LIMITS.seed)
   if (body.maxMessagesPerRole !== undefined || body.exa || body.memory) {
     const first: Field = body.maxMessagesPerRole !== undefined ? "maxMessagesPerRole" : body.exa ? "exa" : "memory"
     if (body.solver !== "glhf") bad("maxMessagesPerRole, exa and memory need solver glhf", first)
@@ -172,7 +174,8 @@ export interface Tracker {
    */
   startChain(requests: RunRequest[]): Promise<GlhfRun[]>
   /**
-   * Stop a run and mark it cancelled. A run that is already settled is returned as it is. Throws NoSuchRun, or
+   * Stop a run and mark it cancelled, and with it the runs queued behind it (the partner of a pair), whose note
+   * says why. A run that is already settled is returned as it is, and nothing behind it is touched. Throws NoSuchRun, or
    * CannotCancel for a cloud run (its VM is removed with `bixbench3 cancel`, which only a local user may do).
    */
   cancel(id: string): Promise<GlhfRun>
@@ -242,6 +245,17 @@ export async function openTracker(): Promise<Tracker> {
     return all.map(({ run }) => run)
   }
 
+  const endTask = async (id: string) => {
+    // End the durable task now instead of at its next poll. If this fails the task still ends on its own:
+    // every phase first looks at the record.
+    const taskId = loadStored(id)?.taskId
+    if (taskId === undefined) return
+    try {
+      await harness.abortTask(taskId as unknown as TaskId<RunResult>, ctx)
+      await Promise.race([harness.waitForTask(taskId as unknown as TaskId<RunResult>, ctx), new Promise((ok) => setTimeout(ok, 5_000).unref())])
+    } catch (error) { trackerLog(id, `could not end the tracking task at once: ${String(error)}`) }
+  }
+
   return {
     start: async (request) => (await startChain([request]))[0],
     startChain,
@@ -255,20 +269,18 @@ export async function openTracker(): Promise<Tracker> {
       }
       // The record first: from here on no phase of its task starts, reads or overwrites anything (see patchRun).
       patchRun(id, { phase: "cancelled", detail: "cancelled; stopping the runner", finishedAt: Date.now() }, "cancel requested")
+      // The runs queued behind it, before anything that takes time: they must not see a settled run and start.
+      const behind: string[] = []
+      for (let last = id, next: Stored | undefined; (next = listStored().find((s) => s.run.after === last && !settled(s.run.phase))); last = next.run.id) {
+        patchRun(next.run.id, { phase: "cancelled", detail: "cancelled before the runner started", note: cancelledWith(last), finishedAt: Date.now() }, cancelledWith(last))
+        behind.push(next.run.id)
+      }
       const stopped = await stopAndWait(runDir(id), "runner")
       const detail = stopped === "stopped" ? "cancelled; the runner and what it started were stopped"
         : stopped === "none" ? "cancelled before the runner started, or after it had ended"
         : "cancelled, but the runner could not be stopped; check for a leftover process (runner.pid) or container"
       patchRun(id, { phase: "cancelled", detail }, detail)
-      // End the durable task now instead of at its next poll. If this fails the task still ends on its own:
-      // every phase first looks at the record.
-      const taskId = loadStored(id)?.taskId
-      if (taskId !== undefined) {
-        try {
-          await harness.abortTask(taskId as unknown as TaskId<RunResult>, ctx)
-          await Promise.race([harness.waitForTask(taskId as unknown as TaskId<RunResult>, ctx), new Promise((ok) => setTimeout(ok, 5_000).unref())])
-        } catch (error) { trackerLog(id, `could not end the tracking task at once: ${String(error)}`) }
-      }
+      for (const one of [id, ...behind]) await endTask(one)
       return publicRun(loadStored(id)!)
     },
     async wait(id) {

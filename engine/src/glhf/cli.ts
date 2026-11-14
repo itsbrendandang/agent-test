@@ -16,8 +16,8 @@ import { doctor, tools } from "./doctor.ts"
 import { TOKEN_FILE } from "./routes.ts"
 import { type Cell, scoreboard } from "./scoreboard.ts"
 import { listRuns, runDetail } from "./store.ts"
-import { BadRequest, CannotCancel, checkRequest, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
-import { type GlhfRun, RECORD, type RunRequest, settled as settledPhase } from "./types.ts"
+import { BadRequest, CannotCancel, checkStart, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
+import { type GlhfRun, RECORD, type RunRequest, settled as settledPhase, type Solver, type StartBody } from "./types.ts"
 
 const ENGINE = `http://127.0.0.1:${process.env.DRUG_BOARD_PORT ?? 8787}`
 const [command, ...rest] = process.argv.slice(2)
@@ -93,22 +93,34 @@ async function withTracker<T>(work: (tracker: Tracker) => Promise<T>): Promise<T
   try { return await work(tracker) } finally { await tracker.close() }
 }
 
-async function start(request: RunRequest, wait: boolean): Promise<number> {
+/** Start one run, or with `solvers` a pair that runs one after the other. Checked here first, so a refusal needs no server. */
+async function start(body: StartBody, wait: boolean): Promise<number> {
+  const requests = checkStart(body, true)
+  const followAll = async (ids: string[], done?: (id: string) => Promise<unknown>) => {
+    let ok = true
+    for (const id of ids) ok = (await follow(id, done?.(id)))?.phase === "done" && ok // in the order they run
+    return ok ? 0 : 1
+  }
+  const queued = (ids: string[]) => { if (ids.length > 1) console.log(`${ids[1]} starts when ${ids[0]} has ended. Cancelling ${ids[0]} cancels both.`) }
   if (await serverUp()) {
     const token = existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, "utf8") : ""
-    const res = await fetch(`${ENGINE}/api/glhf/runs`, { method: "POST", headers: { "content-type": "application/json", "x-glhf-token": token }, body: JSON.stringify(request) })
-    const body = (await res.json()) as { id?: string; error?: string }
-    if (!res.ok || !body.id) { console.error(`could not start: ${body.error ?? res.status}`); return 1 }
-    console.log(`started ${body.id} (tracked by the engine at ${ENGINE})`)
-    if (!wait) return 0
-    return (await follow(body.id))?.phase === "done" ? 0 : 1
+    const res = await fetch(`${ENGINE}/api/glhf/runs`, { method: "POST", headers: { "content-type": "application/json", "x-glhf-token": token }, body: JSON.stringify(body) })
+    const reply = (await res.json()) as { id?: string; ids?: string[]; error?: string }
+    const ids = reply.ids ?? (reply.id ? [reply.id] : [])
+    if (!res.ok || !ids.length) { console.error(`could not start: ${reply.error ?? res.status}`); return 1 }
+    console.log(`started ${ids.join(", ")} (tracked by the engine at ${ENGINE})`)
+    queued(ids)
+    return wait ? followAll(ids) : 0
   }
   return withTracker(async (tracker) => {
-    const run = await tracker.start(request)
-    console.log(`started ${run.id} (tracked by this command; the engine is not running)`)
-    if (wait) return (await follow(run.id, tracker.wait(run.id)))?.phase === "done" ? 0 : 1
-    while (runDetail(run.id)?.run.phase === "queued") await sleep(200) // the run itself is detached once launched
-    console.log("The run continues on its own. Tracking stops with this command; continue it with:\n  npm run engine    (or)    npm run glhf -- resume")
+    const ids = (await tracker.startChain(requests)).map((run) => run.id)
+    console.log(`started ${ids.join(", ")} (tracked by this command; the engine is not running)`)
+    queued(ids)
+    if (wait) return followAll(ids, (id) => tracker.wait(id))
+    while (runDetail(ids[0])?.run.phase === "queued") await sleep(200) // the run itself is detached once launched
+    console.log(ids.length > 1
+      ? `The first run continues on its own. ${ids[1]} is started by whoever tracks next: npm run engine    (or)    npm run glhf -- resume`
+      : "The run continues on its own. Tracking stops with this command; continue it with:\n  npm run engine    (or)    npm run glhf -- resume")
     return 0
   })
 }
@@ -132,10 +144,13 @@ async function main(): Promise<number> {
       return local.length || cloud.length ? 1 : 0
     }
     case "demo":
-      return start(checkRequest({ mode: "local", task: "demo", solver: f.get("solver") === "single" ? "single" : "glhf", model: "mock" }, true), true)
+      return start({ mode: "local", task: "demo", solver: f.get("solver") === "single" ? "single" : "glhf", model: "mock" }, true)
     case "run": {
       if (f.get("help")) {
         console.log("run --mode local|cloud --solver single|glhf --model MODEL [--task T] [--role-model ROLE=MODEL]... [--follow]\n" +
+          "  pair (local): --solvers glhf,single instead of --solver. Two runs with the same model, time limit, token\n" +
+          "    budget and seed, the second when the first has ended, so the scoreboard can compare them.\n" +
+          "  a real model needs --max-tokens N: the limit on what the run can spend.\n" +
           "  local: runs the demo case in Docker. --model mock needs no key. [--time-limit SECONDS] [--case DIR]\n" +
           "  budgets (local): [--max-tokens N] whole run; [--max-messages-per-role N] swarm, per phase; [--seed N]\n" +
           "  swarm extras (local): [--exa] documentation search, needs EXA_API_KEY; [--memory] keep lessons in glhf/memory/\n" +
@@ -146,15 +161,17 @@ async function main(): Promise<number> {
       const roleModels = Object.fromEntries(f.all("role-model").map((item) => item.split("=", 2) as [string, string]))
       const mode = f.get("mode") ?? "local"
       const project = f.get("project") ?? (mode === "cloud" ? (await tools()).project ?? undefined : undefined)
-      const request = checkRequest({
-        mode: mode as RunRequest["mode"], task: f.get("task"), solver: (f.get("solver") ?? "glhf") as RunRequest["solver"], model: f.get("model") ?? "",
+      const solvers = f.get("solvers")?.split(",").map((s) => s.trim()) as Solver[] | undefined
+      if (solvers && f.get("solver")) throw new BadRequest("give --solver or --solvers, not both", "solver")
+      const request: StartBody = {
+        mode: mode as RunRequest["mode"], task: f.get("task"), ...(solvers ? { solvers } : { solver: (f.get("solver") ?? "glhf") as Solver }), model: f.get("model") ?? "",
         roleModels, effort: f.get("effort"), project, resultsBucket: f.get("results-bucket"), caseDir: f.get("case"),
         timeLimit: f.get("time-limit") ? Number(f.get("time-limit")) : undefined, reviewRounds: f.get("review-rounds") ? Number(f.get("review-rounds")) : undefined,
         maxTokens: f.get("max-tokens") ? Number(f.get("max-tokens")) : undefined,
         maxMessagesPerRole: f.get("max-messages-per-role") ? Number(f.get("max-messages-per-role")) : undefined,
         seed: f.get("seed") ? Number(f.get("seed")) : undefined,
         exa: f.get("exa") !== undefined || undefined, memory: f.get("memory") !== undefined || undefined,
-      }, true)
+      }
       return start(request, f.get("follow") !== undefined)
     }
     case "list": {

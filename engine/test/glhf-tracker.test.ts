@@ -117,8 +117,8 @@ test("a rival is an unfinished cloud run of the other solver, same task and mode
 test("model ids cannot look like command-line options", () => {
   const base = { mode: "local" as const, solver: "glhf" as const }
   for (const model of ["--help", "-x", "--x/y z", "a b", ".hidden", "/abs/path", "", "x".repeat(201)]) assert.throws(() => checkRequest({ ...base, model }, CLI), /model/, model)
-  for (const model of ["mock", "anthropic/claude-sonnet-5-5", "openai/gpt-5.5", "ollama/qwen3:32b", "openrouter/~anthropic/claude-opus-latest"]) assert.equal(checkRequest({ ...base, model }, CLI).model, model)
-  const real = { ...base, model: "anthropic/claude-sonnet-5-5" }
+  for (const model of ["mock", "anthropic/claude-sonnet-5-5", "openai/gpt-5.5", "ollama/qwen3:32b", "openrouter/~anthropic/claude-opus-latest"]) assert.equal(checkRequest({ ...base, model, maxTokens: model === "mock" ? undefined : 1_000 }, CLI).model, model)
+  const real = { ...base, model: "anthropic/claude-sonnet-5-5", maxTokens: 1_000 }
   for (const critic of ["--x/y", "--x/y z", "-/a", "a /b"]) assert.throws(() => checkRequest({ ...real, roleModels: { critic } }, CLI), /roleModels/, critic)
   assert.deepEqual(checkRequest({ ...real, roleModels: { critic: "openai/gpt-5.5" } }, CLI).roleModels, { critic: "openai/gpt-5.5" })
 })

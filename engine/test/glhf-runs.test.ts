@@ -2,7 +2,8 @@
 // a temporary folder (GLHF_RUNS_DIR), so the engine that may be running and glhf/runs are not touched, and a stub
 // stands in for the local runner (GLHF_LOCAL_CMD): no Docker, no model, no cost.
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
@@ -65,6 +66,7 @@ const until = async (what: string, ok: () => boolean, ms = 15_000) => {
 }
 const isSettled = (id: string) => ["done", "failed", "cancelled"].includes(run(id).phase)
 const stubLines = () => (existsSync(stubLog) ? readFileSync(stubLog, "utf8").trim().split("\n").map((l) => l.split(" ")) : [])
+const listRunsDone = () => readdirSync(runs).every((id) => !loadStored(id) || isSettled(id))
 const pidOf = (id: string, file: string) => readFileSync(join(runs, id, file), "utf8")
 
 test("a pair runs one after the other, with the settings that make the scoreboard pair them", async () => {
@@ -127,7 +129,8 @@ test("when the first run of a pair fails, the partner still starts and says why"
   assert.deepEqual(predecessor("x", stored("running")), { settled: false })
   assert.deepEqual(predecessor("x", stored("queued")), { settled: false })
   assert.deepEqual(predecessor("x", stored("done")), { settled: true })
-  assert.match(predecessor("x", stored("cancelled")).note ?? "", /was cancelled/)
+  assert.deepEqual(predecessor("x", stored("cancelled")), { settled: true, cancel: true, note: "cancelled because x, the run it was queued behind, was cancelled" })
+  assert.equal(predecessor("x", stored("failed", "boom")).cancel, undefined, "a failure does not cancel the partner")
   assert.match(predecessor("gone-run", undefined).note ?? "", /record of gone-run.* is gone/)
 })
 
@@ -199,7 +202,7 @@ test("cancel stops the runner and what it started, marks the run cancelled, and 
   assert.equal(run(id).phase, "cancelled")
 })
 
-test("cancelling a queued partner means it never starts; cancelling the first lets the partner start, with a note", async () => {
+test("cancelling a queued partner means it never starts; cancelling the first cancels the partner too, with a note", async () => {
   const a = await start({ solvers: ["glhf", "single"] }, 400)
   const [first, second] = a.body.ids as string[]
   assert.equal((await call("POST", `/api/glhf/runs/${second}/cancel`)).body.phase, "cancelled")
@@ -220,19 +223,88 @@ test("cancelling a queued partner means it never starts; cancelling the first le
   assert.equal(run(late).phase, "cancelled")
   assert.ok(!existsSync(join(runs, late, "runner.pid")), "not launched after the restart either")
 
-  const b = await start({ solvers: ["glhf", "single"] }, 300)
+  // Cancelling the first run of a pair stops the spending: the partner is cancelled with it, and says why.
+  // (Slow polling here, so that it is the cancel itself that reaches the partner, not the partner's next look.)
+  process.env.GLHF_LOCAL_POLL_MS = "3000"
+  const b = await start({ solvers: ["glhf", "single"] }, 60_000)
   const [one, two] = b.body.ids as string[]
-  await until("the first to be going", () => run(one).phase === "running")
+  await until("the first to be launched", () => existsSync(join(runs, one, "runner.pid")) && alive(pidOf(one, "runner.pid")))
+  await sleep(100) // the partner has had its first look and now sleeps for 3 s
   assert.equal((await call("POST", `/api/glhf/runs/${one}/cancel`)).body.phase, "cancelled")
-  await until("the partner to finish", () => isSettled(two))
-  assert.equal(run(two).phase, "done")
-  assert.match(run(two).note ?? "", new RegExp(`${one}.* was cancelled`))
+  process.env.GLHF_LOCAL_POLL_MS = "40"
+  assert.equal(run(two).phase, "cancelled", "already when the cancel answers")
+  assert.equal(run(two).note, `cancelled because ${one}, the run it was queued behind, was cancelled`)
+  assert.equal(run(one).note, undefined)
+  await sleep(300)
+  assert.equal(run(two).phase, "cancelled")
+  assert.ok(!existsSync(join(runs, two, "runner.pid")), "the partner was never launched")
+  assert.equal((await start({ solver: "single" }, 50)).status, 201, "and the machine is free")
+  await until("that run to finish", () => listRunsDone())
+
+  // The same when the engine stopped between the cancel of the first and the cancel of its partner.
+  const d = await start({ solvers: ["glhf", "single"] }, 60_000)
+  const [head, tail] = d.body.ids as string[]
+  await until("the first to be launched", () => existsSync(join(runs, head, "runner.pid")) && alive(pidOf(head, "runner.pid")))
+  await stopTracker()
+  patchRun(head, { phase: "cancelled", finishedAt: Date.now() })
+  process.kill(-Number(pidOf(head, "runner.pid").split(" ")[0]), "SIGKILL")
+  await startTracker()
+  await until("the partner to settle", () => isSettled(tail))
+  assert.equal(run(tail).phase, "cancelled")
+  assert.equal(run(tail).note, `cancelled because ${head}, the run it was queued behind, was cancelled`)
+  assert.ok(!existsSync(join(runs, tail, "runner.pid")))
+})
+
+test("a real model needs a token budget", async () => {
+  const real = { mode: "local", solver: "glhf", model: "anthropic/claude-sonnet-5-5" } as const
+  for (const trust of [true, { token: false, origin: true }] as const) {
+    assert.throws(() => checkRequest(real, trust), (e: any) => e instanceof BadRequest && e.field === "maxTokens" && /^maxTokens is required for a real model/.test(e.message))
+    assert.equal(checkRequest({ ...real, maxTokens: 1_000 }, trust).maxTokens, 1_000)
+  }
+  assert.equal(checkRequest({ ...real, model: "mock" }, true).maxTokens, undefined, "the scripted model spends nothing")
+  assert.throws(() => checkStart({ mode: "local", model: real.model, solvers: ["glhf", "single"] }, true), /maxTokens is required/)
+  assert.equal(checkStart({ mode: "local", model: real.model, solvers: ["glhf", "single"], maxTokens: 5_000 }, true).length, 2)
+  // A cloud run cannot take maxTokens (the cloud runner has its own limit), so it is not asked for one.
+  assert.equal(checkRequest({ ...real, mode: "cloud", task: "9", effort: "high", project: "p" }, true).maxTokens, undefined)
+  const sent = await call("POST", "/api/glhf/runs", real)
+  assert.equal(sent.status, 400)
+  assert.equal(sent.body.field, "maxTokens")
+})
+
+test("the CLI starts a pair with --solvers", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "glhf-cli-"))
+  // A port nobody listens on, so the CLI tracks the runs itself and never talks to an engine that may be running.
+  const free = createServer(); await new Promise<void>((ok) => free.listen(0, "127.0.0.1", ok))
+  const port = (free.address() as AddressInfo).port; await new Promise((ok) => free.close(ok))
+  const cli = (...args: string[]) => spawnSync(process.execPath, [join(here, "..", "src", "glhf", "cli.ts"), ...args],
+    { encoding: "utf8", env: { ...process.env, GLHF_RUNS_DIR: dir, DRUG_BOARD_PORT: String(port), GLHF_STUB_MS: "200", GLHF_STUB_FAIL: "", GLHF_STUB_LOG: join(dir, "stub.log") } })
+  try {
+    const out = cli("run", "--solvers", "single,glhf", "--model", "mock", "--time-limit", "120", "--seed", "4", "--follow")
+    assert.equal(out.status, 0, out.stdout + out.stderr)
+    const [, a, b] = /started (\S+), (\S+) /.exec(out.stdout) ?? []
+    assert.match(a, /-single$/); assert.match(b, /-glhf$/)
+    assert.match(out.stdout, new RegExp(`${b} starts when ${a} has ended`))
+    const order = readFileSync(join(dir, "stub.log"), "utf8").trim().split("\n").map((l) => l.split(" ").slice(0, 2).join(" "))
+    assert.deepEqual(order, ["start single", "end single", "start glhf", "end glhf"])
+    const record = (id: string) => JSON.parse(readFileSync(join(dir, id, "record.json"), "utf8")).run as GlhfRun
+    assert.equal(record(b).after, a)
+    assert.equal(record(b).phase, "done")
+    assert.equal(pairKey(record(a)), pairKey(record(b)))
+    assert.equal(record(b).settings?.seed, 4)
+
+    const both = cli("run", "--solvers", "glhf,single", "--solver", "glhf", "--model", "mock")
+    assert.equal(both.status, 1); assert.match(both.stderr, /--solver or --solvers, not both/)
+    const bad = cli("run", "--solvers", "glhf,glhf", "--model", "mock")
+    assert.equal(bad.status, 1); assert.match(bad.stderr, /solvers must be/)
+    const unpaid = cli("run", "--solvers", "glhf,single", "--model", "anthropic/claude-sonnet-5-5")
+    assert.equal(unpaid.status, 1); assert.match(unpaid.stderr, /maxTokens is required/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 test("status gives the limits from types.ts, the models to offer, and keys as true or false only", async () => {
   const { status, body } = await call("GET", "/api/glhf/status")
   assert.equal(status, 200)
-  assert.deepEqual(body.limits, { timeLimit: [60, 86_400], maxTokens: [1_000, 500_000_000], reviewRounds: [1, 10], maxMessagesPerRole: [2, 5_000] })
+  assert.deepEqual(body.limits, { timeLimit: [60, 86_400], maxTokens: [1_000, 500_000_000], reviewRounds: [1, 10], maxMessagesPerRole: [2, 5_000], seed: [1, 2 ** 31 - 1] })
   assert.deepEqual(body.limits, JSON.parse(JSON.stringify(LIMITS)), "the same object checkRequest enforces")
   assert.equal(body.keys.EXA_API_KEY, false)
   for (const [name, value] of Object.entries(body.keys)) assert.equal(typeof value, "boolean", name)
@@ -244,7 +316,7 @@ test("status gives the limits from types.ts, the models to offer, and keys as tr
   assert.equal(modelsFor({ ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }).length, 4)
   // The limits are what is enforced: one past each end is refused, each end is accepted.
   const base = { mode: "local", solver: "glhf", model: "mock" } as const
-  for (const field of ["timeLimit", "maxTokens", "reviewRounds", "maxMessagesPerRole"] as const) {
+  for (const field of ["timeLimit", "maxTokens", "reviewRounds", "maxMessagesPerRole", "seed"] as const) {
     const [min, max] = LIMITS[field]
     assert.equal(checkRequest({ ...base, [field]: min }, true)[field], min)
     assert.equal(checkRequest({ ...base, [field]: max }, true)[field], max)
@@ -266,6 +338,7 @@ test("a refusal names the field it is about", async () => {
   assert.equal(field({ ...base, maxMessagesPerRole: 1 }), "maxMessagesPerRole")
   assert.equal(field({ ...base, model: "a b" }), "model")
   assert.equal(field({ ...base, model: "anthropic/claude-sonnet-5-5" }, false), "model")
+  assert.equal(field({ ...base, model: "anthropic/claude-sonnet-5-5" }), "maxTokens")
   assert.equal(field({ ...base, exa: true }), "exa") // no EXA_API_KEY in this test
   assert.equal(field({ ...base, exa: true }, false), "exa")
   assert.equal(field({ ...base, memory: true }, false), "memory")

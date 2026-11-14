@@ -186,19 +186,23 @@ const grade = (dir: string) => {
   return { score: g.score, artifacts }
 }
 
+/** The note of a queued run that was cancelled together with the run it waited for. */
+export const cancelledWith = (after: string) => `cancelled because ${after}, the run it was queued behind, was cancelled`
+
 /** Was the run cancelled (tracker.cancel)? Then its task only has to end: nothing is started, read or written. */
 const cancelled = (id: string) => loadStored(id)?.run.phase === "cancelled"
 
 /**
  * The second run of a pair: is the run it waits for settled? `note` says what to remember when that run did not
- * finish, because the partner starts anyway (a pair with one failed side is still worth its other side).
+ * finish. After a failure the partner starts anyway (a pair with one failed side is still worth its other side).
+ * After a cancel it does not (`cancel`): whoever stopped a pair expects the spending to stop.
  */
-export function predecessor(after: string, stored = loadStored(after)): { settled: boolean; note?: string } {
+export function predecessor(after: string, stored = loadStored(after)): { settled: boolean; note?: string; cancel?: true } {
   if (!stored) return { settled: true, note: `started although the record of ${after}, the run it was queued behind, is gone` }
   const { phase, error } = stored.run
   if (!settled(phase)) return { settled: false }
   if (phase === "failed") return { settled: true, note: `started although ${after}, the run it was queued behind, failed: ${(error ?? "no error message").split("\n")[0].slice(0, 300)}` }
-  if (phase === "cancelled") return { settled: true, note: `started although ${after}, the run it was queued behind, was cancelled` }
+  if (phase === "cancelled") return { settled: true, cancel: true, note: cancelledWith(after) }
   return { settled: true }
 }
 
@@ -222,6 +226,10 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         if (!before.settled) {
           patchRun(input.id, { phase: "queued", detail: `waiting for ${input.after} to finish` })
           return runtime.sleepUntil(runtime.now() + LOCAL_POLL(), { phase: "launch" }, context)
+        }
+        if (before.cancel) { // tracker.cancel does this at once; this covers an engine that stopped in between
+          patchRun(input.id, { phase: "cancelled", detail: "cancelled before the runner started", note: before.note, finishedAt: runtime.now() }, before.note)
+          return endCancelled(runtime, context)
         }
         // The clock of this run starts now, not when it was queued: its time limit and its duration count from here.
         patchRun(input.id, { startedAt: runtime.now(), note: before.note }, before.note ?? `${input.after} is settled; starting`)
