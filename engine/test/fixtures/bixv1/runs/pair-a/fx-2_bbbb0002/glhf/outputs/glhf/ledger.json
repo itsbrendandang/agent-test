@@ -1,0 +1,31 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "fx-2-q1": "What fraction of variants has VAF below 0.3?"
+  },
+  "final": [
+    {
+      "question_id": "fx-2-q1",
+      "answer": "about a third",
+      "status": "unchecked",
+      "comparison": null,
+      "derivations": [
+        "D1"
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "D1",
+      "question_id": "fx-2-q1",
+      "by": "analyst",
+      "answer": "about a third",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    }
+  ],
+  "resolutions": [],
+  "rejected": [],
+  "events": []
+}

@@ -1,0 +1,16 @@
+{
+  "solver": "single",
+  "answers": {
+    "fx-1-q1": {
+      "answer": "166",
+      "status": "unchecked",
+      "note": ""
+    },
+    "fx-1-q2": {
+      "answer": "x",
+      "status": "unchecked",
+      "note": ""
+    }
+  },
+  "rejected": []
+}

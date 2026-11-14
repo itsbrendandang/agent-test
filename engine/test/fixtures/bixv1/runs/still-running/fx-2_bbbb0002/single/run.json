@@ -1,0 +1,25 @@
+{
+  "benchmark": "BixBench v1.5 (futurehouse/BixBench)",
+  "dataset_revision": "fixture-rev",
+  "capsule": "fx-2_bbbb0002",
+  "question_ids": [
+    "fx-2-q1"
+  ],
+  "questions_in_capsule": 1,
+  "settings": {
+    "solver": "single",
+    "model": "fixture/model-a",
+    "role_models": {},
+    "answer_mode": "open",
+    "unit": "capsule",
+    "time_limit_seconds": 600,
+    "max_tokens": 1000,
+    "seed": 0,
+    "critic_hints": null
+  },
+  "started_at": 3100,
+  "status": "running",
+  "a_field_added_later": {
+    "ignored": true
+  }
+}

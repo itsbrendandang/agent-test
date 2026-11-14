@@ -1,0 +1,42 @@
+{
+  "capsule": "fx-1_aaaa0001",
+  "solver": "glhf",
+  "answer_mode": "open",
+  "judge_model": "fixture/judge",
+  "graded_at": 2551,
+  "profiles": {
+    "per-mode": {
+      "summary": {},
+      "grades": [
+        {
+          "question_id": "fx-1-q1",
+          "eval_mode": "str_verifier",
+          "answer_mode": "open",
+          "profile": "per-mode",
+          "predicted": "166",
+          "correct": true,
+          "refused": false,
+          "method": "exact",
+          "judge_response": null,
+          "note": "",
+          "graded": true,
+          "correct_strict": true
+        },
+        {
+          "question_id": "fx-1-q2",
+          "eval_mode": "llm_verifier",
+          "answer_mode": "open",
+          "profile": "per-mode",
+          "predicted": "x",
+          "correct": true,
+          "refused": false,
+          "method": "llm",
+          "judge_response": null,
+          "note": "",
+          "graded": true,
+          "correct_strict": false
+        }
+      ]
+    }
+  }
+}

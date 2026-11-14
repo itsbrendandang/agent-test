@@ -1,0 +1,31 @@
+{
+  "profile": "per-mode",
+  "models": [
+    "fixture/model-a"
+  ],
+  "scripted_model": false,
+  "prices_usd_per_million_tokens": {
+    "input": 3,
+    "output": 15,
+    "cache_read": 0.3,
+    "cache_write": 3.75
+  },
+  "paired": {
+    "a": "single",
+    "b": "glhf",
+    "n": 3,
+    "capsules": 2,
+    "both_correct": 1,
+    "only_a_correct": 0,
+    "only_b_correct": 1,
+    "neither_correct": 1,
+    "difference_b_minus_a": 0.3333,
+    "mcnemar_exact_p": 1,
+    "capsule_bootstrap95": [
+      0,
+      0.5
+    ]
+  },
+  "solvers": {},
+  "questions": []
+}

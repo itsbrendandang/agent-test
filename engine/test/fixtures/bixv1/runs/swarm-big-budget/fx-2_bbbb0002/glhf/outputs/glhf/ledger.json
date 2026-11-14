@@ -1,0 +1,11 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "fx-2-q1": "What fraction of variants has VAF below 0.3?"
+  },
+  "final": [],
+  "derivations": [],
+  "resolutions": [],
+  "rejected": [],
+  "events": []
+}

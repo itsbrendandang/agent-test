@@ -1,0 +1,16 @@
+{
+  "solver": "glhf",
+  "answers": {
+    "fx-1-q1": {
+      "answer": "166",
+      "status": "replicated",
+      "note": ""
+    },
+    "fx-1-q2": {
+      "answer": "Oxidative phosphorylation",
+      "status": "reconciled",
+      "note": ""
+    }
+  },
+  "rejected": []
+}

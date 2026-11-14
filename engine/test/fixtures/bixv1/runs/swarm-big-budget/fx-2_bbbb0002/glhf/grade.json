@@ -1,0 +1,28 @@
+{
+  "capsule": "fx-2_bbbb0002",
+  "solver": "glhf",
+  "answer_mode": "open",
+  "judge_model": "fixture/judge",
+  "graded_at": 2151,
+  "profiles": {
+    "per-mode": {
+      "summary": {},
+      "grades": [
+        {
+          "question_id": "fx-2-q1",
+          "eval_mode": "range_verifier",
+          "answer_mode": "open",
+          "profile": "per-mode",
+          "predicted": "0.31",
+          "correct": true,
+          "refused": false,
+          "method": "range",
+          "judge_response": null,
+          "note": "",
+          "graded": true,
+          "correct_strict": true
+        }
+      ]
+    }
+  }
+}

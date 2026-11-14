@@ -1,0 +1,12 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "fx-1-q1": "How many genes pass the filter?",
+    "fx-1-q2": "Which pathway is most enriched?"
+  },
+  "final": [],
+  "derivations": [],
+  "resolutions": [],
+  "rejected": [],
+  "events": []
+}

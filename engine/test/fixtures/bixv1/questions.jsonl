@@ -1,0 +1,4 @@
+{"id":"uuid-fx-1-q1","question_id":"fx-1-q1","question":"How many genes pass the filter?","eval_mode":"str_verifier","ideal":166}
+{"id":"uuid-fx-1-q2","question_id":"fx-1-q2","question":"Which pathway is most enriched?","eval_mode":"llm_verifier","ideal":"IDEAL-SECRET-42"}
+{"id":"uuid-fx-2-q1","question_id":"fx-2-q1","question":"What fraction of variants has VAF below 0.3?","eval_mode":"range_verifier","ideal":"(0.2,0.4)"}
+not json

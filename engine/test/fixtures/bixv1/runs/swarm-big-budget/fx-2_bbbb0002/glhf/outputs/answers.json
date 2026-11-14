@@ -1,0 +1,11 @@
+{
+  "solver": "glhf",
+  "answers": {
+    "fx-2-q1": {
+      "answer": "0.31",
+      "status": "unchecked",
+      "note": ""
+    }
+  },
+  "rejected": []
+}

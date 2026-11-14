@@ -1,0 +1,20 @@
+{
+  "spent": 830,
+  "cap": 10000,
+  "runs": [
+    {
+      "run": "fx-1_aaaa0001/single",
+      "solver_tokens": 100,
+      "judge_tokens": 10,
+      "seconds": 50,
+      "status": "done"
+    },
+    {
+      "run": "fx-1_aaaa0001/glhf",
+      "solver_tokens": 300,
+      "judge_tokens": 20,
+      "seconds": 50,
+      "status": "done"
+    }
+  ]
+}

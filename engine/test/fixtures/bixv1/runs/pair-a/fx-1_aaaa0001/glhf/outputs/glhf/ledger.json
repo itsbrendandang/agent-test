@@ -1,0 +1,90 @@
+{
+  "solver": "glhf",
+  "questions": {
+    "fx-1-q1": "How many genes pass the filter?",
+    "fx-1-q2": "Which pathway is most enriched?"
+  },
+  "final": [
+    {
+      "question_id": "fx-1-q1",
+      "answer": "166",
+      "status": "replicated",
+      "comparison": "agree",
+      "derivations": [
+        "D1",
+        "D4"
+      ]
+    },
+    {
+      "question_id": "fx-1-q2",
+      "answer": "Oxidative phosphorylation",
+      "status": "reconciled",
+      "comparison": "unclear",
+      "derivations": [
+        "D3",
+        "D5"
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "D1",
+      "question_id": "fx-1-q1",
+      "by": "analyst",
+      "answer": "166",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D2",
+      "question_id": "fx-1-q2",
+      "by": "analyst",
+      "answer": "TCA cycle",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": "D3"
+    },
+    {
+      "id": "D3",
+      "question_id": "fx-1-q2",
+      "by": "analyst",
+      "answer": "Glycolysis",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D4",
+      "question_id": "fx-1-q1",
+      "by": "critic",
+      "answer": "166.0",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    },
+    {
+      "id": "D5",
+      "question_id": "fx-1-q2",
+      "by": "critic",
+      "answer": "Oxidative phosphorylation",
+      "route": "r",
+      "evidence": "e",
+      "superseded_by": null
+    }
+  ],
+  "resolutions": [
+    {
+      "question_id": "fx-1-q2",
+      "keep": "B",
+      "final_answer": "Oxidative phosphorylation",
+      "cause": "the analyst ranked by raw p-value",
+      "evidence": "e",
+      "by": "reconciler",
+      "a": "D3",
+      "b": "D5"
+    }
+  ],
+  "rejected": [],
+  "events": []
+}

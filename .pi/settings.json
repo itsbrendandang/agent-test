@@ -1,5 +1,9 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "skills": ["../.agents/skills"],
-  "packages": ["npm:pi-agents", "npm:pi-observational-memory"]
+  "skills": [
+    "../.agents/skills"
+  ],
+  "packages": [
+    "npm:pi-agents@0.40.1"
+  ]
 }

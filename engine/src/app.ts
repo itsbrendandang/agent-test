@@ -24,6 +24,7 @@ import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, 
 import { BriefRejected } from "./brief.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
 import { handleGlhf, hasSessionToken } from "./glhf/routes.ts"
+import { handleBixV1 } from "./bixv1/routes.ts"
 import { guard, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "./http.ts"
 import { PaidCallsOff, paidCallsOff } from "./paid.ts"
 import { search } from "./search.ts"
@@ -103,6 +104,7 @@ export function createApp(options: AppOptions = {}) {
     const url = new URL(req.url ?? "/", "http://x")
     const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
+    if (parts[0] === "api" && parts[1] === "bixv1") return handleBixV1(req, res, parts)
     try {
       if (url.pathname === "/api/status") return json(res, 200, {
         mock,
