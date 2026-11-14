@@ -133,6 +133,8 @@ glhf/demo_case/                  toy case: 3,600 reads, 4 samples, 2 required ta
 glhf/docs/                       DESIGN.md, ideas and design (docx)
 engine/src/glhf/                 Pi Durable run tracker, CLI, doctor, API routes
 dashboard/src/views/SwarmView.tsx   live view of roles, claims, verdicts, scores
+dashboard/src/views/AgentsView.tsx  the nine roles: time share, model, instructions
+dashboard/src/views/ExperimentsView.tsx  search across every run (engine: /api/search)
 engine/, board/, dashboard/      the drug candidate board (see docs/drug-board.md)
 Dockerfile, docker-compose.yml   the platform in containers
 ```

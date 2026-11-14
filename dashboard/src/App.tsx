@@ -6,8 +6,8 @@ import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs"
 import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle"
 import { Toolbar, ToolbarButton } from "@ui-sdk/react/toolbar"
 import {
-  Activity, BarChart3, Boxes, Expand, Globe2, Home, Layers, PanelRightClose, PanelRightOpen,
-  FlaskConical, Microscope, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
+  Activity, BarChart3, Expand, Globe2, Home, Layers, PanelRightClose, PanelRightOpen,
+  FlaskConical, Microscope, Search, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
 } from "lucide-react"
 import { Buddy, Mark } from "./components/Buddy"
 import { fmtMetric as fmt } from "./lib/format"
@@ -22,6 +22,7 @@ import { defaults, type Category, type Params } from "./sim/types"
 import { useSimulation } from "./sim/useSimulation"
 import { AgentsView } from "./views/AgentsView"
 import { BoardView } from "./views/BoardView"
+import { ExperimentsView } from "./views/ExperimentsView"
 import { OverviewView } from "./views/OverviewView"
 import { PlaceholderView } from "./views/PlaceholderView"
 import { SettingsView } from "./views/SettingsView"
@@ -38,11 +39,11 @@ const categories = Object.keys(categoryLabels) as Category[]
 const rail = [
   { label: "Swarm", icon: Microscope, hint: "" },
   { label: "Board", icon: FlaskConical, hint: "" },
+  { label: "Experiments", icon: Search, hint: "" },
   { label: "Overview", icon: Home, hint: "" },
   { label: "Simulations", icon: Layers, hint: "" },
   { label: "Agents", icon: Users, hint: "" },
   { label: "Worlds", icon: Globe2, hint: "World and map definitions shared across simulations." },
-  { label: "Experiments", icon: Boxes, hint: "Parameter sweeps and results from the Python research code in research/." },
   { label: "Analytics", icon: BarChart3, hint: "" },
   { label: "Settings", icon: Settings, hint: "App preferences and model / API configuration." },
 ]
@@ -273,8 +274,9 @@ export default function App() {
       {view === "Swarm" && <SwarmView />}
       {view === "Board" && <BoardView />}
       {view === "Agents" && <AgentsView />}
+      {view === "Experiments" && <ExperimentsView onOpen={go} />}
       {view === "Settings" && <SettingsView />}
-      {!["Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Settings"].includes(view) && (
+      {!["Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Experiments", "Settings"].includes(view) && (
         <PlaceholderView title={view} hint={rail.find((r) => r.label === view)!.hint} />
       )}
     </div>

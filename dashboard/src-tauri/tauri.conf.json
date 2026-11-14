@@ -21,23 +21,6 @@
         "fullscreen": false,
         "center": true,
         "label": "main"
-      },
-      {
-        "label": "crew",
-        "url": "index.html?crew=1",
-        "title": "Drug Board Crew",
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "shadow": false,
-        "resizable": false,
-        "visible": false,
-        "focus": false,
-        "visibleOnAllWorkspaces": true,
-        "acceptFirstMouse": true,
-        "width": 800,
-        "height": 600
       }
     ],
     "security": {

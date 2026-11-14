@@ -1,21 +1,16 @@
 import { useEffect, useState } from "react"
+import { ENGINE } from "@/board/api"
+import { useSwarm } from "@/swarm/api"
+import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
 import { SPECIES, Buddy } from "@/components/Buddy"
 import { CrewSprite } from "@/crew/CrewSprite"
-import { isCrewOut, isDesktop, setCrewOut } from "@/crew/desktop"
 import { buildSkill, SKILL_STARTERS, suggestStarter } from "@/crew/skills"
 import { readCharacterImage, useCrew, type CrewMember } from "@/crew/store"
 
 // Crew editor: name, role and look for each desktop character. No AI agents are wired to them yet.
 export function AgentsView() {
   const { crew, update } = useCrew()
-  const [out, setOut] = useState(false)
   const [error, setError] = useState("")
-  useEffect(() => { void isCrewOut().then(setOut) }, [])
-
-  const toggle = async () => {
-    await setCrewOut(!out)
-    setOut(!out)
-  }
   const upload = async (id: string, file: File | undefined) => {
     if (!file) return
     try {
@@ -43,16 +38,12 @@ export function AgentsView() {
 
   return (
     <div className="page">
+      <SwarmTeam />
       <header className="page-head crew-head">
         <div>
           <h1>Your crew</h1>
-          <p className="muted small">Give each character a name, a role, a look and a SKILL.md. They are not connected to AI agents yet, so the skill is saved but not used.</p>
+          <p className="muted small">The characters in the side rail. Give each a name, a role, a look and a SKILL.md. They are not connected to AI agents, so the skill is saved but not used.</p>
         </div>
-        {isDesktop ? (
-          <button type="button" className="toon-btn" onClick={toggle}>{out ? "Call the crew home" : "Send the crew to the desktop"}</button>
-        ) : (
-          <span className="pill pill-warning">Desktop characters need the desktop app</span>
-        )}
       </header>
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
@@ -137,5 +128,77 @@ function SkillEditor({ member, onChange, onImport, onDownload }: {
         {member.skill && <button type="button" className="link-btn" onClick={() => onChange(undefined)}>Clear</button>}
       </div>
     </div>
+  )
+}
+
+const GROUP = { planner: "planner", experimenter: "experimenter", critic: "critic", reporter: "reporter" } as const
+
+// The nine swarm roles in the crew's card layout: what each does, its share of the time, the model
+// it runs on in the latest run, and its instructions as the solver defines them (read-only).
+function SwarmTeam() {
+  const { runs, detail, offline } = useSwarm(undefined, 0)
+  const [catalog, setCatalog] = useState<RoleCatalog>()
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    fetch(`${ENGINE}/api/glhf/roles`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(setCatalog).catch(() => setFailed(true))
+  }, [])
+
+  const run = runs?.find((r) => r.solver === "glhf")
+  const ledger = detail?.run.id === run?.id ? detail?.ledger : undefined
+  const events = ledger?.events ?? []
+  const started = new Set(events.filter((e) => e.kind === "phase.started").map((e) => roleOf(e.phase)))
+  const last = events.findLast((e) => e.kind === "phase.started" || e.kind === "phase.finished")
+  const live = run && run.phase !== "done" && run.phase !== "failed"
+  const active = live && last?.kind === "phase.started" ? roleOf(last.phase) : undefined
+
+  return (
+    <>
+      <header className="page-head crew-head">
+        <div>
+          <h1>Swarm team</h1>
+          <p className="muted small">
+            Nine roles, in the order they run. Each is a separate agent with its own instructions; they share only the files and the ledger.
+            {run ? ` Status is from the latest swarm run (${run.id}).` : ""}
+          </p>
+        </div>
+        {(offline || failed) && <span className="pill pill-warning">Start the engine to load instructions</span>}
+      </header>
+      <section className="cast">
+        {ROLES.map((r, i) => {
+          const spec = catalog?.roles.find((x) => x.key === r.key)
+          const model = spec && run ? run.roleModels?.[GROUP[spec.model_group]] ?? run.model : undefined
+          const state = active === r.key ? "working now" : started.has(r.key) ? "ran in the latest run" : run ? "did not run in the latest run" : "no runs yet"
+          return (
+            <article key={r.key} className="cast-card card-surface team-card" data-active={active === r.key || undefined}>
+              <div className="team-top">
+                <Buddy species={r.species} mood={active === r.key ? "working" : started.has(r.key) ? "happy" : "sleeping"} size={64} />
+                <div>
+                  <h2>{i + 1}. {r.name}</h2>
+                  <p className="small">{r.does}.</p>
+                </div>
+              </div>
+              <dl className="team-facts">
+                <dt>Time</dt><dd>{spec?.budget ?? "–"}</dd>
+                <dt>Model</dt><dd>{spec ? <>{model ?? "the run's model"} <span className="muted">({spec.model_group} group)</span></> : "–"}</dd>
+                <dt>Status</dt><dd>{state}</dd>
+              </dl>
+              {spec && (
+                <details className="team-prompt">
+                  <summary>Instructions</summary>
+                  <pre>{spec.instructions}</pre>
+                </details>
+              )}
+            </article>
+          )
+        })}
+      </section>
+      {catalog && (
+        <details className="team-prompt team-shared card-surface">
+          <summary>Rules every role follows</summary>
+          <pre>{catalog.shared_rules}</pre>
+        </details>
+      )}
+    </>
   )
 }

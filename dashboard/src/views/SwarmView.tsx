@@ -7,22 +7,10 @@ import {
   isDemo, isLive, startDemo, useSwarm,
   type GlhfRun, type Ledger, type LedgerEvent, type Solver,
 } from "@/swarm/api"
+import { takeOpen } from "@/views/ExperimentsView"
+import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
 import "@/swarm/swarm.css"
 
-const ROLES = [
-  { key: "scout", species: "bunny", name: "Scout", does: "Inspects the data and the tools before anyone plans" },
-  { key: "propose", species: "sprout", name: "Proposer", does: "Plans the analysis and writes down claims to test" },
-  { key: "pilot", species: "egg", name: "Pilot", does: "Proves the whole pipeline on a small sample first" },
-  { key: "experiment", species: "flame", name: "Experimenter", does: "Runs the analysis and writes the outputs" },
-  { key: "audit", species: "sprout", name: "Auditor", does: "Checks the scripts against the stated methods, line by line" },
-  { key: "critique", species: "mountain", name: "Critic", does: "Checks the work and tries to disprove each claim" },
-  { key: "revise", species: "egg", name: "Reviser", does: "Fixes the problems the reviewers found" },
-  { key: "finish", species: "flame", name: "Finisher", does: "Rescues any output still missing at the end (only if needed)" },
-  { key: "report", species: "bunny", name: "Reporter", does: "Writes up what was actually done" },
-] as const
-type RoleKey = (typeof ROLES)[number]["key"]
-
-const roleOf = (phase: string | undefined): RoleKey | undefined => ROLES.find((r) => phase?.startsWith(r.key))?.key
 const round = (phase: string) => phase.match(/\d+/)?.[0]
 const num = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : String(Number(x.toPrecision(3))))
 const score = (x: number | undefined) => (x === undefined ? "–" : x.toFixed(3))
@@ -89,7 +77,7 @@ function scoreboard(runs: GlhfRun[]): Row[] {
 }
 
 export function SwarmView() {
-  const [picked, setPicked] = useState<string>()
+  const [picked, setPicked] = useState<string | undefined>(() => takeOpen("swarm"))
   const [nudge, setNudge] = useState(0)
   const [solver, setSolver] = useState<Solver>("glhf")
   const [error, setError] = useState("")

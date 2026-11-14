@@ -13,6 +13,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { resolve } from "node:path"
+import { search } from "./search.ts"
 import "./env.ts"
 import { loadAgent, loadRoster } from "./agents.ts"
 import { loadState, runBoard, runDir, startRun } from "./board.ts"
@@ -83,6 +84,7 @@ createServer(async (req, res) => {
       keys: Object.fromEntries(["OPENROUTER_API_KEY", "EXA_API_KEY", "OPENAI_API_KEY", "TYPESAFE_API_KEY"].map((k) => [k, Boolean(process.env[k])])),
       meeting: config.meeting, models: config.models,
     })
+    if (url.pathname === "/api/search") return json(res, 200, search(url.searchParams.get("q") ?? "", listRuns()))
     if (url.pathname === "/api/roster") {
       const lead = loadAgent(config, "lead-scientist")
       return json(res, 200, [lead, ...loadRoster(config)].map(({ prompt: _p, ...a }) => ({ ...a, modelId: config.models[a.model] })))

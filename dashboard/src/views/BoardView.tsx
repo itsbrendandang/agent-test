@@ -1,5 +1,6 @@
 // Board room. By default a plain summary: is the board working, and what did it decide and why can you trust it.
 // "Show details" opens the full room: roster, every reply with per-claim verdicts, the ledger, evidence and memo.
+import { takeOpen } from "@/views/ExperimentsView"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
@@ -28,7 +29,7 @@ export function BoardView() {
   const [briefs, setBriefs] = useState<string[]>([])
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [brief, setBrief] = useState("")
-  const [runId, setRunId] = useState<string>()
+  const [runId, setRunId] = useState<string | undefined>(() => takeOpen("board"))
   const [error, setError] = useState("")
   const [memoText, setMemoText] = useState("")
   const [details, setDetails] = useState(() => localStorage.getItem("board.details") === "1")

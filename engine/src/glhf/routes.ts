@@ -1,14 +1,16 @@
 // /api/glhf/* for the dashboard's Swarm view. See types.ts for the shapes.
 //
 //   GET  /api/glhf/status        the record to beat, and which tools and keys this machine has (never the keys)
+//   GET  /api/glhf/roles         the swarm's roles: instructions and time shares, read from the solver code
 //   GET  /api/glhf/runs          runs, newest first
 //   POST /api/glhf/runs          start a run; cloud runs need the CLI's token (see below)
 //   GET  /api/glhf/runs/:id      one run with its ledger, FINDINGS.md and METHODS.md
+import { execFile } from "node:child_process"
 import { randomBytes } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { statusBody } from "./doctor.ts"
-import { listRuns, runDetail, RUNS } from "./store.ts"
+import { BIXBENCH, listRuns, runDetail, RUNS } from "./store.ts"
 import { BadRequest, checkRequest, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
 import { RECORD, type RunRequest } from "./types.ts"
 
@@ -35,6 +37,13 @@ export async function startTracker(): Promise<void> {
   }
 }
 
+// The roles as the solver defines them (instructions, time shares), read from the Python code once.
+let roles: Promise<unknown> | undefined
+const loadRoles = () => (roles ??= new Promise((ok, fail) => {
+  execFile("uv", ["run", "python", "-m", "bixbench3.inspect_harness.swarm.catalog"], { cwd: BIXBENCH, timeout: 120_000, maxBuffer: 8 << 20 },
+    (error, stdout) => { try { if (error) throw error; ok(JSON.parse(stdout)) } catch (e) { roles = undefined; fail(e) } })
+}))
+
 const json = (res: ServerResponse, code: number, body: unknown) => {
   res.writeHead(code, { "content-type": "application/json" })
   res.end(JSON.stringify(body))
@@ -53,6 +62,7 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
       if (!status || Date.now() - status.at > 30_000) status = { at: Date.now(), body: await statusBody() }
       return json(res, 200, { record: RECORD, ...status.body })
     }
+    if (parts[2] === "roles" && req.method === "GET") return json(res, 200, await loadRoles())
     if (parts[2] === "runs" && !parts[3] && req.method === "GET") return json(res, 200, listRuns())
     if (parts[2] === "runs" && !parts[3] && req.method === "POST") {
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
