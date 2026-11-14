@@ -1,6 +1,7 @@
 {
   "name": "@drug-board/engine",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "board": "node src/cli.ts",

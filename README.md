@@ -293,6 +293,14 @@ cd glhf/bixbench_v1 && uv run pytest -q tests
 npm --prefix dashboard test
 ```
 
+## Licence
+
+Our own code is under the MIT licence (`LICENSE`). Two folders are not: `glhf/bixbench/` is a modified copy
+of BixBench3 (Edison Scientific, CC BY-SA 4.0; our changes are listed in `glhf/bixbench/CHANGES.md` and carry
+the same licence), and `glhf/bixbench_v1/` depends on it and is offered under CC BY-SA 4.0 as well.
+Third-party files copied into the repository keep their own terms. Open items before the repository is made
+public are in `docs/proposals/licenses.md`.
+
 ## Limits
 
 - The `NO_PAID_CALLS` switch does not cover `inspect eval` on the task file, scripts that call

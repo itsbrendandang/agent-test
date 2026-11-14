@@ -1,6 +1,7 @@
 {
   "name": "glhf",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "setup": "npm --prefix engine install && npm --prefix dashboard install && (cd glhf/bixbench && uv sync --locked)",
