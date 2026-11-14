@@ -1,7 +1,8 @@
 // The engine's HTTP request handler, without the listening. server.ts listens; tests call the handler on a
 // throwaway server. Importing this file starts nothing.
 //
-//   GET  /api/status             mode (mock or live) and which keys are present (never the keys)
+//   GET  /api/status             mode (mock or live), whether paid calls are allowed (NO_PAID_CALLS, see paid.ts)
+//                                and which keys are present (never the keys)
 //   GET  /api/roster             lead + board members with task, deliverable, model tier
 //   GET  /api/briefs             briefs available to run
 //   GET  /api/runs               runs with status
@@ -19,11 +20,12 @@ import { existsSync, readdirSync, readFileSync, watch } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./agents.ts"
-import { BudgetReached, checkDailyBudget, loadState, lockHolder, RunBusy, runBoard, runDir, startRun, summarize } from "./board.ts"
+import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
 import { handleGlhf, hasSessionToken } from "./glhf/routes.ts"
 import { guard, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "./http.ts"
+import { PaidCallsOff, paidCallsOff } from "./paid.ts"
 import { search } from "./search.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -55,7 +57,7 @@ export function createApp(options: AppOptions = {}) {
     if (active.has(runId)) return
     active.add(runId)
     run(runId)
-      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
+      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
       .finally(() => active.delete(runId))
   }
 
@@ -104,6 +106,7 @@ export function createApp(options: AppOptions = {}) {
     try {
       if (url.pathname === "/api/status") return json(res, 200, {
         mock,
+        paidCalls: !paidCallsOff(),
         keys: Object.fromEntries(["OPENROUTER_API_KEY", "EXA_API_KEY", "OPENAI_API_KEY", "TYPESAFE_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
@@ -119,6 +122,7 @@ export function createApp(options: AppOptions = {}) {
       if (url.pathname === "/api/runs" && req.method === "POST") {
         const { brief } = await readJson<{ brief?: unknown }>(req)
         if (!mayRun(req)) throw new HttpError(403, "starting a paid run from outside the dashboard needs the x-glhf-token header (glhf/runs/.token)")
+        if (!mock && paidCallsOff()) throw new PaidCallsOff("starting a board run with real models") // not reachable with the engine's own MOCK; kept for a handler built with mock: false
         if (typeof brief !== "string" || !brief.endsWith(".md")) throw new HttpError(400, "name a brief, for example {\"brief\": \"kras-g12c-hit-to-lead.md\"}")
         const file = resolve(path(config, "briefs"), safeId(basename(brief))) // a file in board/briefs, never a path
         if (!existsSync(file)) throw new HttpError(404, "no such brief")
@@ -134,6 +138,7 @@ export function createApp(options: AppOptions = {}) {
           if (!mayRun(req)) throw new HttpError(403, "resuming a paid run from outside the dashboard needs the x-glhf-token header (glhf/runs/.token)")
           if (!existsSync(`${runDir(config, runId)}/run.json`)) throw new HttpError(404, "no such run")
           if (!active.has(runId) && lockHolder(runDir(config, runId)) !== undefined) throw new RunBusy("another process is working on this run")
+          if (paidCallsOff()) refusePaidRun(loadState(config, runId)) // 403: a run started with real models stays paused
           if (!loadState(config, runId).finished) checkDailyBudget(config, new Date(), mock) // 429 past the daily cap
           launch(runId)
           return json(res, 202, { runId })
@@ -146,7 +151,7 @@ export function createApp(options: AppOptions = {}) {
       json(res, 404, { error: "not found" })
     } catch (error) {
       if (res.headersSent) return void res.end()
-      const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : 500
+      const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
       json(res, code, { error: String(error instanceof Error ? error.message : error) })
     }
   }

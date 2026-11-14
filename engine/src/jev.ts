@@ -3,6 +3,7 @@
 import type { ClassifierAnswer, Models } from "@earendil-works/pi-ai"
 import { type BoardConfig, MOCK } from "./config.ts"
 import type { EvidenceItem, Verdict } from "./events.ts"
+import { refusePaid } from "./paid.ts"
 import { claimQuestions, triageQuestions } from "./questions.ts"
 
 const p = (a: ClassifierAnswer | undefined) => (a?.type === "bool" ? a.probability : undefined)
@@ -11,10 +12,12 @@ export class Jev {
   usd = 0
   private models: Models
   private config: BoardConfig
-  constructor(models: Models, config: BoardConfig) { this.models = models; this.config = config }
+  private mock: boolean
+  constructor(models: Models, config: BoardConfig, mock = MOCK) { this.models = models; this.config = config; this.mock = mock }
 
   private async ask(state: Record<string, unknown>, questions: ReturnType<typeof triageQuestions>) {
-    if (MOCK) return mockAnswers(state, questions)
+    if (this.mock) return mockAnswers(state, questions)
+    refusePaid("the Jev checker (OpenRouter or TypeSafe)")
     const id = this.config.checkers.jev.model
     const model = process.env.TYPESAFE_API_KEY
       ? this.models.getModelOfType("classifier", "typesafe", "jev-latest")

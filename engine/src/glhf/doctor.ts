@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
+import { paidCallsOff } from "../paid.ts"
 import { LIMITS, modelsFor } from "./types.ts"
 
 export interface Check { name: string; ok: boolean; need: "local" | "cloud" | "optional"; found: string; fix: string }
@@ -25,6 +26,8 @@ export async function statusBody() {
     tools: { docker: t.docker.ok, uv: t.uv.ok, gcloud: t.gcloud.ok },
     keys: { ANTHROPIC_API_KEY: Boolean(process.env.ANTHROPIC_API_KEY), OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY), HF_TOKEN: hfToken(), EXA_API_KEY: Boolean(process.env.EXA_API_KEY) },
     project: t.project,
+    /** false while the NO_PAID_CALLS switch is on (the default): real models, Exa and cloud runs are refused. */
+    paidCalls: !paidCallsOff(),
     /** [smallest, largest] per budget, from types.ts. */
     limits: LIMITS,
     /** Model ids the New-run form should offer: "mock", then those whose key is set. */

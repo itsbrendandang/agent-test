@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
+import { paidCallsOff } from "./paid.ts"
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 
@@ -34,4 +35,9 @@ export function loadConfig(file = resolve(ROOT, "board/config.yaml")): BoardConf
 export const path = (config: BoardConfig, key: keyof BoardConfig["paths"], ...rest: string[]) =>
   resolve(ROOT, config.paths[key], ...rest)
 
-export const MOCK = process.env.DRUG_BOARD_MOCK === "1" || !process.env.OPENROUTER_API_KEY
+/**
+ * Scripted (mock) models for the drug board: always while paid calls are off (NO_PAID_CALLS, see paid.ts), and
+ * otherwise with DRUG_BOARD_MOCK=1 or without an OPENROUTER_API_KEY.
+ */
+export const mockMode = (env: NodeJS.ProcessEnv = process.env): boolean => paidCallsOff(env) || env.DRUG_BOARD_MOCK === "1" || !env.OPENROUTER_API_KEY
+export const MOCK = mockMode()

@@ -14,6 +14,10 @@ import { type BoardConfig, loadConfig } from "../src/config.ts"
 import { stamp } from "../src/glhf/proc.ts"
 import { allowedHost, allowedOrigin, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
 
+// These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
+// fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
+process.env.NO_PAID_CALLS = "0"
+
 const tmp = () => mkdtempSync(join(tmpdir(), "engine-test-"))
 const req = (headers: Record<string, string>, body = "") => Object.assign(Readable.from(body ? [Buffer.from(body)] : []), { headers }) as unknown as IncomingMessage
 /** The real config, with runs and expertise in a temp folder. */

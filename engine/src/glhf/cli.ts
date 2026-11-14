@@ -12,6 +12,7 @@
 // With the engine server running (npm run engine) commands go through it; otherwise this process tracks.
 import { existsSync, readFileSync } from "node:fs"
 import "../env.ts"
+import { paidCallsLine, paidCallsOff } from "../paid.ts"
 import { doctor, tools } from "./doctor.ts"
 import { TOKEN_FILE } from "./routes.ts"
 import { type Cell, scoreboard } from "./scoreboard.ts"
@@ -138,8 +139,9 @@ async function main(): Promise<number> {
       }
       const local = checks.filter((c) => c.need === "local" && !c.ok)
       const cloud = checks.filter((c) => c.need === "cloud" && !c.ok)
-      console.log(local.length ? "\nNot ready for local runs." : "\nReady for local runs (npm run glhf -- demo).")
-      console.log(cloud.length ? `Not ready for BixBench3 cloud runs: ${cloud.map((c) => c.name).join(", ")}.` : "Ready for BixBench3 cloud runs.")
+      console.log(`\n${paidCallsLine()}`)
+      console.log(local.length ? "Not ready for local runs." : "\nReady for local runs (npm run glhf -- demo).")
+      console.log(cloud.length ? `Not ready for BixBench3 cloud runs: ${cloud.map((c) => c.name).join(", ")}.` : paidCallsOff() ? "The tools and keys for BixBench3 cloud runs are there, but cloud runs are refused while paid calls are off." : "Ready for BixBench3 cloud runs.")
       if (cellranger === undefined) console.log("Cell Ranger archives (needed once, for bixbench3 setup-runtime) were not checked; pass --cellranger DIR.")
       return local.length || cloud.length ? 1 : 0
     }

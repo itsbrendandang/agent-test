@@ -13,6 +13,10 @@ import { type BoardConfig, loadConfig } from "../src/config.ts"
 import { stamp } from "../src/glhf/proc.ts"
 import { sessionToken } from "../src/glhf/routes.ts"
 
+// These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
+// fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
+process.env.NO_PAID_CALLS = "0"
+
 const DASH = "http://127.0.0.1:5317"
 const servers: Server[] = []
 after(() => { for (const s of servers) s.close() })

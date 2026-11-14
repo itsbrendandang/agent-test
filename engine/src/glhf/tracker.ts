@@ -6,6 +6,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { createRegistry, defineExtension, Harness, type TaskId } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
+import { HOW_TO_ALLOW, paidCallsOff } from "../paid.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { DEMO_CASE, type Stored, listStored, loadStored, newRunId, patchRun, publicRun, runDir, RUNS, saveStored, settingsOf, trackerLog } from "./store.ts"
 import { cancelledWith, type RunInput, type RunResult, RunTask, stopAndWait } from "./task.ts"
@@ -89,6 +90,12 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   if (body.mode !== "local" && body.mode !== "cloud") bad('mode must be "local" or "cloud"', "mode")
   if (body.solver !== "single" && body.solver !== "glhf") bad('solver must be "single" or "glhf"', "solver")
   if (typeof body.model !== "string" || !MODEL_ID.test(body.model)) bad("model is required (a model id such as anthropic/claude-sonnet-5-5, or mock)", "model")
+  // The kill switch, before anything else is weighed: nobody starts a run that can spend, whoever they are.
+  if (paidCallsOff()) {
+    if (body.model !== "mock") bad(`${body.mode === "cloud" ? "cloud runs and runs" : "runs"} with a real model are refused; only the scripted model "mock" may run. ${HOW_TO_ALLOW}`, "model")
+    if (body.mode === "cloud") bad(`cloud runs are refused. ${HOW_TO_ALLOW}`, "mode")
+    if (body.exa) bad(`exa (documentation search through Exa) is refused. ${HOW_TO_ALLOW}`, "exa")
+  }
   if (body.task !== undefined && (typeof body.task !== "string" || body.task.length > 100)) bad("task must be a short text")
   if (body.caseDir !== undefined && typeof body.caseDir !== "string") bad("caseDir must be a path", "caseDir")
   const roleModels = body.roleModels ?? {}

@@ -20,6 +20,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto"
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { allowedOrigin, HttpError, readJson } from "../http.ts"
+import { childEnv } from "../paid.ts"
 import { statusBody } from "./doctor.ts"
 import { scoreboard } from "./scoreboard.ts"
 import { BIXBENCH, listRuns, runDetail, RUNS, safeId } from "./store.ts"
@@ -63,7 +64,7 @@ export async function stopTracker(): Promise<void> {
 // The roles as the solver defines them (instructions, time shares), read from the Python code once.
 let roles: Promise<unknown> | undefined
 const loadRoles = () => (roles ??= new Promise((ok, fail) => {
-  execFile("uv", ["run", "python", "-m", "bixbench3.inspect_harness.swarm.catalog"], { cwd: BIXBENCH, timeout: 120_000, maxBuffer: 8 << 20 },
+  execFile("uv", ["run", "python", "-m", "bixbench3.inspect_harness.swarm.catalog"], { cwd: BIXBENCH, env: childEnv(), timeout: 120_000, maxBuffer: 8 << 20 },
     (error, stdout) => { try { if (error) throw error; ok(JSON.parse(stdout)) } catch (e) { roles = undefined; fail(e) } })
 }))
 

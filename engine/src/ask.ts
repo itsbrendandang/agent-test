@@ -15,6 +15,7 @@ import { loadConfig } from "./config.ts"
 import "./env.ts"
 import { listRuns as swarmRuns, runDetail, safeId } from "./glhf/store.ts"
 import { HttpError, readJson } from "./http.ts"
+import { paidCallsOff } from "./paid.ts"
 import { type BoardRun, search } from "./search.ts"
 
 export type Kind = "all" | "swarm" | "board"
@@ -149,6 +150,8 @@ type Fetch = typeof fetch
 export class AskAborted extends Error {}
 
 export async function ask(question: string, boardRuns: BoardRun[], kind: Kind = "all", options: { fetch?: Fetch; key?: string; signal?: AbortSignal; entries?: Entry[] } = {}): Promise<Answer> {
+  // Before the key is even looked at: with paid calls off there is no model call, whoever asks.
+  if (paidCallsOff()) return keywordAnswer(question, boardRuns, kind, "Paid calls are off (NO_PAID_CALLS), so no model was asked and this is a keyword search.")
   const key = options.key ?? process.env.ANTHROPIC_API_KEY
   if (!key) return keywordAnswer(question, boardRuns, kind, "No ANTHROPIC_API_KEY is set, so this is a keyword search.")
   try {

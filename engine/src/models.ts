@@ -10,10 +10,12 @@ import type { ModelRef } from "@earendil-works/pi-durable"
 import type { AgentDef } from "./agents.ts"
 import { type BoardConfig, MOCK } from "./config.ts"
 import { mockLeadTurn, mockMemberTurn } from "./mock.ts"
+import { refusePaid } from "./paid.ts"
 
-export function buildModels(roster: AgentDef[]): Models {
+export function buildModels(roster: AgentDef[], mock = MOCK): Models {
   const models = createModels()
-  if (!MOCK) {
+  if (!mock) {
+    refusePaid("the drug board with real models (OpenRouter, OpenAI)") // no real provider is registered while paid calls are off
     models.setProvider(openrouterProvider()) // OPENROUTER_API_KEY: chat models and Jev
     if (process.env.OPENAI_API_KEY) models.setProvider(openaiProvider()) // escalation checker
     return models

@@ -1,4 +1,6 @@
 // The GLHF run-tracker contract. The dashboard's Swarm view is built against these shapes; do not rename.
+import { paidCallsOff } from "../paid.ts"
+
 // "cancelled": stopped on request (POST /api/glhf/runs/:id/cancel). It is settled like done and failed, but it is
 // not a result: the scoreboard leaves it out.
 export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed" | "cancelled"
@@ -109,7 +111,7 @@ export const MODEL_CHOICES = [
   { id: "openai/gpt-5.5", key: "OPENAI_API_KEY" },
 ] as const
 
-/** "mock" first, then the models whose key is set. */
-export const modelsFor = (env: NodeJS.ProcessEnv = process.env): string[] => ["mock", ...MODEL_CHOICES.filter((m) => Boolean(env[m.key])).map((m) => m.id)]
+/** "mock" first, then the models whose key is set. Only "mock" while paid calls are off (NO_PAID_CALLS, ../paid.ts). */
+export const modelsFor = (env: NodeJS.ProcessEnv = process.env): string[] => ["mock", ...(paidCallsOff(env) ? [] : MODEL_CHOICES.filter((m) => Boolean(env[m.key])).map((m) => m.id))]
 
 export const RECORD = 0.523 // BixBench3 best published score (the bar to beat)

@@ -32,6 +32,7 @@ import { type Brief, loadBrief } from "./brief.ts"
 import { type Claim, parseClaims, stripClaims } from "./claims.ts"
 import { claudeCodeCheck, openaiCheck } from "./checkers.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
+import { refusePaid } from "./paid.ts"
 import { type Checker, EventLog, type EvidenceItem, type Verdict } from "./events.ts"
 import { exaSearch, OBJECTIVE_DESCRIPTION } from "./exa.ts"
 import { Jev } from "./jev.ts"
@@ -66,6 +67,14 @@ export const runDir = (config: BoardConfig, runId: string) => path(config, "runs
 export class BudgetReached extends Error {}
 
 export class RunBusy extends Error {}
+
+/**
+ * Refuse to continue a run that was started with real models while paid calls are off. Continuing it would
+ * either spend, or put scripted turns into a real record. A finished run and a scripted run pass.
+ */
+export function refusePaidRun(state: Pick<RunState, "runId" | "finished" | "mock">): void {
+  if (!state.finished && state.mock !== true) refusePaid(`continuing board run ${state.runId}, which was started with real models`)
+}
 
 /** The process that holds the run's lock (board/runs/<run>/run.lock), if it is still alive. See runlock.ts. */
 export const lockHolder = (dir: string): number | undefined => holder(`${dir}/run.lock`)
@@ -338,6 +347,7 @@ export function newRunDir(config: BoardConfig, base: string): string {
 export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean } = {}): Promise<void> {
   const config = options.config ?? loadConfig()
   if (loadState(config, runId).finished) return
+  refusePaidRun(loadState(config, runId))
   checkDailyBudget(config, new Date(), options.mock ?? MOCK) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
   try { await runLocked(config, runId, onLog) } finally { release() }
@@ -346,6 +356,7 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void, o
 async function runLocked(config: BoardConfig, runId: string, onLog?: (log: EventLog) => void): Promise<void> {
   const state = loadState(config, runId) // read under the lock
   if (state.finished) return
+  refusePaidRun(state)
   const brief = loadBrief(state.briefFile, config.brief.required_sections)
   const lead = loadAgent(config, "lead-scientist")
   const roster = loadRoster(config)

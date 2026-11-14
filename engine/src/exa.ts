@@ -4,6 +4,7 @@
 import { MOCK } from "./config.ts"
 import type { EvidenceItem } from "./events.ts"
 import { MOCK_EVIDENCE } from "./mock.ts"
+import { refusePaid } from "./paid.ts"
 
 /** Verbatim from Exa: the description of the `objective` tool parameter. Do not reword. */
 export const OBJECTIVE_DESCRIPTION =
@@ -31,6 +32,7 @@ interface ExaResponse {
 
 /** One live Exa search. Throws on a non-2xx response. */
 export async function exaLive(query: string, objective: string, apiKey: string): Promise<SearchResult> {
+  refusePaid("Exa search (api.exa.ai)")
   const res = await fetch("https://api.exa.ai/search", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": apiKey },
@@ -47,8 +49,8 @@ export async function exaLive(query: string, objective: string, apiKey: string):
 }
 
 /** Fixture papers in mock mode or without a key; a live search otherwise. */
-export async function exaSearch(query: string, objective: string): Promise<SearchResult> {
+export async function exaSearch(query: string, objective: string, mock = MOCK): Promise<SearchResult> {
   const key = process.env.EXA_API_KEY
-  if (MOCK || !key) return { items: MOCK_EVIDENCE.slice(0, 5), notices: [] }
+  if (mock || !key) return { items: MOCK_EVIDENCE.slice(0, 5), notices: [] }
   return exaLive(query, objective, key)
 }

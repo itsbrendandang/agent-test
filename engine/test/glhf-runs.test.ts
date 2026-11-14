@@ -12,6 +12,10 @@ import { fileURLToPath } from "node:url"
 import { after, before, test } from "node:test"
 import type { GlhfRun } from "../src/glhf/types.ts"
 
+// These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
+// fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
+process.env.NO_PAID_CALLS = "0"
+
 const here = dirname(fileURLToPath(import.meta.url))
 const runs = mkdtempSync(join(tmpdir(), "glhf-runs-"))
 const stubLog = join(runs, "stub.log")
@@ -310,10 +314,10 @@ test("status gives the limits from types.ts, the models to offer, and keys as tr
   for (const [name, value] of Object.entries(body.keys)) assert.equal(typeof value, "boolean", name)
   assert.equal(body.models[0], "mock")
   assert.deepEqual(body.models, modelsFor())
-  assert.deepEqual(modelsFor({}), ["mock"])
-  assert.deepEqual(modelsFor({ ANTHROPIC_API_KEY: "k" }), ["mock", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5"])
-  assert.deepEqual(modelsFor({ OPENAI_API_KEY: "k" }), ["mock", "openai/gpt-5.5"])
-  assert.equal(modelsFor({ ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }).length, 4)
+  assert.deepEqual(modelsFor({ NO_PAID_CALLS: "0" }), ["mock"])
+  assert.deepEqual(modelsFor({ NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "k" }), ["mock", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5"])
+  assert.deepEqual(modelsFor({ NO_PAID_CALLS: "0", OPENAI_API_KEY: "k" }), ["mock", "openai/gpt-5.5"])
+  assert.equal(modelsFor({ NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }).length, 4)
   // The limits are what is enforced: one past each end is refused, each end is accepted.
   const base = { mode: "local", solver: "glhf", model: "mock" } as const
   for (const field of ["timeLimit", "maxTokens", "reviewRounds", "maxMessagesPerRole", "seed"] as const) {

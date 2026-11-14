@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "nod
 import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
+import { childEnv, HOW_TO_ALLOW, paidCallsOff } from "../paid.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, type Stored, tail, trackerLog } from "./store.ts"
 import { type GlhfRun, type RunRequest, settled, type Usage } from "./types.ts"
@@ -59,7 +60,7 @@ export function startOnce(dir: string, name: string, argv: string[], stdout: str
   try { writeFileSync(pidFile, "", { flag: "wx" }) } catch { return false }
   const redirect = stderr ? `> ${quote(stdout)} 2> ${quote(stderr)}` : `> ${quote(stdout)} 2>&1`
   const script = `"$@" ${redirect}; echo $? > ${quote(`${dir}/${name}.exit`)}`
-  const child = spawn("sh", ["-c", script, "sh", ...argv], { cwd, detached: true, stdio: "ignore", env: process.env })
+  const child = spawn("sh", ["-c", script, "sh", ...argv], { cwd, detached: true, stdio: "ignore", env: childEnv() }) // keys blanked while paid calls are off
   child.on("error", () => { /* reported by processState as "gone" */ })
   child.unref()
   if (child.pid) writeFileSync(pidFile, stamp(child.pid))
@@ -113,7 +114,7 @@ export async function stopAndWait(dir: string, name: string, graceMs = ms("GLHF_
 
 const run = (argv: string[], timeoutMs: number) =>
   new Promise<{ code: number; stdout: string; stderr: string }>((ok) => {
-    execFile(argv[0], argv.slice(1), { cwd: BIXBENCH, env: process.env, timeout: timeoutMs, maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
+    execFile(argv[0], argv.slice(1), { cwd: BIXBENCH, env: childEnv(), timeout: timeoutMs, maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
       const code = error ? (typeof error.code === "number" ? error.code : 1) : 0
       ok({ code, stdout, stderr: stderr || (error && typeof error.code !== "number" ? String(error.message) : "") })
     })
@@ -206,6 +207,17 @@ export function predecessor(after: string, stored = loadStored(after)): { settle
   return { settled: true }
 }
 
+/**
+ * Why this run may not be launched, or go on, while paid calls are off; undefined when it costs nothing (a local
+ * run of the scripted model without Exa). checkRequest refuses such a request, so this is for runs that were
+ * accepted earlier: a queued partner, or a run that an engine with paid calls on left behind.
+ */
+export function paidRun(input: Pick<RunInput, "mode" | "model" | "exa" | "roleModels">): string | undefined {
+  if (!paidCallsOff()) return undefined
+  const what = input.mode === "cloud" ? "a cloud run" : input.model !== "mock" || Object.keys(input.roleModels ?? {}).length ? "a run with a real model" : input.exa ? "a run with Exa search" : undefined
+  return what && `${what} is refused. ${HOW_TO_ALLOW}`
+}
+
 const lastPhase = (dir: string) => {
   const ledger = readJson<{ events?: { kind?: string; phase?: string }[] }>(`${dir}/outputs/glhf/ledger.json`)
   return ledger?.events?.findLast((e) => e.kind === "phase.started")?.phase
@@ -234,6 +246,8 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         // The clock of this run starts now, not when it was queued: its time limit and its duration count from here.
         patchRun(input.id, { startedAt: runtime.now(), note: before.note }, before.note ?? `${input.after} is settled; starting`)
       }
+      const refused = paidRun(input)
+      if (refused && !existsSync(`${dir}/runner.pid`) && !existsSync(`${dir}/launch.pid`)) return finish(runtime, context, input.id, { phase: "failed", error: `not launched: ${refused}` })
       const roles = Object.entries(input.roleModels ?? {}).flatMap(([role, model]) => ["--role-model", `${role}=${model}`])
       if (input.mode === "local") {
         const argv = [...localRunner(), "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
@@ -266,6 +280,13 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       if (cancelled(id)) return endCancelled(runtime, context)
       const dir = runDir(id)
       const { polls } = task.state.checkpoint
+      // The switch was turned on while a run that spends was going: stop it. (A finished one is read as usual below.)
+      const refused = paidRun(task.input)
+      const ended = ["done", "failed"].includes(readJson<{ status?: string }>(`${dir}/run.json`)?.status ?? "")
+      if (refused && !ended && processState(dir, "runner", polls) === "running" && parseStamp(readText(`${dir}/runner.pid`))) {
+        const stopped = await stopAndWait(dir, "runner")
+        return finish(runtime, context, id, { phase: "failed", error: `stopped: ${refused}${stopped === "stuck" ? " The runner could not be stopped; check for a leftover process (runner.pid) or container." : ""}` })
+      }
       type LocalRun = { status?: string; score?: number; artifacts?: GlhfRun["artifacts"]; usage?: Usage; error?: string | null; finished_at?: number }
       const read = () => readJson<LocalRun>(`${dir}/run.json`)
       let local = read()
@@ -297,6 +318,13 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       if (cancelled(input.id)) return endCancelled(runtime, context)
       const dir = runDir(input.id)
       const { polls } = task.state.checkpoint
+      // The switch was turned on while `bixbench3 run` was still provisioning: stop the launcher before it starts
+      // the run on the VM. What it already created is not removed from here; the message says how to check.
+      const refused = paidRun(input)
+      if (refused && processState(dir, "launch", polls) === "running" && parseStamp(readText(`${dir}/launch.pid`))) {
+        await stopAndWait(dir, "launch")
+        return finish(runtime, context, input.id, { phase: "failed", error: `launch stopped: ${refused}\nA VM may already exist and bill. Check with: gcloud compute instances list --project ${input.project}` })
+      }
       let state = processState(dir, "launch", polls)
       const started = statSync(`${dir}/launch.pid`, { throwIfNoEntry: false })?.birthtimeMs || (loadStored(input.id)?.run.startedAt ?? runtime.now())
       const stuck = state === "running" && runtime.now() > started + LAUNCH_TIMEOUT()
@@ -339,7 +367,10 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         return runtime.commit(() => ({ status: "running", checkpoint: { phase: "complete", remoteId, remoteStatus: status.status!, attempts: 0 } }), context)
       }
       if (status.status === "cancelled") return finish(runtime, context, input.id, { phase: "failed", error: `cloud run ${remoteId} was cancelled` })
-      patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: ${status.status} (phase=${status.phase}, vm=${status.vm_state})` })
+      // A cloud run that was launched before the switch came on has its keys on the VM. The engine cannot take
+      // them back, and it does not delete a VM on its own; it says how a person stops it.
+      const paid = paidRun(input) ? ` Paid calls are off now, but this run keeps spending on its VM. Stop it with: ${bixbench3().join(" ")} cancel --run ${remoteId} --project ${input.project}` : ""
+      patchRun(input.id, { phase: "running", detail: `cloud run ${remoteId}: ${status.status} (phase=${status.phase}, vm=${status.vm_state})${paid}` })
       await runtime.sleepUntil(runtime.now() + CLOUD_POLL(), { phase: "watchCloud", remoteId, polls: polls + 1, errors: 0 }, context)
     },
 

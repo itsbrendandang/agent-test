@@ -8,6 +8,7 @@ import { BudgetReached, loadState, RunBusy, runBoard, startRun } from "./board.t
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path, ROOT } from "./config.ts"
 import type { Stamped } from "./events.ts"
+import { PaidCallsOff } from "./paid.ts"
 
 const [command, arg] = process.argv.slice(2)
 const config = loadConfig()
@@ -46,6 +47,6 @@ try {
   }
 } catch (error) {
   if (error instanceof BriefRejected) { console.error(`✘ ${error.message}`); process.exit(2) }
-  if (error instanceof RunBusy || error instanceof BudgetReached) { console.error(`✘ ${error.message}`); process.exit(3) }
+  if (error instanceof RunBusy || error instanceof BudgetReached || error instanceof PaidCallsOff) { console.error(`✘ ${error.message}`); process.exit(3) }
   throw error
 }

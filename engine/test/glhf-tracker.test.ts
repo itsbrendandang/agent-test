@@ -9,6 +9,10 @@ import type { GlhfRun, RunRequest } from "../src/glhf/types.ts"
 import { findManifest, hasRival, manifestSolver, processState, startOnce } from "../src/glhf/task.ts"
 import { BadRequest, checkRequest, lock, TrackerBusy } from "../src/glhf/tracker.ts"
 
+// These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
+// fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
+process.env.NO_PAID_CALLS = "0"
+
 const tmp = () => mkdtempSync(join(tmpdir(), "glhf-test-"))
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 const NOBODY = { token: false, origin: false }

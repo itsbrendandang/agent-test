@@ -11,6 +11,10 @@ import { claudeCodeCheck } from "../src/checkers.ts"
 import type { Claim } from "../src/claims.ts"
 import { type BoardConfig, loadConfig, ROOT } from "../src/config.ts"
 
+// These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
+// fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
+process.env.NO_PAID_CALLS = "0"
+
 const tmp = () => mkdtempSync(join(tmpdir(), "board-core-"))
 const tempConfig = (): BoardConfig => {
   const config = loadConfig(), dir = tmp()
