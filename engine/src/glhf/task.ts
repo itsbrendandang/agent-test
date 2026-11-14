@@ -2,6 +2,8 @@
 // a stored sleep, so killing the engine at any point loses nothing: on restart the task continues from its
 // last checkpoint. The benchmark processes themselves are started detached and outlive the engine.
 //
+//   pair:   the second run of a matched pair stays in launch (checking every 2 s) until the run it waits for
+//           (input.after) is settled, then launches like any other run. The wait is a stored sleep too.
 //   local:  launch -> watchLocal (poll run.json every 2 s) -> done | failed
 //   cloud:  launch -> awaitLaunch (`bixbench3 run` provisions, then detaches) -> watchCloud (`status` every
 //           5 min) -> complete (`complete` collects grades and deletes the VM) -> done | failed
@@ -12,7 +14,7 @@ import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { BIXBENCH, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, type Stored, tail, trackerLog } from "./store.ts"
-import type { GlhfRun, RunRequest, Usage } from "./types.ts"
+import { type GlhfRun, type RunRequest, settled, type Usage } from "./types.ts"
 
 export type RunInput = RunRequest & { id: string }
 type Checkpoint =
@@ -21,7 +23,7 @@ type Checkpoint =
   | { phase: "awaitLaunch"; polls: number }
   | { phase: "watchCloud"; remoteId: string; polls: number; errors: number }
   | { phase: "complete"; remoteId: string; remoteStatus: string; attempts: number }
-export type RunResult = { phase: "done" | "failed"; score: number | null }
+export type RunResult = { phase: "done" | "failed" | "cancelled"; score: number | null }
 
 const ms = (name: string, fallback: number) => Number(process.env[name] ?? fallback)
 const LOCAL_POLL = () => ms("GLHF_LOCAL_POLL_MS", 2_000)
@@ -36,6 +38,8 @@ const localDeadline = (startedAt: number, timeLimit: number | undefined) => {
   return startedAt + limit + ms("GLHF_LOCAL_MARGIN_MS", Math.max(30 * 60_000, limit / 4))
 }
 
+/** The local runner. GLHF_LOCAL_CMD replaces it (tests use a stub script); the arguments stay the same. */
+const localRunner = () => (process.env.GLHF_LOCAL_CMD ?? "uv run python -m bixbench3.glhf_local").split(/\s+/).filter(Boolean)
 /** The `bixbench3` command. GLHF_BIXBENCH3_CMD replaces it (tests use a stub script). */
 const bixbench3 = () => (process.env.GLHF_BIXBENCH3_CMD ?? "uv run bixbench3").split(/\s+/).filter(Boolean)
 const manifestsRoot = () => process.env.GLHF_BIXBENCH3_RUNS ?? resolve(BIXBENCH, "runs")
@@ -74,12 +78,37 @@ export function processState(dir: string, name: string, polls: number): "running
   return alive(mark) ? "running" : "gone"
 }
 
+const signalGroup = (pid: number, signal: NodeJS.Signals) => {
+  try { process.kill(-pid, signal); return true } catch { try { process.kill(pid, signal); return true } catch { return false } }
+}
+
 /** Stop a detached command and what it started (its process group). Only when it is still the process we started. */
 function stop(dir: string, name: string): boolean {
   const mark = readText(`${dir}/${name}.pid`)
   const pid = parseStamp(mark)?.pid
   if (!pid || !alive(mark)) return false
-  try { process.kill(-pid, "SIGTERM"); return true } catch { try { process.kill(pid, "SIGTERM"); return true } catch { return false } }
+  return signalGroup(pid, "SIGTERM")
+}
+
+/**
+ * Stop a detached command and wait until it is gone: SIGTERM to its process group, then SIGKILL to the group when
+ * it is still there after `graceMs`. "none": it was not running (never started, or already ended).
+ */
+export async function stopAndWait(dir: string, name: string, graceMs = ms("GLHF_CANCEL_GRACE_MS", 5_000)): Promise<"stopped" | "none" | "stuck"> {
+  const mark = readText(`${dir}/${name}.pid`)
+  const pid = parseStamp(mark)?.pid
+  if (!pid || !alive(mark)) return "none"
+  signalGroup(pid, "SIGTERM")
+  const gone = async (within: number) => {
+    for (const end = Date.now() + within; Date.now() < end;) {
+      if (!alive(mark)) return true
+      await new Promise((ok) => setTimeout(ok, 50))
+    }
+    return !alive(mark)
+  }
+  if (await gone(graceMs)) return "stopped"
+  signalGroup(pid, "SIGKILL")
+  return (await gone(2_000)) ? "stopped" : "stuck"
 }
 
 const run = (argv: string[], timeoutMs: number) =>
@@ -145,7 +174,7 @@ export function findManifest(input: Pick<RunInput, "task" | "model" | "solver">,
 /** Is another cloud run of the other solver, for the same task and model, unfinished and still without its cloud run id? */
 export const hasRival = (input: Pick<RunInput, "id" | "task" | "model" | "solver">, stored: Stored[] = listStored()) => stored.some((s) =>
   s.run.id !== input.id && s.run.mode === "cloud" && s.run.solver !== input.solver && s.run.task === input.task && s.run.model === input.model &&
-  s.run.phase !== "done" && s.run.phase !== "failed" && !s.run.remoteId)
+  !settled(s.run.phase) && !s.run.remoteId)
 
 /** Cloud runs other tracked runs already follow. */
 const takenRemoteIds = (except: string) => listStored().filter((s) => s.run.id !== except).flatMap((s) => (s.run.remoteId ? [s.run.remoteId] : []))
@@ -155,6 +184,22 @@ const grade = (dir: string) => {
   if (typeof g?.score !== "number") return {}
   const artifacts = (g.artifacts ?? []).flatMap((a) => (typeof a.artifact_id === "string" && typeof a.score === "number" ? [{ artifact_id: a.artifact_id, score: a.score }] : []))
   return { score: g.score, artifacts }
+}
+
+/** Was the run cancelled (tracker.cancel)? Then its task only has to end: nothing is started, read or written. */
+const cancelled = (id: string) => loadStored(id)?.run.phase === "cancelled"
+
+/**
+ * The second run of a pair: is the run it waits for settled? `note` says what to remember when that run did not
+ * finish, because the partner starts anyway (a pair with one failed side is still worth its other side).
+ */
+export function predecessor(after: string, stored = loadStored(after)): { settled: boolean; note?: string } {
+  if (!stored) return { settled: true, note: `started although the record of ${after}, the run it was queued behind, is gone` }
+  const { phase, error } = stored.run
+  if (!settled(phase)) return { settled: false }
+  if (phase === "failed") return { settled: true, note: `started although ${after}, the run it was queued behind, failed: ${(error ?? "no error message").split("\n")[0].slice(0, 300)}` }
+  if (phase === "cancelled") return { settled: true, note: `started although ${after}, the run it was queued behind, was cancelled` }
+  return { settled: true }
 }
 
 const lastPhase = (dir: string) => {
@@ -169,11 +214,21 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
   phases: {
     launch: async (task, runtime, context) => {
       const input = task.input
+      if (cancelled(input.id)) return endCancelled(runtime, context)
       const dir = runDir(input.id)
       mkdirSync(dir, { recursive: true })
+      if (input.after && !existsSync(`${dir}/runner.pid`) && !existsSync(`${dir}/launch.pid`)) {
+        const before = predecessor(input.after)
+        if (!before.settled) {
+          patchRun(input.id, { phase: "queued", detail: `waiting for ${input.after} to finish` })
+          return runtime.sleepUntil(runtime.now() + LOCAL_POLL(), { phase: "launch" }, context)
+        }
+        // The clock of this run starts now, not when it was queued: its time limit and its duration count from here.
+        patchRun(input.id, { startedAt: runtime.now(), note: before.note }, before.note ?? `${input.after} is settled; starting`)
+      }
       const roles = Object.entries(input.roleModels ?? {}).flatMap(([role, model]) => ["--role-model", `${role}=${model}`])
       if (input.mode === "local") {
-        const argv = ["uv", "run", "python", "-m", "bixbench3.glhf_local", "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
+        const argv = [...localRunner(), "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
           "--model", input.model, "--out", dir, ...roles,
           ...(input.timeLimit ? ["--time-limit", String(input.timeLimit)] : []),
           ...(input.reviewRounds ? ["--review-rounds", String(input.reviewRounds)] : []),
@@ -200,6 +255,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
 
     watchLocal: async (task, runtime, context) => {
       const { id } = task.input
+      if (cancelled(id)) return endCancelled(runtime, context)
       const dir = runDir(id)
       const { polls } = task.state.checkpoint
       type LocalRun = { status?: string; score?: number; artifacts?: GlhfRun["artifacts"]; usage?: Usage; error?: string | null; finished_at?: number }
@@ -230,6 +286,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
 
     awaitLaunch: async (task, runtime, context) => {
       const input = task.input
+      if (cancelled(input.id)) return endCancelled(runtime, context)
       const dir = runDir(input.id)
       const { polls } = task.state.checkpoint
       let state = processState(dir, "launch", polls)
@@ -301,7 +358,8 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       })
     },
   },
-  // Stops tracking only. It does not stop a local runner or delete a cloud VM.
+  // Stops tracking only. It does not stop a local runner or delete a cloud VM. tracker.cancel stops the runner
+  // itself and marks the record cancelled before it aborts the task; that record is left as it is (patchRun).
   abort: async (task, runtime, context) => {
     patchRun(task.input.id, { phase: "failed", error: "tracking was aborted; the run itself was not stopped", finishedAt: Date.now() })
     await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context)
@@ -310,8 +368,13 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
 
 type Runtime = TaskRuntime<RunInput, Checkpoint, RunResult, object>
 
+/** End the task of a run that was cancelled. The record already says so. */
+const endCancelled = (runtime: Runtime, context: Context) =>
+  runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: { phase: "cancelled", score: null } } }), context)
+
 /** Settle a run: the record first (rewriting it is harmless), then the task's outcome. Logged once. */
 async function finish(runtime: Runtime, context: Context, id: string, final: Partial<GlhfRun> & { phase: "done" | "failed" }): Promise<void> {
+  if (cancelled(id)) return endCancelled(runtime, context) // the cancel arrived while this phase was working
   const stamp = { at: final.finishedAt ?? runtime.now() }
   const first = await runtime.memo("finished", stamp, context) // the first attempt wins, also across restarts
   const score = typeof final.score === "number" ? final.score : null

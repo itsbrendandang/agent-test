@@ -5,6 +5,7 @@
 //   run --mode local|cloud ...  start a run (see `run --help`); --follow stays until it ends
 //   list                        runs, newest first
 //   show <id>                   one run: status, score, claims and issues
+//   cancel <id>                 stop a local run and mark it cancelled
 //   resume                      continue tracking unfinished runs (when the engine server is not running)
 //   scoreboard                  single agent vs swarm per task, next to the record
 //
@@ -15,13 +16,13 @@ import { doctor, tools } from "./doctor.ts"
 import { TOKEN_FILE } from "./routes.ts"
 import { type Cell, scoreboard } from "./scoreboard.ts"
 import { listRuns, runDetail } from "./store.ts"
-import { BadRequest, checkRequest, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
-import { type GlhfRun, RECORD, type RunRequest } from "./types.ts"
+import { BadRequest, CannotCancel, checkRequest, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
+import { type GlhfRun, RECORD, type RunRequest, settled as settledPhase } from "./types.ts"
 
 const ENGINE = `http://127.0.0.1:${process.env.DRUG_BOARD_PORT ?? 8787}`
 const [command, ...rest] = process.argv.slice(2)
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
-const settled = (run: GlhfRun) => run.phase === "done" || run.phase === "failed"
+const settled = (run: GlhfRun) => settledPhase(run.phase)
 const fmt = (n: number | undefined) => (n === undefined ? "  -  " : n.toFixed(3))
 
 /** --name value flags; a flag given twice becomes a list; a bare flag is "true". */
@@ -168,6 +169,22 @@ async function main(): Promise<number> {
       printResult(f.positional[0])
       return 0
     }
+    case "cancel": {
+      const id = f.positional[0]
+      if (!id) { console.error("cancel <run id>"); return 1 }
+      if (await serverUp()) {
+        const res = await fetch(`${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+        const body = (await res.json()) as Partial<GlhfRun> & { error?: string }
+        if (!res.ok) { console.error(`could not cancel: ${body.error ?? res.status}`); return 1 }
+        console.log(`${body.id}: ${body.phase}${body.detail ? ` (${body.detail})` : ""}`)
+        return 0
+      }
+      return withTracker(async (tracker) => {
+        const run = await tracker.cancel(id)
+        console.log(`${run.id}: ${run.phase}${run.detail ? ` (${run.detail})` : ""}`)
+        return 0
+      })
+    }
     case "resume": {
       if (await serverUp()) {
         const open = listRuns().filter((r) => !settled(r))
@@ -203,12 +220,12 @@ async function main(): Promise<number> {
       return 0
     }
     default:
-      console.log("Commands: doctor, demo, run, list, show <id>, resume, scoreboard.  Details: engine/src/glhf/cli.ts")
+      console.log("Commands: doctor, demo, run, list, show <id>, cancel <id>, resume, scoreboard.  Details: engine/src/glhf/cli.ts")
       return command ? 1 : 0
   }
 }
 
 main().then((code) => process.exit(code), (error) => {
-  console.error(error instanceof BadRequest ? error.message : error)
+  console.error(error instanceof BadRequest || error instanceof LocalBusy || error instanceof NoSuchRun || error instanceof CannotCancel ? error.message : error)
   process.exit(1)
 })

@@ -1,13 +1,20 @@
 // /api/glhf/* for the dashboard's Swarm view. See types.ts for the shapes.
 //
-//   GET  /api/glhf/status        the record to beat, and which tools and keys this machine has (never the keys)
+//   GET  /api/glhf/status        the record to beat, which tools and keys this machine has (never the keys), the
+//                                limits a request must keep (`limits`, from types.ts) and the models to offer
 //   GET  /api/glhf/roles         the swarm's roles: instructions and time shares, read from the solver code
 //   GET  /api/glhf/runs          runs, newest first
 //   GET  /api/glhf/scoreboard    single agent against swarm, runs paired only when their settings match
 //   POST /api/glhf/runs          start a run. Who may start what is in tracker.ts (checkRequest):
 //                                cloud runs and case directories need the CLI's token; a real model, Exa and
 //                                memory need the token or the dashboard's own Origin; anyone else gets the demo
+//                                Body: a RunRequest; `solvers: ["glhf", "single"]` instead of `solver` starts a
+//                                matched pair, the second when the first is settled. Answers 201 {id, ids}.
+//                                409 {error, run} while a local run is still going: one local run at a time.
+//                                400 {error, field?}: `field` names the input the refusal is about.
 //   GET  /api/glhf/runs/:id      one run with its ledger, FINDINGS.md and METHODS.md
+//   POST /api/glhf/runs/:id/cancel   stop a local run and mark it cancelled; answers the run. A settled run is
+//                                returned unchanged. Open to the dashboard and to local callers, like every route.
 import { execFile } from "node:child_process"
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs"
@@ -16,8 +23,8 @@ import { allowedOrigin, HttpError, readJson } from "../http.ts"
 import { statusBody } from "./doctor.ts"
 import { scoreboard } from "./scoreboard.ts"
 import { BIXBENCH, listRuns, runDetail, RUNS, safeId } from "./store.ts"
-import { BadRequest, checkRequest, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
-import { RECORD, type RunRequest } from "./types.ts"
+import { BadRequest, CannotCancel, checkStart, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
+import { RECORD, type StartBody } from "./types.ts"
 
 // Any web page can POST to localhost, and runs cost money. So a request may start a cloud run or name a case
 // directory only with this token, which the server writes to a file only local users can read. Runs with a
@@ -26,6 +33,7 @@ export const TOKEN_FILE = `${RUNS}/.token`
 const token = randomBytes(24).toString("hex")
 
 let tracker: Tracker | undefined
+let retry: ReturnType<typeof setTimeout> | undefined
 let status: { at: number; body: Awaited<ReturnType<typeof statusBody>> } | undefined
 
 /** Take over tracking and continue unfinished runs. Retries while a CLI command holds the tracker. */
@@ -40,8 +48,16 @@ export async function startTracker(): Promise<void> {
   } catch (error) {
     if (!(error instanceof TrackerBusy)) throw error
     console.log(`glhf tracker: ${error.message}; retrying in 3 s`)
-    setTimeout(() => void startTracker().catch((e) => console.error("glhf tracker failed to start:", e)), 3_000)
+    retry = setTimeout(() => void startTracker().catch((e) => console.error("glhf tracker failed to start:", e)), 3_000)
   }
+}
+
+/** Stop tracking and release the tracker lock. Runs that were launched go on; the next startTracker continues them. */
+export async function stopTracker(): Promise<void> {
+  clearTimeout(retry)
+  const open = tracker
+  tracker = undefined
+  await open?.close()
 }
 
 // The roles as the solver defines them (instructions, time shares), read from the Python code once.
@@ -78,11 +94,11 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
     if (parts[2] === "roles" && req.method === "GET") return json(res, 200, await loadRoles())
     if (parts[2] === "runs" && !parts[3] && req.method === "GET") return json(res, 200, listRuns())
     if (parts[2] === "runs" && !parts[3] && req.method === "POST") {
-      const body = await readJson<Partial<RunRequest>>(req) // 415 unless application/json, 413 over 1 MB
-      const request = checkRequest(body, { token: hasToken(req), origin: allowedOrigin(req) })
+      const body = await readJson<StartBody>(req) // 415 unless application/json, 413 over 1 MB
+      const requests = checkStart(body, { token: hasToken(req), origin: allowedOrigin(req) })
       if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
-      const run = await tracker.start(request)
-      return json(res, 201, { id: run.id })
+      const ids = (await tracker.startChain(requests)).map((run) => run.id)
+      return json(res, 201, { id: ids[0], ids }) // `id` is the first run: what callers that start one run read
     }
     if (parts[2] === "scoreboard" && req.method === "GET") return json(res, 200, scoreboard(listRuns()))
     if (parts[2] === "runs" && parts[3] && !parts[4] && req.method === "GET") {
@@ -92,8 +108,20 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
       const detail = runDetail(id)
       return detail ? json(res, 200, detail) : json(res, 404, { error: "no such run" })
     }
+    if (parts[2] === "runs" && parts[3] && parts[4] === "cancel" && !parts[5] && req.method === "POST") {
+      let id: string
+      try { id = decodeURIComponent(parts[3]) } catch { return json(res, 400, { error: "invalid run id" }) }
+      if (!safeId(id)) return json(res, 400, { error: "invalid run id" })
+      if (!tracker) return json(res, 503, { error: "the run tracker is held by another process; try again shortly" })
+      return json(res, 200, await tracker.cancel(id))
+    }
     json(res, 404, { error: "not found" })
   } catch (error) {
-    json(res, error instanceof HttpError ? error.status : error instanceof BadRequest ? 400 : 500, { error: String(error instanceof Error ? error.message : error) })
+    const message = String(error instanceof Error ? error.message : error)
+    if (error instanceof BadRequest) return json(res, 400, error.field ? { error: message, field: error.field } : { error: message })
+    if (error instanceof LocalBusy) return json(res, 409, { error: message, run: error.run })
+    if (error instanceof CannotCancel) return json(res, 409, { error: message })
+    if (error instanceof NoSuchRun) return json(res, 404, { error: "no such run" })
+    json(res, error instanceof HttpError ? error.status : 500, { error: message })
   }
 }

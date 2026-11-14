@@ -48,6 +48,12 @@ documents are in `docs/`.
 - The drug board's Claude Code checker runs with `--restricted` by default and cannot run code
   (`checkers.claude_code_cmd` in `board/config.yaml`). Do not remove the flag or add `Bash` to
   `checkers.claude_code_tools`.
+- Durable replay repeats your code, so it repeats your side effects. Any call that costs money
+  or acts outside the process (a model, a checker, Exa, a subprocess, a cloud launch) must be
+  stored under a stable key before the run can rely on it, and skipped on replay when that key
+  exists. The pattern is in `checkClaims` in `engine/src/board.ts` (key: round, member, hash of
+  the claim) and `startOnce` in `engine/src/glhf/tracker.ts`. Do not add a paid call without
+  one, and add a test that replays and counts the calls.
 - The engine's request checks (`engine/src/http.ts`, `checkRequest` in
   `engine/src/glhf/tracker.ts`) decide who may start a paid run. Do not loosen them.
 - Do not rename the types in `engine/src/glhf/types.ts`. The dashboard is built against them.
