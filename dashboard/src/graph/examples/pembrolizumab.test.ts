@@ -111,7 +111,8 @@ describe("the cancer-drug example's graph", () => {
 
   it("is a long run: many statements by several roles, each checked, some failing", () => {
     expect(g.totals.claims).toBeGreaterThanOrEqual(45)
-    expect(g.totals.members).toBeGreaterThanOrEqual(6)
+    expect(g.totals.members).toBe(EXAMPLE_ROSTER.length) // one node per role: the lead is not counted twice
+    expect(g.nodes.filter((n) => n.kind === "agent" && n.label === "Lead Scientist")).toHaveLength(1)
     expect(g.totals.byOutcome.fails).toBe(1)
     expect(g.totals.byVerdict.unsupported).toBe(4)
     expect(g.totals.byVerdict.unchecked).toBe(1)

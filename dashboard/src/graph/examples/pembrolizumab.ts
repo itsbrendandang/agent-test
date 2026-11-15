@@ -186,9 +186,8 @@ claim("proposer", "The 2014 label said that no formal pharmacokinetic drug inter
 claim("proposer", "Strong CYP3A4 inhibitors raise pembrolizumab levels, so the dose must be lowered with them.", "unsupported", "label2014", "No FDA label for pembrolizumab says this. The 2014 label reports no formal pharmacokinetic interaction studies, and the current label has no Drug Interactions section.")
 reply("critic", "The CYP3A4 statement has no source: no pembrolizumab label says it.")
 
-stage("Lead: what did approval require, and what came after? Methods Auditor: check the commitments.")
+stage("Lead: what did approval require, and what came after? Approval came early, on response rates, with a duty to prove a survival benefit. KEYNOTE-002 and KEYNOTE-006 met that duty in December 2015. Methods Auditor: check the commitments.")
 search("openfda", "KEYTRUDA accelerated approval requirement fulfilment", ["letter2014", "letter2015", "qlex"])
-reply("lead-scientist", "Approval came early, on response rates, with a duty to prove a survival benefit. KEYNOTE-002 and KEYNOTE-006 met that duty in December 2015.")
 claim("proposer", "FDA granted accelerated approval on 4 September 2014 for unresectable or metastatic melanoma after ipilimumab (and a BRAF inhibitor if BRAF V600 positive).", "verified", "letter2014")
 claim("proposer", "Requirement 2770-1: a randomized trial showing superiority over standard therapy in melanoma, with trial completion in March 2016 and a final report in January 2017.", "verified", "letter2014")
 claim("methods-auditor", "On 18 December 2015 FDA approved supplements 4 and 6, removed the accelerated-approval limits from the melanoma indication and said requirement 2770-1 no longer had to be reported on.", "verified", "letter2015")
