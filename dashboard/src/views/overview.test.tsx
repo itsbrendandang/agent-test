@@ -71,7 +71,7 @@ describe("Overview", () => {
 
 describe("the Agent Lab under the question box", () => {
   const lab = () => document.querySelector(".ov-lab") as HTMLElement
-  it("is idle until a question is sent; Send starts the answer on this page and the lab follows that answer", async () => {
+  it("is idle until a question is sent; Send starts the answer, says the agents are thinking and opens Research, without the answer text", async () => {
     const onOpen = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
     await screen.findByText("Let's research together!")
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
@@ -80,11 +80,16 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Is hERG a risk for KRAS G12C inhibitors?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is working on your question."))
-    expect(onOpen).not.toHaveBeenCalled() // the page stays: no jump to Research
     expect(sessionStorage.getItem("open.ask")).toBeNull()
-    const answer = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })
-    // The answer is written above the lab, so it is in view without scrolling past the lab.
-    expect(answer.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // One short box above the lab: the question, that the agents are thinking, and the way to Research. Not the answer.
+    const box = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" }).closest("section") as HTMLElement
+    expect(box.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(box.textContent).toContain("The agents are thinking.")
+    expect(screen.getByRole("button", { name: "Open in Research" })).toBeTruthy()
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull()
+    // After one short beat the person is sent to Research, where the answer is written and follow-ups continue it.
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home"), { timeout: 3000 })
+    expect(onOpen).toHaveBeenCalledTimes(1)
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
     // The same answer is Research's conversation, with its thread, so Research shows it and continues it.
     expect(JSON.parse(sessionStorage.getItem("home.chat") ?? "null")).toEqual([
@@ -101,12 +106,14 @@ describe("the Agent Lab under the question box", () => {
       { seq: 3, at: 3, type: "step.started", step: "specialist:toxicologist", kind: "write", label: "Toxicologist: reading 3 sources with its method notes", agent: "specialist:toxicologist" },
     ])
     await waitFor(() => expect(lab().textContent).toContain("Toxicologist"))
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull() // the answer's events move the lab, never an answer here
     // When the answer ends, the line says so and the counts are read again.
     const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
     const before = reads()
-    await feed([{ seq: 4, at: 4, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
+    await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
     await waitFor(() => expect(reads()).toBeGreaterThan(before))
+    expect(document.body.textContent).not.toContain("hERG blocking is a known risk") // the answer text is in Research, never here
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
