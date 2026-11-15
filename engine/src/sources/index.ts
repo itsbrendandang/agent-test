@@ -60,8 +60,9 @@ literature search, for facts that live in a registry or a curated database, not 
 - Write \`query\` the way that database reads it (the tool says how). A candidate that has only an internal code is not in
   these databases: look up the approved drugs, the target and the disease instead.
 - What comes back are records, not papers. A trial record says what was planned or done, not that the drug works. One
-  bioactivity value is one experiment. Adverse-event counts are reports, not rates. An Open Targets score measures how
-  much evidence there is, not the size of an effect.
+  bioactivity value is one experiment, and \`chembl\` gives the most potent values first: that end also holds the
+  outliers and data errors, so do not present one as typical. Adverse-event counts are reports, not rates. An Open
+  Targets score measures how much evidence there is, not the size of an effect.
 - State a value only as the record gives it, with its unit. Do not convert or round it.
 - Cite a record by its exact URL. The notes that come with the results are for you: do not cite them.`
 

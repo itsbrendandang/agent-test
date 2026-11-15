@@ -184,7 +184,7 @@ export async function chemblSearch(query: string, http: Http): Promise<SourceRes
   const head = molecule ? compoundItem(molecule, mechanisms) : targetRow ? targetItem(targetRow, count) : undefined
   const { items: measured, shown } = activityRecords(rows(activity, "activities"), MAX_ITEMS - (head ? 1 : 0))
   const scope = join([molecule && (clean(molecule.pref_name) || moleculeId), targetRow && `${molecule ? "against " : ""}${clean(targetRow.pref_name) || targetId}`])
-  if (measured.length) notices.push(`ChEMBL holds ${count || "several"} activity records with a pChEMBL value for ${scope}. Given here: the ${shown} with the highest pChEMBL value (the most potent), grouped by assay. They are not a summary of every measurement, and one value is one experiment.`)
+  if (measured.length) notices.push(`ChEMBL holds ${count || "several"} activity records with a pChEMBL value for ${scope}. Given here: the ${shown} with the highest pChEMBL value (the most potent), grouped by assay. They are not a summary of every measurement: one value is one experiment, and the most potent end of a list also holds outliers and data errors. Do not present one as typical.`)
   else notices.push(`ChEMBL has no activity record with a pChEMBL value for ${scope}.`)
   return { items: [...(head ? [head] : []), ...measured], notices }
 }

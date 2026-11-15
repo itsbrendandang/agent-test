@@ -66,7 +66,7 @@ documents are in `docs/`.
   by several people and agents. Re-read the file right before you edit it, keep the edit small,
   and never resolve a merge by taking one whole side of these files.
 - **The team list keeps its searcher.** The `board:` list in `board/config.yaml` must include the
-  scout (the only member with `exa_search` and `literature_search`). A review without it gathers
+  scout (the only member with the search tools `exa_search`, `literature_search` and `database_search`). A review without it gathers
   no sources. A board review is not a benchmark run, so the rule below about web search for
   benchmark agents does not apply to it.
 - Never commit a file with merge-conflict markers. `npm run check -- --fast` finds them.

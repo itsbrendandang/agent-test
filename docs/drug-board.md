@@ -12,7 +12,7 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 
 ```
 brief.md ──▶ Lead Scientist ──converse──▶ 6 board members (the scout first, then the others in parallel; each its own durable conversation)
-                 ▲                            │ only the scout searches (exa_search, literature_search)
+                 ▲                            │ only the scout searches (exa_search, then literature_search, then database_search)
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: cheap first pass ─(unsettled)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
@@ -226,3 +226,51 @@ instructions) and `engine/src/chat/plan.ts` (choosing).
 - **No real model has run a specialist.** Everything above was tested with scripted models. Whether a model keeps to the frame, and whether a specialist improves a review, is not known.
 - The choice is a word match. It can miss (a question about a method whose skill is a name only gets no specialist for it) and it can pick a neighbour (a "differential expression" question gets the bulk RNA-seq agent with its notes on counts, deconvolution and consensus signatures, because the differential-expression skill itself is a name only).
 - `GET /api/roster?run=<id>` (the board's own roster route) is served by `rosterFor` in `engine/src/chat/roster.ts` once `app.ts` calls it; until then use `GET /api/chat/roster?run=<id>`.
+
+## Free database records (`database_search`)
+
+The scout has a third search tool, `database_search` (`engine/src/sources/`, one file per database). It reads one
+public database and returns its records. None needs a key and none costs money. In the scout's order of searches it
+comes third: web search, then the literature, then the databases (`searchOrder` in `engine/src/agents.ts`).
+
+| `source` | Database | What a lookup returns | The record's page (the URL to cite) |
+|---|---|---|---|
+| `chembl` | ChEMBL (EMBL-EBI) | A compound's record (highest clinical phase, mechanism, calculated properties) and its most potent measured values, one item per assay; or the most potent compounds against a target | `www.ebi.ac.uk/chembl/explore/compound/…`, `/target/…`, `/assay/…` |
+| `clinicaltrials` | ClinicalTrials.gov | Up to 8 trials: phase, status, enrollment, conditions, interventions, primary outcome, sponsor, dates, whether results are posted | `clinicaltrials.gov/study/NCT…` |
+| `openfda` | openFDA | The newest FDA label that names the drug, one item per section (boxed warning, warnings, adverse reactions, contraindications, indications), and the counts of adverse-event reports by reaction | The label on DailyMed (`…drugInfo.cfm?setid=…#section`); for the counts, the openFDA request itself |
+| `opentargets` | Open Targets Platform | A target's record (tractability, safety liabilities, function) and its strongest target-disease associations with their scores | `platform.opentargets.org/target/ENSG…`, `/evidence/ENSG…/<disease id>` |
+| `uniprot` | UniProt | The best-matching reviewed entry: function, disease involvement, natural variants, subcellular location | `www.uniprot.org/uniprotkb/<accession>/entry#…`, `/variant-viewer` |
+| `pubchem` | PubChem | A compound's identity and computed properties, and experimental properties from sources with an open licence | `pubchem.ncbi.nlm.nih.gov/compound/<CID>` |
+
+How a record is turned into a source:
+
+- Each record becomes plain text that holds the values **as the database wrote them**. Nothing is converted or rounded
+  (`4.0` stays `4.0`), codes such as `PHASE3` or `RECRUITING` are kept, and a field the database does not give is left
+  out, never filled in. A statement is "verified" only when the checker's quoted passage, with its numbers, is in that text.
+- The URL is built only from an id that passed a strict pattern (an NCT number, a ChEMBL id, an accession ...), never
+  from free text.
+- Limits: at most 8 items per lookup, 3000 characters per item (cut at a sentence or a word, with `[...]`), at most 4
+  requests per lookup, a 15-second timeout, no retries, and at most one request every 1.5 seconds to a host.
+- `meeting.max_database_searches` lookups per run (default 20). A lookup is free, but its records are screened by the
+  first pass, so it is refused at the spend cap and when paid calls are switched off. A database that does not answer
+  does not stop the run: the scout is told, and the lookup is not counted. A crash replay reads the stored result.
+- Screening: a database record is kept unless the first pass says it is off-topic. (For papers the first pass also
+  drops a source that "reports no results of its own"; a trial registration or a label section would fail that rule.)
+- A practice run reaches no network: the lookup returns the example sources, labelled as such.
+
+Every source in the pool keeps the search that found it (`provider`: `exa`, `europepmc`, one of the six database
+names, or `fixture`) and the query (`query`), in `run.json` and in the `evidence.triaged` event. A source found again
+by a later search keeps the search that found it first.
+
+Things to know before relying on it:
+
+- **Not yet done: a real board run that uses it.** The clients were run against the live services by hand, and the
+  tests use saved answers; no real model has called the tool.
+- ChEMBL lookups give the **most potent** values first. That end of a list also holds outliers and data errors. One
+  value is one experiment.
+- Adverse-event counts are spontaneous reports, not rates. An Open Targets score measures how much evidence there is,
+  not the size of an effect. A trial record says what was planned or done, not that a drug works.
+- PubChem's experimental values come from other sources with their own licences. A value is passed on only when
+  PubChem's record of its source states public domain, CC BY or CC0, or the source is NLM's HSDB; the others (DrugBank,
+  HMDB, Haz-Map and so on) are left out and counted in a note to the scout.
+- openFDA allows 1,000 requests a day per IP address without a key. One lookup uses up to 3.

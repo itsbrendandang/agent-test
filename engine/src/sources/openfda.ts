@@ -86,7 +86,7 @@ export async function openFdaSearch(query: string, http: Http): Promise<SourceRe
   const items = label ? labelItems(label) : []
   if (!items.length) return { items: [], notices: [`openFDA has no drug label that names "${name}" as its generic name, brand name or substance. Try the other name of the drug.`] }
   const o = rec(label.openfda), total = num(rec(rec(body.meta).results).total)
-  const notices = [`openFDA has ${total || "one or more"} label${total === "1" ? "" : "s"} naming "${name}". This is the most recently updated one: ${join([firsts(o.brand_name), firsts(o.generic_name) && `(${firsts(o.generic_name)})`, firsts(o.manufacturer_name, 1)], " ")}. Check that it is the product you mean; a brand name gives one product. Each section is cut to 3000 characters.`]
+  const notices = [`openFDA has ${total || "one or more"} label${total === "1" ? "" : "s"} naming "${name}". This is the most recently updated one: ${join([firsts(o.brand_name), firsts(o.generic_name) && `(${firsts(o.generic_name)})`, firsts(o.manufacturer_name, 1).replace(/\.$/, "")], " ")}. Check that it is the product you mean (it can be a generic or a repackaged product); a brand name gives one product. Each section is cut to 3000 characters.`]
   const uniis = list(o.unii).filter((u): u is string => typeof u === "string" && UNII.test(u))
   if (uniis.length !== 1) return { items, notices: [...notices, uniis.length ? "The label names more than one active substance, so no adverse-event counts were fetched (they are per substance)." : "openFDA gives no substance identifier for this label, so no adverse-event counts were fetched."] }
   try {
