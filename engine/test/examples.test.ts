@@ -6,12 +6,21 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { createApp } from "../src/app.ts"
 import { loadConfig } from "../src/config.ts"
-import { exampleEntries } from "../src/examples.ts"
+import { exampleCsv, exampleEntries } from "../src/examples.ts"
 import { researchSpentToday } from "../src/research/spend.ts"
 import { spentToday } from "../src/board/board.ts"
 
 process.env.NO_PAID_CALLS = "1"
 process.env.PAID_SWITCH_LOCKED = "1"
+
+test("example CSV appends a quoted provenance column without changing quoted fields or record boundaries", () => {
+  assert.equal(exampleCsv('"title","note"\r\n"A, ""quoted"" title","line 1\nline 2"\r\n'),
+    '"title","note","provenance"\r\n"A, ""quoted"" title","line 1\nline 2","Example · practice, $0"\r\n')
+  assert.equal(exampleCsv("n,title\n1,Example"), 'n,title,"provenance"\r\n1,Example,"Example · practice, $0"\r\n')
+  assert.equal(exampleCsv("n,title\r\n"), 'n,title,"provenance"\r\n')
+  assert.equal(exampleCsv(""), '"provenance"\r\n')
+  assert.throws(() => exampleCsv('"unfinished'), /Unterminated quoted CSV field/)
+})
 
 test("committed examples are listed, labelled, read-only, outside spending and replay", async () => {
   const config = loadConfig(), dir = mkdtempSync(join(tmpdir(), "example-api-"))
@@ -53,7 +62,15 @@ test("committed examples are listed, labelled, read-only, outside spending and r
         assert.equal(refused.status, 403)
         for (const a of record.artifacts) {
           const res = await fetch(base + path + "/artifacts/" + a.name)
-          assert.equal(res.status, 200); assert.match(await res.text(), /Example · practice, \$0/)
+          const body = await res.text()
+          assert.equal(res.status, 200); assert.match(body, /Example · practice, \$0/)
+          if (a.name === "sources.csv") {
+            const rows = body.trimEnd().split("\r\n")
+            assert.equal(rows[0], '"n","title","url","provider","note","cited","provenance"')
+            assert.equal(rows.length, record.sources.length + 1)
+            assert.ok(rows.slice(1).every((row: string) => row.endsWith(',"Example · practice, $0"')))
+            assert.match(res.headers.get("content-type") ?? "", /^text\/csv/)
+          }
         }
         assert.equal((await fetch(base + path + "/artifacts/unknown.md")).status, 404)
       } else assert.match(await (await fetch(base + path + "/memo")).text(), /Example · practice, \$0/)

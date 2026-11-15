@@ -11,6 +11,25 @@ export interface Example {
   status: string; brief?: string; rounds?: number; claims?: number
 }
 const read = (id: string, name: string) => readFileSync(resolve(root, id, name), "utf8")
+export function exampleCsv(body: string): string {
+  if (!body) return '"provenance"\r\n'
+  const rows: string[] = []
+  let quoted = false, start = 0
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '"') {
+      if (quoted && body[i + 1] === '"') { i++; continue }
+      quoted = !quoted
+    }
+    if (!quoted && (body[i] === "\r" || body[i] === "\n")) {
+      rows.push(body.slice(start, i))
+      if (body[i] === "\r" && body[i + 1] === "\n") i++
+      start = i + 1
+    }
+  }
+  if (quoted) throw new Error("Unterminated quoted CSV field")
+  if (start < body.length) rows.push(body.slice(start))
+  return rows.map((row, i) => `${row},"${i === 0 ? "provenance" : "Example · practice, $0"}"\r\n`).join("")
+}
 export function exampleEntries(env: NodeJS.ProcessEnv = process.env): Example[] {
   if (env.GLHF_HIDE_EXAMPLES === "1" || !existsSync(`${root}/manifest.json`)) return []
   return JSON.parse(readFileSync(`${root}/manifest.json`, "utf8")) as Example[]
@@ -51,7 +70,7 @@ export function handleExample(req: IncomingMessage, res: ServerResponse, url: UR
         if (!artifact || parts.length !== 5 || !/^[\w.-]+$/.test(name)) return json(404, { error: "No such file" })
         const body = read(entry.id, name)
         res.writeHead(200, { "content-type": `${artifact.type}; charset=utf-8`, "content-disposition": `attachment; filename="example-${entry.id}-${name}"`, "x-content-type-options": "nosniff" })
-        res.end(name.endsWith(".md") ? `Example · practice, $0\n\n${body}` : name.endsWith(".json") ? JSON.stringify({ provenance: "Example · practice, $0", example: true, data: JSON.parse(body) }) : `Example · practice, $0\r\n${body}`); return true
+        res.end(name.endsWith(".csv") ? exampleCsv(body) : name.endsWith(".md") ? `Example · practice, $0\n\n${body}` : name.endsWith(".json") ? JSON.stringify({ provenance: "Example · practice, $0", example: true, data: JSON.parse(body) }) : `Example · practice, $0\r\n${body}`); return true
       }
     } else if (parts.length === 3) return json(200, { ...JSON.parse(read(entry.id, "run.json")), title: entry.title, example: true, readOnly: true, provenance: "Example · practice, $0" })
     else if (parts[3] === "memo" && parts.length === 4) {
