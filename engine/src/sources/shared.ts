@@ -6,6 +6,9 @@
 //   and at most one every MIN_GAP_MS (1.5 s, so 40 a minute): far below every documented limit (PubChem: 5 a second;
 //   openFDA: 240 a minute and 1,000 a day without a key).
 // - At most MAX_REQUESTS_PER_CALL requests and MAX_ITEMS items for one tool call; text is cut to MAX_TEXT_CHARS.
+// - The live object keeps a good answer for CACHE_MS (10 minutes), so the same request made again (another member, a
+//   later round, another answer) is read from memory: nothing is sent and no gap is waited. Two identical requests made
+//   at the same moment share one. A failure is never kept. At most CACHE_ENTRIES answers and CACHE_BYTES of text.
 // - Numbers are kept as the service wrote them ("4.0" stays "4.0"): parseJson gives every JSON number back as its
 //   source text. Nothing is converted or rounded. A field that is missing is left out of the text.
 // - Text from a service is data: HTML tags are removed, entities decoded, control and invisible characters dropped,
@@ -24,6 +27,9 @@ export const TIMEOUT_MS = 15_000
 export const MIN_GAP_MS = 1_500
 export const MAX_REQUESTS_PER_CALL = 4
 export const MAX_BODY_BYTES = 4_000_000
+export const CACHE_MS = 10 * 60_000
+export const CACHE_ENTRIES = 200
+export const CACHE_BYTES = 20_000_000
 export const USER_AGENT = "ai-scientist-bot/0.1 (drug board evidence lookup; +https://github.com/itsbrendandang/agent-test)"
 
 /** The only hosts a client may call, by source. */
@@ -146,7 +152,11 @@ export interface Http {
    */
   json(source: DatabaseSource, url: string, options?: { post?: unknown; emptyOn?: number[] }): Promise<Answer>
 }
-export interface HttpOptions { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; minGapMs?: number }
+export interface HttpOptions {
+  fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; minGapMs?: number
+  /** How long a good answer is kept and given again for the same request. 0 (the default): nothing is kept. */
+  cacheMs?: number
+}
 
 const NAMES: Record<DatabaseSource, string> = { chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem" }
 export const serviceName = (source: DatabaseSource) => NAMES[source]
@@ -177,6 +187,20 @@ export function createHttp(options: HttpOptions = {}): Http {
   const gap = options.minGapMs ?? MIN_GAP_MS
   const last = new Map<string, number>()
   const queue = new Map<string, Promise<unknown>>()
+  const keep = options.cacheMs ?? 0
+  const kept = new Map<string, { at: number; size: number; answer: Answer }>() // oldest first
+  const pending = new Map<string, Promise<Answer>>()
+  let keptBytes = 0
+  const drop = (key: string) => { const old = kept.get(key); if (old) { keptBytes -= old.size; kept.delete(key) } }
+  const store = (key: string, answer: Answer, size: number) => {
+    drop(key)
+    if (size > CACHE_BYTES) return
+    kept.set(key, { at: now(), size, answer })
+    keptBytes += size
+    for (const [oldest] of kept) { if (kept.size <= CACHE_ENTRIES && keptBytes <= CACHE_BYTES) break; drop(oldest) }
+  }
+  // Each caller gets its own copy: one lookup can never change what the next one reads.
+  const copy = (answer: Answer): Answer => ({ status: answer.status, body: answer.body === undefined ? undefined : structuredClone(answer.body) })
   return {
     json(source, url, opts = {}) {
       let target: URL
@@ -184,6 +208,15 @@ export function createHttp(options: HttpOptions = {}): Http {
       // A client can only reach its own service: a wrong host here is a bug in the client, and nothing is sent.
       if (target.protocol !== "https:" || target.host !== HOSTS[source] || target.username || target.password) return Promise.reject(new ServiceError(`${NAMES[source]}: refused to call ${target.host}`))
       const host = target.host
+      const key = keep > 0 ? JSON.stringify([source, target.href, opts.post ?? null, opts.emptyOn ?? []]) : ""
+      if (key) {
+        const hit = kept.get(key)
+        if (hit && now() - hit.at < keep) return Promise.resolve(copy(hit.answer))
+        if (hit) drop(key)
+        const same = pending.get(key)
+        if (same) return same.then(copy)
+      }
+      let size = 0
       const run = async (): Promise<Answer> => {
         const wait = (last.get(host) ?? -Infinity) + gap - now()
         if (wait > 0) await sleep(wait)
@@ -207,20 +240,33 @@ export function createHttp(options: HttpOptions = {}): Http {
         try { text = await readBody(response, source) } catch (error) {
           throw error instanceof ServiceError ? error : new ServiceError(`${NAMES[source]} stopped answering part-way`)
         }
+        size = text.length
         try { return { status: response.status, body: parseJson(text) } } catch { throw new ServiceError(`${NAMES[source]} answered with something that is not JSON`) }
       }
       const next = (queue.get(host) ?? Promise.resolve()).then(run, run)
       queue.set(host, next.catch(() => {}))
-      return next
+      if (!key) return next
+      pending.set(key, next)
+      const settled = () => { if (pending.get(key) === next) pending.delete(key) }
+      next.then((answer) => { settled(); store(key, answer, size) }, settled)
+      return next.then(copy)
     },
   }
 }
 
-/** The same `http`, but it refuses the request after `max` (one tool call can never turn into a stream of requests). */
-export function limited(http: Http, max = MAX_REQUESTS_PER_CALL): Http {
+/**
+ * The same `http`, but it refuses the request after `max` (one tool call can never turn into a stream of requests), and
+ * every request once `signal` is aborted (a lookup that ran out of time sends nothing more).
+ */
+export function limited(http: Http, max = MAX_REQUESTS_PER_CALL, signal?: AbortSignal): Http {
   let sent = 0
-  return { json: (source, url, options) => (++sent > max ? Promise.reject(new ServiceError(`${NAMES[source]}: more than ${max} requests for one lookup`)) : http.json(source, url, options)) }
+  return {
+    json: (source, url, options) =>
+      signal?.aborted ? Promise.reject(new ServiceError(`${NAMES[source]}: the lookup ran out of time`))
+      : ++sent > max ? Promise.reject(new ServiceError(`${NAMES[source]}: more than ${max} requests for one lookup`))
+      : http.json(source, url, options),
+  }
 }
 
-/** The object live lookups use: one for the process, so its spacing covers every run. */
-export const liveHttp = createHttp()
+/** The object live lookups use: one for the process, so its spacing and its kept answers cover every run. */
+export const liveHttp = createHttp({ cacheMs: CACHE_MS })

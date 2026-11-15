@@ -4,9 +4,11 @@
   "url": "https://api.platform.opentargets.org/api/v4/graphql",
   "method": "POST",
   "post": {
-   "query": "query($q:String!){search(queryString:$q,entityNames:[\"target\"],page:{index:0,size:5}){hits{id entity name description}}}",
+   "query": "query($q:String!,$filter:String,$size:Int!){search(queryString:$q,entityNames:[\"target\"],page:{index:0,size:5}){hits{id entity name description object{... on Target{id approvedSymbol approvedName biotype functionDescriptions tractability{label modality value} safetyLiabilities{event datasource effects{direction dosing} biosamples{tissueLabel cellLabel}} associatedDiseases(BFilter:$filter,page:{index:0,size:$size}){count rows{score disease{id name} datatypeScores{id score}}}}}}}}",
    "variables": {
-    "q": "kras"
+    "q": "kras",
+    "filter": "lung",
+    "size": 7
    }
   },
   "status": 200,
@@ -18,367 +20,901 @@
        "id": "ENSG00000133703",
        "entity": "target",
        "name": "KRAS",
-       "description": "KRas proto-oncogene, GTPase"
+       "description": "KRas proto-oncogene, GTPase",
+       "object": {
+        "id": "ENSG00000133703",
+        "approvedSymbol": "KRAS",
+        "approvedName": "KRas proto-oncogene, GTPase",
+        "biotype": "protein_coding",
+        "functionDescriptions": [
+         "Signal transducer in the Ras-MAPK signaling pathway that regulates cell proliferation and survival (PubMed:22711838, PubMed:23698361). Ras proteins bind GDP/GTP and possess intrinsic GTPase activity (PubMed:20949621, PubMed:39809765). Activates MAPK1/MAPK3 resulting in phosphorylation and ultimately degradation of GJA1 (By similarity). Plays a role in promoting oncogenic events by inducing transcriptional silencing of tumor suppressor genes (TSGs) in colorectal cancer (CRC) cells in a ZNF304-dependent manner (PubMed:24623306). Recognized by LZTR1 that mediates its ubiquitination by a BCR (BTB-CUL3-RBX1) E3 ubiquitin-protein ligase complex (PubMed:40934300). {ECO:0000250|UniProtKB:P08644, ECO:0000269|PubMed:20949621, ECO:0000269|PubMed:22711838, ECO:0000269|PubMed:23698361, ECO:0000269|PubMed:24623306, ECO:0000269|PubMed:39809765, ECO:0000269|PubMed:40934300}."
+        ],
+        "tractability": [
+         {
+          "label": "Approved Drug",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Structure with Ligand",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "High-Quality Ligand",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "High-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Med-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Druggable Family",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "GO CC high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "UniProt loc med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt SigP or TMHMM",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Human Protein Atlas loc",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Literature",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "UniProt Ubiquitination",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Database Ubiquitination",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Half-life Data",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Small Molecule Binder",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "OC",
+          "value": false
+         }
+        ],
+        "safetyLiabilities": [],
+        "associatedDiseases": {
+         "count": 31,
+         "rows": [
+          {
+           "score": 0.803525472671903,
+           "disease": {
+            "id": "MONDO_0005233",
+            "name": "non-small cell lung carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.9966745153123064
+            },
+            {
+             "id": "affected_pathway",
+             "score": 0.6934634586610258
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.8400963905230843
+            },
+            {
+             "id": "clinical",
+             "score": 0.9460943622076069
+            }
+           ]
+          },
+          {
+           "score": 0.7029978547925759,
+           "disease": {
+            "id": "MONDO_0005061",
+            "name": "lung adenocarcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.9904198205006515
+            },
+            {
+             "id": "affected_pathway",
+             "score": 0.9285669064556789
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.8224435219117215
+            }
+           ]
+          },
+          {
+           "score": 0.6462213590514202,
+           "disease": {
+            "id": "MONDO_0008903",
+            "name": "lung cancer"
+           },
+           "datatypeScores": [
+            {
+             "id": "genetic_literature",
+             "score": 0.607930797611621
+            },
+            {
+             "id": "clinical",
+             "score": 0.47515702271658306
+            },
+            {
+             "id": "literature",
+             "score": 0.9879330187637246
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.804888561125478
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.5792229543910723
+            },
+            {
+             "id": "animal_model",
+             "score": 0.7478858530150846
+            }
+           ]
+          },
+          {
+           "score": 0.48007827632251954,
+           "disease": {
+            "id": "MONDO_0005138",
+            "name": "lung carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "affected_pathway",
+             "score": 0.9549947196932794
+            },
+            {
+             "id": "literature",
+             "score": 0.9880759629705823
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.5592963338026914
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.5288997939221103
+            },
+            {
+             "id": "animal_model",
+             "score": 0.7478858530150846
+            }
+           ]
+          },
+          {
+           "score": 0.45566991650676336,
+           "disease": {
+            "id": "MONDO_0005097",
+            "name": "squamous cell lung carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.1785732947443188
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.5490442623961349
+            }
+           ]
+          },
+          {
+           "score": 0.40297522723543905,
+           "disease": {
+            "id": "MONDO_0006279",
+            "name": "lung sarcomatoid carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.07825082583257582
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.5288997939221103
+            }
+           ]
+          },
+          {
+           "score": 0.3976092864153344,
+           "disease": {
+            "id": "MONDO_0021117",
+            "name": "lung neoplasm"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.922125736703975
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.607930797611621
+            }
+           ]
+          }
+         ]
+        }
+       }
       },
       {
        "id": "ENSG00000220635",
        "entity": "target",
        "name": "KRASP1",
-       "description": "KRas proto-oncogene, GTPase pseudogene 1"
+       "description": "KRas proto-oncogene, GTPase pseudogene 1",
+       "object": {
+        "id": "ENSG00000220635",
+        "approvedSymbol": "KRASP1",
+        "approvedName": "KRas proto-oncogene, GTPase pseudogene 1",
+        "biotype": "processed_pseudogene",
+        "functionDescriptions": [],
+        "tractability": [],
+        "safetyLiabilities": [],
+        "associatedDiseases": {
+         "count": 0,
+         "rows": []
+        }
+       }
       },
       {
        "id": "ENSG00000270170",
        "entity": "target",
        "name": "NCBP2AS2",
-       "description": "NCBP2 antisense 2 (head to head)"
+       "description": "NCBP2 antisense 2 (head to head)",
+       "object": {
+        "id": "ENSG00000270170",
+        "approvedSymbol": "NCBP2AS2",
+        "approvedName": "NCBP2 antisense 2 (head to head)",
+        "biotype": "protein_coding",
+        "functionDescriptions": [],
+        "tractability": [
+         {
+          "label": "Approved Drug",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Structure with Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Med-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Druggable Family",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc high conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC high conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt SigP or TMHMM",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Human Protein Atlas loc",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Literature",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "UniProt Ubiquitination",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Database Ubiquitination",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Half-life Data",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Small Molecule Binder",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "OC",
+          "value": false
+         }
+        ],
+        "safetyLiabilities": [],
+        "associatedDiseases": {
+         "count": 0,
+         "rows": []
+        }
+       }
       },
       {
        "id": "ENSG00000123096",
        "entity": "target",
        "name": "SSPN",
-       "description": "sarcospan"
+       "description": "sarcospan",
+       "object": {
+        "id": "ENSG00000123096",
+        "approvedSymbol": "SSPN",
+        "approvedName": "sarcospan",
+        "biotype": "protein_coding",
+        "functionDescriptions": [
+         "Component of the dystrophin-glycoprotein complex (DGC), a complex that spans the muscle plasma membrane and forms a link between the F-actin cytoskeleton and the extracellular matrix. Preferentially associates with the sarcoglycan subcomplex of the DGC."
+        ],
+        "tractability": [
+         {
+          "label": "Approved Drug",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Structure with Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Med-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Druggable Family",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc high conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "UniProt loc med conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "UniProt SigP or TMHMM",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "GO CC med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Human Protein Atlas loc",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Literature",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "UniProt Ubiquitination",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Database Ubiquitination",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Half-life Data",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Small Molecule Binder",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "OC",
+          "value": false
+         }
+        ],
+        "safetyLiabilities": [],
+        "associatedDiseases": {
+         "count": 1,
+         "rows": [
+          {
+           "score": 0.008089692374765138,
+           "disease": {
+            "id": "MONDO_0021117",
+            "name": "lung neoplasm"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.06653464840527186
+            }
+           ]
+          }
+         ]
+        }
+       }
       },
       {
        "id": "ENSG00000138434",
        "entity": "target",
        "name": "ITPRID2",
-       "description": "ITPR interacting domain containing 2"
+       "description": "ITPR interacting domain containing 2",
+       "object": {
+        "id": "ENSG00000138434",
+        "approvedSymbol": "ITPRID2",
+        "approvedName": "ITPR interacting domain containing 2",
+        "biotype": "protein_coding",
+        "functionDescriptions": [],
+        "tractability": [
+         {
+          "label": "Approved Drug",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Structure with Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Ligand",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "High-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Med-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Druggable Family",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc high conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "UniProt loc med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt SigP or TMHMM",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "GO CC med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Human Protein Atlas loc",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Literature",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "UniProt Ubiquitination",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Database Ubiquitination",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Half-life Data",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Small Molecule Binder",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "OC",
+          "value": false
+         }
+        ],
+        "safetyLiabilities": [],
+        "associatedDiseases": {
+         "count": 4,
+         "rows": [
+          {
+           "score": 0.010816370413772274,
+           "disease": {
+            "id": "MONDO_0005061",
+            "name": "lung adenocarcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.07307834796289694
+            },
+            {
+             "id": "rna_expression",
+             "score": 0.0635287683504144
+            }
+           ]
+          },
+          {
+           "score": 0.0073915970936940375,
+           "disease": {
+            "id": "MONDO_0005138",
+            "name": "lung carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.06079307976116211
+            }
+           ]
+          },
+          {
+           "score": 0.0073915970936940375,
+           "disease": {
+            "id": "MONDO_0008903",
+            "name": "lung cancer"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.06079307976116211
+            },
+            {
+             "id": "genetic_association",
+             "score": 0
+            }
+           ]
+          },
+          {
+           "score": 0,
+           "disease": {
+            "id": "MONDO_0005097",
+            "name": "squamous cell lung carcinoma"
+           },
+           "datatypeScores": [
+            {
+             "id": "genetic_association",
+             "score": 0
+            }
+           ]
+          }
+         ]
+        }
+       }
       }
      ]
-    }
-   }
-  }
- },
- {
-  "name": "ot-kras",
-  "url": "https://api.platform.opentargets.org/api/v4/graphql",
-  "method": "POST",
-  "post": {
-   "query": "query($id:String!,$filter:String,$size:Int!){target(ensemblId:$id){id approvedSymbol approvedName biotype functionDescriptions tractability{label modality value} safetyLiabilities{event datasource effects{direction dosing} biosamples{tissueLabel cellLabel}} associatedDiseases(BFilter:$filter,page:{index:0,size:$size}){count rows{score disease{id name} datatypeScores{id score}}}}}",
-   "variables": {
-    "id": "ENSG00000133703",
-    "filter": "lung",
-    "size": 7
-   }
-  },
-  "status": 200,
-  "body": {
-   "data": {
-    "target": {
-     "id": "ENSG00000133703",
-     "approvedSymbol": "KRAS",
-     "approvedName": "KRas proto-oncogene, GTPase",
-     "biotype": "protein_coding",
-     "functionDescriptions": [
-      "Signal transducer in the Ras-MAPK signaling pathway that regulates cell proliferation and survival (PubMed:22711838, PubMed:23698361). Ras proteins bind GDP/GTP and possess intrinsic GTPase activity (PubMed:20949621, PubMed:39809765). Activates MAPK1/MAPK3 resulting in phosphorylation and ultimately degradation of GJA1 (By similarity). Plays a role in promoting oncogenic events by inducing transcriptional silencing of tumor suppressor genes (TSGs) in colorectal cancer (CRC) cells in a ZNF304-dependent manner (PubMed:24623306). Recognized by LZTR1 that mediates its ubiquitination by a BCR (BTB-CUL3-RBX1) E3 ubiquitin-protein ligase complex (PubMed:40934300). {ECO:0000250|UniProtKB:P08644, ECO:0000269|PubMed:20949621, ECO:0000269|PubMed:22711838, ECO:0000269|PubMed:23698361, ECO:0000269|PubMed:24623306, ECO:0000269|PubMed:39809765, ECO:0000269|PubMed:40934300}."
-     ],
-     "tractability": [
-      {
-       "label": "Approved Drug",
-       "modality": "SM",
-       "value": true
-      },
-      {
-       "label": "Advanced Clinical",
-       "modality": "SM",
-       "value": false
-      },
-      {
-       "label": "Phase 1 Clinical",
-       "modality": "SM",
-       "value": false
-      },
-      {
-       "label": "Structure with Ligand",
-       "modality": "SM",
-       "value": true
-      },
-      {
-       "label": "High-Quality Ligand",
-       "modality": "SM",
-       "value": true
-      },
-      {
-       "label": "High-Quality Pocket",
-       "modality": "SM",
-       "value": false
-      },
-      {
-       "label": "Med-Quality Pocket",
-       "modality": "SM",
-       "value": false
-      },
-      {
-       "label": "Druggable Family",
-       "modality": "SM",
-       "value": false
-      },
-      {
-       "label": "Approved Drug",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "Advanced Clinical",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "Phase 1 Clinical",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "UniProt loc high conf",
-       "modality": "AB",
-       "value": true
-      },
-      {
-       "label": "GO CC high conf",
-       "modality": "AB",
-       "value": true
-      },
-      {
-       "label": "UniProt loc med conf",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "UniProt SigP or TMHMM",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "GO CC med conf",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "Human Protein Atlas loc",
-       "modality": "AB",
-       "value": false
-      },
-      {
-       "label": "Approved Drug",
-       "modality": "PR",
-       "value": false
-      },
-      {
-       "label": "Advanced Clinical",
-       "modality": "PR",
-       "value": false
-      },
-      {
-       "label": "Phase 1 Clinical",
-       "modality": "PR",
-       "value": false
-      },
-      {
-       "label": "Literature",
-       "modality": "PR",
-       "value": true
-      },
-      {
-       "label": "UniProt Ubiquitination",
-       "modality": "PR",
-       "value": true
-      },
-      {
-       "label": "Database Ubiquitination",
-       "modality": "PR",
-       "value": true
-      },
-      {
-       "label": "Half-life Data",
-       "modality": "PR",
-       "value": true
-      },
-      {
-       "label": "Small Molecule Binder",
-       "modality": "PR",
-       "value": true
-      },
-      {
-       "label": "Approved Drug",
-       "modality": "OC",
-       "value": false
-      },
-      {
-       "label": "Advanced Clinical",
-       "modality": "OC",
-       "value": false
-      },
-      {
-       "label": "Phase 1 Clinical",
-       "modality": "OC",
-       "value": false
-      }
-     ],
-     "safetyLiabilities": [],
-     "associatedDiseases": {
-      "count": 31,
-      "rows": [
-       {
-        "score": 0.803525472671903,
-        "disease": {
-         "id": "MONDO_0005233",
-         "name": "non-small cell lung carcinoma"
-        },
-        "datatypeScores": [
-         {
-          "id": "literature",
-          "score": 0.9966745153123064
-         },
-         {
-          "id": "affected_pathway",
-          "score": 0.6934634586610258
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.8400963905230843
-         },
-         {
-          "id": "clinical",
-          "score": 0.9460943622076069
-         }
-        ]
-       },
-       {
-        "score": 0.7029978547925759,
-        "disease": {
-         "id": "MONDO_0005061",
-         "name": "lung adenocarcinoma"
-        },
-        "datatypeScores": [
-         {
-          "id": "literature",
-          "score": 0.9904198205006515
-         },
-         {
-          "id": "affected_pathway",
-          "score": 0.9285669064556789
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.8224435219117215
-         }
-        ]
-       },
-       {
-        "score": 0.6462213590514202,
-        "disease": {
-         "id": "MONDO_0008903",
-         "name": "lung cancer"
-        },
-        "datatypeScores": [
-         {
-          "id": "genetic_literature",
-          "score": 0.607930797611621
-         },
-         {
-          "id": "clinical",
-          "score": 0.47515702271658306
-         },
-         {
-          "id": "literature",
-          "score": 0.9879330187637246
-         },
-         {
-          "id": "genetic_association",
-          "score": 0.804888561125478
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.5792229543910723
-         },
-         {
-          "id": "animal_model",
-          "score": 0.7478858530150846
-         }
-        ]
-       },
-       {
-        "score": 0.48007827632251954,
-        "disease": {
-         "id": "MONDO_0005138",
-         "name": "lung carcinoma"
-        },
-        "datatypeScores": [
-         {
-          "id": "affected_pathway",
-          "score": 0.9549947196932794
-         },
-         {
-          "id": "literature",
-          "score": 0.9880759629705823
-         },
-         {
-          "id": "genetic_association",
-          "score": 0.5592963338026914
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.5288997939221103
-         },
-         {
-          "id": "animal_model",
-          "score": 0.7478858530150846
-         }
-        ]
-       },
-       {
-        "score": 0.45566991650676336,
-        "disease": {
-         "id": "MONDO_0005097",
-         "name": "squamous cell lung carcinoma"
-        },
-        "datatypeScores": [
-         {
-          "id": "literature",
-          "score": 0.1785732947443188
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.5490442623961349
-         }
-        ]
-       },
-       {
-        "score": 0.40297522723543905,
-        "disease": {
-         "id": "MONDO_0006279",
-         "name": "lung sarcomatoid carcinoma"
-        },
-        "datatypeScores": [
-         {
-          "id": "literature",
-          "score": 0.07825082583257582
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.5288997939221103
-         }
-        ]
-       },
-       {
-        "score": 0.3976092864153344,
-        "disease": {
-         "id": "MONDO_0021117",
-         "name": "lung neoplasm"
-        },
-        "datatypeScores": [
-         {
-          "id": "literature",
-          "score": 0.922125736703975
-         },
-         {
-          "id": "somatic_mutation",
-          "score": 0.607930797611621
-         }
-        ]
-       }
-      ]
-     }
     }
    }
   }
@@ -388,9 +924,11 @@
   "url": "https://api.platform.opentargets.org/api/v4/graphql",
   "method": "POST",
   "post": {
-   "query": "query($q:String!){search(queryString:$q,entityNames:[\"target\"],page:{index:0,size:5}){hits{id entity name description}}}",
+   "query": "query($q:String!,$filter:String,$size:Int!){search(queryString:$q,entityNames:[\"target\"],page:{index:0,size:5}){hits{id entity name description object{... on Target{id approvedSymbol approvedName biotype functionDescriptions tractability{label modality value} safetyLiabilities{event datasource effects{direction dosing} biosamples{tissueLabel cellLabel}} associatedDiseases(BFilter:$filter,page:{index:0,size:$size}){count rows{score disease{id name} datatypeScores{id score}}}}}}}}",
    "variables": {
-    "q": "kcnh2"
+    "q": "kcnh2",
+    "filter": null,
+    "size": 7
    }
   },
   "status": 200,
@@ -402,7 +940,380 @@
        "id": "ENSG00000055118",
        "entity": "target",
        "name": "KCNH2",
-       "description": "potassium voltage-gated channel subfamily H member 2"
+       "description": "potassium voltage-gated channel subfamily H member 2",
+       "object": {
+        "id": "ENSG00000055118",
+        "approvedSymbol": "KCNH2",
+        "approvedName": "potassium voltage-gated channel subfamily H member 2",
+        "biotype": "protein_coding",
+        "functionDescriptions": [
+         "Pore-forming (alpha) subunit of voltage-gated inwardly rectifying potassium channel (PubMed:10219239, PubMed:10753933, PubMed:10790218, PubMed:10837251, PubMed:11997281, PubMed:12063277, PubMed:18559421, PubMed:22314138, PubMed:22359612, PubMed:26363003, PubMed:27916661, PubMed:9230439, PubMed:9351446, PubMed:9765245). Channel properties are modulated by cAMP and subunit assembly (PubMed:10837251). Characterized by unusual gating kinetics by producing relatively small outward currents during membrane depolarization and large inward currents during subsequent repolarization which reflect a rapid inactivation during depolarization and quick recovery from inactivation but slow deactivation (closing) during repolarization (PubMed:10219239, PubMed:10753933, PubMed:10790218, PubMed:10837251, PubMed:11997281, PubMed:12063277, PubMed:18559421, PubMed:22314138, PubMed:22359612, PubMed:26363003, PubMed:27916661, PubMed:9230439, PubMed:9351446, PubMed:9765245). Forms a stable complex with KCNE1 or KCNE2, and that this heteromultimerization regulates inward rectifier potassium channel activity (PubMed:10219239, PubMed:9230439). {ECO:0000269|PubMed:10219239, ECO:0000269|PubMed:10753933, ECO:0000269|PubMed:10790218, ECO:0000269|PubMed:10837251, ECO:0000269|PubMed:11997281, ECO:0000269|PubMed:12063277, ECO:0000269|PubMed:18559421, ECO:0000269|PubMed:22314138, ECO:0000269|PubMed:22359612, ECO:0000269|PubMed:26363003, ECO:0000269|PubMed:27916661, ECO:0000269|PubMed:9230439, ECO:0000269|PubMed:9351446, ECO:0000269|PubMed:9765245}.",
+         "[Isoform A-USO]: Has no inward rectifier potassium channel activity by itself, but modulates channel characteristics by forming heterotetramers with other isoforms which are retained intracellularly and undergo ubiquitin-dependent degradation. .",
+         "[Isoform B-USO]: Has no inward rectifier potassium channel activity by itself, but modulates channel characteristics by forming heterotetramers with other isoforms which are retained intracellularly and undergo ubiquitin-dependent degradation. ."
+        ],
+        "tractability": [
+         {
+          "label": "Approved Drug",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Structure with Ligand",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "High-Quality Ligand",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "High-Quality Pocket",
+          "modality": "SM",
+          "value": false
+         },
+         {
+          "label": "Med-Quality Pocket",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "Druggable Family",
+          "modality": "SM",
+          "value": true
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt loc high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "GO CC high conf",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "UniProt loc med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "UniProt SigP or TMHMM",
+          "modality": "AB",
+          "value": true
+         },
+         {
+          "label": "GO CC med conf",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Human Protein Atlas loc",
+          "modality": "AB",
+          "value": false
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Literature",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "UniProt Ubiquitination",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Database Ubiquitination",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Half-life Data",
+          "modality": "PR",
+          "value": false
+         },
+         {
+          "label": "Small Molecule Binder",
+          "modality": "PR",
+          "value": true
+         },
+         {
+          "label": "Approved Drug",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Advanced Clinical",
+          "modality": "OC",
+          "value": false
+         },
+         {
+          "label": "Phase 1 Clinical",
+          "modality": "OC",
+          "value": false
+         }
+        ],
+        "safetyLiabilities": [
+         {
+          "event": "receptor binding",
+          "datasource": "ToxCast",
+          "effects": [],
+          "biosamples": [
+           {
+            "tissueLabel": null,
+            "cellLabel": null
+           }
+          ]
+         },
+         {
+          "event": "Increased Mortality",
+          "datasource": "AOP-Wiki",
+          "effects": [],
+          "biosamples": []
+         },
+         {
+          "event": "Reduced, survival",
+          "datasource": "AOP-Wiki",
+          "effects": [
+           {
+            "direction": "Inhibition/Decrease/Downregulation",
+            "dosing": null
+           }
+          ],
+          "biosamples": []
+         },
+         {
+          "event": "Torsades de Point",
+          "datasource": "ClinPGx",
+          "effects": [],
+          "biosamples": []
+         },
+         {
+          "event": "prolongation of QT interval of ECG",
+          "datasource": "Bowes et al. (2012)",
+          "effects": [
+           {
+            "direction": "Inhibition/Decrease/Downregulation",
+            "dosing": "general"
+           }
+          ],
+          "biosamples": [
+           {
+            "tissueLabel": "cardiovascular system",
+            "cellLabel": null
+           }
+          ]
+         }
+        ],
+        "associatedDiseases": {
+         "count": 686,
+         "rows": [
+          {
+           "score": 0.8494242971410532,
+           "disease": {
+            "id": "MONDO_0019171",
+            "name": "familial long QT syndrome"
+           },
+           "datatypeScores": [
+            {
+             "id": "genetic_literature",
+             "score": 0.7565361036944618
+            },
+            {
+             "id": "literature",
+             "score": 0.6885178805523925
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.9874224528094544
+            },
+            {
+             "id": "somatic_mutation",
+             "score": 0.6960807632653061
+            },
+            {
+             "id": "animal_model",
+             "score": 0.7452638001842471
+            }
+           ]
+          },
+          {
+           "score": 0.7780744007865633,
+           "disease": {
+            "id": "MONDO_0000453",
+            "name": "short QT syndrome"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.35236448218539235
+            },
+            {
+             "id": "animal_model",
+             "score": 0.6848999026792325
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.8521904464965754
+            },
+            {
+             "id": "genetic_literature",
+             "score": 0.7384135053916763
+            }
+           ]
+          },
+          {
+           "score": 0.7407809361995509,
+           "disease": {
+            "id": "MONDO_0004981",
+            "name": "atrial fibrillation"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.3582202434454773
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.6396147271768192
+            },
+            {
+             "id": "genetic_literature",
+             "score": 0.607930797611621
+            },
+            {
+             "id": "clinical",
+             "score": 0.9468967374258621
+            }
+           ]
+          },
+          {
+           "score": 0.7293552714504805,
+           "disease": {
+            "id": "EFO_0004269",
+            "name": "cardiac arrhythmia"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.3630212206268401
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.812054647473105
+            },
+            {
+             "id": "clinical",
+             "score": 0.9066612367713315
+            }
+           ]
+          },
+          {
+           "score": 0.7127540880412618,
+           "disease": {
+            "id": "HP_0001657",
+            "name": "Prolonged QT interval"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.34774435853832214
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.948548982913255
+            },
+            {
+             "id": "genetic_literature",
+             "score": 0.607930797611621
+            }
+           ]
+          },
+          {
+           "score": 0.6795678885973767,
+           "disease": {
+            "id": "MONDO_0000190",
+            "name": "ventricular fibrillation"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.10496501232152235
+            },
+            {
+             "id": "clinical",
+             "score": 0.9635223198127763
+            },
+            {
+             "id": "genetic_literature",
+             "score": 0.607930797611621
+            }
+           ]
+          },
+          {
+           "score": 0.6098088734525112,
+           "disease": {
+            "id": "MONDO_0005310",
+            "name": "atrial flutter"
+           },
+           "datatypeScores": [
+            {
+             "id": "literature",
+             "score": 0.057753425773104
+            },
+            {
+             "id": "genetic_association",
+             "score": 0.6445457278226949
+            },
+            {
+             "id": "clinical",
+             "score": 0.8406694507328422
+            }
+           ]
+          }
+         ]
+        }
+       }
       }
      ]
     }

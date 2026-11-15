@@ -248,7 +248,11 @@ How a record is turned into a source:
 - The URL is built only from an id that passed a strict pattern (an NCT number, a ChEMBL id, an accession ...), never
   from free text.
 - Limits: at most 8 items per lookup, 3000 characters per item (cut at a sentence or a word, with `[...]`), at most 4
-  requests per lookup, a 15-second timeout, no retries, and at most one request every 1.5 seconds to a host.
+  requests per lookup, a 15-second timeout per request and 45 seconds per lookup, no retries, and at most one request
+  every 1.5 seconds to a host.
+- The engine keeps each good answer in memory for 10 minutes (at most 200 answers, `engine/src/sources/shared.ts`). The
+  same request made again in that time, by another lookup or another run, sends nothing and waits no gap. A failure is
+  not kept. Open Targets finds a gene symbol and reads its target in one request.
 - `meeting.max_database_searches` lookups per run (default 20). A lookup is free, but its records are screened by the
   first pass, so it is refused at the spend cap and when paid calls are switched off. A database that does not answer
   does not stop the run: the scout is told, and the lookup is not counted. A crash replay reads the stored result.
