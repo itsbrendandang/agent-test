@@ -90,7 +90,6 @@ def test_one_claim_dead_on_arrival_one_supported_after_a_send_back(tmp_path: Pat
     [
         ("no_pilot", {"C1": "supported", "C2": "not_established"}),
         ("no_auditor", {"C1": "supported", "C2": "rejected"}),
-        ("no_critic", {"C1": "not_established", "C2": "rejected"}),
         ("no_retriage", {"C1": "supported", "C2": "rejected"}),
     ],
 )
@@ -107,8 +106,7 @@ def test_each_ablation_runs_to_the_end_and_is_logged(
     assert flags[flag.removeprefix("no_")] is False
     assert summary["settings"]["ablations"][flag] is True
     roles = {e["role"] for e in events if e["kind"] == "agent.call"}
-    if flag == "no_critic":
-        assert "critic" not in roles
+    assert "critic" in roles, "the critic is never off"
     if flag == "no_auditor":
         assert "auditor" not in roles
     if flag == "no_pilot":

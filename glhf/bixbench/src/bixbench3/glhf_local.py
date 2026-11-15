@@ -634,7 +634,6 @@ def run_local(
     seed: int | None = None,
     mock_outputs: list[ModelOutput] | None = None,
     engine: str = "phases",
-    no_critic: bool = False,
     no_auditor: bool = False,
     no_pilot: bool = False,
     no_retriage: bool = False,
@@ -709,7 +708,6 @@ def run_local(
         "review_rounds": review_rounds if swarm else None,
         "engine": engine if swarm else None,
         "ablations": {
-            "no_critic": no_critic,
             "no_auditor": no_auditor,
             "no_pilot": no_pilot,
             "no_retriage": no_retriage,
@@ -754,7 +752,6 @@ def run_local(
             "exa": exa,
             "memory_dir": str(memory_dir.resolve()) if memory_dir else None,
             "engine": engine,
-            "no_critic": no_critic,
             "no_auditor": no_auditor,
             "no_pilot": no_pilot,
             "no_retriage": no_retriage,
@@ -894,8 +891,7 @@ def main() -> int:
         default="phases",
         help="swarm: nine phases in order (default), or the claims engine",
     )
-    for name, what in (
-        ("critic", "the critic"),
+    for name, what in (  # the critic is never off: no other role tests a claim
         ("auditor", "the methods auditor"),
         ("pilot", "the pilot"),
         ("retriage", "moving unspent budget between claims"),
@@ -929,7 +925,6 @@ def main() -> int:
         memory_dir=arguments.memory_dir,
         seed=arguments.seed,
         engine=arguments.engine,
-        no_critic=arguments.no_critic,
         no_auditor=arguments.no_auditor,
         no_pilot=arguments.no_pilot,
         no_retriage=arguments.no_retriage,

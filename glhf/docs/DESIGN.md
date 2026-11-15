@@ -205,8 +205,10 @@ Each call's time limit (`call_seconds`) is its stage share of the claim's second
 most the run's time left minus what the claim's later stages need, while that leaves room for the
 30 s. Calls that run at the same time share the wall clock, so each one ends before the reserves.
 
-**Ablations** (`swarm/flags.py`): `--no-critic`, `--no-auditor`, `--no-pilot`, `--no-retriage`. They
-do not change the run's budget. With `--no-critic`, only the registered tests can support a claim.
+**Ablations** (`swarm/flags.py`): `--no-auditor`, `--no-pilot`, `--no-retriage`. They do not change
+the run's budget. The critic cannot be switched off. It is the role that tests each claim on its
+own: it sees only code and files, reruns code and registers at least one falsification test. No
+other role registers tests, so without a critic no claim could be supported.
 
 **Files**, next to `ledger.json` in the run folder and in `outputs/glhf/`: `board.json` (after every
 change), `events.jsonl` (every change, agent call and budget step), `rejections.json` (claim, stage,

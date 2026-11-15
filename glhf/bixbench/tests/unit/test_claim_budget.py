@@ -164,10 +164,9 @@ def test_parse_mode() -> None:
     assert parse_mode("pilot") == ("pilot", 0)
 
 
-def test_a_reviewer_that_is_off_gives_its_part_to_the_other() -> None:
+def test_without_the_auditor_its_part_goes_to_the_critic() -> None:
     assert sum(REVIEW_SPLIT.values()) == pytest.approx(1.0)
     assert review_split(auditor=False) == pytest.approx({"critique": 0.75, "revise": 0.25})
-    assert review_split(critic=False) == pytest.approx({"audit": 0.75, "revise": 0.25})
 
 
 @pytest.mark.parametrize("rounds", [1, 2, 3, 5])

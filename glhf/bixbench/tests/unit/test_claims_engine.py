@@ -223,14 +223,15 @@ def test_no_pilot_goes_straight_to_workup() -> None:
     assert board.claims["C1"].history[0].to_state == "in_workup"
 
 
-def test_no_critic_lets_only_the_registered_tests_decide() -> None:
-    board, ledger, hooks = _setup(
-        {"C1": Script(verdicts=["supported"]), "C2": Script(verdicts=["insufficient"])}
-    )
-    summary = _run(board, ledger, hooks, SwarmFlags(critic=False))
-    assert summary.states == {"C1": "supported", "C2": "not_established"}
-    assert not any(r == "critic" for r, *_ in hooks.calls)
-    assert board.claims["C1"].verdicts[-1].evidence["critic"] == "off (--no-critic)"
+def test_every_claims_run_has_a_critic() -> None:
+    """The critic cannot be switched off: it is the role that tests each claim independently."""
+    assert not hasattr(SwarmFlags(), "critic")
+    with pytest.raises(TypeError):
+        SwarmFlags.from_options(no_critic=True)  # type: ignore[call-arg]
+    board, ledger, hooks = _setup({"C1": Script(), "C2": Script()})
+    _run(board, ledger, hooks, SwarmFlags(auditor=False, pilot=False, retriage=False))
+    critiqued = {c for r, _, c, *_ in hooks.calls if r == "critic"}
+    assert critiqued == {"C1", "C2"}, "every claim under review is critiqued"
 
 
 def test_no_auditor_runs_the_critic_only() -> None:
@@ -241,7 +242,7 @@ def test_no_auditor_runs_the_critic_only() -> None:
 
 def test_no_review_at_all_leaves_claims_not_established() -> None:
     board, ledger, hooks = _setup({"C1": Script()})
-    summary = _run(board, ledger, hooks, SwarmFlags(critic=False, auditor=False))
+    summary = _run(board, ledger, hooks, SwarmFlags(review_rounds=0))
     assert summary.states["C1"] == "not_established" and summary.rounds == 0
     assert board.claims["C1"].history[-1].reason == "no review ran (review is off)"
 
@@ -303,8 +304,8 @@ def test_flags_are_checked() -> None:
         SwarmFlags(max_parallel=0)
     with pytest.raises(ValueError):
         SwarmFlags(review_rounds=9)
-    flags = SwarmFlags.from_options(no_critic=True, no_pilot=True)
-    assert (flags.critic, flags.pilot, flags.auditor, flags.retriage) == (False, False, True, True)
+    flags = SwarmFlags.from_options(no_auditor=True, no_pilot=True)
+    assert (flags.pilot, flags.auditor, flags.retriage) == (False, False, True)
 
 
 def test_every_review_round_gets_its_own_review_tokens() -> None:
