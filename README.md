@@ -263,6 +263,10 @@ finished in a fraction of a second, so the Lab replays a new Demo answer once, l
 "Pause motion" stops all movement. With the system's reduced-motion setting, nothing moves and
 nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
 
+![Research with a Demo answer on the left and its Agent Lab replaying on the right](docs/images/research-lab.png)
+
+![A narrow screen: the Agent Lab, opened again after the answer, above the conversation](docs/images/research-lab-narrow.png)
+
 **Team review.** The decision first, then how many statements were checked and how each one did.
 
 ![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
