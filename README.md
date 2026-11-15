@@ -6,7 +6,7 @@ checked, and what is still uncertain.**
 Built for the **SF AI Research Hackathon** (Track 3, AI Scientist Swarms) by team GLHF:
 Brendan Dang, Anh Lam and Josh Bustamante.
 
-**Contents:** [Try it](#try-it) · [Demo and Real](#demo-and-real) · [What is in the app](#what-is-in-the-app) ·
+**Contents:** [Run it](#run-it-on-your-machine) · [Demo and Real](#demo-and-real) · [Using the app](#using-the-app) ·
 [Where things stand](#where-things-stand) · [Benchmarks](#benchmarks) · [How it fits together](#how-it-fits-together) ·
 [Words](#words) · [Read more](#read-more)
 
@@ -127,24 +127,102 @@ only the case's data files are uploaded.
 Tested with fakes only; no run has used Modal yet. Details:
 [docs/configuration.md](docs/configuration.md#where-the-swarms-analyses-run-analysis_backend).
 
-## What is in the app
+## Using the app
 
-The sidebar has two groups. **Overview, Research, Saved research** come first: ask, read, find again.
-**How it works** holds Agent Log, Team review, Graph and Agents. Settings opens from the profile row at the foot.
-Benchmarks and Compare are not in the sidebar. They open only by their address (`#Benchmarks`, `#Compare`).
+The sidebar has two groups. **Overview**, **Research** and **Saved research** come first: ask, read, find again.
+**How it works** holds **Agent Log**, **Team review**, **Graph** and **Agents**. **Settings** opens from the profile
+row at the foot. Benchmarks and Compare are not in the sidebar; they open only by their address (`#Benchmarks`,
+`#Compare`). The pictures below are **Demo mode**: practice runs with fixed example text, not research. The app
+labels them "Practice".
 
-| Screen | What it is for |
-|---|---|
-| Overview | Ask in the "Let's research together!" question box. The answer is written right under the box. Below it, follow the six-room Agent Lab and its activity panel. The answer is also the conversation in Research, so a follow-up there continues it. One quiet line counts research and practice apart. |
-| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. |
-| Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
-| Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
-| Team review | One review in detail: what each agent said, and how each statement was checked. |
-| Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
-| Graph | One run as a picture of who said what. |
-| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab stays on Overview. |
-| Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
-| Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
+### 1. Overview: ask, and watch the team work
+
+The app opens here. Type a question in the **"Let's research together!"** box, choose Quick, Standard or Deep, and
+press Send. Under the box, **Try asking** shows biology questions; a click fills the box, and nothing is sent until
+you press Send. The answer is written right under the box. Below it, the **Agent Lab** shows the team as characters in
+six rooms (Discovery, Planning, Experiment bench; Evidence review, Quality control, Report studio). Click a teammate to
+see what it does now, and its steps in the Agent Log. The activity panel follows the run. One quiet line counts
+research and practice apart. Spending and limits are in Settings.
+
+![The Overview: the question box, Try asking, and the Agent Lab with six rooms](docs/images/overview.png)
+
+The Lab's look is by Anh Lam.
+
+### 2. Research: the answer as a chat
+
+An Overview question continues here as the same conversation, so a follow-up keeps the context. The answer is
+written **live**: its text appears as the writer writes it, under short lines that say what the team is doing
+("Searching the web: found 6, kept 4."). Each cited sentence has a source number and a check mark. Below the text are
+the **hypotheses**, each with its sources for and against, then "What is missing" and the sources. Pictures from the
+sources show in a strip under the text; each links to its source page. "Open in the Agent Log" shows every step.
+
+Try asking works as on Overview: a click fills the box. The button at the top right opens the **inspector**, with
+four tabs:
+
+- **Evidence**: the sources (found, selected, cited) and each checked statement with its quoted passage. A citation
+  number in the answer opens this tab with that source lit; "Show in the answer" goes back.
+- **Hypotheses**, **Results** (the saved files) and **Activity** (the steps, in order).
+
+![Research: a practice answer with the inspector open on the Evidence tab](docs/images/research.png)
+
+### 3. Saved research: everything that was run
+
+Newest first, with a search box that finds a word in a question, a result or anything that was said. Filters:
+Answers, Team reviews, Benchmark runs and **Examples** (six read-only practice runs, see
+[Example library](#example-library)). Each row opens the run, and has a link to its Agent Log (and to its Graph, for
+a run that has one).
+
+### 4. Agent Log and Team review: who said what
+
+The **Agent Log** shows every event of one run as a **group chat**. Each agent turn is a message beside the agent's
+picture and name. Longer reasoning opens with **Show thinking**; other long text opens with **Show more**. Tool
+calls, searches and system steps are small notes between the messages. One toolbar holds the search box, the
+**Agent** and **Kind of step** menus (each choice with its number of events), Clear and Download (JSON or CSV). The
+run menu at the top lists runs in progress, then finished ones, next to **Follow newest**. Click a face or a name to
+see only that agent's messages, then follow the link to its card in Agents.
+
+![The Agent Log: one run as a group chat, with the search box and the Agent and Kind of step menus](docs/images/agent-log.png)
+
+A **Team review** is the drug board: a lead scientist and seven members discuss a written brief over rounds, and the
+lead writes a recommendation. In every round the scout gathers sources first, then the **evidence verifier** rechecks
+each source the scout cited and searches for what it missed; the lead reads its report before deciding. The screen shows the recommendation first, then how many statements were checked and
+how each one did (supported, contradicted, insufficient evidence), who took part, and the discussion round by round.
+Each member opens its messages in the Agent Log; each source and checked statement has an "In the graph" link.
+
+![Team review: the recommendation, the counts of checked statements, and who took part](docs/images/team-review.png)
+
+### 5. Agents: who does the work
+
+All agents as member cards, grouped by team: the **team of nine** (benchmark tasks) in step order, the **team review**
+with its lead first, then the **specialists** A to Z. Filter by team or search by name, job or tool. **Details** opens
+one member in a side panel, with a link to its messages in the Agent Log.
+
+![Agents: member cards for the team of nine, with their step and model group](docs/images/agents.png)
+
+### 6. Graph: one run as a picture
+
+One run (a team review, or a Compare run on a benchmark task) as a 3D graph of team members and their statements, coloured by what each
+check found. "Watch how this unfolded" replays the statements in order; "Next contradicted one" jumps to a problem.
+Select a node to see its details and what it connects to. The side panel links back to the run and to the Agent Log.
+A research answer has no graph.
+
+![Graph: a practice team review as members and statements, with contradicted ones in red](docs/images/graph.png)
+
+### 7. Settings
+
+Your profile (kept in this browser only), **Run mode** (Demo or Real; see [Turn on Real mode](#turn-on-real-mode)),
+**Usage and limits** (spent today, the limit per run and per day, Exa search), the session token for Real runs, and
+**Appearance**: Light, Dark or Match system. Light is the default.
+
+### Compare and Benchmarks
+
+These two are not in the sidebar; open them by their address. **Compare** (`#Compare`) runs the team of nine against
+one agent alone on the same benchmark task. **Benchmarks** (`#Benchmarks`) sets out our
+results as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. These
+numbers come from real runs, read from the run records. Where something was not measured the screen says "Not
+known". See [Benchmarks](#benchmarks).
+
+![The Benchmarks screen: the record to beat, and one agent against the team of nine with accuracy, tokens, time and cost](docs/images/benchmarks.png)
 
 ### How the screens connect
 
@@ -166,10 +244,7 @@ The address bar always says what is shown, so Back, Forward and a copied link re
 `#Lab/<kind>/<run id>?agent=<name>`, `#Graph/<kind>/<run id>?node=<node id>`, `#Agents/<name>`, `#Board/<run id>`,
 `#Compare/<run id>`. The code is in `dashboard/src/lib/links.ts`.
 
-The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
-Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
-below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.
-The room art is unchanged. The Lab's look is by Anh Lam.
+### How a research answer is made
 
 Research answers can add **method specialists** whose skills fit the question. Code matches
 the question to their method notes. They write from the sources found; their sections are
@@ -204,9 +279,11 @@ cannot be read, curated biology questions are shown. On Overview and on Research
 the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
-preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is skipped and named; a
-paper found twice is listed once. No key is needed. See
-[docs/research-answer.md](docs/research-answer.md#the-flow).
+preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is
+skipped and named; a paper found twice is listed once, and a paper OpenAlex marks as retracted is
+dropped. No key is needed. Answers from the public
+databases (ChEMBL, Open Targets, UniProt and others) are kept for 10 minutes, so a repeated lookup
+does not ask again. See [docs/research-answer.md](docs/research-answer.md#the-flow).
 
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
@@ -236,36 +313,6 @@ node scripts/generate-examples.mjs
 
 The script starts its own engine with paid calls off and locked. It makes the events through
 the Demo pipeline, not by hand. These are practice runs, not research or benchmark results.
-
-### Earlier Demo screenshots
-
-The Overview, Research, Team review and Lab pictures below show earlier layouts in **Demo
-mode**. They are practice runs: fixed example text, not research. The app labels them "Practice".
-The Benchmarks picture is described separately.
-
-**Overview.** Practice runs are counted apart from research, so the big number is only what real
-models produced.
-
-![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
-
-**Research.** You ask; the answer is split into hypotheses, each with the sources for and against
-it. A mark that rests on one source only says so ("one source only").
-
-![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
-
-**Team review.** The decision first, then how many statements were checked and how each one did.
-
-![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
-
-**Overview's Agent Lab.** The same run as a scene: who is working and who fetched what.
-This earlier picture shows the room art, not the current three-column layout or the Agent Log.
-
-![Earlier Demo Lab: six rooms with agents as characters and an activity panel](docs/images/lab.png)
-
-**Benchmarks.** These numbers are real runs, read from the run records. Where something was not
-measured the screen says "Not known".
-
-![The Benchmarks screen: the record to beat, and one agent against the team of nine with accuracy, tokens, time and cost](docs/images/benchmarks.png)
 
 ## Where things stand
 
@@ -408,7 +455,7 @@ holds the keys, enforces the spending limits, and is the only part that reaches 
 ```mermaid
 flowchart TB
     you(["You, in a browser"])
-    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Research · Saved research · Compare · Team review<br/>Agents · Graph · Lab · Settings"]
+    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Overview · Research · Agent Log · Saved research · Compare<br/>Team review · Agents · Graph · Benchmarks · Settings"]
 
     subgraph engine["The engine · 127.0.0.1:8787 · on your machine"]
         gate{"Access check and<br/>spending limits"}
