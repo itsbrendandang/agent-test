@@ -44,9 +44,9 @@ export const PER_SOURCE = 5
 export const MAX_MERGED = 12
 /** Time limit of one source, in milliseconds. Europe PMC also keeps literature.ts's 15 s limit on each request. */
 export const SOURCE_TIMEOUT_MS = 12_000
-const MAX_ABSTRACT_CHARS = 3000
-const MAX_BODY_BYTES = 4_000_000
-const USER_AGENT = "ai-scientist-bot/0.1 (research answer literature search; +https://github.com/itsbrendandang/agent-test)"
+export const MAX_ABSTRACT_CHARS = 3000
+export const MAX_BODY_BYTES = 4_000_000
+export const USER_AGENT = "ai-scientist-bot/0.1 (research answer literature search; +https://github.com/itsbrendandang/agent-test)"
 
 export interface ScholarlyOptions {
   fetchFn?: typeof fetch
@@ -56,12 +56,15 @@ export interface ScholarlyOptions {
 }
 
 /** A source that could not be used. The message says why, without the source's name. */
-class SourceFailed extends Error {}
+export class SourceFailed extends Error {}
 
 /** One GET to a source's own host. Anything but HTTPS to that host is refused before a request is made. */
-async function get(source: ScholarlySource, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> {
+const get = (source: ScholarlySource, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> => getFrom(LITERATURE_HOSTS[source], url, fetchFn, signal, headers)
+
+/** One GET to `host` only (protocols.ts uses it too): HTTPS, no redirect, a capped body. */
+export async function getFrom(host: string, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> {
   const u = new URL(url)
-  if (u.protocol !== "https:" || u.hostname !== LITERATURE_HOSTS[source]) throw new SourceFailed("address not allowed")
+  if (u.protocol !== "https:" || u.hostname !== host) throw new SourceFailed("address not allowed")
   const res = await fetchFn(url, { headers: { "user-agent": USER_AGENT, ...headers }, redirect: "error", signal })
   if (!res.ok) throw new SourceFailed(`answered ${res.status}`)
   const text = await readCapped(res, MAX_BODY_BYTES)
@@ -69,14 +72,14 @@ async function get(source: ScholarlySource, url: string, fetchFn: typeof fetch, 
   return text
 }
 
-const json = (text: string): unknown => {
+export const json = (text: string): unknown => {
   try { return JSON.parse(text) } catch { throw new SourceFailed("sent something that is not JSON") }
 }
-const str = (value: unknown): string => (typeof value === "string" ? value : typeof value === "number" ? String(value) : "")
-const year = (value: unknown): string | undefined => { const y = str(value).slice(0, 4); return /^(19|20)\d{2}$/.test(y) ? y : undefined }
+export const str = (value: unknown): string => (typeof value === "string" ? value : typeof value === "number" ? String(value) : "")
+export const year = (value: unknown): string | undefined => { const y = str(value).slice(0, 4); return /^(19|20)\d{2}$/.test(y) ? y : undefined }
 
 /** "Title (Venue, 2024) [preprint]": the form literature.ts writes, which the answer reads the year and the marks from. */
-function titled(title: string, venue: string | undefined, published: string | undefined, mark?: "preprint" | "review"): string {
+export function titled(title: string, venue: string | undefined, published: string | undefined, mark?: "preprint" | "review"): string {
   const where = [venue, published].filter(Boolean).join(", ")
   return `${title}${where ? ` (${where})` : ""}${mark ? ` [${mark}]` : ""}`.slice(0, 300)
 }
@@ -240,7 +243,7 @@ export function mergePapers(lists: FoundPaper[][], max = MAX_MERGED): EvidenceIt
 }
 
 /** Ends with SourceFailed once `ms` have passed; aborts `controller` so the request is dropped too. */
-function inTime<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+export function inTime<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const late = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { controller.abort(); reject(new SourceFailed(`did not answer within ${ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`}`)) }, ms) })
@@ -278,7 +281,7 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
 }
 
 /** A short reason without a key: only the message of our own errors, a fixed phrase for anything else. */
-function reason(error: unknown): string {
+export function reason(error: unknown): string {
   if (error instanceof SourceFailed) return error.message
   if (error instanceof Error && /^Europe PMC (answered \d+|sent too much)$/.test(error.message)) return error.message.replace("Europe PMC ", "")
   if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) return "it ran out of time"

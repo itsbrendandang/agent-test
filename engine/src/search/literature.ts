@@ -102,12 +102,13 @@ export async function readCapped(res: Response, maxBytes: number): Promise<strin
 
 /**
  * literatureLive, with each paper's DOI kept (scholarly.ts). `signal` (optional) ends the search early; `maxBytes`
- * (optional) refuses redirects and a body longer than that.
+ * (optional) refuses redirects and a body longer than that. `filter` (optional) is a Europe PMC clause added to every
+ * try with AND, so dropping words never drops it (protocols.ts: the protocol journals).
  */
-export async function europePmcPapers(query: string, fetchFn: typeof fetch = fetch, signal?: AbortSignal, maxBytes?: number): Promise<{ papers: FoundPaper[]; notices: string[] }> {
+export async function europePmcPapers(query: string, fetchFn: typeof fetch = fetch, signal?: AbortSignal, maxBytes?: number, filter?: string): Promise<{ papers: FoundPaper[]; notices: string[] }> {
   const notices: string[] = []
   for (const q of retryQueries(query)) {
-    const url = `${LITERATURE_URL}?${new URLSearchParams({ query: q, resultType: "core", format: "json", pageSize: String(MAX_RESULTS) })}` // no `sort`: relevance is the default, and sort=RELEVANCE is answered with 503
+    const url = `${LITERATURE_URL}?${new URLSearchParams({ query: filter ? `(${q}) AND ${filter}` : q, resultType: "core", format: "json", pageSize: String(MAX_RESULTS) })}` // no `sort`: relevance is the default, and sort=RELEVANCE is answered with 503
     const timeout = AbortSignal.timeout(15_000)
     const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: signal ? AbortSignal.any([signal, timeout]) : timeout, ...(maxBytes ? { redirect: "error" as const } : {}) })
     if (!res.ok) throw new Error(`Europe PMC answered ${res.status}`)

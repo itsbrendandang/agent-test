@@ -18,14 +18,19 @@ export const PLANNER = file("planner.md"), WRITER = file("writer.md"), REVISER =
 export const HYPOTHESES = file("hypotheses.md"), WRITER_HYPOTHESES = file("writer-hypotheses.md"), STANCE = file("stance.md"), INVESTIGATOR = file("investigator.md"), LEAD = file("lead.md"), SPECIALIST = file("specialist.md")
 export const MAX_NOTES = 6
 
-const DATABASE_RULE = `3. "databases": 0 to {{n}} lookups in public databases, only when a record there would help. Each is {"source", "query"}. Sources and what to send: "clinicaltrials" (free text, or one NCT number), "chembl" (a compound name, or "target: <gene symbol>"), "openfda" (ONE drug name), "opentargets" (a gene symbol, optionally followed by disease words), "uniprot" (a gene symbol or protein name), "pubchem" (a compound name).`
+const PROTOCOL_RULE = `3. "protocols": 0 to {{n}} queries for a search of published lab protocols and SOPs (Bio-protocol, STAR Protocols, Nature Protocols, JoVE, Current Protocols, Cold Spring Harbor Protocols, MethodsX, Methods in Molecular Biology, Protocol Exchange and protocols.io). Write one only when the question asks for a protocol, an SOP or a method, or how to do something at the bench ("How do I isolate hepatocytes from mouse liver?"). 2 to 6 terms: the technique and the material or system, as a protocol title would name them (example: TRIzol RNA extraction mouse liver). No sentences, no quotation marks, no AND/OR. For any other question, an empty list.`
 
-export function plannerSystem(o: { web: number; literature: number; databases: number }): string {
+const DATABASE_RULE = `{{num}}. "databases": 0 to {{n}} lookups in public databases, only when a record there would help. Each is {"source", "query"}. Sources and what to send: "clinicaltrials" (free text, or one NCT number), "chembl" (a compound name, or "target: <gene symbol>"), "openfda" (ONE drug name), "opentargets" (a gene symbol, optionally followed by disease words), "uniprot" (a gene symbol or protein name), "pubchem" (a compound name).`
+
+export function plannerSystem(o: { web: number; literature: number; databases: number; protocols?: number }): string {
+  const protocols = o.protocols ?? 0
   return fill(PLANNER, {
     web: o.web === 1 ? "exactly 1 query" : `1 to ${o.web} queries; write more than one only when the question has parts that one search would not cover`,
     literature: o.literature,
-    steps: `a web search, a search of PubMed and preprints, ${o.databases ? "lookups in public databases, " : ""}screening the results, writing an answer from the kept sources, and checking each statement against its source`,
-    databases: o.databases ? fill(DATABASE_RULE, { n: o.databases }) : "",
+    steps: `a web search, a search of PubMed and preprints, ${protocols ? "a search of published lab protocols (only for a question about a lab method), " : ""}${o.databases ? "lookups in public databases, " : ""}screening the results, writing an answer from the kept sources, and checking each statement against its source`,
+    protocols: protocols ? fill(PROTOCOL_RULE, { n: protocols }) : "",
+    protocols_shape: protocols ? `, "protocols": []` : "",
+    databases: o.databases ? fill(DATABASE_RULE, { n: o.databases, num: protocols ? 4 : 3 }) : "",
     databases_shape: o.databases ? `, "databases": [{"source": "clinicaltrials", "query": "..."}]` : "",
   })
 }
@@ -40,7 +45,7 @@ export const plannerUser = (question: string, thread: ThreadTurn[]): string =>
   `${threadBlock(thread)}<question>\n${escapeData(question)}\n</question>`
 
 const PROVIDER_NAME: Record<string, string> = {
-  exa: "Web search (Exa)", europepmc: "Literature search (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: abstracts)", openalex: "OpenAlex (paper abstract)", semanticscholar: "Semantic Scholar (paper abstract)", arxiv: "arXiv (preprint abstract)", crossref: "Crossref (paper abstract)", biorxiv: "bioRxiv/medRxiv (preprint abstract)", fixture: "Example sources (demo)",
+  exa: "Web search (Exa)", europepmc: "Literature search (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: abstracts)", openalex: "OpenAlex (paper abstract)", semanticscholar: "Semantic Scholar (paper abstract)", arxiv: "arXiv (preprint abstract)", crossref: "Crossref (paper abstract)", biorxiv: "bioRxiv/medRxiv (preprint abstract)", protocols: "Lab protocol search (protocol journals and protocols.io: abstracts)", fixture: "Example sources (demo)",
   chembl: "ChEMBL database", clinicaltrials: "ClinicalTrials.gov database", openfda: "openFDA database", opentargets: "Open Targets database", uniprot: "UniProt database", pubchem: "PubChem database",
 }
 export const providerName = (provider: string): string => PROVIDER_NAME[provider] ?? provider

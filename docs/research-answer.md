@@ -20,7 +20,7 @@ The two levels on this page are `quick` and `standard`. The third level, `deep`,
 flowchart LR
     q(["Your question"]) --> prepare["Prepare<br/>plan the queries"]
     prepare --> exa["Web search (Exa)<br/>opens every answer"]
-    exa --> more["At the same time:<br/>the literature (Europe PMC, OpenAlex,<br/>Semantic Scholar, arXiv,<br/>Crossref, bioRxiv/medRxiv),<br/>more web searches,<br/>public databases (standard)"]
+    exa --> more["At the same time:<br/>the literature (Europe PMC, OpenAlex,<br/>Semantic Scholar, arXiv,<br/>Crossref, bioRxiv/medRxiv),<br/>more web searches,<br/>lab protocols (a lab-method question),<br/>public databases (standard)"]
     more --> screen["Screen each result<br/>for relevance"]
     screen --> number["Number the kept sources<br/>[1] .. [n] (code)"]
     number --> write["Write the draft<br/>from the numbered sources only"]
@@ -36,9 +36,10 @@ flowchart LR
 
 | Step | Who does it | What it does |
 |---|---|---|
-| Prepare | cheap model (`models.cheap`) | Writes 1 to 3 web queries, 1 to 3 literature queries and one opening sentence. If its reply cannot be read, the question's own words are searched. |
+| Prepare | cheap model (`models.cheap`) | Writes 1 to 3 web queries, 1 to 3 literature queries, 0 to 2 lab protocol queries and one opening sentence. If its reply cannot be read, the question's own words are searched. |
 | Web search | Exa (paid) | Always the first search. `quick`: exactly 1. `standard`: up to 3. |
 | Literature search | Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv (all free, no key) | Abstracts of papers and preprints. One literature query asks the six at the same time. bioRxiv/medRxiv is searched through Crossref (DOIs that start with 10.1101) (`engine/src/search/scholarly.ts`). Each source has its own time limit (12 s); a source that fails is skipped and named, and the others are still used. A paper found twice (same DOI or same title) is listed once, Europe PMC's copy first. At most 12 papers go on to screening. Each kept paper names the index it came from. A free `SEMANTIC_SCHOLAR_API_KEY` in `.env` only raises Semantic Scholar's rate limit; it is not needed. Runs after the first web search, at the same time as the other searches. |
+| Lab protocol search | Europe PMC and OpenAlex limited to protocol journals, protocols.io through Crossref (all free, no key) | Only for a question that asks for a protocol, an SOP or how to do a lab method. The planner decides and writes the queries; when it writes none, none run. Only when the planner's reply cannot be read does code decide: for a question that names a lab method and asks for a protocol, an SOP or how to do it (`looksProtocol` in `engine/src/research/text.ts`), code makes one query from the first literature query. At most 2, and no more than the level's literature query limit. Journals: Bio-protocol, STAR Protocols, Nature Protocols, JoVE, Current Protocols, Cold Spring Harbor Protocols, MethodsX, Methods in Molecular Biology, and Protocol Exchange (OpenAlex only). The three sources are asked at once (`engine/src/search/protocols.ts`), each with its own time limit (12 s); a source that fails is skipped and named. A protocol found twice (same DOI, same title, or another version of one protocols.io protocol) is listed once. At most 10 go on to screening. A protocol is kept when it is on the question, even though it reports no findings of its own. It is marked "protocol" in the sources and cited like a paper. Only its abstract is read, not its steps. A question with protocol searches never takes the short path. The protocols.io API is not used: it needs a token. |
 | Database lookups | public databases (free) | `standard` only, up to 2: ClinicalTrials.gov, ChEMBL, openFDA, Open Targets, UniProt, PubChem (`engine/src/sources/`). |
 | Screen | cheap model | The board's own first pass (`engine/src/board/triage.ts`): is the result about the question, does it report findings, what kind of study is it. |
 | Number | code | Kept sources become `[1]..[n]`, the most relevant first. The order comes from the plan, not from which reply arrived first. |
@@ -68,7 +69,8 @@ nothing more). Code then takes the **short path** only when all of these hold (`
 `engine/src/research/pipeline.ts`):
 
 - the planner's reply was read (not the fallback plan) and says `simple`;
-- the question is not about health (a medical answer always gets the full review).
+- the question is not about health (a medical answer always gets the full review);
+- the plan has no lab protocol searches.
 
 On the short path, at both levels:
 
@@ -120,7 +122,8 @@ answer and the app say so.
    Exa first, then its literature search (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref,
    bioRxiv/medRxiv), and a database lookup when it planned one and the
    level has room), the screening of what they find (against the hypothesis itself), and then the draft of its
-   own section. It is given only its own hypothesis and the sources its own searches found. Every step in the
+   own section. It is given only its own hypothesis and the sources its own searches found, plus the lab
+   protocols found, when the plan has protocol searches: those run beside the hypotheses and serve every one. Every step in the
    event log names who did it (`agent`: `planner`, `investigator-1`, `writer`, `checker`, `critic`). **No limit is raised for this.** Each hypothesis uses one
    web search and one literature query of the level, so with today's limits (3 and 3) at most 3 are tested. A
    proposal that does not fit is set aside and named under "What is missing". The numbered sources (12) are

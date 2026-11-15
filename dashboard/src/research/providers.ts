@@ -10,6 +10,8 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
   arxiv: { label: "Found in arXiv (preprints)", link: "https://arxiv.org", linkText: "arXiv", place: "arXiv", kind: "literature" },
   crossref: { label: "Found in Crossref (scholarly records)", link: "https://www.crossref.org", linkText: "Crossref", place: "Crossref", kind: "literature" },
   biorxiv: { label: "Found in bioRxiv/medRxiv (preprints)", link: "https://www.biorxiv.org", linkText: "bioRxiv/medRxiv", place: "bioRxiv/medRxiv", kind: "literature" },
+  // A lab protocol from the protocol search: a protocol journal (through Europe PMC or OpenAlex) or protocols.io, so no one site is credited.
+  protocols: { label: "Lab protocol (protocol journals and protocols.io)", place: "published lab protocols (protocol journals and protocols.io)", kind: "literature" },
   chembl: { label: "ChEMBL record", link: "https://www.ebi.ac.uk/chembl/", linkText: "ChEMBL", place: "ChEMBL", kind: "database" },
   clinicaltrials: { label: "ClinicalTrials.gov record", link: "https://clinicaltrials.gov", linkText: "ClinicalTrials.gov", place: "ClinicalTrials.gov", kind: "database" },
   openfda: { label: "FDA label or report counts (openFDA)", link: "https://open.fda.gov", linkText: "openFDA", place: "openFDA", kind: "database" },

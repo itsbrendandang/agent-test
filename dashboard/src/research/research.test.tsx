@@ -686,6 +686,11 @@ describe("where a source was found", () => {
     expect(render(<ProviderCredit provider="somewhere-new" />).container).toHaveTextContent("Found in somewhere-new")
     expect(render(<ProviderCredit provider="" />).container).toBeEmptyDOMElement()
   })
+  it("a lab protocol is credited as a protocol, with no single site linked, and its search step names where it looked", () => {
+    const { container } = render(<ProviderCredit provider="protocols" />)
+    expect(container).toHaveTextContent(/^Lab protocol \(protocol journals and protocols\.io\)$/); expect(container.querySelector("a")).toBeNull()
+    expect(searchPlace("protocols")).toBe("published lab protocols (protocol journals and protocols.io)")
+  })
   it("the generated real stream credits each source to the search that found it", async () => {
     await show(lines(S_REAL))
     const state = foldAnswer(lines(S_REAL))

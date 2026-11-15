@@ -1,8 +1,8 @@
 // A research-answer engine for tests: the real routes, pipeline and Pi Durable sessions, with every outside thing faked.
 //   models   pi-ai's faux providers under the real ids (anthropic: haiku and sonnet; openai: gpt-4o-mini and gpt-5-mini);
 //            each call is answered by a function chosen from the call's system prompt, and is recorded
-//   network  globalThis.fetch is replaced: Exa and Europe PMC are answered from tables, OpenAlex, Semantic Scholar and
-//            arXiv find nothing, anything else throws
+//   network  globalThis.fetch is replaced: Exa and Europe PMC are answered from tables, OpenAlex, Semantic Scholar,
+//            arXiv and Crossref (protocols.io) find nothing, anything else throws
 //   folder   a temp folder for runs (so the Exa ledger and every answer live there), never board/runs
 // Nothing here can reach a vendor: keys are fake words and the only fetch is the fake.
 import { mkdtempSync, readFileSync } from "node:fs"
@@ -30,6 +30,8 @@ export interface Net {
   europepmc: (query: string) => Response | Promise<Response>
   /** The answer of OpenAlex for a query; by default it finds nothing. */
   openalex?: (query: string) => Response | Promise<Response>
+  /** The answer of Crossref (the protocol search's protocols.io records) for a query; by default it finds nothing. */
+  crossref?: (query: string) => Response | Promise<Response>
 }
 export const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
@@ -57,8 +59,12 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   if (url.startsWith("https://api.openalex.org/works?")) return net.openalex ? net.openalex(new URL(url).searchParams.get("search") ?? "") : jsonResponse({ results: [] })
   if (url.startsWith("https://api.semanticscholar.org/graph/v1/paper/search?")) return jsonResponse({ data: [] })
   if (url.startsWith("https://export.arxiv.org/api/query?")) return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 })
-  // Crossref and bioRxiv (scholarly.ts) share the Crossref host; find nothing here by default.
-  if (url.startsWith("https://api.crossref.org/works?")) return jsonResponse({ message: { items: [] } })
+  // The protocol search's protocols.io records (filter prefix:10.17504), and Crossref and bioRxiv (scholarly.ts), share the
+  // Crossref host. Only the protocols.io request goes to `net.crossref`; the others find nothing here.
+  if (url.startsWith("https://api.crossref.org/works?")) {
+    const params = new URL(url).searchParams
+    return net.crossref && params.get("filter") === "prefix:10.17504" ? net.crossref(params.get("query") ?? "") : jsonResponse({ message: { items: [] } })
+  }
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 
