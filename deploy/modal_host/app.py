@@ -1,4 +1,4 @@
-"""AI Scientist Bot on Modal: the engine and the built dashboard as one private web address.
+"""Bit Crew on Modal: the engine and the built dashboard as one private web address.
 
   python3 deploy/modal_host/access.py add owner        once: who may sign in (see access.py)
   python3 deploy/modal_host/deploy.py                  build and publish; prints the address (deploy.py runs `modal deploy` on a frozen copy)

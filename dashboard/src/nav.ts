@@ -1,5 +1,5 @@
-/** The product's name as people read it. As a slug it is "ai-scientist-bot". */
-export const PRODUCT = "AI Scientist Bot"
+/** The product's name as people read it. The slug stays "ai-scientist-bot" (package names, user agents) for compatibility. */
+export const PRODUCT = "Bit Crew"
 
 // The views of the app. The keys are addresses (the URL hash, stored choices, deep links): they never change.
 // What a person reads is LABEL. Overview is first and is what opens when the address names no view and no view

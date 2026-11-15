@@ -1,6 +1,6 @@
-# AI Scientist Bot dashboard
+# Bit Crew dashboard
 
-The web app for AI Scientist Bot. It runs in a browser and talks to the engine on port 8787
+The web app for Bit Crew. It runs in a browser and talks to the engine on port 8787
 (change with `VITE_ENGINE_URL`). The engine does the work and holds the API keys; the browser never
 sees a key.
 

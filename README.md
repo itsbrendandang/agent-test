@@ -1,4 +1,4 @@
-# AI Scientist Bot
+# Bit Crew
 
 **Ask a science question. A team of AI agents researches it. You see what they found, what they
 checked, and what is still uncertain.**
