@@ -37,6 +37,9 @@ const screen = (call: { user: string }) => JSON.stringify({ items: [...call.user
 /** Europe PMC: the protocol journals' search finds the Bio-protocol paper; the general literature search finds nothing. */
 const pmc = (query: string) => jsonResponse(query.includes('JOURNAL:"Bio-protocol"') ? BIOPROTOCOL : { resultList: { result: [] } })
 
+/** A request of the protocol search to protocols.io: the literature search also calls the Crossref host, without this filter. */
+const isProtocolsIo = (url: string) => url.startsWith("https://api.crossref.org/") && new URL(url).searchParams.get("filter") === "prefix:10.17504"
+
 test("a question that asks for a protocol searches the published lab protocols; they are kept, numbered, labelled and cited like papers", async () => {
   const e = await engine({ script: { plan: () => PLAN(["primary mouse hepatocyte isolation"]), screen } })
   e.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
@@ -138,7 +141,7 @@ test("a question that is not about a lab method searches no protocol", async () 
     assert.equal(record.status, "done")
     assert.ok(!record.searches.some((s) => s.provider === "protocols"))
     assert.ok(!of(events, "step.started").some((s) => s.step.startsWith("search:protocols")))
-    assert.ok(!e.net.requests.some((r) => r.url.includes("crossref") || (r.url.includes("europepmc") && r.url.includes("JOURNAL"))))
+    assert.ok(!e.net.requests.some((r) => isProtocolsIo(r.url) || (r.url.includes("europepmc") && r.url.includes("JOURNAL"))))
   } finally { await e.close() }
 })
 
@@ -166,7 +169,7 @@ test("a protocol search is stored like every outside step: after a restart it is
   e.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
   e.net.europepmc = pmc
   e.net.crossref = () => jsonResponse(PIO)
-  const crossref = () => e.net.requests.filter((r) => r.url.startsWith("https://api.crossref.org/")).length
+  const crossref = () => e.net.requests.filter((r) => isProtocolsIo(r.url)).length
   try {
     await paidAllowed(async () => {
       const id = (await e.ask({ question: Q, effort: "quick" })).body.id

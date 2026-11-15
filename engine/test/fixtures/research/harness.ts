@@ -58,10 +58,13 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   // so by default every answer's papers are Europe PMC's.
   if (url.startsWith("https://api.openalex.org/works?")) return net.openalex ? net.openalex(new URL(url).searchParams.get("search") ?? "") : jsonResponse({ results: [] })
   if (url.startsWith("https://api.semanticscholar.org/graph/v1/paper/search?")) return jsonResponse({ data: [] })
-  if (url.startsWith("https://api.crossref.org/works?")) return net.crossref ? net.crossref(new URL(url).searchParams.get("query") ?? "") : jsonResponse({ message: { items: [] } })
   if (url.startsWith("https://export.arxiv.org/api/query?")) return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 })
-  // Crossref and bioRxiv (scholarly.ts) share the Crossref host; find nothing here by default.
-  if (url.startsWith("https://api.crossref.org/works?")) return jsonResponse({ message: { items: [] } })
+  // The protocol search's protocols.io records (filter prefix:10.17504), and Crossref and bioRxiv (scholarly.ts), share the
+  // Crossref host. Only the protocols.io request goes to `net.crossref`; the others find nothing here.
+  if (url.startsWith("https://api.crossref.org/works?")) {
+    const params = new URL(url).searchParams
+    return net.crossref && params.get("filter") === "prefix:10.17504" ? net.crossref(params.get("query") ?? "") : jsonResponse({ message: { items: [] } })
+  }
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 
