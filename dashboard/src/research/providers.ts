@@ -16,3 +16,5 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
   pubchem: { label: "PubChem record", link: "https://pubchem.ncbi.nlm.nih.gov", linkText: "PubChem", place: "PubChem", kind: "database" },
   fixture: { label: "Example source (practice run)", place: "the example sources", kind: "example" },
 }
+/** Where a search step looked. The literature search asks four indexes at once, though its steps carry the provider "europepmc". */
+export const searchPlace = (provider: string): string => (provider === "europepmc" ? "the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)" : PROVIDERS[provider]?.place ?? provider)

@@ -4,7 +4,8 @@
 import { agentName } from "./hypothesisWords"
 import { useLayoutEffect, useRef, useState } from "react"
 import { Loader } from "@/components/ai-elements/loader"
-import { providerPlace, seconds, type Step } from "./model"
+import { seconds, type Step } from "./model"
+import { searchPlace } from "./providers"
 
 const ICON: Record<Step["status"], string> = { running: "", completed: "✓", empty: "○", failed: "✕", cancelled: "■" }
 const STATUS_WORD: Record<Step["status"], string> = { running: "running", completed: "done", empty: "found nothing", failed: "failed", cancelled: "stopped" }
@@ -63,7 +64,7 @@ export function Activity({ steps, working, totalSeconds, preparedMs, defaultOpen
                   <span className="activity-label">{st.label}<span className="sr-only">: {STATUS_WORD[st.status]}</span></span>
                   {st.status !== "completed" && st.status !== "running" && <span className="activity-status">{STATUS_WORD[st.status]}</span>}
                   {agentName(st.agent) && <span className="muted small activity-agent">{agentName(st.agent)}</span>}
-                  {st.provider && <span className="muted small activity-place">{providerPlace(st.provider)}</span>}
+                  {st.provider && <span className="muted small activity-place">{searchPlace(st.provider)}</span>}
                   <span className="mono activity-ms">{st.status === "running" ? (st.total ? `${st.done ?? 0}/${st.total}` : "…") : seconds(st.ms)}</span>
                 </button>
                 {isOpen && (
