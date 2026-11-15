@@ -6,6 +6,10 @@ checked, and what is still uncertain.**
 Built for the **SF AI Research Hackathon** (Track 3, AI Scientist Swarms) by team GLHF:
 Brendan Dang, Anh Lam and Josh Bustamante.
 
+**Contents:** [Try it](#try-it) · [Demo and Real](#demo-and-real) · [What is in the app](#what-is-in-the-app) ·
+[Where things stand](#where-things-stand) · [Benchmarks](#benchmarks) · [How it fits together](#how-it-fits-together) ·
+[Words](#words) · [Read more](#read-more)
+
 ## Why we built it
 
 An AI model can write a confident answer that is wrong. This app does not ask you to trust the
@@ -20,28 +24,6 @@ answer. It shows the work:
    source it cites, and how it was checked.
 
 The app is allowed to say "I do not know" or "nothing was found". That is better than a guess.
-
-## The brief: Track 3, AI Scientist Swarms
-
-The hackathon's instructions for the track we entered, as given:
-
-> **The question:** can a team of agents reproduce a full computational biology study from raw
-> data better than the best single frontier model?
->
-> **What to build:** generating hypotheses is the easy part, rejecting the wrong ones is harder.
-> Build a multi-agent system where agents with different roles (proposer, experimenter, critic)
-> plan, run the analysis and check each other's results before anything is reported.
->
-> **Record to beat:** BixBench3 (Edison Scientific), 20 published studies rebuilt from raw data.
-> Best score: 0.523.
->
-> **Context:** Kosmos (Edison Scientific, 2025) coordinates 200+ agents through a shared world
-> model, and independent scientists judged 79.4% of its statements accurate, so about 1 in 5 is
-> wrong. Popper (Huang et al., ICML 2025) has agents design falsification experiments with
-> Type-I error control.
->
-> **Judged on:** score vs. the record and a single-agent baseline on the same compute budget,
-> rigour, reproducibility. Report what the swarm rejected as well as what it found.
 
 ## Try it
 
@@ -67,22 +49,45 @@ examples that show how the app works. They are not research.
 | Cost | Free | Costs money, with limits you see before you start |
 | Keys needed | None | Your own keys (below) |
 
-To use Real mode:
+### Turn on Real mode
 
-```bash
-cp .env.example .env    # open .env and paste your own keys after the = signs
-npm run preflight       # free: checks your keys and prints the spending limits
-```
+Only the person who pays for the keys does this.
 
-You need an `ANTHROPIC_API_KEY`, an `OPENAI_API_KEY` and an `EXA_API_KEY`. Then start the app and
-switch from Demo to Real in **Settings**. The app shows the limits and asks you to confirm before
-anything is spent.
+1. **Add your keys.** Copy the example file and paste your own keys after the `=` signs:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   | Key | Needed for |
+   |---|---|
+   | `ANTHROPIC_API_KEY` | The main AI models (writing, first check) |
+   | `OPENAI_API_KEY` | The critic and the second check |
+   | `EXA_API_KEY` | Web search |
+
+   The other keys in `.env.example` are optional. `HF_TOKEN` is for benchmark data and cloud
+   runs, `PAST_API_KEY` for memory between runs. All settings: [docs/configuration.md](docs/configuration.md).
+
+2. **Check the keys.** This is free. It asks each company for its model list and prints the
+   spending limits:
+
+   ```bash
+   npm run preflight
+   ```
+
+3. **Switch to Real.** Choose one:
+   - **For this session:** start the app (`npm start`), open **Settings**, and switch Run mode
+     from Demo to Real. The app shows the limits and asks you to confirm. A restart goes back
+     to Demo.
+   - **Every time:** set `NO_PAID_CALLS=0` in `.env`, then start the app again.
+
+Good to know:
 
 - Keys are never stored in this repository. Each person uses their own. Do not share them or
   paste them in a chat.
 - A key alone spends nothing. Real mode is off until the person who pays turns it on.
-- Each run has a spending limit, and each day has one too. A run is stopped at its limit (it can
-  pass it by a few cents, because the check happens between steps).
+- Each run has a spending limit, and each day has one too. A run is stopped at its limit.
+- Tests and coding agents never spend money. `npm run check` forces paid calls off.
 
 ## What is in the app
 
@@ -144,13 +149,38 @@ We say only what was really done.
 - **Built, and tested in Demo mode only:** the direct answer in the chat (numbered sources,
   visible steps, hypotheses with sources for and against), and the Lab. No real AI model has
   written a direct answer yet; a real one stays switched off until we turn it on.
-- **Being built now:** open models and a sandbox on Modal, and a shared store for what the
-  agents find. Today each run keeps its own folder of files; there is no database yet.
+- **Open models on Modal:** one open model (Qwen3.6 35B) was served on Modal and ran 82 benchmark
+  questions (see Benchmarks). More models are listed in `glhf/openmodels/models.yaml` but are
+  switched off.
+- **Being built now:** a shared store for what the agents find. Today each run keeps its own
+  folder of files; there is no database yet.
 - **Memory between runs (past.dev):** wired into the nine-agent swarm only, and a person must
   approve each lesson before it is saved. It has not been used in a full real run. The team
   review and the chat do not use it.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
+
+## The brief: Track 3, AI Scientist Swarms
+
+The hackathon's instructions for the track we entered, as given:
+
+> **The question:** can a team of agents reproduce a full computational biology study from raw
+> data better than the best single frontier model?
+>
+> **What to build:** generating hypotheses is the easy part, rejecting the wrong ones is harder.
+> Build a multi-agent system where agents with different roles (proposer, experimenter, critic)
+> plan, run the analysis and check each other's results before anything is reported.
+>
+> **Record to beat:** BixBench3 (Edison Scientific), 20 published studies rebuilt from raw data.
+> Best score: 0.523.
+>
+> **Context:** Kosmos (Edison Scientific, 2025) coordinates 200+ agents through a shared world
+> model, and independent scientists judged 79.4% of its statements accurate, so about 1 in 5 is
+> wrong. Popper (Huang et al., ICML 2025) has agents design falsification experiments with
+> Type-I error control.
+>
+> **Judged on:** score vs. the record and a single-agent baseline on the same compute budget,
+> rigour, reproducibility. Report what the swarm rejected as well as what it found.
 
 ## Benchmarks
 
@@ -213,7 +243,7 @@ What we were given, and what this project really uses. "Called" means a real req
 | [Exa](https://exa.ai) | Web search. The scout agent opens a review with it. The benchmark agents can search tool documentation with it. | Yes. One real team review made 3 searches and checked statements against the pages found. Before that, three searches by hand. |
 | [past.dev](https://past.dev) | Long-term memory for the benchmark agents: lessons a person approved are saved and recalled. | Yes, saving and recalling were tested by hand. No full run has used it yet. |
 | OpenAI | The second checker and the critic agent (a different company from the main model, on purpose). The judge that grades benchmark answers. | Yes. It made 12 second checks in the one real team review, and `gpt-4o` graded the 8 pilot questions. A teammate's separate baseline also used it. |
-| [Modal](https://modal.com) | Cloud computers: to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). The weights of one open model were downloaded and a test sandbox was set up. No open model has been served for a benchmark run yet. |
+| [Modal](https://modal.com) | Cloud computers: to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). One open model (Qwen3.6 35B) was served there for 82 benchmark questions; see [glhf/openmodels/README.md](glhf/openmodels/README.md). |
 | Tinker (Thinking Machines) | Not used. | No. No code calls it. |
 | Devin (Cognition) | Not used. | No. |
 
@@ -308,8 +338,8 @@ a practice review in the middle.
 npm run check    # about 3 minutes; never spends money
 ```
 
-It prints one line per part, `ok` or `FAIL`. On `main` today all five parts print `ok`: no
-merge-conflict markers, both type checks clean, 452 engine tests and 798 dashboard tests pass.
+It prints one line per part, `ok` or `FAIL`. All five parts should print `ok`: no
+merge-conflict markers, both type checks clean, engine tests and dashboard tests pass.
 If a line says `FAIL` on your copy, run `npm run setup` again first. More about the tests is in
 [docs/developers.md](docs/developers.md#tests).
 

@@ -111,7 +111,7 @@ sample.
 | Tool | Status |
 |---|---|
 | past.dev memory | Sending lessons (ingest) and recalling them are tested against the live API (`swarm/past_memory.py`). Lessons are now sent only when a person approves them (`approve` command). Not used inside a full swarm run yet. |
-| Modal | Planned only. No code in this repository uses Modal. |
+| Modal | In use for two things. The app is hosted there in Demo mode behind a sign-in (`deploy/modal_host/`). One open model (Qwen3.6 35B) was served there and ran the 20-dataset, 82-question BixBench v1.5 grid, graded by code rules only (`glhf/openmodels/`). Real mode in the cloud is designed, not deployed. |
 
 ## Engine and dashboard
 
