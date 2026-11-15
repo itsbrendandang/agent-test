@@ -86,11 +86,14 @@ We say only what was really done.
   on 8 benchmark questions. They scored the same (4 of 8), and the team cost more.
 - **Not done yet:** a full benchmark run. So we cannot say that a team of agents is better than
   one agent. That is the question this project was built to test.
-- **Not done yet:** a team review with real AI models from start to end. The parts are built and
-  tested with stand-ins. One real question was answered with a plan, and one real web search was
-  made, to check the keys.
+- **Done once:** a team review with real AI models from start to end. It made 3 web searches
+  (Exa) and 5 literature searches, and checked 204 statements: 71 supported, 28 without enough
+  evidence, 105 not checked (75 of those are calculations, which the checker cannot re-run), none
+  contradicted. It cost $1.31 and took 8 minutes. One run is not evidence that the reviews are
+  good.
 - **Being built now:** a direct answer in the chat with numbered sources and visible steps, a
-  simpler screen layout, an animated "lab" that shows the agents at work, and running on Modal.
+  simpler screen layout, an animated "lab" that shows the agents at work, and open models on
+  Modal.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
 
@@ -100,15 +103,24 @@ What we were given, and what this project really uses. "Called" means a real req
 
 | Tool | What we use it for | Really called so far? |
 |---|---|---|
-| [Exa](https://exa.ai) | Web search. The scout agent opens a review with it. The benchmark agents can search tool documentation with it. | Yes, three searches by hand to test it. No full run has used it yet. |
+| [Exa](https://exa.ai) | Web search. The scout agent opens a review with it. The benchmark agents can search tool documentation with it. | Yes. One real team review made 3 searches and checked statements against the pages found. Before that, three searches by hand. |
 | [past.dev](https://past.dev) | Long-term memory for the benchmark agents: lessons a person approved are saved and recalled. | Yes, saving and recalling were tested by hand. No full run has used it yet. |
-| OpenAI | The second checker and the critic agent (a different company from the main model, on purpose). The judge that grades benchmark answers. | Yes. `gpt-4o` graded the 8 pilot questions. A teammate's separate baseline also used it. |
-| [Modal](https://modal.com) | Cloud computers: to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The account is connected, the weights of one open model were downloaded, and a test sandbox was set up. Open models are not served yet: the account needs a payment method for GPUs. |
+| OpenAI | The second checker and the critic agent (a different company from the main model, on purpose). The judge that grades benchmark answers. | Yes. It made 12 second checks in the one real team review, and `gpt-4o` graded the 8 pilot questions. A teammate's separate baseline also used it. |
+| [Modal](https://modal.com) | Cloud computers: to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). The weights of one open model were downloaded and a test sandbox was set up. No open model has been served for a benchmark run yet. |
 | Tinker (Thinking Machines) | Not used. | No. No code calls it. |
 | Devin (Cognition) | Not used. | No. |
 
 The main AI models are Claude models from Anthropic (not a sponsor credit). They were called for
 the 8 pilot questions and for one chat question.
+
+**Hosted on Modal (Demo mode).** The app also runs as one private web address on Modal:
+`deploy/modal_host/`. The owner gives each teammate a personal access code; nothing is served
+without sign-in. The hosted engine has no API key: it does practice reviews and demo answers only,
+and says so. Runs are kept on a Modal Volume and survive a container stop; a review that was cut
+off continues at the next visit. Swarm and benchmark runs are not available there yet. The
+container stops after five idle minutes and then costs nothing. Deploy, access codes, cost and
+limits: [deploy/modal_host/README.md](deploy/modal_host/README.md). Real mode in the cloud is
+designed, not deployed: [deploy/modal_host/REAL-MODE.md](deploy/modal_host/REAL-MODE.md).
 
 ## How it fits together
 
