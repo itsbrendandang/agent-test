@@ -14,7 +14,7 @@ const turns: Turn[] = [
 
 describe("mode labels", () => {
   it("say plainly whether a model wrote the reply", () => {
-    expect(MODE_LABEL).toEqual({ ai: "Written by a real model", keyword: "Word search of past runs: not written by a model", scripted: "Practice run: fixed text, not real research" })
+    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Saved-research search", scripted: "Demo response" })
   })
 })
 

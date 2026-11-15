@@ -27,29 +27,49 @@ describe("first visit", () => {
     render(<HomeView onOpen={() => {}} />)
     return sent
   }
-  it("says what this is in one sentence, and offers three examples that send in one click", async () => {
+  it("is one clear thing: the headline, the search box right under it, and three short examples that send in one click", async () => {
     const sent = home(CATALOG_OFF)
-    expect(screen.getByRole("heading", { name: "Ask a science question." })).toBeInTheDocument()
-    expect(screen.getByText("A team of AI agents works on it, and every statement they make gets checked.")).toBeInTheDocument()
+    const headline = screen.getByRole("heading", { level: 1, name: "What do you want to research?" })
+    expect(screen.getByText("Ask a question. Explore evidence and sources.")).toBeInTheDocument()
+    const box = screen.getByRole("textbox", { name: "Ask a research question" })
+    expect(box).toHaveAttribute("placeholder", "Ask a research question…")
+    expect(headline.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // the box comes right after the headline
     const examples = within(screen.getByRole("group", { name: "Example questions" })).getAllByRole("button")
     expect(examples).toHaveLength(3)
+    for (const e of examples) expect(e.textContent!.length).toBeLessThanOrEqual(60)
+    expect(box.compareDocumentPosition(examples[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.setup().click(examples[0])
     await waitFor(() => expect(to(sent, "POST", "/api/chat")).toHaveLength(1)) // filled and sent, one click
   })
-  it("says once, kindly, when only practice runs are possible; and not when real runs are", async () => {
+  it("has no setup cards, model names, key status or agent lists until they are asked for", async () => {
+    home(CATALOG_ON)
+    await screen.findByRole("radio", { name: "Standard" })
+    expect(screen.queryByRole("complementary", { name: "What this can use" })).toBeNull()
+    // nothing technical in the open; the one model list sits inside the closed "Research options"
+    expect(screen.queryAllByText(/key present|key missing|claude-|gpt-|ANTHROPIC|\.env/i).filter((e) => !e.closest("details:not([open])"))).toEqual([])
+    await userEvent.setup().click(screen.getByRole("button", { name: "Recent results and setup" }))
+    expect(await screen.findByRole("complementary", { name: "What this can use" })).toBeInTheDocument()
+  })
+  it("explains Demo mode once, in the owner's words", async () => {
     home(CATALOG_OFF)
-    expect(await screen.findByText("You're in Demo mode. Answers are fixed examples, so you can see how it works for free.")).toBeInTheDocument()
+    const note = await screen.findByRole("note")
+    expect(note).toHaveTextContent("Demo mode. AI answers and web search are unavailable. You can search saved research.")
+    expect(screen.getAllByText(/AI answers and web search are unavailable/)).toHaveLength(1)
   })
   it("does not say Demo when the engine can use real models", async () => {
     home(CATALOG_ON)
-    await screen.findAllByText("Real: costs money")
-    expect(screen.queryByText(/You're in Demo mode/)).toBeNull()
+    await screen.findByRole("radio", { name: "Standard" })
+    expect(screen.queryByText(/Demo mode/)).toBeNull()
   })
-  it("keeps effort and the model list out of the way, under More options", async () => {
+  it("keeps Quick, Standard and Deep in one compact selector, and everything advanced under Research options", async () => {
     home(CATALOG_OFF)
-    const more = (await screen.findByRole("radio", { name: "Standard", hidden: true })).closest("details")!
-    expect(more).not.toHaveAttribute("open")
-    expect(within(more).getByText("More options")).toBeInTheDocument()
+    const pick = within(await screen.findByRole("group", { name: "Effort" }))
+    expect(pick.getAllByRole("radio").map((r) => (r as HTMLInputElement).value)).toEqual(["quick", "standard", "deep"])
+    expect(pick.getByRole("radio", { name: "Standard" }).closest("label")).toHaveAttribute("title", expect.stringMatching(/up to 15 minutes · up to \$5\.00/)) // each option explains itself
+    const options = screen.getByText("Research options").closest("details")!
+    expect(options).not.toHaveAttribute("open")
+    expect(within(options).getByLabelText("Model")).toBeInTheDocument()
+    expect(options).toHaveTextContent("You see the plan, its limits and its cost before anything starts.")
   })
 })
 

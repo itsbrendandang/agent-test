@@ -3,12 +3,12 @@
 import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
-import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
+import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
-import { EngineOffline, ModeLabel, PageHead, StatusPill, Verdict as VerdictChip } from "@/components/Shared"
+import { EngineOffline, ModeLabel, PageHead, SearchCredit, StatusPill, Verdict as VerdictChip } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
-import { BOARD_JOB, verdictCount } from "@/lib/words"
+import { BOARD_JOB, safeUrl, verdictCount } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
@@ -83,10 +83,12 @@ export function BoardView() {
   }
 
   const rounds = useMemo(() => {
-    const byRound = new Map<number, { head?: Of<"round.started">; replies: Of<"member.replied">[]; claims: Of<"claim.checked">[] }>()
-    const slot = (n: number) => byRound.get(n) ?? byRound.set(n, { replies: [], claims: [] }).get(n)!
+    const byRound = new Map<number, { head?: Of<"round.started">; replies: Of<"member.replied">[]; claims: Of<"claim.checked">[]; searches: Of<"evidence.triaged">[] }>()
+    const slot = (n: number) => byRound.get(n) ?? byRound.set(n, { replies: [], claims: [], searches: [] }).get(n)!
+    let now = 1 // a search has no round of its own: it belongs to the round that was running
     for (const e of events) {
-      if (e.type === "round.started") slot(e.round).head = e
+      if (e.type === "round.started") { slot(e.round).head = e; now = e.round }
+      if (e.type === "evidence.triaged") slot(now).searches.push(e)
       if (e.type === "member.replied") slot(e.round).replies.push(e)
       if (e.type === "claim.checked") slot(e.round).claims.push(e)
     }
@@ -96,11 +98,15 @@ export function BoardView() {
   const claims = events.filter((e): e is Of<"claim.checked"> => e.type === "claim.checked")
   const count = (v: Verdict) => claims.filter((c) => c.verdict === v).length
   const evidence = events.filter((e): e is Of<"evidence.triaged"> => e.type === "evidence.triaged")
-  const uniqueEvidence = [...new Map(evidence.flatMap((e) => e.items).map((i) => [i.url, i])).values()]
   const dropped = evidence.reduce((n, e) => n + e.dropped, 0)
   // Who found the sources, as the run recorded it. Old runs do not say; then nothing is claimed.
-  const providers = new Set(evidence.flatMap((e) => [e.provider, ...e.items.map((i) => i.provider)]).filter(Boolean))
-  const searchedWith = providers.has("exa") ? "exa" : providers.has("fixture") ? "fixture" : undefined
+  const startedAs = events.find((e): e is Of<"run.started"> => e.type === "run.started")?.mock
+  // An older run does not say: then it follows from the run's own flag (a practice run never searched for real).
+  const providerOf = (e: { provider?: SearchProvider }): SearchProvider | undefined => e.provider ?? (startedAs === true ? "fixture" : startedAs === false ? "exa" : undefined)
+  const spent = events.reduce((n, e) => n + (e.type === "member.replied" && typeof e.usd === "number" ? e.usd : 0), 0)
+  const litSearches = evidence.filter((e) => providerOf(e) === "europepmc").length
+  const webSearches = evidence.filter((e) => { const p = providerOf(e); return p !== "europepmc" && p !== "fixture" }).length // a practice run's example sources are not searches
+  const cap = (n: number | undefined) => (n ? ` of ${n}` : "")
   const current = rounds.at(-1)?.[1]
   const members = roster.filter((m) => m.role === "member")
   const live = !finished && events.length > 0
@@ -108,7 +114,6 @@ export function BoardView() {
   const failed = events.find((e): e is Of<"run.failed"> => e.type === "run.failed")
   const title = (name: string) => roster.find((m) => m.name === name)?.title ?? name
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
-  const startedAs = events.find((e): e is Of<"run.started"> => e.type === "run.started")?.mock
   const scripted = startedAs ?? status?.mock ?? false
   const nextWhy = `${boardScriptedWhy(status) ?? "The engine is in practice mode: board reviews are practice runs only"}.`
   const resume = async () => {
@@ -143,12 +148,34 @@ export function BoardView() {
   const progress = done ? 1 : Math.min(0.95, ((rounds.length - 1) + (current ? current.replies.length / Math.max(1, members.length) : 0)) / maxRounds)
 
   const runRow = runs.find((r) => r.id === runId)
+  // A search step in the discussion: who searched, with what, the queries and how many results were kept.
+  const searchLines = (searches: Of<"evidence.triaged">[]) => {
+    const groups: { member: string; provider?: SearchProvider; list: Of<"evidence.triaged">[] }[] = []
+    for (const e of searches) {
+      const last = groups.at(-1), provider = providerOf(e)
+      if (last && last.member === e.member && last.provider === provider) last.list.push(e)
+      else groups.push({ member: e.member, provider, list: [e] })
+    }
+    return groups.map((g) => (
+      <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`}>
+        <p>
+          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : "searched the web"}
+          {g.provider && <> · <SearchCredit provider={g.provider} /></>}
+        </p>
+        <ul>
+          {g.list.map((e) => <li key={e.key}>“{e.query}”: kept {e.kept} of {e.kept + e.dropped} result{e.kept + e.dropped === 1 ? "" : "s"}</li>)}
+        </ul>
+      </div>
+    ))
+  }
+  const sources = [...new Map(evidence.flatMap((e) => e.items.map((i) => [i.url, { ...i, provider: i.provider ?? providerOf(e) }] as const))).values()]
+  const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
+  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
   const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
   const wrong = count("contradicted")
   const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: BOARD_JOB[member] ?? t.job?.toLowerCase() } }
-  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
 
   return (
     <div className="page board">
@@ -189,13 +216,15 @@ export function BoardView() {
               <span className="muted small">
                 {runRow && <>Started {plainWhen(runRow.startedAt)}</>}
                 {done && <> · took {plainDuration(done.minutes * 60_000)} · {plainCost(done.usd, startedAs === true)}</>}
+                {!done && startedAs === false && status && <> · spent so far ${spent.toFixed(2)} of ${status.meeting.max_usd.toFixed(2)}</>}
+                {webSearches + litSearches > 0 && <> · <span data-testid="search-count">{live ? "Searching: " : "Searched: "}{webSearches}{cap(status?.meeting.max_searches)} web searches, {litSearches}{cap(status?.meeting.max_literature_searches)} literature searches</span></>}
               </span>
             </p>
           </>
         )}
         <p className="story-headline" role="status">{headline}</p>
         {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was proven wrong." : `${wrong} statements were proven wrong.`} Look for the marked messages below.</p>}
-        {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
+        {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. If it names a model or a key, check them in Settings (or ask the person who runs the engine). After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {memoText && (
           <div className="story-decision" role="group" aria-label="Decision">
@@ -227,13 +256,14 @@ export function BoardView() {
       <section className="talk" aria-label="Discussion">
         <h2 className="talk-title">The discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
         <p className="muted small">Who said what, in order. Each message shows one sentence; the chips under it show what a separate check found about each statement in it.</p>
-        {rounds.length === 0 && <p className="empty-note">{runId && (known || events.length > 0) ? "Nobody has spoken yet." : <>Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Home</a>.</>}</p>}
+        {rounds.length === 0 && <p className="empty-note">{runId && (known || events.length > 0) ? "Nobody has spoken yet." : <>Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Search</a>.</>}</p>}
         <Conversation className="thread-inline" aria-label="Discussion, round by round">
           <ConversationContent className="thread-list">
             {rounds.map(([n, r]) => (
               <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
                 <h3 className="round-head">Round {n}{r.head?.final ? ": final positions" : ""}</h3>
                 {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
+                {searchLines(r.searches)}
                 {r.replies.map((reply) => <TeamMessage key={reply.key} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
               </div>
             ))}
@@ -244,6 +274,44 @@ export function BoardView() {
           <p key={c.key} className="pill" data-kind="warning">The lead was told to wrap up: {c.detail}</p>
         ))}
       </section>
+
+      {runId && (sources.length > 0 || evidence.length > 0) && (
+        <section className="talk" aria-label="Sources">
+          <h2 className="talk-title">Sources</h2>
+          <p className="muted small">
+            What the team found when it searched, and which statements rest on each one. {sources.length} kept{dropped > 0 && `, ${dropped} left out as off-topic`}.
+            {sourceProviders.map((p) => <span key={p}> <SearchCredit provider={p} />.</span>)}
+          </p>
+          <ul className="source-list">
+            {sources.map((src) => {
+              const url = safeUrl(src.url)
+              const resting = claims.filter((c) => c.source === src.url)
+              return (
+                <li key={src.url}>
+                  <span className="source-title">{url ? <a href={url} target="_blank" rel="noreferrer noopener">{src.title || url}</a> : src.title || src.url}</span>
+                  {/\[preprint\]\s*$/i.test(src.title ?? "") && <span className="source-preprint">Preprint: not peer reviewed</span>}
+                  <span className="muted small">
+                    {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", src.studyType && `kind of study: ${src.studyType}`,
+                      typeof src.relevance === "number" && `relevance ${src.relevance.toFixed(2)} (as the engine scored it, 0 to 1)`].filter(Boolean).join(" · ")}
+                    {src.provider && <> · <SearchCredit provider={src.provider} /></>}
+                  </span>
+                  {resting.length > 0 && (
+                    <ul className="source-rests" aria-label="Statements that rest on this source">
+                      {resting.map((c) => (
+                        <li key={c.key}>
+                          <VerdictChip verdict={c.verdict} /> <span>{c.claim}</span>
+                          {c.quoteFound !== undefined && <span className="muted small" data-found={c.quoteFound}>{c.quoteFound ? "The quoted passage was found in this source." : "The quoted passage was not found in the source."}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          {sources.length === 0 && <p className="empty-note">The search kept no sources.</p>}
+        </section>
+      )}
 
       {runId && (known || events.length > 0) && (
         <nav className="next-steps" aria-label="What you can do next">
@@ -266,13 +334,6 @@ export function BoardView() {
               A quick first check settled {claims.filter(firstPass).length} of {claims.length} statements;
               {" "}{claims.filter((c) => !firstPass(c)).length} went to a second, more careful check.
             </p>
-            <h2>Sources</h2>
-            <p className="muted small">{uniqueEvidence.length === 0 ? "This review looked up no outside sources." : `${uniqueEvidence.length} sources kept`}{dropped > 0 && ` · ${dropped} left out as off-topic`}</p>
-            {searchedWith === "exa" && <p className="muted small" data-testid="search-credit">Search powered by Exa</p>}
-            {searchedWith === "fixture" && <p className="muted small" data-testid="search-credit">These are example sources that come with a practice run. No live search was made.</p>}
-            <ul className="evidence">
-              {uniqueEvidence.map((i) => <li key={i.url}><a href={i.url} target="_blank" rel="noreferrer">{i.title}</a> <span className="muted">{i.studyType}</span></li>)}
-            </ul>
             <h2>The written decision (memo)</h2>
             {memoText ? <div className="memo"><Streamdown>{memoText}</Streamdown></div> : <p className="muted small">Written when the review finishes.</p>}
           </section>

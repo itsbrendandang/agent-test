@@ -191,6 +191,5 @@ costs nothing, so it does not use the Exa credit; the scout is told to use it fi
 what papers do not cover. Its results go through the same screening and the same evidence pool as Exa's, and a
 statement is "verified" only when the quoted passage is in the abstract. Limits: `meeting.max_literature_searches`
 per run (default 20); abstracts only, not full papers; preprints are marked `[preprint]`. A practice run reaches no
-network and gets the example sources. The idea (a PubMed query tool that retries with fewer words when nothing is
-found) comes from Biomni's `query_pubmed` (snap-stanford/Biomni, Apache-2.0); the code is ours. Not yet done: a real
+network and gets the example sources. A query that finds nothing is tried again with fewer words. Not yet done: a real
 board run that uses it, and listing it in the Home catalogue.

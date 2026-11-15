@@ -22,13 +22,16 @@ const show = (table: Parameters<typeof routes>[0], paid: "off" | "on" = "off", l
 afterEach(() => vi.useRealTimers())
 
 describe("the control", () => {
-  it("is on every view's status line, a radio group that shows the state, Demo by default, with plain words", () => {
+  it("the status line has one compact indicator; pressing it opens the switch, a radio group that shows the state", async () => {
     routes({})
     render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={() => {}} />)
+    expect(screen.queryByRole("radiogroup")).toBeNull() // compact until asked for
+    await userEvent.setup().click(screen.getByRole("button", { name: "Demo mode" }))
     const group = screen.getByRole("radiogroup", { name: "Mode: Demo or Real" })
     expect(within(group).getByRole("radio", { name: "Demo" })).toBeChecked()
     expect(within(group).getByRole("radio", { name: "Real" })).not.toBeChecked()
     expect(group).toHaveAccessibleDescription("Practice runs. Fixed example answers. Free.")
+    expect(screen.getByRole("dialog", { name: "Demo or Real" })).toHaveTextContent("AI answers and web search are unavailable. You can search saved research")
   })
   it("says Real plainly while it is on", () => {
     show({}, "on")
@@ -151,18 +154,19 @@ describe("the state is the engine's, read again and again", () => {
     let paidCalls = false
     routes({ "GET /api/glhf/status": () => ({ status: 200, body: { paidCalls, paidLocked: false } }) })
     render(<Line />)
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Demo" })).toBeChecked())
+    expect(await screen.findByRole("button", { name: "Demo mode" })).toBeInTheDocument()
     paidCalls = true // someone else switched, or the engine was restarted with another setting
     await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Real" })).toBeChecked())
+    expect(await screen.findByRole("button", { name: "Real mode" })).toBeInTheDocument()
     paidCalls = false
     await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Demo" })).toBeChecked())
+    expect(await screen.findByRole("button", { name: "Demo mode" })).toBeInTheDocument()
     expect(Object.keys(localStorage).concat(Object.keys(sessionStorage)).filter((k) => /paid|mode|real|demo/i.test(k))).toEqual([])
   })
   it("a lock reported by the engine disables the control", async () => {
     routes({ "GET /api/glhf/status": { status: 200, body: { paidCalls: false, paidLocked: true } } })
     render(<Line />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Demo mode" }))
     await waitFor(() => expect(screen.getByRole("radio", { name: "Real" })).toBeDisabled())
     expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(/Locked by the person running the engine/)
   })

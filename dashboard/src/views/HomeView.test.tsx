@@ -1,5 +1,5 @@
 // Home as a person uses it, against a stand-in engine. Nothing here reaches the network.
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
@@ -22,6 +22,7 @@ function home(catalog: Catalog | "down", table: Table = {}) {
   const sent = routes({ ...(catalog !== "down" && { "GET /api/chat/catalog": { status: 200, body: catalog } }), ...table })
   const onOpen = vi.fn()
   const view = render(<><TokenPrompt /><HomeView onOpen={onOpen} /></>)
+  fireEvent.click(screen.getByRole("button", { name: "Recent results and setup" })) // the optional panel: closed until asked for
   const box = () => screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
   const user = userEvent.setup()
   const ask = async (text: string) => { await user.type(box(), `${text}{Enter}`) }
@@ -36,7 +37,7 @@ describe("empty conversation", () => {
     const examples = within(screen.getByRole("group", { name: "Example questions" })).getAllByRole("button")
     expect(examples.length).toBeGreaterThanOrEqual(3)
     expect(examples.length).toBeLessThanOrEqual(4)
-    expect(screen.queryByRole("button", { name: "Clear conversation" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "New search" })).toBeNull()
     const question = examples[1].textContent!
     await t.user.click(examples[1])
     await waitFor(() => expect(t.chats()).toHaveLength(1))
@@ -80,14 +81,14 @@ describe("sending", () => {
     let answer!: (r: { status: number; body: unknown }) => void
     const t = home(CATALOG_ON, { "POST /api/chat": () => new Promise((done) => { answer = done }) })
     await t.ask("Slow question")
-    expect(await screen.findByText(/Waiting for the engine's reply/)).toBeInTheDocument()
+    expect(await screen.findByText(/Writing an answer\. A real model usually takes about ten seconds/)).toBeInTheDocument()
     expect(screen.getByText("Slow question")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled()
     await t.user.type(t.box(), "Another{Enter}")
     expect(t.chats()).toHaveLength(1)
     answer(reply({ reply: "Done" }))
     expect(await screen.findByText("Done")).toBeInTheDocument()
-    expect(screen.queryByText(/Waiting for the engine's reply/)).toBeNull()
+    expect(screen.queryByText(/Writing an answer\. A real model usually takes about ten seconds/)).toBeNull()
   })
   it("when the engine cannot be reached: says so, keeps the question in the box, adds nothing to the conversation", async () => {
     const t = home(CATALOG_ON)
@@ -111,7 +112,7 @@ describe("sending", () => {
     await waitFor(() => expect([...(screen.getByLabelText("Model") as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Let the engine choose", "claude-sonnet-5-5", "claude-haiku-5-5"]))
     on.view.unmount()
     home(CATALOG_OFF)
-    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("None in Demo mode"))
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("Not available in Demo mode"))
     expect(screen.getByLabelText("Model")).toBeDisabled()
   })
   it("keeps the conversation for the session, and Clear removes it", async () => {
@@ -123,7 +124,7 @@ describe("sending", () => {
     expect(screen.getByText("Kept question")).toBeInTheDocument()
     expect(screen.getByText("Kept answer")).toBeInTheDocument()
     expect(localStorage.getItem("home.chat")).toBeNull()
-    await again.user.click(screen.getByRole("button", { name: "Clear conversation" }))
+    await again.user.click(screen.getByRole("button", { name: "New search" }))
     expect(screen.queryByText("Kept answer")).toBeNull()
     expect(sessionStorage.getItem("home.chat")).toBeNull()
     expect(screen.getByRole("group", { name: "Example questions" })).toBeInTheDocument()
@@ -139,21 +140,59 @@ describe("sending", () => {
 })
 
 describe("replies", () => {
-  it.each([["ai", "Written by a real model"], ["keyword", "Word search of past runs: not written by a model"], ["scripted", "Practice run: fixed text, not real research"]] as const)("labels a %s reply '%s' and shows the engine's note", async (mode, label) => {
+  it.each([
+    ["ai", "AI answer", "Written by an AI model."],
+    ["keyword", "Saved-research search", "Matched by words in saved research. No AI model read the question."],
+    ["scripted", "Demo response", "Fixed example text. Not an AI answer and not research."],
+  ] as const)("a %s reply is labelled '%s' and says what produced it", async (mode, label, means) => {
     const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode, note: `note for ${mode}` }) })
     await t.ask("q")
-    const article = within(await screen.findByRole("article", { name: "Reply" }))
+    const article = within(await screen.findByRole("article", { name: "Answer" }))
     expect(article.getByText(label)).toBeInTheDocument()
-    expect(article.getByText(`note for ${mode}`)).toBeInTheDocument()
+    expect(article.getByText(means)).toBeInTheDocument()
+    // only one of the three labels is ever on a reply
+    for (const other of ["AI answer", "Saved-research search", "Demo response"]) if (other !== label) expect(article.queryByText(other)).toBeNull()
+    // the engine's note names the model that wrote an AI answer; the other kinds need no second explanation
+    if (mode === "ai") expect(article.getByText("note for ai")).toBeInTheDocument()
+    else expect(article.queryByText(`note for ${mode}`)).toBeNull()
+    expect(article.queryByText(/✓|Holds up|verified/i)).toBeNull() // no mark of a check that was not made
   })
-  it("renders reply text as text, never as HTML", async () => {
-    const evil = '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> **not bold** [link](javascript:alert(1))'
-    const t = home(CATALOG_ON, { "POST /api/chat": reply({ reply: evil, note: "<b>note</b>" }) })
+  it("formats an answer (lists, a table, code, a safe link) and lets nothing in it run, load or mislead", async () => {
+    const evil = [
+      "## What we found", "", "The effect is real (p < 0.05); potency is 1.2 × 10⁻⁵ M.", "", "- first point", "- second point", "",
+      "| compound | IC50 |", "|---|---|", "| CMP-1 | 6 µM |", "", "```", "x < y", "```", "",
+      '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> <b>raw</b>', "",
+      "[bad](javascript:alert(1)) [good](https://example.org/paper) ![pic](https://evil.example/t.png)",
+    ].join("\n")
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode: "ai", reply: evil, note: "<b>note</b>" }) })
     await t.ask("q")
-    const article = await screen.findByRole("article", { name: "Reply" })
-    expect(within(article).getByText(evil)).toBeInTheDocument()
-    expect(article.querySelector("img, script, a, b, strong")).toBeNull()
+    const article = await screen.findByRole("article", { name: "Answer" })
+    expect(within(article).getByRole("heading", { name: "What we found" })).toBeInTheDocument()
+    expect(article).toHaveTextContent("The effect is real (p < 0.05); potency is 1.2 × 10⁻⁵ M.")
+    expect(article.querySelectorAll(".md ul li")).toHaveLength(2)
+    expect(within(article).getByRole("table")).toHaveTextContent("CMP-16 µM")
+    expect(article.querySelector(".md pre")).toHaveTextContent("x < y")
+    expect(article.querySelector("img, script, iframe, [onerror], .md b")).toBeNull() // raw HTML never becomes elements; no image is loaded
+    const links = [...article.querySelectorAll(".md a")]
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["https://example.org/paper"])
+    expect(links[0]).toHaveAttribute("rel", "noopener noreferrer"); expect(links[0]).toHaveAttribute("target", "_blank")
+    expect(within(article).getByText("<b>note</b>")).toBeInTheDocument() // the engine's note is text
     expect((window as unknown as { pwned?: number }).pwned).toBeUndefined()
+  })
+  it("Copy copies the answer's text, and Ask again sends the same question once more", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": [reply({ reply: "First **answer**" }), reply({ reply: "Second answer" })] })
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true }) // after the test user is set up: it brings its own clipboard
+    await t.ask("What about hERG?")
+    const first = within(await screen.findByRole("article", { name: "Answer" }))
+    await t.user.click(first.getByRole("button", { name: "Copy answer" }))
+    expect(writeText).toHaveBeenCalledWith("First **answer**")
+    expect(await first.findByRole("button", { name: "Copied" })).toBeInTheDocument()
+    await t.user.click(first.getByRole("button", { name: "Ask again" }))
+    await waitFor(() => expect(t.chats()).toHaveLength(2))
+    expect((t.chats()[1].body as { messages: { content: string }[] }).messages.at(-1)).toMatchObject({ role: "user", content: "What about hERG?" })
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(2))
+    expect(within(screen.getAllByRole("article", { name: "Answer" })[0]).queryByRole("button", { name: "Ask again" })).toBeNull() // only on the latest answer
   })
   it("shows cited runs as cards that open the run in its view", async () => {
     const t = home(CATALOG_ON, { "POST /api/chat": reply({ runs: [
@@ -161,7 +200,7 @@ describe("replies", () => {
       { kind: "board", id: "202611142034-kras", title: "Drug board · kras", why: "decided on hERG" },
     ] }) })
     await t.ask("q")
-    const cards = within(await screen.findByRole("list", { name: "Runs this reply used" })).getAllByRole("button")
+    const cards = within(await screen.findByRole("list", { name: "Saved research this answer used" })).getAllByRole("button")
     expect(cards).toHaveLength(2)
     expect(cards[0]).toHaveTextContent("claim C2 was refuted")
     expect(t.onOpen).not.toHaveBeenCalled() // a reply never navigates away by itself
@@ -188,7 +227,13 @@ describe("plan card", () => {
     expect(card.getByText("used (a paid service)")).toBeInTheDocument()
     expect(card.getByText("claude-opus").closest("dd")).toHaveTextContent("lead claude-opus · members claude-sonnet · checker gpt-mini")
     expect(card.getByText("at most $5.00, 15 minutes and 4 rounds of discussion")).toBeInTheDocument()
-    expect(card.getByText(/about \$1\.80/)).toHaveTextContent("(6 agents, 4 rounds, list prices)")
+    expect(card.getAllByText(/about \$1\.80/).some((e) => e.textContent!.includes("(6 agents, 4 rounds, list prices)"))).toBe(true)
+    // what it may cost and how long it may take is in the open, before anything starts
+    const limits = within(card.getByLabelText("Limits and cost"))
+    expect(limits.getByText("Most it can cost").nextElementSibling).toHaveTextContent("$5.00")
+    expect(limits.getByText("Estimated cost").nextElementSibling).toHaveTextContent("about $1.80")
+    expect(limits.getByText("Most time").nextElementSibling).toHaveTextContent("15 minutes")
+    expect(limits.getByText("Rounds").nextElementSibling).toHaveTextContent("at most 4")
     expect(within(card.getByRole("list", { name: "Warnings" })).getByText("Exa search has no key on this machine.")).toBeInTheDocument()
     expect(card.getByText(/Nothing has started/)).toBeInTheDocument()
     const brief = card.getByText("Read what the team would be given (the brief)").closest("details")!
@@ -427,7 +472,7 @@ describe("effort", () => {
     const group = within(await screen.findByRole("group", { name: "Effort" }))
     expect(group.getAllByRole("radio").map((r) => (r as HTMLInputElement).value)).toEqual(["quick", "standard", "deep"])
     expect(group.getByRole("radio", { name: "Standard" })).toBeChecked() // the engine's default
-    expect(screen.getByText(/A full board review\./)).toHaveTextContent("6 agents · up to 4 rounds · up to 15 minutes · up to $5.00 · strong models · web search, up to 8 searches")
+    expect(screen.getByText(/A full board review\./)).toHaveTextContent("Limits for one research run: 6 agents · up to 4 rounds · up to 15 minutes · up to $5.00 · strong models · web search, up to 8 searches")
     await t.user.click(group.getByRole("radio", { name: "Deep" }))
     expect(screen.getByText(/Every agent, more rounds\./)).toHaveTextContent("all agents · up to 8 rounds · up to 1 hour · up to $20.00")
     expect(localStorage.getItem("home.effort")).toBe("deep")
@@ -477,7 +522,7 @@ describe("effort", () => {
     expect(await screen.findByText("A deeper plan.")).toBeInTheDocument()
     card = await planCard()
     expect(card.getByText("at most $20.00, 1 hour and 8 rounds of discussion")).toBeInTheDocument() // the engine's numbers
-    expect(screen.getAllByRole("article", { name: "Reply" })).toHaveLength(1) // replaced, not added
+    expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1) // replaced, not added
     expect(screen.getByRole("group", { name: "Effort" }).querySelector("input:checked")).toHaveAttribute("value", "standard") // the chat's own choice is untouched
     await t.user.click(card.getByRole("button", { name: "Start research" }))
     await t.user.click(card.getByLabelText(/I understand that this spends money/))

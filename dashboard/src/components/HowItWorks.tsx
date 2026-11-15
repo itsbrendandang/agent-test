@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react"
 import { PRACTICE } from "@/lib/words"
 
 const STEPS = [
-  ["1", "You ask", "Type a science question on Home, or press an example."],
+  ["1", "You ask", "Type a research question on Search, or press an example."],
   ["2", "A team discusses", "Several AI agents work on it, each with one job. One of them only tries to prove the others wrong."],
   ["3", "Every statement is checked", "A separate checker tests each thing they say against a source. The team does not grade itself."],
   ["4", "You get an answer", "You see what the team recommends, and for every statement: ✓ holds up, ✕ proven wrong, or ? not enough evidence."],

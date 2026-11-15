@@ -3,7 +3,7 @@
 // put on the page as text (React text nodes): no Markdown, no HTML, no links or images made from model output.
 import { type ReactNode, useId, useState } from "react"
 import { Message, MessageContent } from "@/components/ai-elements/message"
-import { Verdict as VerdictChip } from "@/components/Shared"
+import { SearchCredit, Verdict as VerdictChip } from "@/components/Shared"
 import type { Verdict } from "@/board/api"
 import type { ClaimVerdict } from "@/swarm/api"
 import { outcomeOf } from "@/lib/verdict"
@@ -15,7 +15,13 @@ export function UserMessage({ children, label = "You asked" }: { children: strin
 }
 
 /** One statement a speaker made, and what a check found about it. */
-export interface Checked { key: string; verdict: Verdict | ClaimVerdict; claim: string; why?: string; source?: string; by?: string }
+export interface Checked {
+  key: string; verdict: Verdict | ClaimVerdict; claim: string; why?: string; source?: string; by?: string
+  /** The passage the checker quoted from the source, and whether code found it there. */
+  quote?: { text?: string; found: boolean }
+  /** Where that source came from, when the run recorded it. */
+  sourceProvider?: "exa" | "fixture" | "europepmc"
+}
 
 /**
  * One message per team member, like a group chat: who is speaking and what their job is, the one sentence that says
@@ -64,7 +70,8 @@ export function TeamMessage({ name, job, text, short, state, fullLabel = "Show f
               <dt>What the check found</dt><dd><VerdictChip verdict={shown.verdict} technical /></dd>
               <dt>Why</dt><dd>{shown.why || "The check gave no reason."}</dd>
               {shown.by && <><dt>Checked by</dt><dd>{shown.by}</dd></>}
-              <dt>Source</dt><dd>{shown.source ? <SourceRef source={shown.source} /> : "No source was recorded."}</dd>
+              <dt>Source</dt><dd>{shown.source ? <><SourceRef source={shown.source} />{shown.sourceProvider && <> · <SearchCredit provider={shown.sourceProvider} /></>}</> : "No source was recorded."}</dd>
+              {shown.quote && <><dt>Quoted passage</dt><dd data-found={shown.quote.found}>{shown.quote.found ? <>Found in the source{shown.quote.text ? <>: “{shown.quote.text}”</> : "."}</> : "The quoted passage was not found in the source."}</dd></>}
             </dl>
           )}
         </div>

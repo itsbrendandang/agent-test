@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { StatusLine } from "@/components/StatusLine"
@@ -7,16 +7,17 @@ import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
 describe("StatusLine", () => {
   it.each([
-    [{ engine: "online", paid: "off" }, "Engine online", "Practice runs. Fixed example answers. Free."],
-    [{ engine: "online", paid: "on" }, "Engine online", "Real AI models and web search. Costs money."],
-    [{ engine: "offline", paid: "unknown" }, "Engine not running", "Not known: the engine did not say."],
-    [{ engine: "unknown", paid: "unknown" }, "Engine: checking", "Not known: the engine did not say."],
-  ] as const)("says in plain words what the engine can do: %j", (shell, engine, mode) => {
+    [{ engine: "online", paid: "off" }, "Engine online", "Demo mode"],
+    [{ engine: "online", paid: "on" }, "Engine online", "Real mode"],
+    [{ engine: "offline", paid: "unknown" }, "Engine not running", "Mode not known"],
+    [{ engine: "unknown", paid: "unknown" }, "Engine: checking", "Mode not known"],
+  ] as const)("has one compact indicator that says what the engine can do: %j", (shell, engine, mode) => {
     render(<StatusLine shell={shell as Shell} onOpenSettings={() => {}} />)
     const line = screen.getByRole("group", { name: "Status" })
     expect(line).toHaveTextContent("AI Scientist Bot")
     expect(line).toHaveTextContent(engine)
-    expect(line).toHaveTextContent(mode)
+    expect(within(line).getByRole("button", { name: mode })).toBeInTheDocument()
+    expect(line).not.toHaveTextContent(/Paid calls|practice runs only/) // one short label, not an explanation
   })
   it("links to Settings", async () => {
     const onOpenSettings = vi.fn()

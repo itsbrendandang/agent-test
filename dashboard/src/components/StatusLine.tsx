@@ -1,5 +1,5 @@
 // One plain line at the top of every view: whether the engine answers and whether it may spend money.
-import { ModeSwitch } from "./PaidSwitch"
+import { ModeIndicator } from "./PaidSwitch"
 import { PRODUCT } from "@/nav"
 import type { Shell } from "@/lib/shell"
 
@@ -12,7 +12,7 @@ export function StatusLine({ shell, onOpenSettings, onHelp }: { shell: Shell; on
       <span aria-hidden="true"> · </span>
       <span data-state={shell.engine} title={shell.said}>{ENGINE_LABEL[shell.engine]}{shell.said && `: ${shell.said}`}</span>
       <span aria-hidden="true"> · </span>
-      <ModeSwitch paid={shell.paid} locked={shell.locked} />
+      <ModeIndicator paid={shell.paid} locked={shell.locked} />
       <span aria-hidden="true"> · </span>
       {onHelp && <><button type="button" className="link-btn" onClick={onHelp}>How this works</button><span aria-hidden="true"> · </span></>}
       <button type="button" className="link-btn" onClick={onOpenSettings}>Settings</button>

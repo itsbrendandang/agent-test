@@ -5,7 +5,7 @@ import { type ReactNode, useId, useState } from "react"
 import { Streamdown } from "streamdown"
 import { useRunEvents } from "@/board/api"
 import { Loading, Mascots } from "@/components/Crew"
-import { ModeLabel, RunId, StatusPill } from "@/components/Shared"
+import { ModeLabel, RunId, SearchCredit, StatusPill } from "@/components/Shared"
 import { plainCost, plainDuration } from "@/lib/format"
 import { HOW_TO_TURN_ON } from "@/lib/paid"
 import { boardFacts } from "@/lib/verdict"
@@ -26,9 +26,13 @@ interface Props {
   onEffort?: (effort: EffortId) => Promise<string | undefined>
   onState: (state: PlanState) => void
   onOpenRun: (id: string) => void
+  /** What a run started now would search with, from the catalog. */
+  searchProvider?: "exa" | "fixture"
 }
 
-export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffort, onState, onOpenRun }: Props) {
+export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffort, onState, onOpenRun, searchProvider }: Props) {
+  // The Scout is the member that searches. The credit says what it would search with if started now.
+  const searches = plan.search.exa || plan.agents.some((a) => a.name === "scout")
   const uid = useId()
   const [step, setStep] = useState<"view" | "confirm">("view")
   const [sending, setSending] = useState(false)
@@ -92,15 +96,29 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
         <span className="pill" data-kind={plan.paid ? "warning" : "neutral"}>{plan.paid ? "Costs money: uses paid models or paid search" : "Practice run: fixed text, not real research"}</span>
       </header>
       <h2 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h2>
-      <p className="home-plan-question">“{plan.question}”</p>
+      {plan.question.trim() !== (plan.briefTitle || "").trim() && <p className="home-plan-question">“{plan.question}”</p>}
 
-      {quick && state.state === "open" && step !== "confirm" && (
+      {state.state === "open" && step !== "confirm" && (quick ? (
         <p className="home-plan-sum">
           {plan.agents.length} team member{plan.agents.length === 1 ? "" : "s"} will discuss it for at most {plan.limits.maxRounds} round{plan.limits.maxRounds === 1 ? "" : "s"}. It is a practice run: the replies are fixed examples, it takes a few seconds and costs nothing.
         </p>
-      )}
+      ) : (
+        <>
+          <p className="home-plan-sum">
+            {plan.agents.length} team member{plan.agents.length === 1 ? "" : "s"} will discuss it and a separate checker tests every statement they make.
+            {plan.paid ? " It uses real AI models, so it costs money. Nothing starts until you confirm." : " Nothing starts until you confirm."}
+          </p>
+          {/* What it may cost and how long it may take, before anything starts. */}
+          <dl className="home-plan-limits" aria-label="Limits and cost">
+            <div><dt>Most it can cost</dt><dd>${plan.limits.maxUsd.toFixed(2)}</dd></div>
+            <div><dt>Estimated cost</dt><dd>{estimateText(plan)}</dd></div>
+            <div><dt>Most time</dt><dd>{plainDuration(plan.limits.maxMinutes * 60_000)}</dd></div>
+            <div><dt>Rounds</dt><dd>at most {plan.limits.maxRounds}</dd></div>
+          </dl>
+        </>
+      ))}
       {step !== "confirm" || state.state !== "open" ? (
-        <Fold folded={quick || state.state === "started"} label={`See what is in this plan (${plan.agents.length} team member${plan.agents.length === 1 ? "" : "s"}, limits, notes)`}>
+        <Fold folded label={`See what is in this plan (${plan.agents.length} team member${plan.agents.length === 1 ? "" : "s"}, limits, notes)`}>
           {plan.warnings.length > 0 && (
             <ul className="home-warnings" aria-label="Warnings">{plan.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
           )}
@@ -115,6 +133,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
                 : <ul className="home-why">{plan.skills.map((s) => <li key={s.name}><b>{s.name}</b><span className="muted small">{s.why}</span></li>)}</ul>}
             </div>
           </div>
+          {searches && searchProvider && <p className="muted small" data-testid="plan-search">The Scout looks for sources. <SearchCredit provider={plan.paid ? searchProvider : "fixture"} /></p>}
           <dl className="home-facts">
             {level && <><dt>Effort</dt><dd>{level.label}</dd></>}
             <dt>Web search (Exa)</dt><dd>{plan.search.exa ? "used (a paid service)" : "not used"}</dd>

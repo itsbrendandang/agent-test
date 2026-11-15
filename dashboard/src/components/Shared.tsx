@@ -85,3 +85,11 @@ export function Verdict({ verdict, count, technical }: { verdict: BoardVerdict |
     </span>
   )
 }
+
+/** Where sources came from. Exa is credited only for a live Exa search; a practice run's sources are examples. */
+export function SearchCredit({ provider }: { provider: "exa" | "fixture" | "europepmc" | undefined }) {
+  if (provider === "exa") return <span className="search-credit" data-provider="exa">Search powered by <a href="https://exa.ai" target="_blank" rel="noopener noreferrer">Exa</a></span>
+  if (provider === "fixture") return <span className="search-credit" data-provider="fixture">Example sources (practice run)</span>
+  if (provider === "europepmc") return <span className="search-credit" data-provider="europepmc">Found in PubMed and preprints (<a href="https://europepmc.org" target="_blank" rel="noopener noreferrer">Europe PMC</a>)</span>
+  return null
+}

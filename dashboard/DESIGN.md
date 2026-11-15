@@ -195,6 +195,20 @@ with plain words beside it (`ModeSwitch` and `RealDialog` in `src/components/Pai
 - A run keeps the label it started with. The per-run cost and confirm stay as they are while Real is on.
 - Tests stub the engine. Never send `{on: true}` to a real engine from a test or a script.
 
+## Sources and search credit
+
+- `SearchCredit` in `src/components/Shared.tsx` is the only place the wording lives. "Search powered by Exa"
+  (Exa links to exa.ai) is shown only for sources whose provider is `exa`: a live Exa search. `europepmc` reads
+  "Found in PubMed and preprints (Europe PMC)". `fixture` reads "Example sources (practice run)". No logo.
+- A run recorded before the `provider` field follows its own practice flag; a run that says neither gets no credit.
+- Where: the search step in the discussion (who searched, the queries, how many results were kept), the Sources
+  section on Board, beside the source in a statement's detail, the plan card, and Home's "What this can use".
+- Sources on Board: title, site, kind of study and relevance as the engine recorded them, "Preprint: not peer
+  reviewed" for a title ending in "[preprint]", and the statements that rest on each with whether the quoted
+  passage was found. Titles and addresses are untrusted: text only, links only for http(s) (`safeUrl`).
+- While a real run works: "spent so far $x of $y" and "Searching: N of 20 web searches, M of 20 literature
+  searches", from the run's own events and the engine's limits.
+
 ## Rules that the design must keep
 
 - Every result says whether it came from a real model or was a practice run (fixed text, no model). That comes from the run itself

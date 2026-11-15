@@ -61,9 +61,9 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
 
   return (
     <div className="page">
-      <PageHead title="Past runs" about="Everything that has been run so far. Type a word to find a run by its question, its result, or anything that was said in it. To ask a question in full sentences, use Home." />
+      <PageHead title="Saved research" about="Everything that has been researched so far. Type a word to find something by its question, its result, or anything that was said in it. To ask a question in full sentences, use Search." />
       <div className="exp-bar">
-        <input type="search" name="experiment-search" aria-label="Search past runs by word" autoComplete="off" value={query}
+        <input type="search" name="experiment-search" aria-label="Search saved research by word" autoComplete="off" value={query}
           placeholder="Type a word, for example: hERG, demo, refuted…" onChange={(e) => setQuery(e.currentTarget.value)} />
         <div role="group" aria-label="Kind of run" className="exp-kinds">
           {(["all", "swarm", "board"] as const).map((k) => (
@@ -74,9 +74,9 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
         </div>
       </div>
       {error && <EngineOffline needs="The list of runs comes from the engine." said={error.said} onRetry={() => { setError(undefined); setRetry((n) => n + 1) }} />}
-      {!hits && !error && <p className="muted small" role="status">Loading past runs…</p>}
-      {hits && <p className="muted small">{shown.length} {shown.length === 1 ? "run" : "runs"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>}
-      <ul className="exp-list" aria-label="Past runs">
+      {!hits && !error && <p className="muted small" role="status">Loading saved research…</p>}
+      {hits && <p className="muted small">{shown.length} {shown.length === 1 ? "result" : "results"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>}
+      <ul className="exp-list" aria-label="Saved research">
         {shown.map((h) => (
           <li key={`${h.kind}:${h.id}`}>
             <button type="button" className="exp-hit card-surface" onClick={() => open(h)}>
@@ -96,8 +96,8 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
         ))}
       </ul>
       {hits && shown.length === 0 && !error && (query.trim()
-        ? <p className="empty-note">No run matches. Every word you typed has to appear in the run. Try fewer words, or ask a question on Home.</p>
-        : <p className="empty-note">Nothing has been run yet. Start one from Home, from Compare or from Board. Finished runs appear here.</p>)}
+        ? <p className="empty-note">No matching research found. Try a shorter query or different keywords.</p>
+        : <p className="empty-note">Nothing has been researched yet. Ask a question on Search to start. Finished research appears here.</p>)}
     </div>
   )
 }

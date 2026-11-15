@@ -1,8 +1,7 @@
 // literature_search: a free search of the biomedical literature for the board's members.
 // Source: Europe PMC (https://europepmc.org/RestfulWebService), which indexes PubMed/MEDLINE, PubMed Central and
-// preprints. No key and no charge. The idea of giving the agent a PubMed query, and of retrying a query that finds
-// nothing with fewer words, is taken from Biomni's `query_pubmed` (snap-stanford/Biomni, Apache-2.0); the code here
-// is our own. What it returns is the paper's abstract: a "verified" statement must quote a passage that is in it.
+// preprints. No key and no charge. A query that finds nothing is tried again with fewer words.
+// What it returns is the paper's abstract: a "verified" statement must quote a passage that is in it.
 // A scripted (practice) run never reaches the network: it gets the fixture sources.
 import type { EvidenceItem } from "./events.ts"
 import type { SearchResult } from "./exa.ts"

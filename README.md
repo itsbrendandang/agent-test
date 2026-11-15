@@ -565,11 +565,7 @@ Details and older counts: [docs/status.md](docs/status.md).
 Our own code is under the MIT licence (`LICENSE`). Two folders are not: `glhf/bixbench/` is a modified copy
 of BixBench3 (Edison Scientific, CC BY-SA 4.0; our changes are listed in `glhf/bixbench/CHANGES.md` and carry
 the same licence), and `glhf/bixbench_v1/` depends on it and is offered under CC BY-SA 4.0 as well.
-Third-party files copied into the repository keep their own terms. From Biomni (snap-stanford/Biomni, Apache-2.0)
-we took two things and no code: the idea for the scout's free literature search (a PubMed query that is tried
-again with fewer words when it finds nothing; `engine/src/literature.ts` is our own code), and the 100 skill
-descriptions indexed under `glhf/specialists/skills/`, which are instructions only and are not run. Its tools,
-its agent and its data lake are not used. Open items before the repository is made
+Third-party files copied into the repository keep their own terms. Open items before the repository is made
 public are in `docs/proposals/licenses.md`.
 
 ## Limits

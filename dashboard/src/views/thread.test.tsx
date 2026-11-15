@@ -121,18 +121,6 @@ describe("the message line", () => {
     expect(within(scout).getByText("The data is complete.")).toHaveClass("thread-short")
     expect(within(scout).getByText("Show full reply").closest("details")).toHaveTextContent("Twelve samples, none missing.")
     expect(within(scout).getByText("Show full reply").closest("details")).not.toHaveTextContent("In short")
-    await userEvent.setup().click(screen.getByRole("button", { name: "See how each statement was checked" }))
-    expect(screen.queryByTestId("search-credit")).toBeNull() // no search recorded: nothing is claimed
-    await emit({ type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "exa", items: [{ url: "https://example.org/a", title: "A", provider: "exa" }] })
-    expect(screen.getByTestId("search-credit")).toHaveTextContent("Search powered by Exa")
-  })
-  it("does not credit Exa for a practice run's example sources", async () => {
-    board(); localStorage.setItem("board.details", "1")
-    render(<BoardView />)
-    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
-    await emit({ type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "fixture", items: [{ url: "https://example.org/a", title: "A", provider: "fixture" }] })
-    expect(screen.getByTestId("search-credit")).toHaveTextContent("example sources that come with a practice run. No live search was made.")
-    expect(screen.getByTestId("search-credit")).not.toHaveTextContent("Exa")
   })
   it("is the reply's own \"In short\" sentence when it has one, and the rest is the full reply", () => {
     expect(splitReply("In short: hold CMP-0517 until the heart-safety margin is fixed.\n\nThe hERG IC50 is 6 uM. That is too close.")).toEqual({

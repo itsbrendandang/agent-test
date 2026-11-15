@@ -5,6 +5,8 @@ export const PRODUCT = "AI Scientist Bot"
 export const VIEWS = ["Home", "Runs", "Compare", "Board", "Agents", "Graph", "Settings"] as const
 export type View = (typeof VIEWS)[number]
 export const DEFAULT_VIEW: View = "Home"
+/** What a person reads in the navigation. The keys above stay as they are, so saved links and stored choices keep working. */
+export const LABEL: Record<View, string> = { Home: "Search", Runs: "Saved research", Compare: "Compare", Board: "Board", Agents: "Agents", Graph: "Graph", Settings: "Settings" }
 
 /** Names these views had before, so an old link or bookmark still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph" }
