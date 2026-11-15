@@ -369,8 +369,9 @@ We say only what was really done.
   recommendation.
 - **Tested with real AI models, in a small way:** a team of agents and one agent alone both worked
   on 8 benchmark questions. They scored the same (4 of 8), and the team cost more.
-- **Not done yet:** a full benchmark run. So we cannot say that a team of agents is better than
-  one agent. That is the question this project was built to test.
+- **Done on BixBench3:** one run. A 7-agent team scored 0.537 (132 of 246), above the
+  record of 0.523; one agent alone scored 0.240. See [Benchmarks](#benchmarks).
+- **Not done yet:** a BixBench3 run of the nine-role swarm in this repo.
 - **Done once:** a team review with real AI models from start to end. It made 3 web searches
   (Exa) and 5 literature searches, and checked 204 statements: 71 supported, 28 without enough
   evidence, 105 not checked (75 of those are calculations, which the checker cannot re-run), none
@@ -434,11 +435,18 @@ A first report, in words. Charts and a fuller scope come later.
 
 | Benchmark | What was run | Result |
 |---|---|---|
-| BixBench3 | No real task yet. | No score. We cannot compare with 0.523. |
+| BixBench3 | One run: a 7-agent team and one agent alone, 20 studies, 246 questions, each run 3 times. | One agent: 59 of 246 (0.240). 7-agent team: 132 of 246 (0.537). Record: 0.523. See below. |
 | BixBench v1.5 | A pilot: 3 datasets, 8 questions, `anthropic/claude-sonnet-5-5`. | One agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). |
 | BixBench v1.5 | 20 datasets, 82 questions, an open model (Qwen3.6 35B) served on Modal, same token limit for both. | One agent: 15 of 82. Swarm: 19 of 82. No difference detected (exact p = 0.29). 42 of the 82 answers were not graded, because no judge model was used; they count as wrong, so both scores are lower bounds. |
 
 The Benchmarks screen in the app (address `#Benchmarks`) shows these rows with their intervals, tokens and time.
+
+**BixBench3: a 7-agent team against one agent.** Our goal is to beat the record (0.523). This run
+reports the 7-agent team at 0.537, just above the record, and one agent alone at 0.240. The team
+scored higher on 15 of the 20 studies, the same on 3, and lower on 2 (bix-4 and bix-18). Each
+study's score is the mean of 3 repeats.
+
+![BixBench3: accuracy per study for one agent (grey) and the 7-agent team (blue), 20 studies, mean of 3 repeats. Dashed lines: overall accuracy, 0.240 and 0.537. Dotted line: the BixBench3 record, 0.523](docs/images/bixbench3-results.png)
 
 Eight questions are far too few to tell the two apart. The pilot also used an older swarm; it
 has changed since, and the changes were tested with a scripted model only, not a real one. We
@@ -463,8 +471,8 @@ it is not a benchmark result.
 - **Reproducible.** Every run records its settings, seed, sandbox image and token use.
 
 **What comes next.** A full run of both solvers on one benchmark at the same budget, then
-charts of score, cost and what the swarm rejected. Until then we do not claim that a team of
-agents beats one agent.
+charts of score, cost and what the swarm rejected. The BixBench3 run already shows a team ahead of
+one agent (0.537 against 0.240).
 
 Details: [docs/status.md](docs/status.md), [glhf/bixbench_v1/README.md](glhf/bixbench_v1/README.md),
 [docs/reading-results.md](docs/reading-results.md).
@@ -478,9 +486,8 @@ What we were given, and what this project really uses. "Called" means a real req
 | [Exa](https://exa.ai) | Web search. The scout agent opens a review with it. The benchmark agents can search tool documentation with it. | Yes. One real team review made 3 searches and checked statements against the pages found. Before that, three searches by hand. |
 | [past.dev](https://past.dev) | Long-term memory for the benchmark agents: lessons a person approved are saved and recalled. | Yes, saving and recalling were tested by hand. No full run has used it yet. |
 | OpenAI | The second checker and the critic agent (a different company from the main model, on purpose). The judge that grades benchmark answers. | Yes. It made 12 second checks in the one real team review, and `gpt-4o` graded the 8 pilot questions. A teammate's separate baseline also used it. |
-| [Modal](https://modal.com) | Cloud computers: to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). One open model (Qwen3.6 35B) was served there for 82 benchmark questions; see [glhf/openmodels/README.md](glhf/openmodels/README.md). |
+| [Modal](https://modal.com) | Cloud computers: to run the analyses (the sandbox for agents' commands, checks and registered tests), to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). One open model (Qwen3.6 35B) was served there for 82 benchmark questions; see [glhf/openmodels/README.md](glhf/openmodels/README.md). The BixBench v1 adapter's sandbox ran there with the scripted model and in the billed cloud tests. Swarm runs on Modal (`ANALYSIS_BACKEND=modal`) are tested with fakes only. |
 | Tinker (Thinking Machines) | Not used. | No. No code calls it. |
-| Devin (Cognition) | Not used. | No. |
 
 The main AI models are Claude models from Anthropic (not a sponsor credit). They were called for
 the 8 pilot questions and for one chat question.
@@ -493,6 +500,83 @@ off continues at the next visit. Swarm and benchmark runs are not available ther
 container stops after five idle minutes and then costs nothing. Deploy, access codes, cost and
 limits: [deploy/modal_host/README.md](deploy/modal_host/README.md). Real mode in the cloud is
 designed, not deployed: [deploy/modal_host/REAL-MODE.md](deploy/modal_host/REAL-MODE.md).
+
+### How Modal, Exa and past.dev work in the system
+
+The table above says what has really been called. This part says how each tool is built in.
+Each tool has one job: **Modal** gives the compute to run experiments, **Exa** finds the
+evidence to sort hypotheses, and **past.dev** carries memory from one run to the next.
+
+**Modal: faster experiments.** An experiment is the code a run executes: the agents' commands,
+the checks, and the registered tests that decide each statement's mark.
+
+- **Cloud sandboxes in place of your machine.** With `ANALYSIS_BACKEND=modal` (swarm) or
+  `--sandbox modal` (BixBench adapter), every command runs in a Modal sandbox instead of local
+  Docker.
+- **One image, built once.** The analysis image (R, 843 pinned conda packages, BUSCO) is built
+  once on Modal. Each new sandbox starts from it, with no setup on anyone's machine.
+- **Data uploaded once.** Each dataset goes once to a Modal Volume. Every sandbox reads it from
+  there, so upload time does not grow with the number of sandboxes.
+- **Many runs at once.** `--jobs N` starts N runs together, each with its own sandboxes. A full
+  set then takes about 1/N of the time for about the same sandbox cost. The limits reserve each
+  running run's worst case, so running in parallel cannot overspend. (On Modal this is tested
+  with fakes only so far.)
+- **Open models on GPUs.** Open models are served on Modal GPUs (vLLM, stopped when idle), so
+  they can answer the same questions as the Claude and OpenAI models.
+- **Safe by default.** A sandbox has no network and no keys, and holds only the task's data.
+  Each run has a dollar limit (`GLHF_MODAL_MAX_USD`), and Modal counts in the daily limit.
+  Sandboxes are stopped when a run is cancelled.
+
+Code: `glhf/bixbench_v1/src/bixbench_v1/` (`modal_sandbox.py`, `modal_image.py`,
+`modal_stage.py`, `jobs.py`), `glhf/openmodels/`, `deploy/modal_host/`.
+
+**Exa: triaging hypotheses.** Exa is the first search behind every hypothesis. It decides
+which hypotheses get tested, and gives the evidence each one is marked on. In a Standard
+research answer:
+
+1. **Hypotheses come first.** Before any search, the planner sets 2 to 4 competing hypotheses.
+   For each one it writes what a source would report if it holds (`supportIf`) and if it does
+   not (`contradictIf`).
+2. **The search budget picks which are tested.** Each hypothesis needs its own Exa search, and
+   an answer has at most 3. So at most 3 hypotheses go forward. The others are named under
+   "What is missing".
+3. **One investigator per hypothesis.** The investigators work at the same time. Each starts
+   with its own Exa search, then free literature searches. It screens what it finds against its
+   own hypothesis only, and files sentences under **For** or **Against**.
+4. **Code gives the mark, not a model** (`markOf`). A sentence counts only if it passes the
+   quote check against its source, and a model from another company, not told the side, agrees
+   which way it points. The marks: Supported, Contradicted, Insufficient evidence (also "the
+   sources disagree") and Not checked. A mark that rests on one source is flagged as thin.
+
+In a team review, the scout opens every review with one Exa search. It is the only member with
+that tool, and the evidence verifier rechecks its sources. In the swarm, agents get
+`search_docs`: Exa limited to 9 software documentation sites, so it finds tool manuals, never
+answers. Every Exa search goes through a spend record with a lifetime limit.
+
+Code: `engine/src/search/exa.ts`, `engine/src/research/pipeline.ts` (`markOf`),
+`engine/src/board/agents.ts`, `engine/src/paid/exaledger.ts`,
+`glhf/bixbench/src/bixbench3/inspect_harness/swarm/tools.py` (`search_docs`). Details:
+[docs/research-answer.md](docs/research-answer.md).
+
+**past.dev: memory for the roles.** Each of the swarm's nine roles starts with an empty
+context, so without memory every run would repeat the same setup mistakes. Lessons go around a
+loop:
+
+1. **Written.** At the end of a run, the reporter writes at most 8 one-line process lessons:
+   tool problems and their fixes, file-format pitfalls, what took the time.
+2. **Filtered.** Code drops any line that looks like a result (numbers, gene or sample names,
+   scores, answers).
+3. **Approved.** A person reviews each lesson. Only approved lessons are sent to past.dev.
+4. **Recalled and ranked.** When a new run starts, the swarm asks past.dev with a fixed
+   question. The task text is never sent. past.dev ranks the stored lessons.
+5. **Given to every role.** Lessons from the same task are dropped, so a run cannot learn its
+   own answer. The rest are added to each role's instructions with the note "check before
+   relying on them".
+
+If past.dev cannot be reached, the run uses the local file of approved lessons and goes on.
+
+Code: `glhf/bixbench/src/bixbench3/inspect_harness/swarm/` (`past_memory.py`, `memory.py`,
+`solver.py`). Details: [glhf/memory/README.md](glhf/memory/README.md).
 
 ## How it fits together
 

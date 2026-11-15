@@ -27,7 +27,7 @@ Do not present a demo-case result or a scripted-model result as a benchmark resu
 | Swarm on the demo case with a real model | Done. Score 1.0. | One run, `anthropic/claude-sonnet-5-5`, 284,532 tokens, `--exa` on, seed 7. |
 | Single agent on the demo case with a real model | Done. Score 1.0. | One run, same model, 18,644 tokens, seed 7. |
 | Token budget (`--max-tokens`) on the demo case, real model | Tried twice with the swarm. | 70,000 tokens: score 0.0. 200,000 tokens: score 1.0. |
-| A real BixBench3 task | **Not done.** | |
+| A real BixBench3 task | One run made with Devin (Cognition), **reported, not checked**: a 7-agent team 132 of 246 (0.537), one agent 59 of 246 (0.240); 20 studies, 3 repeats. The run records are not in this repo, so the model, the budgets and the grading are not known here. No run of the nine-role swarm on a real BixBench3 task. | README, "Benchmarks". |
 | Cloud run (`--mode cloud`) | **Not done.** Google Cloud is not set up. | |
 | Tracking of a cloud run (launch, status, collect) | Parts are tested: a command is started only once, the tracker lock, and matching a run manifest to the right solver. No test follows a whole cloud run, also not with a stand-in. | `engine/test/glhf-tracker.test.ts`. |
 | Per-role models (`--role-model`) | **Not run.** Role models cannot be combined with the scripted model, and no real-model run used them. | |
