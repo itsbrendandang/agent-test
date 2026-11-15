@@ -30,23 +30,24 @@ export function mockLeadTurn(ctx: TranscriptContext): Step {
     return { text: "Writing the memo.", tool: { name: "write_memo", args: { decision: "Go with conditions", memo: MOCK_MEMO } } }
   }
   if (wrapUp || rounds === 2) return { text: "Time to close.", tool: { name: "converse", args: { message: "We are at our limit. Final positions: one statement each, Go or No-Go, and the one condition you would attach.", final: true } } }
-  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Toxicologist and ADMET: CMP-0517's hERG margin and solubility both miss the criteria. Medicinal Chemist: which liability is more fixable? Skeptic: attack the differentiation case. Scout: find resistance data that favors either scaffold.", final: false } } }
+  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Methods Auditor and Critic: the hERG margin and solubility of CMP-0517 both miss the criteria. Reviser: fix what they flagged. Finisher: list the outputs that are still missing. Reporter: draft the supported findings and the rejected claims.", final: false } } }
   return {
     text: "Framing: Go only if one candidate has a credible path to the criteria and a differentiation story against the approved drugs.",
-    tool: { name: "converse", args: { message: "Round 1. Each of you, deliver your card for both candidates against the decision criteria. Work independently.", final: false } },
+    tool: { name: "converse", args: { message: "Round 1. Scout: inspect the data. Proposer: plan the analysis and name the claims to test. Pilot and Experimenter: say what you would run. Everyone else: give your first check. Work independently.", final: false } },
   }
 }
 
 const MEMBER_REPLIES: Record<string, (round: number) => string> = {
-  "literature-scout": () => `Kept 3 of 4 sources after screening.\n\nCLAIMS\n- [literature] Approved KRAS G12C inhibitors give response rates near 37 to 41 percent in previously treated patients (source: https://example.org/mock/kras-g12c-clinical-review)\n- [literature] Y96D switch-II mutations appear in patients progressing on KRAS G12C inhibitors (source: https://example.org/mock/resistance-mechanisms)`,
-  "target-biologist": () => `Target is clinically validated; the open question is durability, not biology.\n\nCLAIMS\n- [literature] Acquired resistance through secondary KRAS mutations is common within a year (source: https://example.org/mock/kras-g12c-clinical-review)`,
-  "medicinal-chemist": (r) => r === 1 ? `CMP-0517 is more potent; CMP-0423 is cleaner. Potency is the easier fix on the quinazoline core.\n\nCLAIMS\n- [brief] CMP-0517 pERK IC50 is 95 nM in H358 (source: brief)\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)` :
-    `Polarity at the piperazine could lower hERG on CMP-0517, but it will cost permeability.\n\nCLAIMS\n- [literature] Adding polarity reduced hERG binding in most matched pairs (source: https://example.org/mock/herg-acrylamide)`,
-  admet: () => `CMP-0423 passes solubility (12 uM) and clearance; CMP-0517 fails solubility (4 uM).\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)`,
-  toxicologist: (r) => `CMP-0517's hERG IC50 of 6 uM is the program-killing risk unless the dose is very low.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)` + (r === 1 ? `\n- [literature] Piperazine-linked quinazolines show no resistance and no hERG issues (source: https://example.org/mock/herg-acrylamide)` : ""),
-  "competitive-ip": () => `Two approved drugs and several next-generation programs. Differentiation must come from resistance coverage.\n\nCLAIMS\n- [literature] Compounds binding a different pocket region kept activity against Y96D (source: https://example.org/mock/resistance-mechanisms)`,
-  skeptic: () => `Neither candidate beats the approved drugs on any measured axis. Without resistance data this is a me-too.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
-  moonshot: () => `Back the scaffold as a degrader handle instead: resistance coverage is the real differentiation.\n\nCLAIMS\n- [literature] MET amplification is a resistance mechanism to KRAS G12C inhibition (source: https://example.org/mock/resistance-mechanisms)`,
+  scout: () => `The brief has one assay table for two candidates. No raw data files came with it, so no file could be checked for damage.\n\nCLAIMS\n- [brief] The brief gives six assays for each of CMP-0423 and CMP-0517 (source: brief)`,
+  proposer: () => `Plan: compare each candidate with the decision criteria, one claim per criterion.\n\nCLAIMS\n- [brief] CMP-0517 pERK IC50 is 95 nM in H358 (source: brief)\n- [brief] CMP-0423 pERK IC50 is 180 nM in H358 (source: brief)`,
+  pilot: () => `Prepared a script that reads the assay table and computes descriptors from the SMILES. Not run: this board has no code tool yet.\n\nCLAIMS\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)`,
+  experimenter: (r) => r === 1 ? `CMP-0423 passes solubility and clearance; CMP-0517 fails solubility.\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)\n- [brief] CMP-0423 kinetic solubility is 12 uM (source: brief)\n- [brief] CMP-0423 shows no resistance liability (source: brief)` :
+    `No new results this round: the reruns the Reviser asked for need a code tool.\n\nCLAIMS`,
+  "methods-auditor": () => `The plan compares each candidate with every criterion. The hERG margin step is present; resistance testing is missing.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
+  critic: (r) => `Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)` ,
+  reviser: () => `Dropped the Experimenter's claim that CMP-0423 has no resistance liability: the brief has no resistance data. Nothing else changed.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
+  finisher: () => `Required outputs: the comparison table is present. The resistance-mutant results are missing and cannot be made from this data.\n\nCLAIMS`,
+  reporter: () => `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
 }
 
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
@@ -56,7 +57,7 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
     return { text: "Searching.", tool: { name: "exa_search", args: { query: `KRAS G12C ${agent.title} evidence`, objective: "Find primary data that separates the two candidates; prefer research papers over news and pull potency, selectivity and safety figures.", key_question: "Is either candidate differentiated?" } } }
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
-    const position = agent.name === "skeptic" ? "No-Go: no differentiation yet." : agent.name === "moonshot" ? "Go, but as a degrader program." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
+    const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : agent.name === "finisher" ? "Outputs complete except the resistance-mutant results." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
     return { text: `${position}\n\nCLAIMS` }
   }
   return { text: (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round) }
@@ -69,20 +70,21 @@ const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)
 
 ## Rationale
 CMP-0423 meets solubility, clearance and hERG criteria and misses only potency (180 nM vs 100 nM), which the
-medicinal chemist rates as the more fixable liability. CMP-0517's hERG IC50 of 6 uM fails the safety margin.
+Methods Auditor and Critic rate as the more fixable liability. CMP-0517's hERG IC50 of 6 uM fails the safety margin.
 
 ## Board Positions
-- Literature Scout: evidence pool of 3 screened sources.
-- Target Biologist: target validated; durability is the question.
-- Medicinal Chemist: Go CMP-0423; potency is fixable on the core.
-- ADMET: CMP-0423 passes; CMP-0517 fails solubility.
-- Toxicologist: CMP-0517 hERG is the program-killing risk.
-- Competitive / IP: differentiation must come from resistance coverage.
-- Skeptic: No-Go until resistance data exists. (dissent)
-- Moonshot: reframe as a degrader program. (dissent)
+- Scout: one assay table, no raw data files to check.
+- Proposer: one claim per decision criterion.
+- Pilot: descriptor script prepared, not run.
+- Experimenter: CMP-0423 passes solubility and clearance; CMP-0517 fails solubility.
+- Methods Auditor: resistance testing is missing from the plan.
+- Critic: No-Go until an advantage over the approved drugs is shown. (dissent)
+- Reviser: dropped one claim that did not match the brief.
+- Finisher: resistance-mutant results are missing.
+- Reporter: one supported finding, one rejected claim.
 
 ## Evidence Ledger Summary
-See verification_ledger.json. One literature claim was contradicted by its own source and dropped.
+See verification_ledger.json. One claim did not match the brief and was dropped.
 
 ## Unresolved Tensions
 Differentiation against approved drugs is a hypothesis, not data.

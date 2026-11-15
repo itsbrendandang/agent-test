@@ -17,7 +17,7 @@ memory:
   max_notes: 40            # newest notes kept per member; the file is read into that member's next run
 
 watch:
-  enabled: false           # rerun the Literature Scout's queries on a schedule
+  enabled: false           # rerun the board's searches on a schedule (no member searches today)
   every_hours: 24          # new evidence that changes a verdict reopens the debate
 
 brief:
@@ -42,7 +42,7 @@ models:                      # OpenRouter IDs; "~" aliases follow the newest mod
   lead: "~anthropic/claude-opus-latest"
   strong: "~anthropic/claude-sonnet-latest"
   cheap: "~google/gemini-flash-latest"
-  rival: "~openai/gpt-mini-latest"      # a second vendor, so the Skeptic does not share the lead's blind spots
+  rival: "~openai/gpt-mini-latest"      # a second vendor, so the Critic does not share the lead's blind spots
 
 checkers:
   jev:
@@ -61,11 +61,12 @@ checkers:
   timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member
-  - literature-scout
-  - target-biologist
-  - medicinal-chemist
-  - admet
-  - toxicologist
-  - competitive-ip
-  - skeptic
-  - moonshot
+  - scout                    # members still reply in parallel each round; the order is the intended pipeline
+  - proposer
+  - pilot
+  - experimenter
+  - methods-auditor
+  - critic
+  - reviser
+  - finisher
+  - reporter
