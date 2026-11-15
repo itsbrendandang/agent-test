@@ -297,11 +297,9 @@ cannot be read, curated biology questions are shown. On Overview and on Research
 the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
-preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is
-skipped and named; a paper found twice is listed once, and a paper OpenAlex marks as retracted is
-dropped. No key is needed. Answers from the public
-databases (ChEMBL, Open Targets, UniProt and others) are kept for 10 minutes, so a repeated lookup
-does not ask again. See [docs/research-answer.md](docs/research-answer.md#the-flow).
+preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is skipped and named; a
+paper found twice is listed once. No key is needed. See
+[docs/research-answer.md](docs/research-answer.md#the-flow).
 
 Research answers can also find **lab protocols and SOPs**. When a question asks for a protocol,
 an SOP or how to do a lab method ("How do I isolate hepatocytes from mouse liver?"), the answer
