@@ -33,11 +33,18 @@ interface ExaResponse {
   warnings?: { code: string; message: string }[]
 }
 
-/** One live Exa search. Throws on a non-2xx response. */
-export async function exaLive(query: string, objective: string, apiKey: string, highlightChars?: number): Promise<SearchResult> {
+/**
+ * How long one Exa request may take, the response body included. Without a limit a connection that never answers holds
+ * a board round open with no end: the round waits for every member, and max_minutes is checked only between rounds.
+ */
+export const EXA_TIMEOUT_MS = 30_000
+
+/** One live Exa search. Throws on a non-2xx response, and after `timeoutMs` (a TimeoutError). */
+export async function exaLive(query: string, objective: string, apiKey: string, highlightChars?: number, timeoutMs = EXA_TIMEOUT_MS): Promise<SearchResult> {
   refusePaid("Exa search (api.exa.ai)")
   const res = await fetch("https://api.exa.ai/search", {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { "content-type": "application/json", "x-api-key": apiKey },
     // Bare highlights (Exa's recommendation) unless the board asks for a size: highlights are what a claim is checked against.
     body: JSON.stringify({ query, objective, type: "auto", contents: { highlights: highlightChars ? { maxCharacters: highlightChars } : true } }),
