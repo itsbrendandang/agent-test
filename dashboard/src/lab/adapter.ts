@@ -10,6 +10,7 @@
 // Rules: a teammate moves only for an event that names its agent or step. What a field does not say is not guessed.
 // Text from a run (questions, statements, errors) is untrusted and is only ever passed on as text.
 import { provenanceOf } from "@/lib/provenance"
+import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import {
   CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
@@ -29,13 +30,16 @@ class Build {
   /** Teammates that did something in this run. */
   readonly touched = new Set<CharacterId>()
   private lines = 0
-  constructor(kind: RunKind, runId: string | undefined, standsFor: Partial<Record<CharacterId, string>>, absent: string) {
+  constructor(kind: RunKind, runId: string | undefined, standsFor: Partial<Record<CharacterId, string>>, absent: string, labels: Partial<Record<CharacterId, string>> = {}) {
     const characters = Object.fromEntries(CHARACTER_IDS.map((id): [CharacterId, Activity] => [id, {
       id, inRun: standsFor[id] !== undefined, standsFor: standsFor[id] ?? absent, state: "idle", doing: standsFor[id] !== undefined ? "At its desk. Nothing to do yet." : "", trips: [],
+      ...(standsFor[id] !== undefined && labels[id] && labels[id] !== characterOf(id).name && { label: labels[id] }),
     }])) as Record<CharacterId, Activity>
     this.model = { kind, runId, status: "waiting", characters, visitors: [], log: [] }
   }
   who(id: CharacterId): Activity { return this.model.characters[id] }
+  /** How this run calls a teammate: the agent it stands for, else the character's own name. */
+  name(id: CharacterId): string { return this.model.characters[id].label ?? characterOf(id).name }
   seen(at: number | undefined) { if (at !== undefined) this.model.at = Math.max(this.model.at ?? at, at) }
   /** Change what a teammate is doing. A teammate that is not in the run is brought in: an event named it. */
   set(id: CharacterId, state: LabState, doing: string, at: number | undefined) {
@@ -79,7 +83,6 @@ class Build {
   }
 }
 
-const name = (id: CharacterId) => characterOf(id).name
 
 // ── Where things come from ───────────────────────────────────────────────────────────────────────
 
@@ -101,10 +104,9 @@ const BOARD_MEMBER: Record<string, CharacterId> = {
   "lead-scientist": "navigator", scout: "scout", proposer: "proposer", experimenter: "experimenter", pilot: "pilot",
   "methods-auditor": "auditor", auditor: "auditor", critic: "critic", reviser: "reviser", finisher: "finisher", reporter: "reporter",
 }
-const BOARD_STANDS: Record<CharacterId, string> = {
+const BOARD_STANDS: Partial<Record<CharacterId, string>> = {
   navigator: "The lead scientist: runs the discussion and writes the decision memo.",
-  scout: "The scout, with its web search (Exa). In a practice run it gets example sources instead.",
-  librarian: "The scout's literature and database searches (Europe PMC and the public databases).",
+  scout: "The scout: the one member that searches (the web through Exa, the literature, the public databases). In a practice run it gets example sources instead.",
   proposer: "The proposer: plans the research and names the statements to test.",
   experimenter: "The experimenter in its full-run mode.",
   pilot: "The experimenter in its Pilot mode: a first try on a small part of the data. The lead names the mode each round.",
@@ -114,6 +116,11 @@ const BOARD_STANDS: Record<CharacterId, string> = {
   guardian: "The statement checker: each statement is checked against its source by a model from another vendor, and code confirms the quoted passage.",
   reporter: "The reporter, and the decision memo.",
   finisher: "The memo's completeness check: code refuses a memo with a required section missing.",
+}
+const BOARD_ABSENT = "A team review's searches are all made by the Scout. The Librarian works in research answers."
+/** Captions before the team list arrives: each agent's own name, made readable. The team list brings the engine's titles. */
+const BOARD_LABELS: Partial<Record<CharacterId, string>> = {
+  navigator: agentIdentity("lead-scientist").label, auditor: agentIdentity("methods-auditor").label, guardian: agentIdentity("checker").label, finisher: "Memo check",
 }
 /** The experimenter's mode names, as board/agents/experimenter.md has them. */
 const MODE: Record<string, CharacterId> = { pilot: "pilot", full: "experimenter", revise: "reviser" }
@@ -148,7 +155,7 @@ export function boardOrder(events: readonly LabEvent[]): LabEvent[] {
 
 /** A team review's events as the lab's activity. */
 export function boardLab(events: readonly LabEvent[], runId?: string): LabModel {
-  const b = new Build("board", runId, BOARD_STANDS, "")
+  const b = new Build("board", runId, BOARD_STANDS, BOARD_ABSENT, BOARD_LABELS)
   const m = b.model
   let roster: Set<string> | undefined
   const visitors = new Map<string, Visitor>()
@@ -186,18 +193,23 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
           const member = str(raw?.name); if (!member) continue
           roster.add(member)
           if (raw.source === "specialist" || !BOARD_MEMBER[member]) visitor(member, str(raw.title), str(raw.why))
+          else if (str(raw.title)) {
+            // the caption is the engine's own title for the member (identity.ts), unless that is the character's name
+            const id = BOARD_MEMBER[member], short = agentIdentity(member, { title: str(raw.title) }).short
+            if (short === characterOf(id).name) delete b.who(id).label; else b.who(id).label = short
+          }
         }
         // Who is in this run: the members the roster names, and the two steps code does (the checks, the memo's check).
         const has = (n: string) => roster!.has(n)
         const present: Record<CharacterId, boolean> = {
-          navigator: has("lead-scientist"), scout: has("scout"), librarian: has("scout"), proposer: has("proposer"),
+          navigator: has("lead-scientist"), scout: has("scout"), librarian: false, proposer: has("proposer"),
           experimenter: has("experimenter"), pilot: has("experimenter") || has("pilot"), reviser: has("experimenter") || has("reviser"),
           auditor: has("methods-auditor") || has("auditor"), critic: has("critic"), reporter: has("reporter"), guardian: true, finisher: true,
         }
         for (const id of CHARACTER_IDS) {
           const a = b.who(id)
           a.inRun = present[id] || b.touched.has(id)
-          if (!a.inRun) { a.state = "idle"; a.doing = ""; a.standsFor = `${BOARD_STANDS[id]} That member is not on this review's team.` }
+          if (!a.inRun) { a.state = "idle"; a.doing = ""; a.standsFor = BOARD_STANDS[id] ? `${BOARD_STANDS[id]} That member is not on this review's team.` : BOARD_ABSENT }
         }
         break
       }
@@ -213,11 +225,11 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
           b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : what, at)
         }
         for (const v of visitors.values()) { v.state = "working"; v.doing = what; v.since = at }
-        b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, name("navigator"))
+        b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, b.name("navigator"))
         break
       }
       case "evidence.triaged": {
-        const provider = str(e.provider), who = searcherOf(provider)
+        const provider = str(e.provider), who: CharacterId = "scout" // every search of a review is the scout's: one agent, one face
         const kept = num(e.kept) ?? 0, dropped = num(e.dropped) ?? 0
         const noun = nounOf(provider), place = placeOf(provider)
         const label = kept > 0 ? `${plural(kept, noun)} from ${place}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`
@@ -225,7 +237,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         const brought = kept > 0 ? `Brought back ${label}.` : `Searched ${place}: ${label}.`
         if (b.who(who).state === "working") b.set(who, "working", `Round ${round}: ${brought.charAt(0).toLowerCase()}${brought.slice(1)} Writing its reply.`, at)
         else b.set(who, "done", brought, at)
-        b.log(at, `${name(who)} ${kept > 0 ? `brought back ${label}` : `searched ${place}: ${label}`}.`, name(who))
+        b.log(at, `${b.name(who)} ${kept > 0 ? `brought back ${label}` : `searched ${place}: ${label}`}.`, b.name(who))
         break
       }
       case "member.replied": {
@@ -237,7 +249,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         let id = BOARD_MEMBER[member]
         if (id === "experimenter" && mode && MODE[mode]) {
           id = MODE[mode]
-          if (id !== "experimenter") b.set("experimenter", "idle", `Round ${r}: the experimenter worked as the ${name(id)}.`, at)
+          if (id !== "experimenter") b.set("experimenter", "idle", `Round ${r}: the experimenter worked as the ${b.name(id)}.`, at)
         }
         if (!id || (roster && visitors.has(member))) {
           const v = visitor(member)
@@ -247,7 +259,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         else {
           b.set(id, "handing-off", `Round ${r}: gave its reply to the lead scientist.`, at)
           b.trip(id, { id: `reply:${r}:${member}`, kind: "handoff", room: "planning", to: "navigator", label: `its round-${r} reply for the lead scientist`, short: "reply", at: at ?? 0 })
-          b.log(at, `${name(id)} replied in round ${r}.`, name(id))
+          b.log(at, `${b.name(id)} replied in round ${r}.`, b.name(id))
         }
         // The round's statements are checked once the replies are in.
         if (b.who("guardian").state !== "fetching") b.set("guardian", "fetching", `Checking round ${r}'s statements against their sources.`, at)
@@ -259,7 +271,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         checked[mark]++; inRound++
         b.trip("guardian", { id: `check:${str(e.key) ?? `${at}:${claim}`}`, kind: "fetch", room: "review", label, short, at: at ?? 0, back: at ?? 0, outcome: "carried" })
         if (b.who("guardian").state !== "fetching") b.set("guardian", "fetching", `Checking round ${num(e.round) ?? round}'s statements against their sources.`, at)
-        b.log(at, `${name("guardian")} checked a statement: ${label}`, name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
         break
       }
       case "constraint": b.log(at, `A limit was reached: ${clip(str(e.detail) ?? str(e.reason) ?? "", 160)}`, undefined, "warn"); break
@@ -269,7 +281,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         b.trip("navigator", { id: "memo", kind: "handoff", room: "report", to: "reporter", label: "the decision memo", short: "memo", at: at ?? 0 })
         if (b.who("reporter").inRun) b.set("reporter", "done", "The decision memo is written.", at)
         b.set("finisher", "done", "Checked the memo: every required section is present.", at)
-        b.log(at, "The decision memo was written.", name("navigator"), "good")
+        b.log(at, "The decision memo was written.", b.name("navigator"), "good")
         break
       case "run.finished": {
         guardianDone(at)
@@ -389,9 +401,9 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
           if (!from || from.who === who || handed.has(`${from.id}>${who}`)) continue
           handed.add(`${from.id}>${who}`)
           const made = MADE[from.kind] ?? "its work", giver = from.who
-          b.trip(giver, { id: `handoff:${from.id}>${who}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
-          if (!running(giver).length && b.who(giver).state !== "failed") b.set(giver, "handing-off", `Gave ${made} to the ${name(who)}.`, at)
-          b.log(at, `${name(giver)} gave ${made} to the ${name(who)}.`, name(giver))
+          b.trip(giver, { id: `handoff:${from.id}>${who}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${b.name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
+          if (!running(giver).length && b.who(giver).state !== "failed") b.set(giver, "handing-off", `Gave ${made} to the ${b.name(who)}.`, at)
+          b.log(at, `${b.name(giver)} gave ${made} to the ${b.name(who)}.`, b.name(giver))
         }
         steps.set(id, { id, kind, label, provider, who, at: at ?? 0, running: true })
         lastWho = who
@@ -401,7 +413,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
           b.trip(who, { id: `step:${id}`, kind: "fetch", room: "discovery", label, short: "…", at: at ?? 0 })
           b.set(who, "fetching", doing, at)
         } else b.set(who, "working", doing, at)
-        b.log(at, `${name(who)}: ${doing.charAt(0).toLowerCase()}${doing.slice(1)}`, name(who))
+        b.log(at, `${b.name(who)}: ${doing.charAt(0).toLowerCase()}${doing.slice(1)}`, b.name(who))
         break
       }
       case "step.progress": {
@@ -429,7 +441,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         if (left.length) { const next = left.at(-1)!; b.set(s.who, isFetch(next.kind) ? "fetching" : "working", `${next.label}.`, b.who(s.who).since) }
         else b.set(s.who, status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "done", line, at)
         if (status === "completed") finished.push(s)
-        b.log(at, `${name(s.who)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`, name(s.who), status === "failed" ? "bad" : status === "empty" ? "warn" : undefined)
+        b.log(at, `${b.name(s.who)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`, b.name(s.who), status === "failed" ? "bad" : status === "empty" ? "warn" : undefined)
         break
       }
       case "statement.checked": {
@@ -437,16 +449,16 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const text = str(e.text); if (text === undefined) break
         const { label, short, mark } = markLabel(e.verdict, text)
         b.trip("guardian", { id: `check:${e.stage === "final" ? "final" : "draft"}:${num(e.index) ?? n}`, kind: "fetch", room: "review", label, short, at: at ?? 0, back: at ?? 0, outcome: "carried" })
-        b.log(at, `${name("guardian")} checked a statement: ${label}`, name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
         break
       }
-      case "review.note": if (str(e.text)) b.log(at, `${name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, name("critic"), e.severity === "blocking" ? "warn" : undefined); break
+      case "review.note": if (str(e.text)) b.log(at, `${b.name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, b.name("critic"), e.severity === "blocking" ? "warn" : undefined); break
       case "sources": if (Array.isArray(e.items)) b.log(at, `${plural(e.items.length, "source")} numbered for the writer.`); break
-      case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, name("auditor")); break
-      case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${name("finisher")} saved ${clip(file, 60)}.`, name("finisher")); break }
+      case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, b.name("auditor")); break
+      case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${b.name("finisher")} saved ${clip(file, 60)}.`, b.name("finisher")); break }
       case "missing": if (Array.isArray(e.items) && e.items.length) b.log(at, `Named as not found or not checked: ${plural(e.items.length, "item")}.`, undefined, "warn"); break
-      case "answer.written": b.log(at, "The draft is written.", name("reporter")); break
-      case "answer.revised": b.log(at, "The answer was revised.", name("reviser")); break
+      case "answer.written": b.log(at, "The draft is written.", b.name("reporter")); break
+      case "answer.revised": b.log(at, "The answer was revised.", b.name("reviser")); break
       case "research.finished": {
         m.status = "done"
         const note = str(e.note); if (note) m.note = clip(note, 300)
@@ -532,7 +544,7 @@ export function swarmTimes(run: SwarmRun, events: readonly LabEvent[], seenAt?: 
 export function swarmLab(run: SwarmRun | undefined, notes: SwarmNotes | null | undefined, options: { seenAt?: readonly (number | undefined)[]; upTo?: number } = {}): LabModel {
   const single = run?.solver === "single"
   const b = new Build("swarm", run?.id, single ? { experimenter: "The single agent: one agent alone does every step of this run." } : SWARM_STANDS,
-    single ? "This run used one agent alone, not the team." : "The swarm has no such role. It takes part in team reviews and research answers.")
+    single ? "This run used one agent alone, not the team." : "The swarm has no such role. It takes part in team reviews and research answers.", single ? { experimenter: "Single agent" } : { guardian: "Mark rule" })
   const m = b.model
   if (!run) return m
   m.title = run.task ? `Task: ${run.task}` : undefined
@@ -561,13 +573,13 @@ export function swarmLab(run: SwarmRun | undefined, notes: SwarmNotes | null | u
         const p = str(e.phase) ?? "", key = roleKey(p), who = SWARM_ROLE[key]
         if (!who) { b.log(at, `Step started: ${clip(p, 60)}.`); break }
         if (finished && finished.who !== who) {
-          b.trip(finished.who, { id: `handoff:${i}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${finished.made} for the ${name(who)}`, short: "notes", at })
-          b.set(finished.who, "handing-off", `Gave ${finished.made} to the ${name(who)}.`, at)
+          b.trip(finished.who, { id: `handoff:${i}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${finished.made} for the ${b.name(who)}`, short: "notes", at })
+          b.set(finished.who, "handing-off", `Gave ${finished.made} to the ${b.name(who)}.`, at)
         }
         finished = undefined
         current = { key, who, phase: p }
         b.set(who, "working", `${SWARM_DOES[key]}${passOf(p)}.`, at)
-        b.log(at, `${name(who)} started: ${SWARM_DOES[key].charAt(0).toLowerCase()}${SWARM_DOES[key].slice(1)}${passOf(p)}.`, name(who))
+        b.log(at, `${b.name(who)} started: ${SWARM_DOES[key].charAt(0).toLowerCase()}${SWARM_DOES[key].slice(1)}${passOf(p)}.`, b.name(who))
         break
       }
       case "phase.finished": {
@@ -577,22 +589,22 @@ export function swarmLab(run: SwarmRun | undefined, notes: SwarmNotes | null | u
         b.set(who, "done", limit ? `Stopped at its ${str(e.limit) ?? "limit"} before it was finished${passOf(p)}.` : `Finished: ${SWARM_DOES[key].charAt(0).toLowerCase()}${SWARM_DOES[key].slice(1)}${passOf(p)}.`, at)
         if (current?.who === who) current = undefined
         finished = { who, made: "its notes" }
-        b.log(at, `${name(who)} ${limit ? "stopped at its limit" : "finished"}${passOf(p)}.`, name(who), limit ? "warn" : undefined)
+        b.log(at, `${b.name(who)} ${limit ? "stopped at its limit" : "finished"}${passOf(p)}.`, b.name(who), limit ? "warn" : undefined)
         break
       }
-      case "claim.added": b.log(at, `${by ? name(by) : "The team"} wrote down statement ${clip(str(e.claim) ?? "", 12)}: “${clip(str(e.text) ?? "", 100)}”`, by && name(by)); break
-      case "test.registered": b.log(at, `${by ? name(by) : "The team"} planned a test for statement ${clip(str(e.claim) ?? "", 12)}: ${clip(str(e.name) ?? "", 60)}.`, by && name(by)); break
+      case "claim.added": b.log(at, `${by ? b.name(by) : "The team"} wrote down statement ${clip(str(e.claim) ?? "", 12)}: “${clip(str(e.text) ?? "", 100)}”`, by && b.name(by)); break
+      case "test.registered": b.log(at, `${by ? b.name(by) : "The team"} planned a test for statement ${clip(str(e.claim) ?? "", 12)}: ${clip(str(e.name) ?? "", 60)}.`, by && b.name(by)); break
       case "test.recorded": {
         const claim = clip(str(e.claim) ?? "", 12), test = clip(str(e.name) ?? "a test", 60)
         const mark = markOf(e.verdict)
         const label = `statement ${claim}: ${MARK_GLYPH[mark]} ${MARK_WORD[mark]} after the test “${test}”`
         b.trip("guardian", { id: `test:${i}`, kind: "fetch", room: "review", label, short: `${claim} ${MARK_GLYPH[mark]}`, at, back: at, outcome: "carried" })
         b.set("guardian", m.status === "running" ? "fetching" : b.who("guardian").state, `Worked out the mark of ${label}.`, at)
-        b.log(at, `${name("guardian")} worked out a mark from a recorded test: ${label}.`, name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} worked out a mark from a recorded test: ${label}.`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
         break
       }
-      case "issue.raised": b.log(at, `${by ? name(by) : "A reviewer"} raised a ${str(e.severity) ?? ""} problem: ${clip(str(e.problem) ?? "", 140)}`, by && name(by), "warn"); break
-      case "issue.resolved": b.log(at, `Problem ${clip(str(e.issue) ?? "", 12)} was marked ${str(e.status) ?? "resolved"}.`, current && name(current.who)); break
+      case "issue.raised": b.log(at, `${by ? b.name(by) : "A reviewer"} raised a ${str(e.severity) ?? ""} problem: ${clip(str(e.problem) ?? "", 140)}`, by && b.name(by), "warn"); break
+      case "issue.resolved": b.log(at, `Problem ${clip(str(e.issue) ?? "", 12)} was marked ${str(e.status) ?? "resolved"}.`, current && b.name(current.who)); break
       case "review.converged": b.log(at, "The reviewers have no open problems left."); break
       case "finished": b.log(at, `The swarm's work ended. ${clip(str(e.contract) ?? "", 140)}`.trim()); break
     }

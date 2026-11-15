@@ -45,8 +45,9 @@
 .board-more summary { cursor: pointer; font-weight: 600; font-size: 13px; width: fit-content; }
 .board-more[open] { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px 16px; }
 .board-more[open] summary, .board-more[open] > p { grid-column: 1 / -1; }
-.board-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.board-steps li { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 96px; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 10px; font-size: 13px; }
+.board-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.board-steps li { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 96px; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 10px; font-size: 13px; }
+.board-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .board-steps li[data-step="now"] { border-color: var(--ink); font-weight: 600; }
 .board-steps li[data-step="done"] .swarm-step { color: #0d5f37; }
 .ledger-stats span { display: block; }

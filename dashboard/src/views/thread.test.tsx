@@ -92,7 +92,11 @@ describe("the board's discussion", () => {
   it("says in one sentence what happened", async () => {
     await open()
     await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
-    expect(screen.getByText(/The team has decided\./)).toHaveTextContent("2 team members made 3 statements: 1 supported, 1 contradicted, 1 insufficient evidence.")
+    expect(screen.getByText(/The team has decided\./)).toHaveTextContent("The team has decided. 2 team members made 3 statements; 3 of them were checked.")
+    const found = within(screen.getByRole("group", { name: "What the checks found" }))
+    expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 3 statements checked.")
+    expect(found.getByText("1 supported")).toBeInTheDocument(); expect(found.getByText("1 contradicted")).toBeInTheDocument(); expect(found.getByText("1 insufficient evidence")).toBeInTheDocument()
+    expect(found.queryByTestId("unchecked-why")).toBeNull() // nothing was left unchecked, so no reasons are given
     expect(screen.getByRole("region", { name: "What happened" })).toHaveTextContent("took 9 seconds · cost nothing (practice run)")
     expect(screen.getByRole("heading", { name: "KRAS" })).toBeInTheDocument() // the title is the question, not the run id
   })

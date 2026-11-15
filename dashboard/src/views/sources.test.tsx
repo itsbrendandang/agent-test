@@ -63,7 +63,7 @@ describe("the credit itself", () => {
 describe("a review's sources", () => {
   it("a live Exa search: credited under Sources, on the search step, and beside the source in a statement's detail", async () => {
     await open(false)
-    await search("exa", [{ url: "https://example.org/herg", title: "hERG margins in practice", studyType: "review", relevance: 0.82, provider: "exa" }])
+    await search("exa", [{ url: "https://example.org/herg", title: "hERG margins in practice", studyType: "review", relevance: 0.5, provider: "exa" }])
     await emit({ type: "member.replied", round: 1, member: "scout", text: "In short: the margin is thin.", usd: 0.12 })
     await emit({ type: "claim.checked", round: 1, member: "scout", claim: "The margin is under 30x", kind: "literature", verdict: "verified", checker: "first-pass", source: "https://example.org/herg", note: 'quoted: "margin of 12x"', quoteFound: true })
     const step = screen.getByRole("note", { name: "Scout searched" })
@@ -72,7 +72,9 @@ describe("a review's sources", () => {
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getAllByRole("link", { name: "Exa" })[0]).toHaveAttribute("href", "https://exa.ai")
     const item = sources.getByRole("link", { name: "hERG margins in practice" }).closest("li")!
-    expect(item).toHaveTextContent("example.org · kind of study: review · relevance 0.82")
+    expect(item).toHaveTextContent("example.org · kind of study: review · Partly relevant") // the screening model's word, never a number
+    expect(item).not.toHaveTextContent(/relevance|0\.5/)
+    expect(within(item).getByTestId("screened")).toHaveAttribute("title", expect.stringContaining("not a measured score"))
     expect(within(item).getByRole("list", { name: "Statements that rest on this source" })).toHaveTextContent(/(Holds up|Supported) ?The margin is under 30xThe quoted passage was found in this source\./)
     await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1: Supported/ }))
     const detail = screen.getByText("The statement").closest("dl")!

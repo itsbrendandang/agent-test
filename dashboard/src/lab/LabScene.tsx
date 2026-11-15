@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
 import { LabMap } from "./LabMap"
 import { Mascot } from "./Mascot"
-import { CHARACTERS, FRESH_MS, MAP, ROOMS, STATE_GLYPH, STATE_WORD, describeActivity, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
+import { CHARACTERS, FRESH_MS, MAP, ROOMS, STATE_GLYPH, STATE_WORD, captionOf, describeActivity, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
 import { active, advance, createSim, moving, settle, syncTrips, visitorPoint, type Sim } from "./motion"
 import "./lab.css"
 
@@ -153,13 +153,13 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
             return (
               <button key={c.id} type="button" className="lab-agent" ref={keep(c.id, "button")}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
-                aria-pressed={selected === c.id} aria-label={`Inspect ${describeActivity(c.name, a)}`} title={describeActivity(c.name, a)} onClick={() => onSelect?.(c.id)}>
+                aria-pressed={selected === c.id} aria-label={`Inspect ${describeActivity(captionOf(a), a)}`} title={describeActivity(captionOf(a), a)} onClick={() => onSelect?.(c.id)}>
                 <span className="lab-cargo" aria-hidden="true"><span className="lab-cargo-tag" ref={keep(c.id, "tag")} /></span>
                 {a.problem && <span className="lab-alert" aria-hidden="true">!</span>}
                 <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} feetRef={keep(c.id, "feet")} /></span>
                 <span className="lab-name">
                   {a.inRun && STATE_GLYPH[a.state] && <span className="lab-glyph" aria-hidden="true">{STATE_GLYPH[a.state]} </span>}
-                  {c.name}
+                  {captionOf(a)}
                   {word && <span className="lab-word">{word}</span>}
                 </span>
               </button>

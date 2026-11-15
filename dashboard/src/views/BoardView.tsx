@@ -13,7 +13,7 @@ import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
 import { uncheckedReasons } from "@/lib/verdict"
-import { BOARD_JOB, checkedOf, MARK_WORD, markCounts, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
+import { BOARD_JOB, checkedOf, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
@@ -285,9 +285,9 @@ export function BoardView() {
             {rounds.map(([n, r]) => (
               <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
                 <h3 className="round-head">Round {n}{r.head?.final ? ": final positions" : ""}</h3>
-                {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
+                {r.head?.message && <TeamMessage agent={lead?.name ?? "lead-scientist"} name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
                 {searchLines(r.searches)}
-                {r.replies.map((reply) => <TeamMessage key={reply.key} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
+                {r.replies.map((reply) => <TeamMessage key={reply.key} agent={reply.member} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
               </div>
             ))}
             {live && <Loading>{headline}</Loading>}

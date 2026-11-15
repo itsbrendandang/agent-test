@@ -2,7 +2,7 @@
 // it stands for, what it is doing now, since when, what it last fetched) and the activity log. Both are read from
 // the same activity model the scene draws, so the words and the picture cannot disagree about what was reported.
 import { Mascot } from "./Mascot"
-import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
+import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
 import "./lab.css"
 
 const IDLE_HINT = "Teammates stay at their desks until the engine reports work. Each search, screening, check and hand-off the engine reports sends one of them to a room and back."
@@ -16,12 +16,13 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
       <div className="lab-eyebrow">Selected teammate</div>
       <div className="lab-who">
         <div className="lab-portrait" data-in-run={a.inRun} aria-hidden="true"><Mascot shape={c.shape} color={c.color} /></div>
-        <h2>{c.name}</h2>
+        <h2>{captionOf(a)}</h2>
         <span className="lab-status" data-state={a.state} data-in-run={a.inRun} data-testid="lab-status">
           {a.inRun ? <>{STATE_GLYPH[a.state] && <span aria-hidden="true">{STATE_GLYPH[a.state]} </span>}{STATE_WORD[a.state]}</> : NOT_IN_RUN}
         </span>
       </div>
       <dl className="lab-facts">
+        {a.label && <div><dt>Character</dt><dd>The {c.name}</dd></div>}
         <div><dt>Home room</dt><dd>{room}</dd></div>
         {a.standsFor && <div><dt>Stands for</dt><dd>{a.standsFor}</dd></div>}
         {a.inRun && a.doing && <div><dt>Doing now</dt><dd>{a.doing}</dd></div>}

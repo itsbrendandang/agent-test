@@ -773,8 +773,18 @@ dialog.how { margin: auto; }
 
 /* ---- sources and search ---- */
 .search-credit a { text-decoration: underline; }
-.thread-search { padding: 8px 12px; border-radius: 10px; background: var(--muted, #f1ecdf); font-size: 13px; max-width: 80ch; }
-.thread-search ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-muted); overflow-wrap: anywhere; }
+/* a search step in the discussion: the searcher's picture in the same left column as the messages (32 px + 12 px) */
+.thread-search { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 12px; row-gap: 2px; align-items: start; font-size: 13px; max-width: 84ch; }
+.thread-search-face { grid-column: 1; grid-row: 1 / span 2; margin-top: 1px; }
+.thread-search > p, .thread-search > ul { grid-column: 2; min-width: 0; }
+.thread-search > p { padding-top: 6px; }
+.thread-search ul { margin: 0; padding-left: 18px; color: var(--text-muted); overflow-wrap: anywhere; }
+@media (max-width: 480px) { .thread-search { grid-template-columns: 24px minmax(0, 1fr); column-gap: 8px; } .thread-search-face { width: 24px; height: 24px; } .thread-search > p { padding-top: 2px; } }
+/* what the checks found: how many were checked, the marks, and why the rest were not */
+.check-summary { display: flex; flex-direction: column; gap: var(--space-2); max-width: 90ch; }
+.check-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); font-size: 15px; }
+.check-why { font-size: 13px; line-height: 1.5; color: var(--text); }
+.check-why span[title] { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--text-muted); cursor: help; }
 .source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .source-list > li { display: flex; flex-direction: column; gap: 3px; padding-left: 14px; border-left: 3px solid var(--edge); max-width: 90ch; }
 .source-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }

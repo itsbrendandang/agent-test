@@ -82,6 +82,12 @@ export interface Activity {
   id: CharacterId
   /** False: no agent or step of this run is played by this teammate. It stays at its desk, marked "not in this run". */
   inRun: boolean
+  /**
+   * The caption under the character, when this run has a real agent it stands for whose name differs from the
+   * character's: the engine's own title for that agent ("Lead Scientist" for the Navigator in a team review).
+   * From identity.ts, so the Lab says the same as every other view. Undefined: the character's own name.
+   */
+  label?: string
   /** The real agent or step this teammate stands for in this run, in plain words. */
   standsFor: string
   state: LabState
@@ -154,6 +160,8 @@ export const clip = (text: string, max: number) => { const flat = text.replace(/
 /** A trip that came back longer ago than this is history when the scene first sees it, and is not walked. */
 export const FRESH_MS = 20_000
 
+/** The caption of a teammate in this run: the agent it stands for, else the character's own name. */
+export const captionOf = (a: Activity): string => a.label ?? characterOf(a.id).name
 /** What a screen reader hears for one teammate. */
 export const describeActivity = (name: string, a: Activity): string => (a.inRun ? `${name}: ${STATE_WORD[a.state]}. ${a.doing}`.trim() : `${name}: ${NOT_IN_RUN}.`)
 

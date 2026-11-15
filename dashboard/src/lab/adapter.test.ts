@@ -31,7 +31,7 @@ describe("a team review (boardLab)", () => {
 
   it("puts the team to work when a round starts, and the modes and code steps wait", () => {
     const m = boardLab(PRACTICE_REVIEW.slice(0, 3))
-    expect(states(m)).toMatchObject({ navigator: "working", scout: "working", proposer: "working", experimenter: "working", auditor: "working", critic: "working", reporter: "working", pilot: "idle", reviser: "idle", guardian: "idle", finisher: "idle", librarian: "idle" })
+    expect(states(m)).toMatchObject({ navigator: "working", scout: "working", proposer: "working", experimenter: "working", auditor: "working", critic: "working", reporter: "working", pilot: "idle", reviser: "idle", guardian: "idle", finisher: "idle", librarian: "not in run" })
     expect(m.characters.scout.doing).toBe("Round 1: searching for evidence, then writing its reply.")
     expect(m.characters.scout.since).toBe(PRACTICE_REVIEW[2].at)
   })
@@ -71,18 +71,35 @@ describe("a team review (boardLab)", () => {
     expect(m.characters.finisher).toMatchObject({ state: "done", doing: "Checked the memo: every required section is present." })
     expect(m.characters.guardian.doing).toBe("Checked 13 statements: 9 supported, 2 contradicted, 2 insufficient evidence, 0 not checked.")
     expect(m.characters.reviser.state).toBe("done") // the experimenter's Reviser mode replied in round 2
-    expect(m.characters.librarian).toMatchObject({ inRun: true, state: "idle", doing: "Had no task in this review." }) // no literature search in a practice run
+    expect(m.characters.librarian).toMatchObject({ inRun: false, state: "idle" }) // a review's searches are the scout's
     expect(CHARACTER_IDS.filter((id) => m.characters[id].state === "working" || m.characters[id].state === "fetching")).toEqual([])
   })
 
-  it("splits the scout's searches: the web to the Scout, the literature and the databases to the Librarian; nothing kept is an empty trip", () => {
+  it("gives every search of a review to the Scout, the one member that searches; nothing kept is an empty trip", () => {
     const m = boardLab(REVIEW_WITH_VISITOR.slice(0, 6))
-    expect(trips(m, "scout").map((t) => t.label)).toEqual(["3 results from the web (Exa) (2 more screened out)"])
-    expect(trips(m, "librarian").map((t) => [t.label, t.outcome])).toEqual([
+    expect(trips(m, "scout").map((t) => [t.label, t.outcome])).toEqual([
+      ["3 results from the web (Exa) (2 more screened out)", "carried"],
       ["8 papers from PubMed and preprints (Europe PMC) (4 more screened out)", "carried"],
       ["nothing kept from ChEMBL (3 results screened out)", "empty"],
     ])
-    expect(m.characters.librarian.lastFetched?.label).toMatch(/^8 papers/)
+    expect(m.characters.scout.lastFetched?.label).toMatch(/^8 papers/)
+    expect(m.characters.librarian).toMatchObject({ inRun: false, trips: [] }) // not a second face for the scout
+    expect(m.characters.librarian.standsFor).toMatch(/all made by the Scout/)
+  })
+
+  it("captions each character with the engine's title of the agent it shows", () => {
+    const m = boardLab(REVIEW_WITH_VISITOR.slice(0, 3))
+    expect(m.characters.navigator.label).toBe("Lead Scientist")
+    expect(m.characters.auditor.label).toBe("Methods Auditor")
+    expect(m.characters.scout.label).toBeUndefined() // "Scout (Data and Evidence)" is the Scout: the character's own name
+    expect(m.characters.guardian.label).toBe("Statement checker")
+    expect(m.characters.finisher.label).toBe("Memo check")
+    expect(m.log.find((l) => l.text === "Round 1 started.")?.who).toBe("Lead Scientist")
+    // before the team list arrives: the agent's own name, made readable; no title is invented
+    expect(boardLab(REVIEW_WITH_VISITOR.slice(0, 1)).characters.navigator.label).toBe("Lead scientist")
+    // an answer has steps, not agents: Anh's names stand
+    expect(answerLab(REAL_ANSWER).characters.navigator.label).toBeUndefined()
+    expect(swarmLab(SWARM_RUN, SWARM_NOTES).characters.guardian.label).toBe("Mark rule")
   })
 
   it("shows a specialist that joined as a visitor under its real name, and a member that is not on the team as not in this run", () => {
@@ -141,7 +158,7 @@ describe("a team review (boardLab)", () => {
     ]
     const m = boardLab(old)
     expect(states(m)).toMatchObject({ pilot: "handing-off", reviser: "handing-off" })
-    expect(CHARACTER_IDS.every((id) => m.characters[id].inRun)).toBe(true) // no team list: nobody is ruled out
+    expect(CHARACTER_IDS.filter((id) => !m.characters[id].inRun)).toEqual(["librarian"]) // no team list: no member is ruled out
   })
 })
 
