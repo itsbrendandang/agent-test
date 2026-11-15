@@ -30,7 +30,7 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
       <div className="ov-tiles" data-cols="3">
         <Tile label="Spent today" value={paid ? usdText(paid.spentToday) : "Not known"} empty={!paid || paid.spentToday === undefined}>
           {paid ? <>
-            <small>{paid.daily !== undefined ? `of a ${usdText(paid.daily)} daily limit, for all runs.` : "No daily limit was reported."}{" A running team review or answer counts at its full limit until it ends."}{paid.real === false ? " Demo mode: nothing can be spent." : ""}</small>
+            <small>{paid.daily !== undefined ? `of a ${usdText(paid.daily)} daily limit, for all runs.` : "No daily limit was reported."}{paid.real === false ? " Demo mode: nothing can be spent." : " Until each one ends, a running real team review counts at the limit per team review and a running real answer at its own cap."}</small>
             <div className="ov-track" role="img" aria-label={`${Math.round(share(paid.spentToday, paid.daily))}% of the daily limit`}><i data-made="research" style={{ width: `${share(paid.spentToday, paid.daily)}%` }} /></div>
           </> : <small>The engine did not report its spend.</small>}
         </Tile>

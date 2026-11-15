@@ -146,7 +146,9 @@ describe("the home page: metrics from recorded data only", () => {
     // Practice: b-practice, the Demo answer and the two scripted benchmark runs.
     await userEvent.click(screen.getByRole("button", { name: "Practice runs" }))
     expect(tile("Runs").textContent).toContain("4 runs")
-    expect(tile("Runs").textContent).toContain("2 done1 running1 failed")
+    expect(tile("Runs").textContent).toContain("2 done1 running1 failed")    // Demo mode holds nothing for running runs, so the tile does not say it does.
+    expect(tile("Spent today").textContent).toContain("Demo mode: nothing can be spent.")
+    expect(tile("Spent today").textContent).not.toContain("counts at")
   })
 
   it("shows today's spend against the engine's daily limit, and the recorded spend of the last 7 days", async () => {
@@ -161,7 +163,7 @@ describe("the home page: metrics from recorded data only", () => {
     })
     await waitFor(() => expect(tile("Spent today").textContent).toContain("$3.46"))
     expect(tile("Spent today").textContent).toContain("of a $20.00 daily limit")
-    expect(tile("Spent today").textContent).toContain("A running team review or answer counts at its full limit until it ends.")
+    expect(tile("Spent today").textContent).toContain("Until each one ends, a running real team review counts at the limit per team review and a running real answer at its own cap.")
     expect(tile("Last 7 days").textContent).toContain("$3.00") // 0.5 + 1.5 + 1: the answer from a month ago is not in it
     expect(tile("Limit per team review").textContent).toContain("$5.00")
     expect(tile("Limit per team review").textContent).toContain("Web search (Exa): $0.04 of a $40.00 ceiling, all time")
