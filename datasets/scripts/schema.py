@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
+import common
 import licences
 
 # Controlled vocabulary for the "domains" field.
@@ -41,8 +42,10 @@ _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # Boundary filters
 # ---------------------------------------------------------------------------------------------
 
-# The benchmark itself is never an entry.
+# The benchmark itself is never an entry. To stay well clear of it, hub datasets from the
+# accounts of the benchmark's makers are left out too, whatever their name.
 BENCHMARK = re.compile(r"bix[\s_-]?bench", re.I)
+BENCHMARK_MAKERS = re.compile(r"^(hf|kaggle|github):(futurehouse|edisonscientific|future-house)/", re.I)
 
 # Accession numbers of single studies in the primary archives. The catalogue lists those archives
 # as a whole. It does not list single studies, so a record that carries one of these is dropped.
@@ -108,6 +111,8 @@ def boundary_reason(record: Dict[str, Any]) -> Optional[str]:
     for value in fields:
         if value and BENCHMARK.search(str(value)):
             return "benchmark: the record names the benchmark"
+    if BENCHMARK_MAKERS.match(str(record.get("id", ""))):
+        return "benchmark: a hub dataset from the account of the benchmark's makers"
     accessions = study_accessions(*fields)
     if accessions:
         return "study accession: " + ", ".join(accessions[:3])
@@ -220,6 +225,8 @@ def validate(record: Dict[str, Any]) -> List[str]:
             problems.append(clash)
         if record["licence"] == licences.UNKNOWN and record["commercial_use"] != "unclear":
             problems.append("an unknown licence must have commercial_use 'unclear'")
+    if isinstance(record["description"], str) and common.is_instruction_like(record["description"]):
+        problems.append("description reads like instructions to the reader (untrusted text)")
     reason = boundary_reason(record)
     if reason:
         problems.append("boundary: " + reason)
@@ -313,7 +320,7 @@ def make_record(
     if signals:
         record["signals"] = {k: v for k, v in sorted(signals.items()) if v is not None}
     if notes:
-        record["notes"] = notes[:400]
+        record["notes"] = common.clean_text(notes, 600)
     if same_as:
         record["same_as"] = sorted(set(same_as))
     return record

@@ -96,17 +96,27 @@ sample_sheet.tsv, the scripts, notebook.md and the outputs; do not trust summari
 4. Falsification, in this order for each claim in the ledger:
    a. Decide the tests that could prove it wrong (permute condition labels, held-out replicates,
       a negative-control gene set, a marker-direction check, an alternative method): at most 3.
-   b. Register each one with register_falsification_test (name, what you will run, and which
-      outcome would contradict the claim) BEFORE running any test of that claim. Never try a
-      test first and register it afterwards: that is how chance results become "findings".
-   c. Run every registered test and record every result with record_falsification_test under
-      its registered name, favourable or not, using the p-value your code computed.
-   The verdict is computed by code from the mean evidence of the registered tests. A registered
-   test left without a result counts as zero and the claim cannot be supported; registration
-   closes at the claim's first result; a result that contradicts the claim is always accepted,
-   registered or not. The support threshold rises with the number of claims (read_ledger shows
-   it), so one strong, well-powered test (for example 10,000 or more permutations) is worth
-   more than several weak ones: register few tests and make each count. If an independent
+   b. Write each test as ONE script under /workspace/work/glhf/tests/ (.py, .sh or .R) that
+      runs with no arguments, reads the data and the outputs by absolute path, fixes every
+      random seed, and prints as its LAST line of standard output exactly
+          GLHF_RESULT p_value=<number in [0, 1]> contradicts=<true|false>
+      where p_value is the p-value under the test's null, computed by the script, and
+      contradicts=true when the observed effect goes against the claim.
+   c. Register each script with register_falsification_test (name, method and which outcome
+      would contradict, the script's path, and the test's own null) BEFORE any test of that
+      claim has a result. The file's content is hashed at registration: do not edit it after.
+   You do not run the registered tests and you do not report their p-values. After your turn a
+   separate judge, who sees the claim and your registration but no result, rates whether each
+   test bears on the claim; then the harness runs each registered file and reads its last
+   line. A typed-in result is never accepted as support. A test whose script changed, failed,
+   ran too long or printed no result line, and a test judged not relevant, count as zero and
+   the claim cannot be supported; registration closes at the claim's first result. The support
+   threshold rises with the number of claims (read_ledger shows it), so one strong,
+   well-powered, clearly relevant test (for example 10,000 or more permutations) is worth more
+   than several weak ones: register few tests and make each count. Do not try a test, look at
+   its p-value and then register it: that is how chance results become "findings", and nothing
+   but you can prevent it. If something you ran goes AGAINST a claim, report it with
+   record_falsification_test (contradicts=true): that is always accepted. If an independent
    re-implementation of a claim's key number disagrees materially, use
    report_failed_replication.
 5. Raise every problem with raise_issue (severity, artifacts, problem, evidence = command + output).

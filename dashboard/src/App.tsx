@@ -10,7 +10,9 @@ import { TokenPrompt } from "./components/TokenPrompt"
 import { ViewBoundary } from "./components/ViewBoundary"
 import { getCatalog } from "./home/api"
 import { useShell } from "./lib/shell"
-import { initialView, viewOfHash, VIEWS, type View } from "./nav"
+import { HowItWorks } from "./components/HowItWorks"
+import { setOpen } from "./lib/open"
+import { initialView, rememberView, runOfHash, viewOfHash, VIEWS, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
 import { BoardView } from "./views/BoardView"
 import { ExperimentsView } from "./views/ExperimentsView"
@@ -24,10 +26,15 @@ const WorldsView = lazy(() => import("./views/WorldsView").then((m) => ({ defaul
 
 const ICON: Record<View, typeof Home> = { Home, Runs: ListChecks, Compare: GitCompareArrows, Board: FlaskConical, Agents: Users, Graph: Share2, Settings }
 export default function App() {
-  const [view, setView] = useState<View>(() => initialView(window.location.hash))
+  // An address may name a run ("#Board/<id>"): it is handed to that view before it mounts.
+  const hand = (hash: string) => { const v = viewOfHash(hash), id = runOfHash(hash); if (id && (v === "Board" || v === "Compare")) setOpen(v === "Board" ? "board" : "swarm", id); return id }
+  const [view, setView] = useState<View>(() => { hand(window.location.hash); return initialView(window.location.hash) })
+  const [linked, setLinked] = useState(0) // goes up when the address names another run, so the view opens it
+  const [help, setHelp] = useState(false)
+  useEffect(() => rememberView(view), [view])
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {
-    const sync = () => { const v = viewOfHash(window.location.hash); if (v) setView(v) }
+    const sync = () => { const v = viewOfHash(window.location.hash); if (hand(window.location.hash)) setLinked((n) => n + 1); if (v) setView(v) }
     window.addEventListener("hashchange", sync)
     return () => window.removeEventListener("hashchange", sync)
   }, [])
@@ -41,7 +48,8 @@ export default function App() {
     <div className="app">
       <Splash ready={shell.engine !== "unknown" && catalogAnswered} offline={shell.engine === "offline"} />
       <TokenPrompt />
-      <StatusLine shell={shell} onOpenSettings={() => go("Settings")} />
+      <StatusLine shell={shell} onOpenSettings={() => go("Settings")} onHelp={() => setHelp(true)} />
+      <HowItWorks open={help} onClose={() => setHelp(false)} />
       <nav className="rail" aria-label="Views">
         <span className="rail-mark" aria-hidden="true"><Mark size={30} /></span>
         {VIEWS.map((label) => {
@@ -59,8 +67,8 @@ export default function App() {
         <ViewBoundary view={view}>
           {view === "Home" && <HomeView onOpen={go} />}
           {view === "Runs" && <ExperimentsView onOpen={go} />}
-          {view === "Compare" && <SwarmView />}
-          {view === "Board" && <BoardView />}
+          {view === "Compare" && <SwarmView key={linked} />}
+          {view === "Board" && <BoardView key={linked} />}
           {view === "Agents" && <AgentsView />}
           {view === "Graph" && <Suspense fallback={<div className="page"><Loading className="loading-block">Loading the graph…</Loading></div>}><WorldsView /></Suspense>}
           {view === "Settings" && <SettingsView />}

@@ -2,23 +2,22 @@
 // must do before a plan may start, and where an engine refusal is shown.
 import { HOW_TO_TURN_ON } from "@/lib/paid"
 import type { RunSummary } from "@/board/api"
-import { fmtDuration } from "@/lib/format"
+import { plainDuration } from "@/lib/format"
 import type { ScoreRow } from "@/swarm/api"
 import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
 export const MODE_LABEL: Record<ChatMode, string> = {
-  ai: "AI answer",
-  keyword: "Keyword search, not an AI answer",
-  scripted: "Practice: fixed text, not research",
+  ai: "Written by a real model",
+  keyword: "Word search of past runs: not written by a model",
+  scripted: "Practice run: fixed text, not real research",
 }
 export const MODE_KIND: Record<ChatMode, string> = { ai: "success", keyword: "warning", scripted: "neutral" }
 
 export const EXAMPLES = [
   "Should we advance a KRAS G12C hit that has a hERG liability?",
-  "What did past board reviews decide about hERG risk?",
+  "What did past reviews decide about hERG risk?",
   "Which runs had a statement that was proven wrong, and what was wrong with it?",
-  "Plan a review of a covalent kinase inhibitor with poor solubility.",
 ]
 
 // The engine's own limits (engine/src/chat/routes.ts): a question of at most 2,000 characters, at most 20 messages.
@@ -63,14 +62,17 @@ export function effortInEffect(catalog: Pick<Catalog, "efforts" | "defaultEffort
 export const loadEffort = (): string | undefined => { try { return localStorage.getItem(EFFORT_KEY) ?? undefined } catch { return undefined } }
 export const saveEffort = (id: EffortId) => { try { localStorage.setItem(EFFORT_KEY, id) } catch { /* not remembered */ } }
 /** What an effort level implies, in one visible line: agents, rounds, time, cost, model tier, search. */
+/** The engine's names for how strong a model is, in plain words. */
+const TIER_WORD: Record<string, string> = { cheap: "small, fast", strong: "strong", lead: "the strongest", "per agent": "each member's own" }
+
 export function effortFacts(e: Effort): string {
   return [
     e.agents === "all" ? "all agents" : `${e.agents} agent${e.agents === 1 ? "" : "s"}`,
     `up to ${e.limits.maxRounds} round${e.limits.maxRounds === 1 ? "" : "s"}`,
-    `up to ${fmtDuration(e.limits.maxMinutes * 60_000)}`,
+    `up to ${plainDuration(e.limits.maxMinutes * 60_000)}`,
     `up to $${e.limits.maxUsd.toFixed(2)}`,
-    `${e.modelTier} models`,
-    e.search.exa ? `Exa search, up to ${e.search.maxSearches} search${e.search.maxSearches === 1 ? "" : "es"}` : "no Exa search",
+    `${TIER_WORD[e.modelTier] ?? e.modelTier} models`,
+    e.search.exa ? `web search, up to ${e.search.maxSearches} search${e.search.maxSearches === 1 ? "" : "es"}` : "no web search",
   ].join(" · ")
 }
 
@@ -128,7 +130,7 @@ export function startRequest(plan: Plan, edits: Edits, effort?: EffortId): { err
  * engine's paid-calls switch is off. `paidCalls` undefined: the catalog is not known, so the engine decides (403).
  */
 export function startBlock(plan: Plan, paidCalls: boolean | undefined, agreed: boolean): string | undefined {
-  if (plan.paid && paidCalls === false) return `This plan uses paid models or paid search, and paid calls are off. ${HOW_TO_TURN_ON}`
+  if (plan.paid && paidCalls === false) return `This plan uses paid models or paid search, and you are in Demo mode. ${HOW_TO_TURN_ON}`
   if (plan.paid && !agreed) return "Tick the box to confirm that this may spend money."
   return undefined
 }
@@ -174,7 +176,7 @@ export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; 
   const needed = new Set(Object.values(status?.models ?? {}).flatMap((id) => (typeof id === "string" ? [keyOfModel(id)] : [])).filter((k): k is string => !!k))
   const missing = [...needed].filter((key) => status?.keys?.[key] === false || providers.some((p) => KEY_FOR[p.id] === key && !p.keyPresent))
   if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board reviews are practice runs only`
-  if (status?.paidCalls === false) return "Paid calls are off: board reviews are practice runs only"
+  if (status?.paidCalls === false) return "Demo mode: reviews are practice runs only"
   if (status?.mock === true) return "The engine is in practice mode: board reviews are practice runs only"
   return undefined
 }

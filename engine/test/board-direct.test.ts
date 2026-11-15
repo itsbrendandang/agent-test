@@ -601,6 +601,11 @@ test("the practice run (default roster, the example brief) still shows every ver
   assert.ok(has("unsupported", "openai") || has("verified", "claude-code"), "escalated to a second checker")
   assert.ok(rows.length >= 15 && events.length >= 40, `a practice run is not a handful of events (claims ${rows.length}, events ${events.length})`)
   assert.ok(rows.every((r) => typeof r.source === "string"), "every row records the source it cited")
+  // The product's main path: a statement about published work, checked against a source the scout found and screened.
+  const pooled = (r: { source?: string }) => Boolean(r.source && loadState(config, id).evidence[r.source])
+  assert.ok(rows.some((r) => r.kind === "literature" && r.verdict === "verified" && r.checker === "first-pass" && pooled(r)), "a literature claim holds up against a triaged source")
+  assert.ok(rows.some((r) => r.kind === "literature" && r.verdict === "contradicted" && r.checker === "first-pass" && pooled(r)), "a literature claim is proven wrong by a triaged source")
+  assert.ok(events.some((e) => e.type === "evidence.triaged"), "and there was an evidence step")
 })
 
 test("the practice run has an evidence step (the scout searches)", async () => {

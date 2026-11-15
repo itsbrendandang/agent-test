@@ -103,6 +103,14 @@ def test_the_benchmark_is_never_an_entry(good_record, name):
     assert any(p.startswith("boundary: benchmark") for p in schema.validate(good_record))
 
 
+@pytest.mark.parametrize("record_id", ["hf:futurehouse/some-other-set", "hf:EdisonScientific/anything", "github:Future-House/repo"])
+def test_hub_datasets_of_the_benchmark_makers_are_left_out(good_record, record_id):
+    good_record["id"] = record_id
+    assert schema.boundary_reason(good_record).startswith("benchmark")
+    good_record["id"] = "hf:someone-else/futurehouse-inspired"
+    assert schema.boundary_reason(good_record) is None
+
+
 @pytest.mark.parametrize(
     "text",
     [

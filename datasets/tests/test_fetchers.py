@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 import fetch_aws_open_data as aws
 import fetch_bioregistry as bioregistry
 import fetch_datacite as datacite
@@ -53,6 +51,20 @@ def test_huggingface_fields_come_from_the_api_reply():
     assert {"single-cell", "chemistry"} <= set(record["domains"])
     assert record["signals"]["downloads_30d"] > 0 and record["retrieved_at"] == STAMP
     assert "See the full description" not in record["description"] and len(record["description"]) <= 300
+
+
+def test_huggingface_card_text_that_reads_like_instructions_is_replaced():
+    # This card opens with a call to install a plugin in "your coding agents". That text is
+    # data from a third party: it must not reach an agent as a description.
+    item = next(i for i in load("huggingface_items.json")["items"] if i["id"] == "tahoebio/Tahoe-100M")
+    assert "coding agents" in item["description"]
+    record = hf.to_record(item, STAMP, "x")
+    assert "agents" not in record["description"] and "Install" not in record["description"]
+    assert record["description"].startswith("The dataset card text is left out here")
+    assert "single-cell" in record["description"]  # the tags stand in for the text
+    assert schema.validate(record) == []
+    record["description"] = item["description"][:300].replace("\n", " ").replace("\t", " ")
+    assert any("instructions" in p for p in schema.validate(record))
 
 
 def test_huggingface_dataset_without_a_licence_needs_much_use():
@@ -155,6 +167,10 @@ def test_gdc_lists_projects_with_open_files_only():
     all_valid(kept)
     assert [r["id"] for r in kept] == ["gdc:TARGET-AML", "gdc:TCGA-BRCA"]
     brca = kept[1]
+    assert brca["licence_source"].startswith(gdc.POLICY_URL + " matches /")
+    # when the policy page could not be confirmed, no policy name is written
+    unconfirmed = gdc.to_record(fixture["projects"][1], fixture["open_files"], "Data Release X", STAMP, policy_ok=False)
+    assert unconfirmed["licence"] == "unknown" and unconfirmed["commercial_use"] == "unclear"
     assert brca["level"] == "collection" and brca["access"] == "open"
     assert brca["size"] == f"{fixture['open_files']['TCGA-BRCA']} open-access files"
     assert brca["commercial_use"] == "unclear" and "no licence stated" in brca["licence"]

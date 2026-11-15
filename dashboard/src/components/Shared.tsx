@@ -39,17 +39,21 @@ export function EngineOffline({ needs, said, onRetry }: { needs: string; said?: 
     <div className="engine-offline card-surface" role="alert">
       {said ? (
         <>
-          <h2>The engine answered with an error</h2>
-          <p className="engine-said">{said}</p>
-          <p className="muted">The engine is running; this is an error inside it, not a connection problem. {needs}</p>
+          <h2>Something went wrong inside the app's engine</h2>
+          <p>The engine is running, so this is not a connection problem. Press Try again. If it keeps happening, stop the app and start it again with <code>npm start</code>.</p>
         </>
       ) : (
         <>
-          <h2>Engine not running</h2>
-          <p className="muted">{needs} Start the engine from the repo root with <code>npm run engine</code>.</p>
+          <h2>The app's engine isn't running</h2>
+          <p>Start it with: <code>npm start</code> (in a terminal, in the project folder). Then press Try again.</p>
         </>
       )}
-      {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
+      {onRetry && <button type="button" className="btn btn-primary" onClick={onRetry}>Try again</button>}
+      <details className="engine-details">
+        <summary>Details</summary>
+        {said && <p className="engine-said">{said}</p>}
+        <p className="muted small">{needs}{!said && " The engine is the program that runs the agents and keeps the results; this page could not reach it."}</p>
+      </details>
     </div>
   )
 }

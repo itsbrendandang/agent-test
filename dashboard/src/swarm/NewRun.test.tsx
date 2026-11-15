@@ -22,15 +22,15 @@ describe("paid calls off", () => {
     expect([...model.options].filter((o) => !o.disabled).map((o) => o.value)).toEqual(["mock"])
     expect([...model.options].find((o) => o.value === "other")).toBeDisabled()
     expect(form.queryByLabelText("Model id")).toBeNull()
-    expect(form.getByText(/Paid calls are off, so only the scripted model can run/)).toHaveTextContent("NO_PAID_CALLS=0")
-    expect(form.getByText(/Paid calls are off, so only the scripted model can run/)).toHaveTextContent("The dashboard cannot turn it on")
+    expect(form.getByText(/You are in Demo mode, so only a practice run can start/)).toHaveTextContent("Real")
+    expect(form.getByText(/You are in Demo mode, so only a practice run can start/)).toHaveTextContent("choose Real at the top of the page first")
   })
   it("disables the Exa box with the reason", () => {
     const { form } = open(PAID_OFF)
     const exa = field(form, /Exa documentation search/)
     expect(exa).toBeDisabled()
     expect(exa).not.toBeChecked()
-    expect(exa).toHaveAccessibleDescription(/cannot be used while paid calls are off/)
+    expect(exa).toHaveAccessibleDescription(/cannot be used in Demo mode/)
   })
   it("starts a scripted run in one step: no cost note and no confirm step", async () => {
     const sent = engine({ status: 201, body: { id: "a", ids: ["a"] } })
@@ -73,7 +73,7 @@ describe("validation", () => {
     const { user, form } = open(PAID_ON)
     await user.click(field(form, /Single agent/))
     expect(field(form, /Review rounds/)).toBeDisabled()
-    expect(field(form, /Memory between runs/)).toBeDisabled()
+    expect(field(form, /Use lessons from earlier runs/)).toBeDisabled()
   })
 })
 

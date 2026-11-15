@@ -143,7 +143,9 @@ def test_the_keys_are_blank_while_the_switch_is_on(monkeypatch: pytest.MonkeyPat
     assert os.environ[paid.SWITCH] == "1"  # passed on to child processes
 
 
-def test_stray_openrouter_and_typesafe_keys_are_blanked_in_a_child(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stray_openrouter_and_typesafe_keys_are_blanked_in_a_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """No provider uses these keys any more, but one left in .env must not reach a child while paid calls are off."""
     import subprocess
     import sys
@@ -154,8 +156,14 @@ def test_stray_openrouter_and_typesafe_keys_are_blanked_in_a_child(monkeypatch: 
     assert {"OPENROUTER_API_KEY", "TYPESAFE_API_KEY"} <= set(paid.PAID_KEYS)
     assert paid.enforce() is True
     out = subprocess.run(
-        [sys.executable, "-c", "import os; print(repr([os.environ.get('OPENROUTER_API_KEY'), os.environ.get('TYPESAFE_API_KEY')]))"],
-        capture_output=True, text=True, check=True,
+        [
+            sys.executable,
+            "-c",
+            "import os; print(repr([os.environ.get('OPENROUTER_API_KEY'), os.environ.get('TYPESAFE_API_KEY')]))",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     assert out == "['', '']"
 

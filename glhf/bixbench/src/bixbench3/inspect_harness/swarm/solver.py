@@ -53,10 +53,12 @@ from inspect_ai.util import (
 
 from ..models import RuntimeCase
 from ..tools import request_web_access
-from . import baseline, past_memory, roles
-from .ledger import UNREVIEWED, Ledger
+from . import baseline, past_memory, relevance, roles
+from .ledger import RELEVANCE_THRESHOLD, UNREVIEWED, Ledger
 from .memory import add_pending, filter_lessons, load_memory
 from .tools import (
+    MIN_TEST_SECONDS,
+    TEST_SECONDS,
     WORK,
     background_processes,
     check_contract,
@@ -72,6 +74,7 @@ from .tools import (
     register_falsification_test,
     report_failed_replication,
     resolve_issue,
+    run_registered_test,
     save_ledger,
     search_docs,
 )
@@ -96,12 +99,21 @@ MAX_FINISH_HOLD = 0.25  # the finisher's reserve never takes more than this shar
 MIN_PHASE_SECONDS = 10  # a phase with less time than this is skipped, not started
 AUDIT_SHARE = 0.10  # of the review time left in a round
 CRITIQUE_SHARE = 0.30
+RELEVANCE_SHARE = 0.05  # of the review time left after the critique: one model call, no tools
+EXECUTE_SHARE = 0.5  # of the review time then left, shared by the registered tests to run
 PILOT_OUT = f"{WORK}/pilot/outputs"
 REPORT_TOKEN_RESERVE = 0.10  # of max_tokens, kept for the reporter
 assert REPORT_TOKEN_RESERVE == baseline.REPORT_TOKEN_RESERVE  # same rule for both solvers
 # With a token budget, the supporting roles are capped so the full run and the review keep most
 # of it. Shares of max_tokens by phase (first word of the phase name); other phases take what is left.
-TOKEN_SHARE = {"scout": 0.05, "propose": 0.08, "pilot": 0.15, "audit": 0.08, "critique": 0.20}
+TOKEN_SHARE = {
+    "scout": 0.05,
+    "propose": 0.08,
+    "pilot": 0.15,
+    "audit": 0.08,
+    "critique": 0.20,
+    "relevance": 0.02,  # the relevance judge: part of review, one call per round
+}
 SEARCH_ROLES = {"scout", "planner", "pilot", "experimenter", "reviser", "finisher", "auditor"}
 
 
@@ -192,11 +204,12 @@ PHASE_ORDER = (
     "experiment",
     "audit",
     "critique",
+    "relevance",
     "revise",
     "finish",
     "report",
 )
-REVIEW_KINDS = ("audit", "critique", "revise")
+REVIEW_KINDS = ("audit", "critique", "relevance", "revise")
 MANDATORY = ("experiment", "report")  # a plan never drops these
 
 
@@ -219,6 +232,7 @@ NEEDS = {
     "experiment": Need("a first complete version of every required artifact", 24, 480),
     "audit": Need("adherence.md", 8, 45),
     "critique": Need("one registered and recorded test per claim", 16, 120),
+    "relevance": Need("one relevance judgement per registered test", 2, 20),
     "revise": Need("a fix for each blocking issue", 12, 90),
     "finish": Need("the rescue of one missing artifact", 8, MIN_FINISH_SECONDS),
     "report": Need("METHODS.md", 6, 60),
@@ -227,9 +241,9 @@ NEEDS = {
 LADDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("full", ()),
     ("lean", ("pilot", "audit")),
-    ("no_review", ("pilot", "audit", "critique", "revise")),
-    ("direct", ("scout", "propose", "pilot", "audit", "critique", "revise")),
-    ("bare", ("scout", "propose", "pilot", "audit", "critique", "revise", "finish")),
+    ("no_review", ("pilot", "audit", "critique", "relevance", "revise")),
+    ("direct", ("scout", "propose", "pilot", "audit", "critique", "relevance", "revise")),
+    ("bare", ("scout", "propose", "pilot", "audit", "critique", "relevance", "revise", "finish")),
 )
 BELOW_FLOOR = "below_floor"  # not even experiment + report fit: both run on scaled-down floors
 FIRST_PASS_TOKEN_SHARE = 0.40
@@ -436,6 +450,10 @@ class Owed:
         later = list(self.kinds)
         if kind == "audit" and "critique" not in later:
             later.append("critique")  # in any round an audit may not starve its critique
+        if kind in ("audit", "critique") and "relevance" not in later:
+            # nor may either starve the relevance judgement: a test nobody judged cannot be
+            # run, so the critic's work in that round would count for nothing
+            later.append("relevance")
         return later
 
 
@@ -509,7 +527,7 @@ class TokenBook:
             if kind in TOKEN_TARGET and later:
                 cap = int(self.max_tokens * _cumulative(TOKEN_TARGET, kind)) - self.used
                 rolled = max(0, cap - int(self.max_tokens * TOKEN_TARGET[kind]))
-            elif kind in ("audit", "critique"):
+            elif kind in ("audit", "critique", "relevance"):
                 cap = int(self.max_tokens * TOKEN_SHARE[kind])
             tokens = max(0, min(available if cap is None else max(floor, cap), available))
             rolled = min(tokens - floor if cap is None else rolled, max(0, tokens - floor))
@@ -588,9 +606,11 @@ def seconds_for(
         want = plan.seconds * _cumulative(TIME_TARGET, kind) - elapsed
     elif kind in REVIEW_KINDS:
         review_left = left - hold
-        share = {"audit": AUDIT_SHARE, "critique": CRITIQUE_SHARE}.get(
-            kind, 0.9 if last_round else REVISE_SHARE
-        )
+        share = {
+            "audit": AUDIT_SHARE,
+            "critique": CRITIQUE_SHARE,
+            "relevance": RELEVANCE_SHARE,
+        }.get(kind, 0.9 if last_round else REVISE_SHARE)
         want = review_left * share
     grant = available if want is None else max(float(plan.time_floors[kind]), want)
     return int(max(0.0, min(grant, available)))
@@ -714,6 +734,7 @@ def glhf_swarm(
     experimenter_model: str | None = None,
     critic_model: str | None = None,
     reporter_model: str | None = None,
+    relevance_model: str | None = None,
     max_tokens: int | None = None,
     max_messages_per_role: int | None = None,
     exa: bool = False,
@@ -759,6 +780,12 @@ def glhf_swarm(
         plan = plan_budget(max_tokens or None, clock.budget, review_rounds)
         book = TokenBook(plan) if plan.max_tokens is not None else None
         owed = Owed.of(plan)
+        # The relevance judge is in the critic's model group unless it is given its own model.
+        # Whether it shares a vendor with the proposer is recorded: the same vendor can mean
+        # the same blind spots.
+        default_name = str(get_model())
+        judge_name = relevance_model or critic_model or default_name
+        proposer_name = planner_model or default_name
         ledger.log(
             "settings",
             budget_seconds=int(clock.budget),
@@ -777,7 +804,18 @@ def glhf_swarm(
                 "experimenter": experimenter_model,
                 "critic": critic_model,
                 "reporter": reporter_model,
+                "relevance": judge_name,
             },
+            relevance={
+                "threshold": RELEVANCE_THRESHOLD,
+                "judge_model": judge_name,
+                "proposer_model": proposer_name,
+                "same_vendor_as_proposer": relevance.vendor(judge_name)
+                == relevance.vendor(proposer_name),
+                "time_share_of_review": RELEVANCE_SHARE,
+                "token_share": TOKEN_SHARE["relevance"],
+            },
+            test_results="run by the harness from the registered script",
         )
         ledger.log("budget.plan", **plan.event(), allocation=allocation(plan))
         if plan.degraded:
@@ -1057,6 +1095,148 @@ def glhf_swarm(
             await save_ledger(ledger)
             return PhaseResult(ran=True, limit=limit)
 
+        async def judge_relevance(n: int) -> None:
+            """Between registration and run: one call to the relevance judge for every
+            registered test that has no judgement. The judge has no tools and sees only what
+            relevance.request builds: no result, no transcript. It is paid from the review
+            share like the other review phases, with its own floor."""
+            items = relevance.waiting(ledger)
+            if not items:
+                return
+            title = f"relevance {n}"
+            later = owed.start("relevance")
+            names = [f"{i.claim_id}/{i.name}" for i in items]
+
+            async def skipped(reason: str, **detail: object) -> None:
+                ledger.log("phase.skipped", phase=title, reason=reason, **detail)
+                ledger.log(
+                    "relevance.skipped",
+                    round=n,
+                    reason=reason,
+                    tests=names,
+                    note="a test without a relevance judgement is not run and cannot support",
+                )
+                await save_ledger(ledger)
+
+            if "relevance" not in plan.phases:
+                return await skipped("plan", mode=plan.mode)
+            floor_seconds = plan.time_floors["relevance"]
+            seconds = seconds_for(plan, title, clock.budget - clock.left(), later)
+            if seconds < MIN_PHASE_SECONDS:
+                return await skipped("time", seconds=seconds)
+            if seconds + 1 < floor_seconds:
+                return await skipped(
+                    "below_floor", unit="seconds", seconds=seconds, floor=floor_seconds
+                )
+            grant: Grant | None = None
+            if book:
+                grant = book.grant(title, later)
+                if grant.skip:
+                    return await skipped(
+                        grant.skip,
+                        unit="tokens",
+                        used=tokens_used(),
+                        tokens=grant.tokens,
+                        floor=grant.floor,
+                        protected=grant.protected,
+                    )
+            ledger.log(
+                "budget.grant",
+                **(grant.event() if grant else {"phase": title, "tokens": None}),
+                seconds=seconds,
+                seconds_floor=floor_seconds,
+                handoff_seconds=0,
+                owed_later=later,
+            )
+            allowance = grant.tokens if grant else None
+            ledger.log("phase.started", phase=title, seconds=seconds, tokens_allowed=allowance)
+            # The request is sized to the allowance: about a third of it for the scripts
+            # (4 characters a token), the rest for the instructions and the answer.
+            script_chars = relevance.SCRIPT_CHARS
+            if allowance is not None:
+                script_chars = max(400, min(script_chars, allowance * 4 // (3 * len(items))))
+            text = relevance.request(ledger, items, script_chars)
+            answer, failed = await relevance.ask(
+                _model(relevance_model or critic_model) or get_model(),
+                text,
+                80 * len(items) + 64,
+                seconds,
+            )
+            state.messages.append(
+                ChatMessageUser(content=f"=== GLHF phase: {title} (budget {seconds}s) ===")
+            )
+            state.messages.append(ChatMessageUser(content=text))
+            state.messages.append(ChatMessageUser(content=f"[relevance judge] {answer or failed}"))
+            if failed is None:
+                for item, (score, reason) in zip(
+                    items, relevance.parse(answer, items).values(), strict=True
+                ):
+                    ledger.judge_relevance(
+                        item.claim_id,
+                        item.name,
+                        relevance.judgement(score, reason, judge_name, proposer_name),
+                    )
+            else:
+                # No answer: the tests stay unjudged (they are asked about again next round).
+                ledger.log(
+                    "relevance.failed",
+                    round=n,
+                    reason=failed,
+                    tests=names,
+                    note="a test without a relevance judgement is not run and cannot support",
+                )
+            ledger.log(
+                "phase.finished",
+                phase=title,
+                limit_hit=failed == "time",
+                limit="time" if failed == "time" else None,
+                left=int(clock.left()),
+                tokens=tokens_used(),
+            )
+            if book and grant:
+                settled = book.settle(grant, tokens_used())
+                ledger.log("budget.settled", **settled)
+                if settled["borrowed"]:
+                    ledger.log(
+                        "budget.borrowed",
+                        phase=title,
+                        overshoot=settled["overshoot"],
+                        from_reserves=settled["borrowed"],
+                        reserves_left=settled["reserves_left"],
+                    )
+            await save_ledger(ledger)
+
+        async def run_registered_tests(n: int) -> None:
+            """The harness runs every registered test that was judged and has no run yet. No
+            model takes part and no tokens are spent. The time comes from the review time
+            that is left (never the finisher's or the reporter's reserve): EXECUTE_SHARE of
+            it, shared by the tests waiting, at most TEST_SECONDS each."""
+            todo = [
+                (claim.id, entry)
+                for claim in ledger.claims.values()
+                for entry in claim.registered
+                if entry.script_sha256 and entry.relevance is not None and entry.run is None
+            ]
+            for position, (claim_id, entry) in enumerate(todo):
+                share = review_left() * EXECUTE_SHARE / (len(todo) - position)
+                seconds = int(min(TEST_SECONDS, share))
+                if seconds < MIN_TEST_SECONDS:
+                    ledger.log(
+                        "test.not_run",
+                        round=n,
+                        claim=claim_id,
+                        name=entry.name,
+                        reason="time",
+                        seconds=seconds,
+                        needed=MIN_TEST_SECONDS,
+                    )
+                    continue
+                outcome = await run_registered_test(entry, seconds)
+                ledger.record_run(claim_id, entry.name, outcome)
+                await save_ledger(ledger)
+            if todo:
+                await save_ledger(ledger)
+
         scout = agent("scout", roles.SCOUT, planner_model, [])
         planner = agent("planner", roles.PLANNER, planner_model, [propose_claim(ledger, "planner")])
         pilot = agent("pilot", roles.PILOT, experimenter_model, [])
@@ -1124,6 +1304,11 @@ def glhf_swarm(
                     f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
                     f"Current ledger:\n{ledger.summary()}",
                 )
+                if critique.ran:
+                    # What the critic registered is now fixed (script and hash). First the
+                    # relevance judge, which sees no result; then the harness runs the tests.
+                    await judge_relevance(n)
+                    await run_registered_tests(n)
                 step = review_step(critique, len(ledger.open_issues()))
                 if critique.completed:
                     critiques_completed += 1

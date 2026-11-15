@@ -5,11 +5,13 @@
 export type PaidState = "off" | "on" | "unknown"
 
 export const PAID_LABEL: Record<PaidState, string> = {
-  off: "Paid calls off: practice runs only",
-  on: "Paid calls on",
-  unknown: "Paid calls: not known",
+  off: "Demo: practice runs only",
+  on: "Real: costs money",
+  unknown: "Demo or Real: not known",
 }
-export const HOW_TO_TURN_ON = "To turn paid calls on, a person sets NO_PAID_CALLS=0 in the .env file in the repo root and restarts the engine. The dashboard cannot turn them on."
+/** The plain words under the switch. */
+export const MODE_WORDS = { off: "Practice runs. Fixed example answers. Free.", on: "Real AI models and web search. Costs money." } as const
+export const HOW_TO_TURN_ON = "To use real models, choose Real at the top of the page. It asks you to confirm that it costs money."
 
 export const paidState = (status: { paidCalls?: unknown } | undefined): PaidState =>
   status?.paidCalls === false ? "off" : status?.paidCalls === true ? "on" : "unknown"

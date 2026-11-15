@@ -76,7 +76,7 @@ The Graph view loads only when it is opened.
   pill with a modifier that also adds a glyph: `pill v-verified`, `pill v-contradicted`, `pill v-unsupported`,
   `pill v-unchecked` (board) and `pill sv-supported`, `pill sv-refuted`, `pill sv-insufficient`,
   `pill sv-untested` (swarm).
-- **One type scale**: 12, 13, 16, 20 and 28 px. Nothing under 12.
+- **One type scale**: 12, 13, 15 (conversation text), 16, 20 and 28 px. Nothing under 12.
 - **One place for each input**: questions are asked on Home; keyword search is on Runs; Agents has a filter box.
 - **One loading look**: `<Loading>text</Loading>` from `src/components/Crew.tsx`. The text is the status; the
   characters beside it are decoration.
@@ -114,20 +114,81 @@ Momo, Ember and Fuji are the app's face, not its workers.
 
 ## Words
 
-Plain words first; the expert term is a tooltip or a small second line. The strings live in `src/lib/words.ts`.
+The reader is smart but is not a scientist or an engineer. Plain words first; the expert term is a tooltip or a
+small second line, never deleted. The strings and helpers live in `src/lib/words.ts` and `src/lib/format.ts`.
 
 | Say | Not | Where the expert term stays |
 |---|---|---|
-| Practice run: fixed text, not real research | scripted, mock | `data-mode="scripted"` |
-| ✓ Holds up · ✕ Proven wrong · ? Not enough evidence | verified/supported · contradicted/refuted · unsupported/unchecked/insufficient/untested | tooltip on every chip; second line with `technical` |
-| statement | claim | ids such as C2 |
-| check, test | falsification test | the "how to read this" text |
-| the run's shared record | ledger | |
-| output | artefact | |
+| Practice run: fixed text, not real research (`PRACTICE`, `ModeLabel`) | scripted, mock | `data-mode="scripted"` |
+| ✓ Holds up · ✕ Proven wrong · ? Not enough evidence (`Verdict`) | verified/supported · contradicted/refuted · unsupported/unchecked/insufficient/untested | tooltip on every chip; second text with `technical` |
+| statement | claim | ids such as C2; "experts say claim" in How to read this |
+| a test that could prove it wrong | falsification test | |
+| the team's shared notes / what the run recorded | ledger | |
+| result, result file | artefact, output | |
 | step, role | phase | |
-| a second, more careful check | escalation | |
-| review, decision | board run, memo | "memo" in the heading of the full text |
-| team member | specialist, portfolio | |
+| a quick first check / a second, more careful check | first pass, escalation | model id in brackets |
+| evidence score (experts call it an e-value) | e-value alone | |
+| one agent alone / a team of nine | single agent / swarm | |
+| scoring program | grader | |
+| text limit (tokens) | token budget | |
+| web search (Exa) | Exa search | |
+| small, fast / strong / the strongest models | cheap / strong / lead tier | |
+| review, decision | board run, memo | "memo" in one heading |
+| Key for Claude (Anthropic) … | env-var names as titles | the env name as a small second line |
+| the question that was asked (`runTitle`, `plainTitle`) | a run id as a title | "Run id:" small, and in tooltips |
+
+Numbers: `plainDuration` ("9 seconds"), `plainLimit` ("30-minute limit"), `plainCost` ("cost nothing (practice
+run)"), `plainWhen` ("today at 4:51 pm"). Scores keep three decimals.
+
+## The conversation
+
+The discussion is the centre of Board and Compare: `TeamMessage` in `src/components/Thread.tsx`.
+
+- Who speaks and their job in one plain line (`BOARD_JOB` in `words.ts`, written from `board/agents/*.md`; the
+  swarm's from `src/swarm/roles.ts`). Do not invent what a role does.
+- The message is the reply's "In short:" sentence (`splitReply`); without one, its first sentence. The rest is
+  under "Show full reply". Never an empty bubble.
+- One chip per checked statement: glyph and plain word. Pressing it shows the statement, why, who checked, the
+  source.
+- A statement proven wrong marks the message with a red edge and a line of text, and the view's headline says so.
+- All of it is text. Nothing a model wrote becomes HTML, a link or an image.
+- Reading size in the conversation is 15 px: the one size added to the scale (12, 13, 15, 16, 20, 28).
+
+Each view opens with the question, a label (practice or real), and one big sentence that says what happened.
+A practice run's score or recommendation is never the headline without the words "practice run" in it.
+
+## Easy to use
+
+A first-time visitor gets from opening the app to a finished result, and understands it, without help.
+
+- **First visit**: Home says what this is in one sentence, offers three example questions that send in one click,
+  and says once when the app is in Demo mode.
+- **Fewest clicks**: example (1), "Start practice run" (2), "See what they found" (3). A practice plan starts in
+  one click only while the engine is in Demo mode and the plan is not paid (`quick` in `src/home/PlanCard.tsx`).
+  Everything else keeps the confirm step, the cost and the tick box. Never weaken that.
+- **Always a next step**: a progress line while a run works, one clear button when it ends, and a "What next?"
+  row on Board and Compare (`.next-steps`). No empty state, error or finished state is a dead end.
+- **Errors a person can act on**: what went wrong, what to do ("Start it with: npm start"), one "Try again"
+  button, and the engine's own text under "Details" (`EngineOffline` in `Shared.tsx`).
+- **Where you were**: the last view (`app.view`) and the last run of each kind (`last.board`, `last.swarm`) are
+  remembered. An address can name a run: `#Board/<id>`, `#Compare/<id>` (`src/nav.ts`, `src/lib/open.ts`).
+- **Advanced controls** (effort, model, limits, team choice) sit under "More options". The Demo/Real state and
+  the practice/real label are never hidden.
+- **Help in place**: "How this works" in the status line opens the same four-step picture on every view
+  (`src/components/HowItWorks.tsx`).
+
+## Demo and Real
+
+The status line always shows "Demo mode: practice runs only" or "Real mode: runs cost money", and pressing it
+opens the switch (`src/components/PaidSwitch.tsx`, engine calls in `src/lib/paidSwitch.ts`; also in Settings).
+
+- To Real: two steps. First what it means and the spending limits; then the person types the engine's sentence
+  ("I will be charged") themselves. It is never pre-filled and never sent silently. The session token is asked for.
+- To Demo: one click, with what stops said beside it.
+- The state is read from the engine every time. The page does not remember it.
+- A locked switch or a missing key is said plainly, and no control to turn it on is offered. No key is typed here.
+- A run keeps the label it started with. Switching never relabels a past run.
+- Tests stub the engine. Never send `{on: true}` to a real engine from a test or a script.
 
 ## Rules that the design must keep
 

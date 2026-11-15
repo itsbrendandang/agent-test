@@ -3,9 +3,10 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { CheckedStatement, TeamMessage } from "@/components/Thread"
+import { TeamMessage } from "@/components/Thread"
+import { plainCost, plainDuration, plainLimit, plainTitle, plainWhen, runTitle } from "@/lib/format"
 import { forgetScripted } from "@/lib/scripted"
-import { inShort, safeUrl } from "@/lib/words"
+import { inShort, safeUrl, splitReply } from "@/lib/words"
 import { routes } from "@/test/engine"
 import { CATALOG_ON } from "@/test/home"
 import { AgentsView } from "./AgentsView"
@@ -34,7 +35,7 @@ const HOSTILE = 'The margin is thin. <img src=x onerror="window.__pwned=1"> <scr
 
 describe("the board's discussion", () => {
   const open = async () => {
-    board(); localStorage.setItem("board.details", "1")
+    board()
     const view = render(<BoardView />)
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit({ type: "run.started", runId: "run-1", brief: "kras", title: "KRAS", mock: true })
@@ -44,42 +45,93 @@ describe("the board's discussion", () => {
     await emit({ type: "claim.checked", round: 1, member: "scout", claim: "The data has 12 samples", kind: "brief", verdict: "verified", checker: "first-pass", checkedBy: "scripted", source: "brief", note: 'quoted: "12 samples"' })
     await emit({ type: "claim.checked", round: 1, member: "critic", claim: "The margin is thin", kind: "web", verdict: "contradicted", checker: "openai", source: "https://example.org/paper" })
     await emit({ type: "claim.checked", round: 1, member: "critic", claim: "Nobody tested it", kind: "web", verdict: "unsupported", checker: "first-pass", source: "javascript:alert(1)" })
-    if (!screen.queryByRole("region", { name: "Discussion" })) await userEvent.setup().click(screen.getByRole("checkbox", { name: "Show the full discussion" }))
     return view
   }
-  it("is one message per team member: name, plain job, the first sentence, the full reply folded, the checks under it", async () => {
+  it("reads like a group chat: who speaks, their plain job, one sentence, the full reply folded, a chip per statement", async () => {
     await open()
     const round = within(screen.getByRole("group", { name: "Round 1" }))
-    expect(round.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["Lead Scientist", "Scout", "Critic"]) // the roster's own names
+    expect(round.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["Lead Scientist", "Scout", "Critic"]) // in the order they spoke
     const scout = within(round.getByRole("article", { name: "Scout" }))
-    expect(scout.getByText("Data Inspector")).toBeInTheDocument()
-    expect(scout.getByText("In short").parentElement).toHaveTextContent("In short The data has 12 samples.")
-    const full = scout.getByText("Read the full reply").closest("details")!
+    expect(scout.getByText("looks at the data before any research begins")).toBeInTheDocument()
+    expect(within(round.getByRole("article", { name: "Critic" })).getByText("tries to prove the others wrong")).toBeInTheDocument()
+    expect(scout.getByText("The data has 12 samples.")).toHaveClass("thread-short") // no "In short" line in this reply: its first sentence
+    const full = scout.getByText("Show full reply").closest("details")!
     expect(full).not.toHaveAttribute("open")
     expect(full).toHaveTextContent("Two are missing a label, and one file is empty.")
-    const checks = within(scout.getByRole("list", { name: "What the checks found about Scout's statements" }))
-    expect(checks.getByText("Holds up")).toHaveAttribute("title", "The check's own word: verified") // glyph plus plain word; the expert word stays reachable
-    expect(checks.getByText(/Checked by the quick first check \(practice: no model\)/)).toBeInTheDocument()
-    expect(checks.getByText("Source: brief")).toBeInTheDocument()
-    const critic = within(round.getByRole("article", { name: "Critic" }))
-    expect(critic.getByText("Proven wrong")).toBeInTheDocument()
-    expect(critic.getByText("Not enough evidence")).toBeInTheDocument()
+    const chips = within(scout.getByRole("group", { name: "What the checks found about Scout's statements" }))
+    expect(chips.getByText("Holds up")).toHaveAttribute("title", "The check's own word: verified") // glyph plus plain word; the expert word stays reachable
+  })
+  it("a chip opens the statement, the source and why it got that result", async () => {
+    await open()
+    const user = userEvent.setup()
+    const scout = within(screen.getByRole("article", { name: "Scout" }))
+    expect(scout.queryByText("The statement")).toBeNull()
+    const chip = scout.getByRole("button", { name: /Statement 1: Holds up/ })
+    await user.click(chip)
+    expect(chip).toHaveAttribute("aria-expanded", "true")
+    const detail = scout.getByText("The statement").closest("dl")!
+    expect(detail).toHaveTextContent("The statementThe data has 12 samples")
+    expect(detail).toHaveTextContent('Whyquoted: "12 samples"')
+    expect(detail).toHaveTextContent("Checked bythe quick first check (practice: no model)")
+    expect(detail).toHaveTextContent("Sourcethe brief (the question and data the team was given)")
+    expect(within(detail).getByText("verified")).toBeInTheDocument() // the expert word, as the small second text
+    await user.click(chip)
+    expect(scout.queryByText("The statement")).toBeNull()
+  })
+  it("marks the moment a check proves a statement wrong, on the message and in the headline", async () => {
+    await open()
+    const critic = screen.getByRole("article", { name: "Critic" })
+    expect(critic).toHaveAttribute("data-wrong", "true")
+    expect(critic).toHaveTextContent("A check proved one statement here wrong.")
+    expect(within(critic).getByText("Proven wrong")).toBeInTheDocument()
+    expect(within(critic).getByText("Not enough evidence")).toBeInTheDocument()
+    expect(screen.getByRole("article", { name: "Scout" })).not.toHaveAttribute("data-wrong")
+    expect(screen.getByText(/One statement was proven wrong\./)).toBeInTheDocument()
   })
   it("says in one sentence what happened", async () => {
     await open()
-    await emit({ type: "run.finished", usd: 0, minutes: 1 })
+    await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
     expect(screen.getByText(/The team has decided\./)).toHaveTextContent("2 team members made 3 statements: 1 held up, 1 was proven wrong, 1 had too little evidence.")
+    expect(screen.getByRole("region", { name: "What happened" })).toHaveTextContent("took 9 seconds · cost nothing (practice run)")
+    expect(screen.getByRole("heading", { name: "KRAS" })).toBeInTheDocument() // the title is the question, not the run id
   })
   it("keeps everything a model wrote as text: no HTML, no script, no image, no link from its words", async () => {
     const { container } = await open()
     const critic = screen.getByRole("article", { name: "Critic" })
     expect(critic).toHaveTextContent('<img src=x onerror="window.__pwned=1">')
     expect(critic).toHaveTextContent("[click](javascript:alert(1))")
+    await userEvent.setup().click(within(critic).getByRole("button", { name: /Statement 2: Not enough evidence/ }))
+    expect(critic).toHaveTextContent("Sourcejavascript:alert(1)") // shown, as text
     expect(container.querySelector("img, script, iframe, object, embed")).toBeNull() // nothing is fetched from a model-supplied address
     expect((window as { __pwned?: number }).__pwned).toBeUndefined()
     const links = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))
     expect(links.every((href) => !/^\s*(javascript|data|vbscript):/i.test(href ?? ""))).toBe(true)
-    expect(within(critic).getByText("Source: javascript:alert(1)")).toBeInTheDocument() // shown, as text, not as a link
+  })
+})
+
+describe("the message line", () => {
+  it("is the reply's own \"In short\" sentence when it has one, and the rest is the full reply", () => {
+    expect(splitReply("In short: hold CMP-0517 until the heart-safety margin is fixed.\n\nThe hERG IC50 is 6 uM. That is too close.")).toEqual({
+      short: "hold CMP-0517 until the heart-safety margin is fixed.", rest: "The hERG IC50 is 6 uM. That is too close.", marked: true })
+    expect(splitReply("  in short - Yes.\nMore.").short).toBe("Yes.")
+    expect(splitReply("**In short:** Go ahead.\nWhy: x").short).toBe("Go ahead.")
+    render(<TeamMessage name="Critic" text={"In short: hold it.\n\nThe margin is 6 uM. I disagree with Scout."} />)
+    expect(screen.getByText("hold it.")).toHaveClass("thread-short")
+    const full = screen.getByText("Show full reply").closest("details")!
+    expect(full).toHaveTextContent("The margin is 6 uM. I disagree with Scout.")
+    expect(full).not.toHaveTextContent("In short")
+  })
+  it("is the first sentence when the reply has no such line, and never an empty bubble", () => {
+    expect(splitReply("The data is fine. Nothing is missing.")).toEqual({ short: "The data is fine.", rest: "The data is fine. Nothing is missing.", marked: false })
+    expect(splitReply("In short:\nThe data is fine.").short).toBe("The data is fine.") // the sentence may start on the next line
+    render(<TeamMessage name="Scout" text="   " />)
+    expect(screen.getByText("(This reply was empty.)")).toBeInTheDocument()
+  })
+  it("a reply with HTML in it is shown as text, in the line and in the full reply", () => {
+    const { container } = render(<TeamMessage name="Critic" text={'In short: <b onclick="x()">no</b> <img src=x onerror=alert(1)>.\n\n<script>alert(1)</script> <a href="javascript:alert(1)">x</a>'} />)
+    expect(screen.getByText('<b onclick="x()">no</b> <img src=x onerror=alert(1)>.')).toBeInTheDocument()
+    expect(container.querySelector("img, script, a, [onclick], .thread-short b, details b")).toBeNull()
+    expect(container).toHaveTextContent('<script>alert(1)</script> <a href="javascript:alert(1)">x</a>')
   })
 })
 
@@ -89,8 +141,8 @@ describe("pieces", () => {
     expect(safeUrl("data:text/html,<script>1</script>")).toBeUndefined()
     expect(safeUrl("brief")).toBeUndefined()
     expect(safeUrl("https://example.org/a")).toBe("https://example.org/a")
-    render(<ul><CheckedStatement verdict="verified" claim="c" source="https://example.org/a" /></ul>)
-    await userEvent.setup().click(screen.getByRole("button", { name: "Source" }))
+    render(<TeamMessage name="Scout" text="x" checks={[{ key: "k", verdict: "verified", claim: "c", source: "https://example.org/a" }]} />)
+    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1/ }))
     const link = screen.getByRole("link")
     expect(link).toHaveAttribute("href", "https://example.org/a")
     expect(link).toHaveAttribute("target", "_blank")
@@ -104,8 +156,25 @@ describe("pieces", () => {
   })
   it("a one-sentence reply is not repeated in a fold", () => {
     render(<TeamMessage name="Scout" text="All files are present." />)
-    expect(screen.getByText("In short").parentElement).toHaveTextContent("All files are present.")
-    expect(screen.queryByText("Read the full reply")).toBeNull()
+    expect(screen.getByText("All files are present.")).toBeInTheDocument()
+    expect(screen.queryByText("Show full reply")).toBeNull()
+  })
+  it("says numbers the way a person does", () => {
+    expect(plainDuration(9_000)).toBe("9 seconds")
+    expect(plainDuration(90_000)).toBe("1 minute 30 seconds")
+    expect(plainDuration(3_900_000)).toBe("1 hour 5 minutes")
+    expect(plainLimit(1800)).toBe("30-minute limit")
+    expect(plainCost(0, true)).toBe("cost nothing (practice run)")
+    expect(plainCost(1.25)).toBe("cost $1.25")
+    const now = new Date(2026, 10, 15, 18, 0)
+    expect(plainWhen(new Date(2026, 10, 15, 16, 51).getTime(), now)).toBe("today at 4:51 pm")
+    expect(plainWhen(new Date(2026, 10, 14, 9, 5).getTime(), now)).toBe("yesterday at 9:05 am")
+    expect(plainWhen(new Date(2026, 10, 2, 12, 0).getTime(), now)).toBe("2 Nov at 12:00 pm")
+    expect(plainTitle("202611150024-chat-should-we-advance-a-kras-g12c-hit-1060e203")).toBe("Should we advance a kras g12c hit")
+    expect(plainTitle("kras-g12c-hit-to-lead.md")).toBe("Kras g12c hit to lead")
+    expect(runTitle("Task demo · swarm · mock")).toBe("Team of nine on the demo task") // no bare "swarm" or "mock"
+    expect(runTitle("Task bix-12 · single · anthropic/claude-sonnet-5-5")).toBe("One agent alone on task bix-12 (anthropic/claude-sonnet-5-5)")
+    expect(runTitle("Drug board · chat should we advance")).toBe("Chat should we advance")
   })
 })
 
@@ -114,19 +183,21 @@ describe("when the engine answers with an error", () => {
     board({ "GET /api/roster": { status: 500, body: { error: 'agent "toxicologist" is not in the roster <b>now</b>' } } })
     const { container } = render(<BoardView />)
     const alert = await screen.findByRole("alert")
-    expect(alert).toHaveTextContent("The engine answered with an error")
+    expect(alert).toHaveTextContent("Something went wrong inside the app's engine")
+    expect(within(alert).getByText("Details").closest("details")).not.toHaveAttribute("open") // the engine's own text is kept, under Details
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument() // one clear action
     expect(alert).toHaveTextContent('agent "toxicologist" is not in the roster <b>now</b> (HTTP 500)')
     expect(alert).toHaveTextContent("The engine is running")
-    expect(alert).not.toHaveTextContent("Engine not running")
-    expect(alert).not.toHaveTextContent("npm run engine")
+    expect(alert).not.toHaveTextContent("engine isn't running")
     expect(container.querySelector("b")).toBeNull()
   })
   it("still says the engine is not running when it cannot be reached at all", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))))
     render(<BoardView />)
     const alert = await screen.findByRole("alert")
-    expect(alert).toHaveTextContent("Engine not running")
-    expect(alert).toHaveTextContent("npm run engine")
+    expect(alert).toHaveTextContent("The app's engine isn't running")
+    expect(alert).toHaveTextContent("Start it with: npm start")
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument()
   })
   it("an error without a message still gives the status", async () => {
     board({ "GET /api/status": { status: 502, body: "bad gateway" } })

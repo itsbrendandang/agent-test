@@ -29,7 +29,7 @@ from bixbench3 import glhf_local
 from bixbench3.inspect_harness import tasks
 from bixbench3.inspect_harness.models import ExpectedOutput
 from bixbench3.inspect_harness.swarm import memory, roles, tools
-from bixbench3.inspect_harness.swarm.ledger import Ledger
+from bixbench3.inspect_harness.swarm.ledger import Ledger, Relevance, Run
 
 DEMO_CASE = Path(__file__).parents[3] / "demo_case"
 
@@ -99,6 +99,16 @@ def _real_ledger() -> Ledger:
     ledger.add_claim("The first pass is complete.", ["gene_counts"], "It is not.", "planner")
     ledger.log("settings", memory_source=None)
     return ledger
+
+
+def _harness_test(ledger: Ledger, claim_id: str, name: str, p: float) -> None:
+    """A registered script, judged relevant, run by the harness: how a result gets in."""
+    ledger.register_test(
+        claim_id, name, "method", "critic", script_path="/workspace/t.py", script=f"# {name}\n"
+    )
+    ledger.judge_relevance(claim_id, name, Relevance(1.0, True, "bears on the claim"))
+    digest = ledger.claims[claim_id].registered[-1].script_sha256
+    ledger.record_run(claim_id, name, Run("ok", ["python3", "-"], 0, 0.1, "", digest, p, False))
 
 
 def _replay(
@@ -400,6 +410,7 @@ def test_the_scripted_model_answers_by_role_not_by_position() -> None:
         "reviser",
         "finisher",
         "reporter",
+        "relevance",
     }
     answer = glhf_local.by_role(script)
 
@@ -443,8 +454,7 @@ def test_the_flat_script_is_the_role_script_in_play_order() -> None:
 def test_a_recorded_test_does_not_claim_a_verdict_that_can_go_stale() -> None:
     ledger = Ledger()
     claim = ledger.add_claim("effect present", ["degs"], "effect absent", "planner")
-    ledger.register_test(claim.id, "perm", "permute labels", "critic")
-    ledger.record_test(claim.id, "perm", 0.0025, False, "", "critic")
+    _harness_test(ledger, claim.id, "perm", 0.0025)
     event = ledger.events[-1]
     assert event["kind"] == "test.recorded" and "verdict" not in event
     assert event["verdict_at_the_time"] == "supported"

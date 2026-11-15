@@ -14,7 +14,7 @@ import pytest
 from inspect_ai.agent import AgentState
 
 from bixbench3.inspect_harness.models import ExpectedOutput, NetworkAccessPolicy
-from bixbench3.inspect_harness.swarm import memory, past_memory, solver
+from bixbench3.inspect_harness.swarm import memory, past_memory, solver, tools
 from bixbench3.inspect_harness.swarm.ledger import Ledger
 
 OK = [{"artifact_id": "degs", "path": "/outputs/degs.csv", "problems": [], "warnings": []}]
@@ -41,6 +41,23 @@ class World:
         self.calls: list[str] = []  # the order of what happened: "run:<role>", "kill", "persist"
         self.persisted: list[dict[str, Any]] = []  # the ledger each time the trusted copy is kept
         self.jobs: list[dict[str, Any]] = []  # background processes the sandbox reports
+        # What a role does during its turn (a role's turns in order), e.g. register a test.
+        self.acts: dict[str, list[Any]] = {}
+        self.tokens = 0  # tokens the sample has used
+        self.token_spend: dict[str, int] = {}  # tokens a role's turn costs
+        # The relevance judge: every request it was sent, and how it answers.
+        self.judge_requests: list[str] = []
+        self.judge: Any = lambda text: (
+            "\n".join(
+                f"T{n} score=1.0 reason=bears on it" for n in range(1, text.count("=== T") + 1)
+            ),
+            None,
+        )
+        self.judge_seconds = 0.0
+        # The harness's runs of registered tests: (command, options), and what a run prints.
+        self.test_runs: list[tuple[list[str], dict[str, Any]]] = []
+        self.test_output = "GLHF_RESULT p_value=0.0004 contradicts=false\n"
+        self.test_seconds = 1.0
         self.ledger = Ledger()
         self.case = SimpleNamespace(
             task_id="5",
@@ -57,7 +74,14 @@ class World:
         world = self
 
         class Box:
-            async def exec(self, cmd: list[str], **_: object) -> SimpleNamespace:
+            async def exec(self, cmd: list[str], **options: Any) -> SimpleNamespace:
+                if "input" in options:  # the harness running a registered test script
+                    world.test_runs.append((cmd, options))
+                    world.calls.append("test")
+                    world.now += world.test_seconds
+                    return SimpleNamespace(
+                        success=True, returncode=0, stdout=world.test_output, stderr=""
+                    )
                 found = cmd[:2] != ["test", "-s"] or cmd[2] in world.files
                 return SimpleNamespace(success=found, stdout="", stderr="")
 
@@ -101,8 +125,17 @@ class World:
                 SimpleNamespace(role=who.name, prompt=prompt, limits=dict(limits), at=at)
             )
             world.calls.append(f"run:{who.name}")
+            world.tokens += world.token_spend.get(who.name, 0)
+            if world.acts.get(who.name):
+                world.acts[who.name].pop(0)(world)
             error = SimpleNamespace(type="time") if who.name in world.cut else None
             return AgentState(messages=[]), error
+
+        async def ask(model: object, text: str, max_tokens: int, seconds: int) -> Any:
+            world.judge_requests.append(text)
+            world.calls.append("judge")
+            world.now += world.judge_seconds
+            return world.judge(text)
 
         def search_docs(*args: object) -> tuple[Any, ...]:
             world.searches.append(args)
@@ -121,7 +154,7 @@ class World:
             "search_docs": search_docs,
             "Ledger": lambda: world.ledger,
             "time": SimpleNamespace(monotonic=lambda: world.now),
-            "sample_limits": lambda: SimpleNamespace(token=SimpleNamespace(usage=0)),
+            "sample_limits": lambda: SimpleNamespace(token=SimpleNamespace(usage=world.tokens)),
             "time_limit": lambda n: ("time", n),
             "message_limit": lambda n: ("message", n),
             "token_limit": lambda n: ("token", n),
@@ -131,6 +164,10 @@ class World:
             "request_web_access": lambda: "request_web_access",
         }.items():
             monkeypatch.setattr(solver, name, fake)
+        monkeypatch.setattr(solver.relevance, "ask", ask)
+        # The real harness runner (tools.run_registered_test) on the fake sandbox and clock.
+        monkeypatch.setattr(tools, "sandbox", lambda: Box())
+        monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: world.now))
         monkeypatch.delenv("PAST_API_KEY", raising=False)
         monkeypatch.delenv("EXA_API_KEY", raising=False)
 
@@ -200,18 +237,18 @@ def test_review_never_spends_the_finisher_reserve_S19_S27(world: World) -> None:
 
 
 def test_the_phases_before_review_leave_room_for_one_round(world: World) -> None:
-    # A 26-minute run where every early role is cut off at the end of its slice and uses its
+    # A 28-minute run where every early role is cut off at the end of its slice and uses its
     # forced final turn too. The floors of the early phases used to leave the review floors
-    # only (255 s here), which is less than the phases before review must leave
-    # (REVIEW_MARGIN x min_review_seconds = 272 s): on a short run review was planned and
+    # only (275 s), which is less than the phases before review must leave
+    # (REVIEW_MARGIN x min_review_seconds = 297 s here): on a short run review was planned and
     # never started.
     world.default_spend = None
     world.cut = {"scout", "planner", "pilot", "experimenter"}
-    world.solve(budget_seconds=1560)
-    budget = 1560 * (1 - solver.RUN_MARGIN)
+    world.solve(budget_seconds=1700)
+    budget = 1700 * (1 - solver.RUN_MARGIN)
     plan = world.events("budget.plan")[0]
     assert plan["mode"] == "full" and world.events("review.skipped") == []
-    assert world.started["experiment"] == 565  # 583 with the review floors alone
+    assert world.started["experiment"] == 670  # 689 with the review floors alone
     auditor = next(r for r in world.runs if r.role == "auditor")
     left_for_review = budget - auditor.at - sum(plan["time_reserves"].values())
     assert left_for_review >= solver.REVIEW_MARGIN * solver.min_review_seconds(budget) - 1
@@ -419,3 +456,261 @@ def test_the_reporter_writes_lessons_only_when_memory_is_on_S37(
     world.ledger = Ledger()
     world.solve(budget_seconds=1800, memory_dir=str(tmp_path))
     assert solver.roles.LESSONS in world.agents["reporter"].prompt
+
+
+# --- falsification tests: registered scripts, the relevance judge, the harness's run --------------
+def _claim(world: World) -> None:
+    world.ledger.add_claim(
+        "C10 lowers REST targets", ["degs"], "no change in REST targets", "planner"
+    )
+
+
+def _registers(name: str = "permutation", claim: str = "C1", suffix: str = ".py") -> Any:
+    """A critic's turn: write a test script and register it (what the tool does)."""
+
+    def act(world: World) -> None:
+        path = f"{solver.WORK}/tests/{name.replace(' ', '_')}{suffix}"
+        world.files[path] = f"# {name}\nprint('GLHF_RESULT p_value=0.0004 contradicts=false')\n"
+        world.ledger.register_test(
+            claim,
+            name,
+            "permute the condition labels 10000 times",
+            "critic",
+            script_path=path,
+            script=world.files[path],
+            test_null="the labels do not matter",
+        )
+
+    return act
+
+
+def test_a_registered_test_is_judged_then_run_by_the_harness_and_no_role_types_a_result(
+    world: World,
+) -> None:
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.solve(budget_seconds=1800)
+    claim = world.ledger.claims["C1"]
+    assert claim.verdict == "supported" and claim.e_value == 25.0
+    # Order: the critic's turn, then the judge, then the harness's run. Nothing in between.
+    turn = world.calls.index("run:critic")
+    assert world.calls[turn + 1 : turn + 3] == ["judge", "test"]
+    kinds = [e["kind"] for e in world.ledger.events]
+    assert (
+        kinds.index("test.registered")
+        < kinds.index("test.relevance")
+        < kinds.index("test.executed")
+        < kinds.index("test.recorded")
+    )
+    # The harness ran the registered content itself, in the work folder, with a time limit.
+    [(command, options)] = world.test_runs
+    entry = claim.registered[0]
+    assert command == ["python3", "-"] and options["input"] == entry.script
+    assert options["cwd"] == solver.WORK and 10 <= options["timeout"] <= tools.TEST_SECONDS
+    assert entry.run is not None and entry.run.status == "ok" and entry.run.seconds == 1.0
+    assert (claim.tests[0].source, claim.tests[0].by) == ("harness", "harness")
+    # The judge is a review phase of its own in the ledger, with its own budget line.
+    assert "relevance 1" in world.started
+    relevance_grant = next(e for e in world.events("budget.grant") if e["phase"] == "relevance 1")
+    assert relevance_grant["seconds_floor"] == 20 and relevance_grant["handoff_seconds"] == 0
+
+
+def test_the_judge_is_shown_the_registration_and_nothing_else(world: World) -> None:
+    def earlier_results(w: World) -> None:
+        _registers("first test")(w)
+        w.ledger.raise_issue(
+            "major", ["degs"], "SECRET-ISSUE the contrast is reversed", "e", "critic"
+        )
+
+    world.acts = {
+        "planner": [_claim],
+        "experimenter": [
+            lambda w: w.files.__setitem__(f"{solver.WORK}/notebook.md", "SECRET-REASONING")
+        ],
+        "critic": [earlier_results],
+    }
+    world.test_output = "SECRET-OUTPUT\nGLHF_RESULT p_value=0.0004 contradicts=false\n"
+    world.solve(budget_seconds=1800)
+    [request] = world.judge_requests
+    assert "C10 lowers REST targets" in request and "no change in REST targets" in request
+    assert "permute the condition labels 10000 times" in request
+    assert "the labels do not matter" in request and "# first test" in request
+    for hidden in ("SECRET", "verdict", "mean e", "I1", "notebook"):
+        assert hidden not in request, hidden
+    assert "None has been run" in request
+
+
+def test_an_irrelevant_test_is_run_and_recorded_and_is_refused_as_support(world: World) -> None:
+    world.acts = {"planner": [_claim], "critic": [_registers("positive control")]}
+    world.judge = lambda text: (
+        "T1 score=0.2 reason=A control that passes whatever the claim.",
+        None,
+    )
+    world.solve(budget_seconds=1800)
+    claim = world.ledger.claims["C1"]
+    assert len(world.test_runs) == 1  # it was still run
+    assert claim.tests[0].p_value == 0.0004 and claim.tests[0].counts is False
+    assert claim.verdict == "insufficient" and claim.e_value == 0.0
+    judged = world.events("test.relevance")[0]
+    assert (judged["score"], judged["relevant"], judged["threshold"]) == (0.2, False, 0.8)
+    assert "Supported findings (0)" in world.files["/outputs/glhf/FINDINGS.md"]
+
+
+def test_a_test_the_judge_did_not_rate_is_not_relevant(world: World) -> None:
+    def two(w: World) -> None:
+        _registers("permutation")(w)
+        _registers("held-out replicate")(w)
+
+    world.acts = {"planner": [_claim], "critic": [two]}
+    world.judge = lambda text: ("T2 score=1.0 reason=fine", None)  # no line for T1
+    world.solve(budget_seconds=1800)
+    first, second = world.ledger.claims["C1"].registered
+    assert first.relevance is not None and first.relevance.score is None
+    assert first.relevance.relevant is False and second.relevance is not None
+    assert second.relevance.relevant is True
+    # The unrated test stays in the mean as zero: (0 + 25) / 2.
+    assert world.ledger.claims["C1"].e_value == 12.5
+    assert len(world.test_runs) == 2
+
+
+def test_without_a_judgement_a_test_is_not_run_and_cannot_support(world: World) -> None:
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.judge = lambda text: ("", "time")  # the judge gave no answer
+    world.solve(budget_seconds=1800)
+    claim = world.ledger.claims["C1"]
+    assert world.test_runs == [] and claim.registered[0].relevance is None
+    assert claim.verdict == "untested" and claim.pending == ["permutation"]
+    failed = world.events("relevance.failed")[0]
+    assert failed["reason"] == "time" and failed["tests"] == ["C1/permutation"]
+    assert "not judged for relevance" in world.files["/outputs/glhf/FINDINGS.md"]
+
+
+def test_a_test_left_unjudged_is_asked_about_again_in_the_next_round(world: World) -> None:
+    answers = [("", "connection lost"), ("T1 score=1.0 reason=fine", None)]
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.judge = lambda text: answers.pop(0)
+    world.cut = {"critic"}  # cut off with nothing raised: the review goes another round
+    world.solve(budget_seconds=3600)
+    assert len(world.judge_requests) == 2 and len(world.test_runs) == 1
+    assert world.ledger.claims["C1"].verdict == "supported"
+    assert [p for p in world.started if p.startswith("relevance")] == ["relevance 1", "relevance 2"]
+
+
+def test_the_judge_is_not_called_when_nothing_is_waiting_or_the_critic_did_not_run(
+    world: World,
+) -> None:
+    world.acts = {"planner": [_claim]}
+    world.solve(budget_seconds=1800)  # the critic registers nothing
+    assert world.judge_requests == [] and "relevance 1" not in world.started
+    assert world.events("relevance.skipped") == []
+
+
+def test_the_judge_is_paid_from_the_review_share_and_skipped_below_its_floor(world: World) -> None:
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.solve(budget_seconds=1800, max_tokens=1_000_000)
+    grant = next(e for e in world.events("budget.grant") if e["phase"] == "relevance 1")
+    assert grant["floor"] == 10_000 and grant["tokens"] == 20_000  # 2% of max_tokens
+    assert solver.TOKEN_SHARE["relevance"] == 0.02 and solver.RELEVANCE_SHARE == 0.05
+    plan = world.events("budget.plan")[0]
+    assert plan["token_floors"]["relevance"] == 10_000 and plan["time_floors"]["relevance"] == 20
+    assert len(world.test_runs) == 1
+
+    # The critic passes its limit by so much that the judge's floor is gone: the judge is
+    # skipped, the ledger says so, the test is not run, and the reporter still runs.
+    world.ledger = Ledger()
+    world.tokens, world.test_runs, world.judge_requests, world.runs = 0, [], [], []
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.token_spend = {"critic": 900_000}
+    world.solve(budget_seconds=1800, max_tokens=1_000_000)
+    skipped = [(e["phase"], e["reason"]) for e in world.events("phase.skipped")]
+    assert ("relevance 1", "below_floor") in skipped
+    note = world.events("relevance.skipped")[0]
+    assert note["tests"] == ["C1/permutation"] and "cannot support" in note["note"]
+    assert world.judge_requests == [] and world.test_runs == []
+    assert world.ledger.claims["C1"].verdict == "untested"
+    assert "reporter" in [r.role for r in world.runs]
+
+
+def test_a_plan_without_review_has_no_judge_and_the_critique_leaves_it_its_floor() -> None:
+    full = solver.plan_budget(1_000_000, 86_400)
+    assert full.phases.index("critique") + 1 == full.phases.index("relevance")
+    assert "relevance" in solver.REVIEW_KINDS and solver.NEEDS["relevance"].seconds == 20
+    lean = solver.plan_budget(450_000, 86_400)
+    assert lean.mode == "lean" and "relevance" in lean.phases  # the judge is kept with the critic
+    for tokens in (300_000, 200_000, 100_000, 10_000):
+        plan = solver.plan_budget(tokens, 86_400)
+        assert ("critique" in plan.phases) == ("relevance" in plan.phases), plan.mode
+    # In every round the critique may not spend the judge's floor, in tokens or in seconds.
+    owed = solver.Owed.of(full)
+    for kind in solver.PHASE_ORDER[:-2]:
+        owed.start(kind)
+    later = owed.start("critique")  # round 2
+    assert later == ["relevance"]
+    book = solver.TokenBook(full)
+    book.used = 700_000
+    grant = book.grant("critique 2", later)
+    assert grant.protected == full.token_floors["relevance"] + sum(full.reserves.values())
+    short = solver.plan_budget(None, 1746)
+    without = solver.seconds_for(short, "critique 2", 1100, [])
+    assert solver.seconds_for(short, "critique 2", 1100, later) == min(
+        without, 1746 - 1100 - 387 - 20
+    )
+
+
+def test_the_tests_run_on_review_time_only_and_one_without_time_is_not_started(
+    world: World,
+) -> None:
+    def three(w: World) -> None:
+        for name in ("a", "b", "c"):
+            _registers(name)(w)
+
+    world.acts = {"planner": [_claim], "critic": [three]}
+    world.test_seconds = 40.0
+    world.solve(budget_seconds=1800)
+    budget = 1800 * (1 - solver.RUN_MARGIN)
+    hold = 300 + 87  # the finisher's and the reporter's reserves
+    # Each test may use half of the review time then left, shared with the tests still
+    # waiting, and never more than TEST_SECONDS.
+    timeouts = [options["timeout"] for _, options in world.test_runs]
+    assert len(timeouts) == 3 and all(10 <= t <= tools.TEST_SECONDS for t in timeouts)
+    assert timeouts[0] == int(min(300, (budget - hold) * solver.EXECUTE_SHARE / 3))
+    assert solver.EXECUTE_SHARE == 0.5 and tools.TEST_SECONDS == 300
+
+    # The judge answers so late that less than 10 s per test is left: none is started, each is
+    # logged, and nothing was taken from the reserves.
+    world.ledger = Ledger()
+    world.test_runs, world.runs = [], []
+    world.now = world.t0
+    world.acts = {"planner": [_claim], "critic": [three]}
+    world.judge_seconds = budget - hold - 15  # 15 s of review time left after the judge
+    world.solve(budget_seconds=1800)
+    assert world.test_runs == []
+    not_run = world.events("test.not_run")
+    assert [e["name"] for e in not_run] == ["a", "b", "c"] and not_run[0]["reason"] == "time"
+    assert world.ledger.claims["C1"].pending == ["a", "b", "c"]
+    assert world.started["report"] >= 87
+
+
+@pytest.mark.parametrize(
+    ("planner", "critic", "judge", "same"),
+    [
+        ("openai/gpt-x", "openai/gpt-y", None, True),
+        ("openai/gpt-x", "anthropic/claude-z", None, False),
+        ("openai/gpt-x", "openai/gpt-y", "google/gemini-q", False),
+        (None, None, None, True),  # everything on the default model
+    ],
+)
+def test_the_run_records_whether_the_judge_is_on_the_proposer_s_vendor(
+    world: World, planner: str | None, critic: str | None, judge: str | None, same: bool
+) -> None:
+    world.acts = {"planner": [_claim], "critic": [_registers()]}
+    world.solve(
+        budget_seconds=1800, planner_model=planner, critic_model=critic, relevance_model=judge
+    )
+    setting = world.events("settings")[0]["relevance"]
+    assert setting["same_vendor_as_proposer"] is same and setting["threshold"] == 0.8
+    assert setting["judge_model"] == (judge or critic or "model")
+    assert setting["proposer_model"] == (planner or "model")
+    entry = world.events("test.relevance")[0]
+    assert entry["same_vendor_as_proposer"] is same
+    assert entry["judge_model"] == setting["judge_model"]
+    assert world.events("settings")[0]["role_models"]["relevance"] == setting["judge_model"]

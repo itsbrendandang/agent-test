@@ -7,7 +7,7 @@ import pytest
 import common
 from conftest import FIXTURES
 
-TOKEN = common.UA_TOKEN
+OUR_NAME = common.UA_NAME
 
 
 def robots(host):
@@ -16,30 +16,30 @@ def robots(host):
 
 def test_zenodo_api_is_disallowed_but_records_are_not():
     rules = robots("zenodo.org")
-    assert not rules.allowed(TOKEN, "https://zenodo.org/api/records?q=chembl")
-    assert rules.allowed(TOKEN, "https://zenodo.org/records/7711952")
-    assert rules.allowed(TOKEN, "https://zenodo.org/api/records/7711952/files")  # the longer Allow rule wins
-    assert not rules.allowed(TOKEN, "https://zenodo.org/records/7711952/preview/x.csv")  # wildcard rule
-    assert rules.crawl_delay(TOKEN) == 10
+    assert not rules.allowed(OUR_NAME, "https://zenodo.org/api/records?q=chembl")
+    assert rules.allowed(OUR_NAME, "https://zenodo.org/records/7711952")
+    assert rules.allowed(OUR_NAME, "https://zenodo.org/api/records/7711952/files")  # the longer Allow rule wins
+    assert not rules.allowed(OUR_NAME, "https://zenodo.org/records/7711952/preview/x.csv")  # wildcard rule
+    assert rules.crawl_delay(OUR_NAME) == 10
 
 
 def test_api_paths_that_robots_disallows():
-    assert not robots("clinicaltrials.gov").allowed(TOKEN, "https://clinicaltrials.gov/api/v2/studies")
-    assert robots("clinicaltrials.gov").allowed(TOKEN, "https://clinicaltrials.gov/api/int/studies")
-    assert robots("clinicaltrials.gov").allowed(TOKEN, "https://clinicaltrials.gov/about-site/terms-conditions")
-    assert not robots("gtexportal.org").allowed(TOKEN, "https://gtexportal.org/api/v2/dataset/tissueSiteDetail")
+    assert not robots("clinicaltrials.gov").allowed(OUR_NAME, "https://clinicaltrials.gov/api/v2/studies")
+    assert robots("clinicaltrials.gov").allowed(OUR_NAME, "https://clinicaltrials.gov/api/int/studies")
+    assert robots("clinicaltrials.gov").allowed(OUR_NAME, "https://clinicaltrials.gov/about-site/terms-conditions")
+    assert not robots("gtexportal.org").allowed(OUR_NAME, "https://gtexportal.org/api/v2/dataset/tissueSiteDetail")
     assert robots("gtexportal.org").allowed("googlebot", "https://gtexportal.org/home/")  # a named group
 
 
 def test_crawl_delay_is_read_and_never_shortened():
-    assert robots("depmap.org").crawl_delay(TOKEN) == 500
+    assert robots("depmap.org").crawl_delay(OUR_NAME) == 500
     assert common.MAX_CRAWL_DELAY >= 500
 
 
 def test_ai_agent_groups_are_obeyed(monkeypatch):
     rules = robots("www.openml.org")
     url = "https://www.openml.org/api/v1/json/data/list"
-    assert rules.allowed(TOKEN, url)  # the "*" group allows it
+    assert rules.allowed(OUR_NAME, url)  # the "*" group allows it
     assert not rules.allowed("claudebot", url) and not rules.allowed("anthropic-ai", url)
     common._ROBOTS["https://www.openml.org"] = rules
     monkeypatch.delenv("DATASET_SCOUT_OPERATOR", raising=False)
@@ -58,9 +58,9 @@ def test_robots_matching_rules():
     assert not rules.allowed("otherbot", "https://x/private/a") and rules.allowed("otherbot", "https://x/private/open/a")
     assert not rules.allowed("otherbot", "https://x/files/a.zip") and rules.allowed("otherbot", "https://x/files/a.zip.txt")
     # a group for our own name replaces the "*" group
-    assert rules.allowed(TOKEN, "https://x/private/a") and not rules.allowed(TOKEN, "https://x/only-us/a")
-    assert rules.allowed(TOKEN, "https://x/robots.txt")
-    assert common.Robots("").allowed(TOKEN, "https://x/anything")
+    assert rules.allowed(OUR_NAME, "https://x/private/a") and not rules.allowed(OUR_NAME, "https://x/only-us/a")
+    assert rules.allowed(OUR_NAME, "https://x/robots.txt")
+    assert common.Robots("").allowed(OUR_NAME, "https://x/anything")
 
 
 def test_no_host_is_exempt_from_robots():
@@ -95,7 +95,7 @@ def test_cache_is_used_before_the_network(tmp_path):
 
 
 def test_user_agent_names_the_tool_and_carries_no_secret():
-    assert common.UA.startswith(common.UA_TOKEN + "/") and "http" in common.UA
+    assert common.UA.startswith(common.UA_NAME + "/") and "http" in common.UA
     send = {"User-Agent": common.UA}
     assert "authorization" not in {k.lower() for k in send}
 

@@ -537,7 +537,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
         save()
         return { output: [{ type: "text", text: out.refused }] }
       }
-      const provider: SearchProvider = mock ? "fixture" : "exa" // shown in the app as the source of the evidence: Exa for a live search, fixture for a practice run's example sources
+      const provider = providerOf(mock) // shown in the app as the source of the evidence: Exa for a live search, fixture for a practice run's example sources
       const found = { ...(out.result as SearchResult), items: (out.result as SearchResult).items.map((i) => ({ ...i, provider })) }
       // A result already in the pool, or already dropped for this key question, is not screened (and paid for) again.
       const dropKey = (url: string) => createHash("sha1").update(`${url}\n${args.key_question}`).digest("hex").slice(0, 16)
@@ -711,6 +711,9 @@ export function overLimit(config: BoardConfig, rounds: number, startedAt: number
   if (reserve > 0 && usd + reserve >= config.meeting.max_usd) return { reason: "budget" as const, detail: `$${usd.toFixed(2)} spent, and another round is expected to cost about $${reserve.toFixed(2)}, which would pass the $${config.meeting.max_usd} cap` }
   return undefined
 }
+
+/** Where a run's sources come from, for the label "Search powered by Exa": a live search is exa, a practice run's example sources are fixture. */
+export const providerOf = (mock: boolean): SearchProvider => (mock ? "fixture" : "exa")
 
 /** The members that can search first, then the rest; one phase when there is no such member or nobody else. */
 export function replyPhases(roster: AgentDef[]): AgentDef[][] {

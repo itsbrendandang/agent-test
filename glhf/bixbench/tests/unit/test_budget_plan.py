@@ -68,7 +68,7 @@ def test_the_old_fixed_shares_would_have_starved_the_review() -> None:
     # 1,000,000 tokens, every phase spending its full share: before, the experimenter could take
     # all but the report's 10%, and audit, critique and revise got 0. Now each has its floor.
     rows = _rows(solver.plan_budget(1_000_000, HALF_HOUR))
-    assert rows["experiment"]["tokens"] == 350_000
+    assert rows["experiment"]["tokens"] == 340_000  # 350,000 before the relevance judge's floor
     assert (rows["audit"]["tokens"], rows["critique"]["tokens"], rows["revise"]["tokens"]) == (
         40_000,
         80_000,
@@ -108,19 +108,19 @@ def test_a_phase_may_not_spend_the_floors_of_the_phases_still_owed() -> None:
     for kind in ("scout", "propose", "pilot"):
         owed.start(kind)
     later = owed.start("experiment")
-    assert later == ["audit", "critique", "revise"]
+    assert later == ["audit", "critique", "relevance", "revise"]
     grant = book.grant("experiment", later)
     floors = sum(plan.token_floors[k] for k in later)
     assert grant.protected == floors + sum(plan.reserves.values())
-    assert grant.tokens == 1_000_000 - 280_000 - grant.protected == 350_000
+    assert grant.tokens == 1_000_000 - 280_000 - grant.protected == 340_000
     # Time: the same rule.
     seconds = solver.seconds_for(plan, "experiment", DAY * 0.5, later)
     held = sum(plan.time_reserves.values()) + sum(plan.time_floors[k] for k in later)
     assert seconds <= DAY * 0.5 - held
     # A 30-minute run whose early roles ran late: the experimenter gets what is left before
-    # the review's floors (45 + 120 + 90 s) and the reserves (300 + 87 s), not all of it.
+    # the review's floors (45 + 120 + 20 + 90 s) and the reserves (300 + 87 s), not all of it.
     short = solver.plan_budget(None, HALF_HOUR)
-    assert solver.seconds_for(short, "experiment", 1000, later) == 1746 - 1000 - 255 - 387
+    assert solver.seconds_for(short, "experiment", 1000, later) == 1746 - 1000 - 275 - 387
     assert solver.seconds_for(short, "audit 1", 1300, ["critique", "revise"]) == 0  # skipped
     assert solver.seconds_for(short, "critique 1", 1100, ["revise"]) == 120  # its floor
 
@@ -130,7 +130,11 @@ def test_an_audit_never_starves_its_critique_in_any_round() -> None:
     owed = solver.Owed.of(plan)
     for kind in ("scout", "propose", "pilot", "experiment", "audit", "critique", "revise"):
         owed.start(kind)
-    assert owed.start("audit") == ["critique"]  # round 2: nothing is owed, the critique still is
+    for kind in ("relevance",):
+        owed.start(kind)
+    # Round 2: nothing is owed, but the critique and the relevance judgement still are.
+    assert owed.start("audit") == ["critique", "relevance"]
+    assert owed.start("critique") == ["relevance"]
     book = solver.TokenBook(plan)
     book.used = 700_000  # 110,000 left before the reserves: not enough for audit and critique
     assert book.grant("audit 2", ["critique"]).skip == "below_floor"
@@ -252,8 +256,8 @@ def test_a_plan_that_cannot_cover_the_review_drops_pilot_and_audit_first() -> No
     plan = solver.plan_budget(450_000, DAY)
     assert plan.mode == "lean" and plan.skipped == ("pilot", "audit")
     assert plan.degraded and plan.limited_by == ("tokens",)
-    assert "450,000 < 557,500 tokens" in plan.reason  # the numbers, not only the verdict
-    assert plan.needed["full"]["tokens"] == 557_500
+    assert "450,000 < 567,500 tokens" in plan.reason  # the numbers, not only the verdict
+    assert plan.needed["full"]["tokens"] == 567_500
     # The experimenter is not starved to keep the supporting roles: it gets more than its floor.
     assert _rows(plan)["experiment"]["tokens"] > plan.token_floors["experiment"]
     event = plan.event()
@@ -419,7 +423,7 @@ def test_a_reviewer_gets_the_facts_of_a_cut_off_role_but_not_its_words() -> None
 def test_roles_are_told_which_phases_a_reduced_plan_skipped() -> None:
     plan = solver.plan_budget(450_000, DAY)
     text = roles.degraded(plan.mode, list(plan.skipped), plan.reason)
-    assert "pilot, audit" in text and "450,000 < 557,500" in text and "deviations.md" in text
+    assert "pilot, audit" in text and "450,000 < 567,500" in text and "deviations.md" in text
 
 
 # --- Rule 4: the run always ends with a METHODS.md ----------------------------------------------

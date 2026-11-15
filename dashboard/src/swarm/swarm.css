@@ -128,3 +128,7 @@
 .swarm-steps li[data-step="now"] { border-color: var(--ink); font-weight: 600; }
 .swarm-steps li[data-step="now"] .swarm-step { color: var(--text); }
 .swarm-steps li[data-step="done"] .swarm-step { color: #0d5f37; }
+.swarm-story { display: flex; flex-direction: column; gap: 12px; }
+.swarm-story .swarm-result { align-items: flex-start; text-align: left; }
+.swarm-status.swarm-story > * { align-self: stretch; }
+.swarm-story .board-bar { justify-content: flex-start; }

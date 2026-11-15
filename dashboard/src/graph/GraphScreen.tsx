@@ -11,8 +11,8 @@ import { GraphList } from "./GraphList"
 import { FullKey, Key } from "./Legend"
 import { buildBoardGraph, buildSwarmGraph, statsOf } from "./model"
 import { NodePanel } from "./NodePanel"
-import { narration, Scrubber, stepMs } from "./Scrubber"
-import { headline } from "./story"
+import { Scrubber } from "./Scrubber"
+import { headline, narration, replaySeconds } from "./story"
 import { GLYPH, LINK_KINDS, MAX_NODES, NODE_KINDS, QUIET_LINKS, VERDICT_CLASSES, type GraphModel, type LinkKind, type NodeKind, type Outcome } from "./types"
 import { applyView, byAttention, capGraph, countVerdicts, layoutView, neighbourMap, reveal, searchNodes } from "./view"
 import { KIND_WHAT, kindLabel, LINK_VERB } from "./words"
@@ -162,14 +162,14 @@ export function GraphScreen() {
           {status && status !== "done" && <span className="pill" data-kind={status === "failed" ? "danger" : "info"}>{status === "running" ? "running: the picture grows as events arrive" : status}</span>}
         </div>
         {full && <p className="graph-headline" role="status" data-testid="headline">{said}</p>}
-        {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), contradicted and refuted first.</p>}
+        {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), those proven wrong first. The headline above still counts the whole run.</p>}
         {full && full.maxOrder > 0 && (
           <div className="graph-row graph-play">
             <button type="button" className="btn btn-primary graph-playbtn" onClick={play} aria-pressed={playing}>
               {playing ? "❚❚ Pause" : step === null ? (reduced ? "Step through how this unfolded" : "▶ Watch how this unfolded") : "▶ Continue"}
             </button>
             {step !== null && <span className="muted small">Step {step} of {full.maxOrder}</span>}
-            {step === null && <span className="muted small">{reduced ? "Press the arrows under the picture to move one step at a time." : `The statements appear in the order they were made, about ${Math.max(5, Math.round((full.maxOrder * stepMs(full.maxOrder)) / 1000))} seconds.`}</span>}
+            {step === null && <span className="muted small">{reduced ? "Press the arrows under the picture to move one step at a time." : `The statements appear in the order they were made, about ${replaySeconds(full.maxOrder)} seconds.`}</span>}
           </div>
         )}
       </section>

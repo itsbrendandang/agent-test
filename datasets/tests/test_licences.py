@@ -84,6 +84,34 @@ def test_a_hedged_sentence_is_not_read_as_a_licence(raw):
     assert not got.spdx and got.commercial_use == "unclear"
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "CC BY 4.0 as stated by ARCHS4, limited on the same page to non-commercial use (commercial use needs a licence)",
+        "CC BY 4.0 as stated by the Hub, with added limits: no commercial redistribution or marketing use",
+        "CC BY 4.0 for the code",
+        "https://creativecommons.org/licenses/by/4.0/ applies to text only",
+        "MIT for the scripts, data from third parties",
+    ],
+)
+def test_a_licence_name_with_extra_words_is_kept_as_written(raw):
+    # These once came out as CC-BY-4.0 or CC-BY-NC-4.0. A qualified statement is not that licence.
+    got = normalise(raw)
+    assert (got.id, got.spdx, got.commercial_use) == (raw, False, "unclear")
+
+
+def test_plain_statements_with_filler_words_are_still_read():
+    assert normalise("This dataset is licensed under a Creative Commons Attribution 4.0 International License").id == "CC-BY-4.0"
+    assert normalise("CC-BY 4.0 See https://github.com/x/y/blob/main/LICENSE").id == "CC-BY-4.0"
+    assert normalise("Creative Commons Attribution 4.0 International Public License").id == "CC-BY-4.0"
+
+
+def test_an_and_expression_of_identifiers_is_two_licences():
+    both = normalise("CC-BY-SA-4.0 AND ODbL-1.0")
+    assert (both.id, both.spdx, both.commercial_use, both.share_alike) == ("CC-BY-SA-4.0 AND ODbL-1.0", True, "yes", True)
+    assert normalise("Research AND development use only").spdx is False
+
+
 def test_markdown_link_with_two_statements_is_not_reduced_to_the_first():
     raw = "[MIT](https://github.com/x/y/blob/master/LICENSE); [terms of use](https://example.org/terms)"
     got = normalise(raw)

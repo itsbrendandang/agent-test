@@ -253,7 +253,6 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
   for (const n of nodes0) {
     if (n.kind === "claim") {
       const rs = n.rulings ?? []
-      n.facts.splice(0, 0, { label: "Verdict", value: n.verdict?.raw ?? "" })
       const named = cited.get(n.id)
       if (named) n.facts.push({ label: n.facts.some((f) => f.label === "Kind of statement" && f.value === "computed") ? "What was computed" : "Cited source", value: named })
       n.facts.push({ label: rs.length > 1 ? "Rounds" : "Round", value: (n.rounds ?? []).join(", ") })
@@ -529,7 +528,7 @@ function claimFields(c: LedgerClaim): Partial<GraphNode> {
     text: c.text, verdict: v, label: clip(oneLine(c.text), 80),
     attention: v.cls === "fails" ? 2 : v.cls === "unknown" ? 1 : 0,
     facts: [
-      { label: "Verdict", value: c.verdict }, { label: "Said by", value: c.proposed_by },
+      { label: "Said by", value: c.proposed_by },
       { label: "If the statement were false", value: c.null_hypothesis },
       { label: "Combined evidence score (e)", value: fmt(c.e_value) },
       ...(c.threshold !== undefined ? [{ label: "Needed to be supported", value: fmt(c.threshold) }] : []),

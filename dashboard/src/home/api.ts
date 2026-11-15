@@ -64,7 +64,7 @@ export class ChatRefused extends Error {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let r: Response
   try { r = await (init ? engineFetch : fetch)(ENGINE + path, init) } // reads need no token; requests that change something may
-  catch { throw new ChatRefused("The engine cannot be reached. Start it from the repo root with npm run engine.", 0) }
+  catch { throw new ChatRefused("The app's engine isn't running. Start it with: npm start. Then send your question again.", 0) }
   const body: unknown = await r.json().catch(() => undefined)
   if (r.ok) return body as T
   const b = (body ?? {}) as { error?: unknown; field?: unknown; id?: unknown; run?: unknown }
@@ -72,7 +72,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   throw new ChatRefused(typeof b.error === "string" ? b.error : `The engine answered ${r.status}.`, r.status, typeof b.field === "string" ? b.field : undefined, run)
 }
 /** The engine is running but has no chat routes: it was started before they existed. Not the same as "not running". */
-export const NO_CHAT_ROUTES = "This engine is running, but it has no chat routes yet. Restart it from the repo root with npm run engine."
+export const NO_CHAT_ROUTES = "This engine is running, but it has no chat routes yet. Stop the app and start it again with: npm start."
 const routeMissing = (error: unknown): never => { throw error instanceof ChatRefused && error.status === 404 ? new ChatRefused(NO_CHAT_ROUTES, 404) : error }
 const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
 

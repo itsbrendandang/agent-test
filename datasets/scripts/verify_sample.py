@@ -6,11 +6,12 @@
 For each sampled record the script
   1. fetches the landing page (record.url) again, through the polite client (robots.txt, rate
      limit, redirects checked hop by hop), and notes whether it answers;
-  2. looks for a licence statement on that page (licences.detect) and compares it with the
-     record. For a record of the hand-checked registry it re-reads the evidence page named in
-     licence_source and applies the same pattern again;
-  3. when the page cannot be read or says nothing about the licence, asks the record's
-     landing_api (Hugging Face, DataCite, GitHub) and compares the licence there.
+  2. reads the licence again from the source, by the first route that applies:
+       a. the evidence page and pattern stored in licence_source ("<url> matches /<pattern>/");
+       b. the record's API (Hugging Face, DataCite, GitHub, Bioregistry, Kaggle's list endpoint);
+       c. for a TDC dataset, the documentation section, parsed again;
+       d. a licence statement on the landing page (licences.detect), or the record's own
+          licence words on that page.
 
 Verdicts per record
   url:      ok | blocked (robots.txt or a bot challenge: not an error of the record) | error
@@ -27,6 +28,7 @@ import json
 import random
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -66,6 +68,8 @@ def compare(record_licence: str, stated: Set[str]) -> str:
     """match, mismatch, missed or not-checkable, from the licences a page or an API states."""
     if not stated:
         return "not-checkable"
+    if record_licence in stated:
+        return "match"
     if record_licence == licences.UNKNOWN:
         return "missed"
     if not is_spdx(record_licence):
@@ -97,6 +101,16 @@ def api_licences(record: Dict[str, Any]) -> Tuple[Optional[Set[str]], str]:
             data, _ = common.get_json(api, headers={"Accept": "application/vnd.github+json"})
             spdx_id = (data.get("license") or {}).get("spdx_id")
             return ({spdx_id} if spdx_id and spdx_id != "NOASSERTION" else set()), "GitHub API, license.spdx_id"
+        if api.startswith("https://bioregistry.io/api/registry/"):
+            data, _ = common.get_json(api)
+            return {licences.normalise(data.get("license")).id} - {licences.UNKNOWN}, "Bioregistry API, field license"
+        if api.startswith("https://www.kaggle.com/api/v1/datasets/list"):
+            data, _ = common.get_json(api)
+            ref = record["id"].split(":", 1)[1]
+            mine = [item for item in data if item.get("ref") == ref]
+            if not mine:
+                return None, "Kaggle list endpoint: the dataset is not in the first page for its title"
+            return {licences.normalise(mine[0].get("licenseName")).id} - {licences.UNKNOWN}, "Kaggle list endpoint, licenseName"
     except common.RobotsDisallowed:
         return None, "API disallowed by robots.txt"
     except Exception as err:
@@ -114,8 +128,30 @@ def evidence_recheck(record: Dict[str, Any]) -> Optional[str]:
     if state != "ok" or text is None:
         return "not-checkable"
     plain = common.clean_text(text, 10 ** 7)
-    patterns = match.group(2).split(" and ")
+    patterns = match.group(2).split("/ and /")
     return "match" if all(re.search(p, plain, re.I) for p in patterns) else "mismatch"
+
+
+def tdc_recheck(record: Dict[str, Any], page_html: str) -> Optional[str]:
+    """Parse the TDC documentation page again and compare this dataset's licence."""
+    import fetch_tdc
+
+    page = urllib.parse.urlsplit(record["url"]).path.strip("/")
+    again = {r["id"]: r for r in fetch_tdc.parse_page(page_html, page, record["retrieved_at"])}
+    if record["id"] not in again:
+        return "mismatch"
+    return "match" if again[record["id"]]["licence"] == record["licence"] else "mismatch"
+
+
+def words_on_page(record: Dict[str, Any], plain: str) -> bool:
+    """True when the record's licence words (a provider's own terms) stand on the page."""
+    low = re.sub(r"\s+", " ", plain.lower())
+    for text in (record.get("licence_raw") or "", record["licence"]):
+        text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+        probe = re.sub(r"\s+", " ", text.lower()).strip(" .")[:60]
+        if len(probe) >= 12 and probe in low:
+            return True
+    return False
 
 
 def check(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,22 +167,29 @@ def check(record: Dict[str, Any]) -> Dict[str, Any]:
         words = [w for w in re.split(r"[^a-z0-9]+", key) if len(w) > 2][:3]
         result["name_on_page"] = bool(words) and all(w in plain.lower() for w in words)
         stated = licences.detect(text)
-    rechecked = evidence_recheck(record) if record.get("fetcher") == "fetch_registry.py" else None
+    plain = common.clean_text(text, 10 ** 7) if text else ""
+    rechecked = evidence_recheck(record)
     if rechecked:
         result["licence_state"], result["licence_detail"] = rechecked, "evidence page read again with the stored pattern"
+    elif record["id"].startswith("tdc:") and text:
+        result["licence_state"], result["licence_detail"] = tdc_recheck(record, text), "TDC documentation section parsed again"
     else:
         from_api, how = api_licences(record)
         if from_api is not None and "__gated__" in from_api:
             result["licence_state"], result["licence_detail"] = "mismatch", how
         elif from_api is not None:
             verdict = compare(record["licence"], from_api)
-            if verdict == "not-checkable" and not from_api and record["licence"] == licences.UNKNOWN:
+            if not from_api and record["licence"] == licences.UNKNOWN:
                 verdict = "match"  # the source states no licence and the record says unknown
+            elif not from_api:
+                verdict = "mismatch"  # the record names a licence that the source no longer states
             result["licence_state"], result["licence_detail"] = verdict, f"{how}: {sorted(from_api) or 'none stated'}"
         else:
             verdict = compare(record["licence"], stated)
-            result["licence_state"] = verdict
-            result["licence_detail"] = f"landing page states {sorted(stated) or 'no licence that the patterns find'}"
+            detail = f"landing page states {sorted(stated) or 'no licence that the patterns find'}"
+            if verdict in ("not-checkable", "mismatch") and plain and words_on_page(record, plain):
+                verdict, detail = "match", "the record's licence words stand on the landing page"
+            result["licence_state"], result["licence_detail"] = verdict, detail + (f" ({how})" if how != "no API to ask" else "")
     if result["licence_state"] == "match" and stated and is_spdx(record["licence"]):
         on_page = {licences.family(part) for part in parts(record["licence"])} <= {licences.family(s) for s in stated}
         result["licence_detail"] += "; also on the landing page" if on_page else f"; the landing page shows {sorted(stated)}"

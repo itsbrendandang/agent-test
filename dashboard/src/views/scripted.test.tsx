@@ -35,7 +35,7 @@ describe("Board view", () => {
     expect(mode.queryByText(/[Pp]ractice|scripted/)).toBeNull()
     expect(screen.getByTestId("run-mode")).toHaveTextContent("This review ran with real models.")
     // what a NEW review would use is said separately, and is about new reviews only
-    expect(screen.getByTestId("next-mode")).toHaveTextContent("Paid calls are off: board reviews are practice runs only.")
+    expect(screen.getByTestId("next-mode")).toHaveTextContent("Demo mode: reviews are practice runs only.")
   })
   it("a scripted review shown while paid calls are on is labelled scripted, not real", async () => {
     board(true)
@@ -91,7 +91,7 @@ describe("Runs list", () => {
   it("does not move the keyboard focus to the keyword box", async () => {
     list(false)
     await card("s-mock")
-    expect(screen.getByRole("searchbox", { name: "Search experiments by keyword" })).not.toHaveFocus()
+    expect(screen.getByRole("searchbox", { name: "Search past runs by word" })).not.toHaveFocus()
   })
 })
 
@@ -99,7 +99,7 @@ describe("one place for each input", () => {
   it("Runs has the keyword search and no Ask box: questions are asked on Home", async () => {
     const sent = routes({ "GET /api/search": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] } })
     render(<ExperimentsView onOpen={() => {}} />)
-    expect(await screen.findByText(/No experiments yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Nothing has been run yet/)).toBeInTheDocument()
     expect(screen.getAllByRole("searchbox")).toHaveLength(1)
     expect(screen.queryByRole("textbox")).toBeNull()
     expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()

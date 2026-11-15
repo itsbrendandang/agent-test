@@ -1,20 +1,21 @@
 // One plain line at the top of every view: whether the engine answers and whether it may spend money.
-import { HOW_TO_TURN_ON, PAID_LABEL } from "@/lib/paid"
+import { ModeSwitch } from "./PaidSwitch"
 import { PRODUCT } from "@/nav"
 import type { Shell } from "@/lib/shell"
 
-const ENGINE_LABEL = { online: "Engine online", offline: "Engine offline", error: "Engine error", unknown: "Engine: checking" } as const
+const ENGINE_LABEL = { online: "Engine online", offline: "Engine not running", error: "Engine problem", unknown: "Engine: checking" } as const
 
-export function StatusLine({ shell, onOpenSettings }: { shell: Shell; onOpenSettings: () => void }) {
+export function StatusLine({ shell, onOpenSettings, onHelp }: { shell: Shell; onOpenSettings: () => void; onHelp?: () => void }) {
   return (
-    <p className="statusline" role="status" aria-label="Status">
+    <div className="statusline" role="group" aria-label="Status">
       <strong>{PRODUCT}</strong>
       <span aria-hidden="true"> · </span>
       <span data-state={shell.engine} title={shell.said}>{ENGINE_LABEL[shell.engine]}{shell.said && `: ${shell.said}`}</span>
       <span aria-hidden="true"> · </span>
-      <span data-state={shell.paid} title={shell.paid === "unknown" ? "The engine did not say whether paid calls are allowed. It may be offline." : HOW_TO_TURN_ON}>{PAID_LABEL[shell.paid]}</span>
+      <ModeSwitch paid={shell.paid} locked={shell.locked} />
       <span aria-hidden="true"> · </span>
+      {onHelp && <><button type="button" className="link-btn" onClick={onHelp}>How this works</button><span aria-hidden="true"> · </span></>}
       <button type="button" className="link-btn" onClick={onOpenSettings}>Settings</button>
-    </p>
+    </div>
   )
 }

@@ -4,6 +4,7 @@
   python3 build_catalog.py            merge /tmp/dataset-scout/records/*.jsonl into catalog.jsonl
   python3 build_catalog.py --check    only validate the catalog.jsonl that is in the repository
   python3 build_catalog.py --stats    print the count tables (Markdown) for the catalogue
+  python3 build_catalog.py --docs     refresh the count tables in README.md and sources.md
 
 A fetcher that was not re-run keeps its old records: the build carries them over from the
 existing catalog.jsonl. So one source can be refreshed without fetching all the others.
@@ -27,6 +28,7 @@ import schema
 HERE = Path(__file__).resolve().parent
 CATALOG = HERE.parent / "catalog.jsonl"
 README = HERE.parent / "README.md"
+SOURCES = HERE.parent / "sources.md"
 MAX_BYTES = 4_500_000  # the repository's CI refuses a file over 5 MB
 
 # When two records describe the same thing, the record from the fetcher listed first wins.
@@ -201,7 +203,11 @@ def stats_markdown(records: List[Dict[str, Any]]) -> str:
         "",
         "By source:",
         "",
-        table(count_by(records, "source")[:25] + [("(other sources, one or two entries each)", sum(n for _, n in count_by(records, "source")[25:]))], ("Source", "Entries")),
+        table(
+            [row for row in count_by(records, "source") if row[1] >= 2]
+            + [("(primary databases with one entry each, ids `db:*`)", sum(1 for _, n in count_by(records, "source") if n == 1))],
+            ("Source", "Entries"),
+        ),
         "",
         "By level:",
         "",
@@ -218,19 +224,41 @@ def stats_markdown(records: List[Dict[str, Any]]) -> str:
     return "\n".join(out) + "\n"
 
 
-def update_readme(markdown: str) -> bool:
-    """Replace the block between the stats markers in README.md. True when the file changed."""
-    if not README.exists():
+def fetcher_markdown(records: List[Dict[str, Any]]) -> str:
+    """Entries per fetcher, for sources.md."""
+    rows = []
+    for fetcher, total in count_by(records, "fetcher"):
+        mine = [r for r in records if r["fetcher"] == fetcher]
+        sources = sorted({r["source"] for r in mine})
+        shown = ", ".join(sources[:4]) + (f" and {len(sources) - 4} more" if len(sources) > 4 else "")
+        spdx = sum(1 for r in mine if all(p.lower() in licences.SPDX for p in r["licence"].split(" AND ")))
+        unknown = sum(1 for r in mine if r["licence"] == licences.UNKNOWN)
+        rows.append((f"`{fetcher}`", shown, total, spdx, total - spdx - unknown, unknown))
+    return table(rows, ("Fetcher", "Sources in the records", "Entries", "SPDX licence", "Provider terms", "Licence unknown")) + "\n"
+
+
+def update_block(path: Path, name: str, markdown: str) -> bool:
+    """Replace the block between <!-- name:begin --> and <!-- name:end -->. True when the file changed."""
+    if not path.exists():
         return False
-    text = README.read_text(encoding="utf-8")
-    begin, end = "<!-- stats:begin -->", "<!-- stats:end -->"
+    text = path.read_text(encoding="utf-8")
+    begin, end = f"<!-- {name}:begin -->", f"<!-- {name}:end -->"
     if begin not in text or end not in text:
         return False
     new = text[: text.index(begin) + len(begin)] + "\n" + markdown + text[text.index(end):]
     if new != text:
-        README.write_text(new, encoding="utf-8")
+        path.write_text(new, encoding="utf-8")
         return True
     return False
+
+
+def update_documents(records: List[Dict[str, Any]]) -> List[str]:
+    changed = []
+    if update_block(README, "stats", stats_markdown(records)):
+        changed.append("README.md")
+    if update_block(SOURCES, "fetchers", fetcher_markdown(records)):
+        changed.append("sources.md")
+    return changed
 
 
 # ---------------------------------------------------------------------------------------------
@@ -249,14 +277,18 @@ def main() -> int:
     parser.add_argument("--out", default=str(CATALOG))
     parser.add_argument("--check", action="store_true", help="validate the existing catalogue and stop")
     parser.add_argument("--stats", action="store_true", help="print the count tables and stop")
+    parser.add_argument("--docs", action="store_true", help="refresh the count tables in README.md and sources.md and stop")
     parser.add_argument("--no-carry-over", action="store_true", help="do not keep records of fetchers that were not re-run")
     args = parser.parse_args()
     out_path = Path(args.out)
 
-    if args.check or args.stats:
+    if args.check or args.stats or args.docs:
         records = common.read_jsonl(out_path)
         if args.stats:
             print(stats_markdown(records), end="")
+            return 0
+        if args.docs:
+            print("updated:", ", ".join(update_documents(records)) or "nothing to update")
             return 0
         problems = check_records(records)
         size = out_path.stat().st_size
@@ -307,8 +339,9 @@ def main() -> int:
         f"build: wrote {len(kept)} records to {out_path} ({len(text.encode('utf-8'))} bytes); "
         f"dropped {len(dropped)} duplicates, {sum(reasons.values())} by boundary rules {reasons}, {invalid} invalid"
     )
-    if update_readme(stats_markdown(kept)):
-        common.log("build: README.md count tables updated")
+    changed = update_documents(kept)
+    if changed:
+        common.log(f"build: count tables updated in {', '.join(changed)}")
     return 1 if invalid else 0
 
 

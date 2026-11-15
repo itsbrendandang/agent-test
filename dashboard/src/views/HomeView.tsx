@@ -16,9 +16,10 @@ import { boardScriptedWhy, chatRequest, effortFacts, effortInEffect, EXAMPLES, l
 import { EffortPicker } from "@/home/EffortPicker"
 import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
+import { runTitle } from "@/lib/format"
 import { setOpen, viewOfKind } from "@/lib/open"
 
-const ABOUT = "Ask a research question. The answer says whether a model wrote it, links the runs it used, and may propose a plan that starts only when you confirm it."
+const ABOUT = "Ask a science question. A team of AI agents works on it, and every statement they make gets checked. Nothing is spent until you say so."
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
@@ -115,9 +116,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               {empty && (
                 <ConversationEmptyState className="home-empty">
                   <Mascots size={72} />
-                  <h2>What do you want to find out?</h2>
-                  <p className="muted">Ask about past runs, or describe a research question to get a plan. Nothing starts and nothing is spent until you confirm a plan.</p>
-                  <Suggestions className="home-examples" role="group" aria-label="Example questions">
+                  <h2>Ask a science question.</h2>
+                  <p className="home-lead">A team of AI agents works on it, and every statement they make gets checked.</p>
+                  {catalog?.paidCalls === false && <p className="home-practice" role="note">You're in Demo mode. Answers are fixed examples, so you can see how it works for free.</p>}
+                  <p className="muted small" id="home-examples-hint">Press one to try it. Nothing is spent.</p>
+                  <Suggestions className="home-examples" role="group" aria-label="Example questions" aria-describedby="home-examples-hint">
                     {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
                   </Suggestions>
                 </ConversationEmptyState>
@@ -135,8 +138,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                         {t.reply.runs.map((r) => (
                           <li key={`${r.kind}:${r.id}`}>
                             <button type="button" className="exp-hit card-surface" onClick={() => openRun(r.kind, r.id)}>
-                              <span className="exp-head"><b>{r.title}</b><span className="pill" data-kind="outline">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
-                              <span className="muted small run-id" title={r.id}>{r.id}</span>
+                              <span className="exp-head"><b>{runTitle(r.title)}</b><span className="pill" data-kind="outline">{r.kind === "swarm" ? "one agent or a team" : "board review"}</span></span>
+                              <span className="muted small run-id" title={`Run id: ${r.id}`}>{r.id}</span>
                               {r.why && <span className="exp-match small">{r.why}</span>}
                             </button>
                           </li>
@@ -176,17 +179,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               <PromptInputFooter className="home-composer-foot">
                 {/* Clicks in the toolbar stay in the toolbar: the input group would otherwise move the focus away from the control. */}
                 <PromptInputTools className="home-tools" onClick={(e) => e.stopPropagation()}>
-                  {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" compact />}
-                  <details className="home-more">
+                  <details className="home-more" open={problem?.control === "effort" || problem?.control === "model" || undefined}>
                     <summary>More options</summary>
+                    {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" compact />}
                     <label className="home-model">
                       <span className="small">Model</span>
                       <select value={choice.model ? picked : AUTO} disabled={offered.length === 0} onChange={(e) => { setPicked(e.target.value); if (problem?.control === "model") setProblem(undefined) }}
                         aria-invalid={problem?.control === "model"} aria-describedby={problem?.control === "model" ? "home-model-error" : "home-model-help"}>
-                        <option value={AUTO}>{offered.length ? "Let the engine choose" : catalog?.paidCalls === false ? "None: paid calls are off" : "Engine default"}</option>
+                        <option value={AUTO}>{offered.length ? "Let the engine choose" : catalog?.paidCalls === false ? "None in Demo mode" : "Engine default"}</option>
                         {offered.map((o) => <option key={`${o.provider} ${o.model}`} value={`${o.provider} ${o.model}`}>{o.model}</option>)}
                       </select>
                     </label>
+                    {efforts.length > 0 && <p className="muted small effort-facts" id="home-effort-facts">{effortLine}</p>}
                   </details>
                 </PromptInputTools>
                 <PromptInputSubmit className="btn btn-primary" size="sm" aria-label={sending !== undefined ? "Sending…" : "Send"} status={sending !== undefined ? "submitted" : undefined}
@@ -196,10 +200,9 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
             {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
             {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
             {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
-            {efforts.length > 0 && <p className="muted small effort-facts" id="home-effort-facts">{effortLine}</p>}
             <p className="muted small">
               <span id="home-box-help">Enter sends. Shift+Enter starts a new line. Do not type API keys here.</span>
-              {catalog?.paidCalls === false && <span id="home-model-help"> Paid calls are off, so no model is asked: replies are keyword searches or fixed text, and each reply says which.</span>}
+              {catalog?.paidCalls === false && <span id="home-model-help"> You are in Demo mode, so no model is asked. A reply is either a word search of past runs or fixed practice text, and each reply says which.</span>}
             </p>
           </div>
         </section>

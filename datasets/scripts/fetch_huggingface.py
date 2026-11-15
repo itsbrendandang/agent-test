@@ -137,9 +137,10 @@ def to_record(item: Dict[str, Any], retrieved_at: str, how: str) -> Optional[Dic
             return None
     elif downloads < MIN_DOWNLOADS and likes < MIN_LIKES:
         return None
+    tag_line = common.clean_text("Tags: " + ", ".join(topical[:12]), 240) if topical else "No tags."
     if not description:
-        description = "No description on the dataset card. Tags: " + ", ".join(topical[:12])
-        description = common.clean_text(description, 300)
+        description = "No description on the dataset card. " + tag_line
+    description = common.safe_description(description, "The dataset card text is left out here: it reads like instructions. " + tag_line)
     sizes = tag_value(tags, "size_categories:")
     formats = tag_value(tags, "format:")
     modalities = tag_value(tags, "modality:")

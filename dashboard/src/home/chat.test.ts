@@ -14,7 +14,7 @@ const turns: Turn[] = [
 
 describe("mode labels", () => {
   it("say plainly whether a model wrote the reply", () => {
-    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Keyword search, not an AI answer", scripted: "Practice: fixed text, not research" })
+    expect(MODE_LABEL).toEqual({ ai: "Written by a real model", keyword: "Word search of past runs: not written by a model", scripted: "Practice run: fixed text, not real research" })
   })
 })
 
@@ -74,8 +74,8 @@ describe("effort", () => {
     expect(localStorage.getItem("home.effort")).toBe("quick")
   })
   it("says what a level implies: agents, rounds, time, cost, models, search", () => {
-    expect(effortFacts(EFFORTS[0])).toBe("3 agents · up to 1 round · up to 5:00 · up to $0.50 · cheap models · no Exa search")
-    expect(effortFacts(EFFORTS[2])).toBe("all agents · up to 8 rounds · up to 1:00:00 · up to $20.00 · lead models · Exa search, up to 30 searches")
+    expect(effortFacts(EFFORTS[0])).toBe("3 agents · up to 1 round · up to 5 minutes · up to $0.50 · small, fast models · no web search")
+    expect(effortFacts(EFFORTS[2])).toBe("all agents · up to 8 rounds · up to 1 hour · up to $20.00 · the strongest models · web search, up to 30 searches")
   })
   it("asks for a plan again with the conversation as it was before that reply", () => {
     const later: Turn[] = [...turns, { id: 3, role: "user", content: "Plan it" }, { id: 4, role: "assistant", content: "Plan", reply: { reply: "Plan", mode: "ai", plan: PLAN } }, { id: 5, role: "user", content: "later" }]
@@ -113,9 +113,9 @@ describe("starting a plan", () => {
   })
   it("a paid plan cannot start while paid calls are off, ticked or not, and says how a person turns them on", () => {
     for (const agreed of [false, true]) {
-      expect(startBlock(PLAN, false, agreed)).toMatch(/paid calls are off/)
-      expect(startBlock(PLAN, false, agreed)).toMatch(/NO_PAID_CALLS=0/)
-      expect(startBlock(PLAN, false, agreed)).toMatch(/dashboard cannot turn them on/)
+      expect(startBlock(PLAN, false, agreed)).toMatch(/you are in Demo mode/)
+      expect(startBlock(PLAN, false, agreed)).toMatch(/choose Real at the top of the page/)
+      expect(startBlock(PLAN, false, agreed)).toMatch(/asks you to confirm that it costs money/)
     }
   })
   it("a paid plan with the switch unknown still needs the tick; the engine decides the rest", () => {
@@ -202,7 +202,7 @@ describe("can a board review use real models?", () => {
     expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board reviews are practice runs only")
   })
   it("says paid calls are off when every key is there", () => {
-    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Paid calls are off: board reviews are practice runs only")
+    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Demo mode: reviews are practice runs only")
   })
   it("says nothing when the board can use real models", () => {
     expect(boardScriptedWhy({ ...live, mock: false, paidCalls: true })).toBeUndefined()

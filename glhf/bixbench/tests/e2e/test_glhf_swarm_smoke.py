@@ -16,7 +16,16 @@ import pytest
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import ModelOutput, ModelUsage
 
-from bixbench3.glhf_local import MOCK, _call, _done, _write, run_local
+from bixbench3.glhf_local import (
+    MOCK,
+    _call,
+    _done,
+    _write,
+    by_role,
+    load_case,
+    role_script,
+    run_local,
+)
 
 DEMO_CASE = Path(__file__).parents[3] / "demo_case"
 
@@ -58,12 +67,42 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
         "experiment",
         "audit 1",
         "critique 1",
+        "relevance 1",
         "revise 1",
         "audit 2",
         "critique 2",
+        "relevance 2",
         "report",
     ]  # no "finish": every artifact passed the shape check after review
     assert any(e["kind"] == "review.converged" for e in ledger["events"])
+    # No role typed a p-value: each test is a registered script, judged for relevance before
+    # it was run, and run by the harness in the sandbox.
+    for claim in ledger["claims"]:
+        [entry], [test] = claim["registered"], claim["tests"]
+        assert entry["script_path"].startswith("/workspace/work/glhf/tests/")
+        assert len(entry["script_sha256"]) == 64 and entry["script"]
+        assert entry["relevance"]["relevant"] is True and entry["relevance"]["score"] == 1.0
+        run = entry["run"]
+        assert (run["status"], run["exit_code"], run["command"]) == ("ok", 0, ["python3", "-"])
+        assert run["sha256_at_run"] == entry["script_sha256"]
+        assert (
+            run["output_tail"].rstrip().endswith(f"contradicts={str(test['contradicts']).lower()}")
+        )
+        assert (test["source"], test["by"], test["counts"]) == ("harness", "harness", True)
+        assert test["p_value"] == run["p_value"]
+    order = [
+        (e["kind"], e["claim"])
+        for e in ledger["events"]
+        if e["kind"] in ("test.registered", "test.relevance", "test.executed")
+    ]
+    assert order == [
+        ("test.registered", "C2"),
+        ("test.relevance", "C2"),
+        ("test.executed", "C2"),
+        ("test.registered", "C1"),
+        ("test.relevance", "C1"),
+        ("test.executed", "C1"),
+    ]
 
     findings = (outputs / "glhf" / "FINDINGS.md").read_text()
     assert "Supported findings (1)" in findings and "Rejected claims (1)" in findings
@@ -156,10 +195,10 @@ def test_swarm_token_budget_skips_phases_and_still_reports(tmp_path: Path) -> No
         "scout": 47_000,
         "propose": 66_000,
         "pilot": 135_500,
-        "experiment": 484_500,
+        "experiment": 474_500,  # 10,000 less than before: the relevance judge's floor
         "report": 97_000,
     }
-    # The experimenter passed its allowance by 253,500 tokens in one call. The overshoot and
+    # The experimenter passed its allowance by 263,500 tokens in one call. The overshoot and
     # finish reserves paid 90,000 of it; the rest came out of the review, which then had less
     # than its floors and was not started. The report's reserve was never lent.
     skipped = [(e["phase"], e["reason"]) for e in events if e["kind"] == "phase.skipped"]
@@ -175,7 +214,7 @@ def test_swarm_token_budget_skips_phases_and_still_reports(tmp_path: Path) -> No
         "experiment": {"overshoot": 50_000, "finish": 40_000},
     }
     exhausted = [e for e in events if e["kind"] == "budget.reserves_exhausted"]
-    assert [(e["phase"], e["not_covered"]) for e in exhausted] == [("experiment", 163_500)]
+    assert [(e["phase"], e["not_covered"]) for e in exhausted] == [("experiment", 173_500)]
     assert not any(e["kind"] == "budget.overdrawn" for e in events)
     # No review ran, so the ledger must not claim that the review converged.
     assert not any(e["kind"] == "review.converged" for e in events)
@@ -347,3 +386,32 @@ def test_outputs_linked_to_the_grader_s_files_from_inside_the_sandbox_are_not_gr
     ]
     assert "symbolic link" in summary["error"]
     assert json.loads((tmp_path / "grade.json").read_text())["score"] is None
+
+
+def test_a_test_judged_irrelevant_runs_but_does_not_support_and_the_score_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    """The same scripted run, except that in round 2 the relevance judge scores the critic's
+    test 0.2. The harness still runs it (p = 0.0004, which was "supported" above), and the claim
+    is not supported. The artifacts, and so the grade, are the same."""
+    case = load_case(DEMO_CASE)
+    grading = DEMO_CASE / "grader"
+    spec = json.loads((grading / "artifacts_grading.json").read_text())
+    truth = {
+        a["artifact_id"]: (grading / a["ground_truth"]["path"]).read_text()
+        for a in spec["artifacts"]
+    }
+    truths = {o.sandbox_path: truth[o.artifact_id] for o in case.expected_outputs}
+    script = by_role(role_script(truths, relevance_scores=(1.0, 0.2)))
+    summary = run_local(DEMO_CASE, tmp_path, solver="glhf", model="mock", mock_outputs=script)  # type: ignore[arg-type]
+    assert summary["status"] == "done", summary["error"]
+    assert summary["score"] == 1.0
+    ledger = json.loads((tmp_path / "ledger.json").read_text())
+    c1, c2 = ledger["claims"]
+    assert (c1["verdict"], c1["e_value"]) == ("insufficient", 0.0)
+    assert c1["registered"][0]["relevance"]["relevant"] is False
+    assert c1["registered"][0]["run"]["status"] == "ok"  # it was run and recorded
+    assert c1["tests"][0]["p_value"] == 0.0004 and c1["tests"][0]["counts"] is False
+    assert c2["verdict"] == "refuted"  # round 1 is as before
+    findings = (tmp_path / "FINDINGS.md").read_text()
+    assert "Supported findings (0)" in findings and "NOT RELEVANT, counts as e = 0" in findings

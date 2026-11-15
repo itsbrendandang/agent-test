@@ -10,7 +10,7 @@ const usd = (n: number) => `$${n.toFixed(2).replace(/\.00$/, "")}`
 function Key({ present, usable }: { present: boolean; usable: boolean }) {
   return (
     <>
-      <span className="pill" data-kind={!present ? "warning" : usable ? "success" : "neutral"} title={present && !usable ? "The key is there, but it is not used while paid calls are off." : undefined}>
+      <span className="pill" data-kind={!present ? "warning" : usable ? "success" : "neutral"} title={present && !usable ? "The key is there, but it is not used in Demo mode." : undefined}>
         {!present ? "key missing" : usable ? "key present" : "key present · off"}
       </span>
     </>
@@ -50,15 +50,16 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
   return (
     <aside className="home-catalog card-surface" aria-labelledby="home-catalog-title">
       <h2 id="home-catalog-title">What this can use</h2>
+      <p className="muted small">The models, team members and skills on this computer. You do not need any of this to ask a question.</p>
       {catalog === undefined && <p className="muted small" role="status">Asking the engine…</p>}
-      {catalog === null && !why && <EngineOffline needs="Models, agents and skills are listed by the engine." onRetry={onRetry} />}
+      {catalog === null && !why && <EngineOffline needs="The engine lists the models, agents and skills." onRetry={onRetry} />}
       {catalog === null && why && <div role="alert"><p className="home-paidoff">{why}</p><button type="button" className="btn" onClick={onRetry}>Try again</button></div>}
       {catalog && (
         <>
           <section aria-label="Paid calls">
             <p><span className="pill" data-kind={catalog.paidCalls ? "warning" : "neutral"}>{PAID_LABEL[catalog.paidCalls ? "on" : "off"]}</span></p>
             <p className="muted small">
-              {catalog.paidCalls ? "A started plan can spend money, up to the limits shown on its card." : `Answers are keyword searches or fixed text, and a plan that needs a paid model cannot start. ${HOW_TO_TURN_ON}`}
+              {catalog.paidCalls ? "A started plan can spend money, up to the limits shown on its card." : `Replies are word searches of past runs or fixed practice text. A plan that needs a paid model cannot start. ${HOW_TO_TURN_ON}`}
             </p>
           </section>
           <section aria-label="Models and search">
@@ -72,7 +73,7 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                 </li>
               ))}
               <li>
-                <span>Exa search</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} />
+                <span>Web search (Exa)</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} />
                 {typeof catalog.search.exa.usedUsd === "number" && typeof catalog.search.exa.ceilingUsd === "number" && (
                   <span className="muted small home-models">{usd(catalog.search.exa.usedUsd)} of {usd(catalog.search.exa.ceilingUsd)} used</span>
                 )}
@@ -95,7 +96,7 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                   {catalog.skills.map((s) => (
                     <li key={s.name}>
                       <b>{s.name}</b>
-                      {!s.installed && <span className="pill" data-kind="waiting">index only, not installed</span>}
+                      {!s.installed && <span className="pill" data-kind="waiting">known by name only: not installed</span>}
                       <span className="small">{s.description}</span>
                     </li>
                   ))}

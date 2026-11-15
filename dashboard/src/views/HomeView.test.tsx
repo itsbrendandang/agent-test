@@ -92,7 +92,7 @@ describe("sending", () => {
   it("when the engine cannot be reached: says so, keeps the question in the box, adds nothing to the conversation", async () => {
     const t = home(CATALOG_ON)
     await t.ask("Is hERG a risk?")
-    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/engine cannot be reached/))
+    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/engine isn't running\. Start it with: npm start/))
     expect(t.box().value).toBe("Is hERG a risk?")
     expect(screen.queryByRole("article")).toBeNull()
     expect(sessionStorage.getItem("home.chat")).toBeNull()
@@ -111,7 +111,7 @@ describe("sending", () => {
     await waitFor(() => expect([...(screen.getByLabelText("Model") as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Let the engine choose", "claude-sonnet-5-5", "claude-haiku-5-5"]))
     on.view.unmount()
     home(CATALOG_OFF)
-    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("None: paid calls are off"))
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("None in Demo mode"))
     expect(screen.getByLabelText("Model")).toBeDisabled()
   })
   it("keeps the conversation for the session, and Clear removes it", async () => {
@@ -139,7 +139,7 @@ describe("sending", () => {
 })
 
 describe("replies", () => {
-  it.each([["ai", "AI answer"], ["keyword", "Keyword search, not an AI answer"], ["scripted", "Practice: fixed text, not research"]] as const)("labels a %s reply '%s' and shows the engine's note", async (mode, label) => {
+  it.each([["ai", "Written by a real model"], ["keyword", "Word search of past runs: not written by a model"], ["scripted", "Practice run: fixed text, not real research"]] as const)("labels a %s reply '%s' and shows the engine's note", async (mode, label) => {
     const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode, note: `note for ${mode}` }) })
     await t.ask("q")
     const article = within(await screen.findByRole("article", { name: "Reply" }))
@@ -187,11 +187,11 @@ describe("plan card", () => {
     expect(card.getByText("Patch-clamp data is in the brief.")).toBeInTheDocument()
     expect(card.getByText("used (a paid service)")).toBeInTheDocument()
     expect(card.getByText("claude-opus").closest("dd")).toHaveTextContent("lead claude-opus · members claude-sonnet · checker gpt-mini")
-    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    expect(card.getByText("at most $5.00, 15 minutes and 4 rounds of discussion")).toBeInTheDocument()
     expect(card.getByText(/about \$1\.80/)).toHaveTextContent("(6 agents, 4 rounds, list prices)")
     expect(within(card.getByRole("list", { name: "Warnings" })).getByText("Exa search has no key on this machine.")).toBeInTheDocument()
-    expect(card.getByText(/nothing has started/)).toBeInTheDocument()
-    const brief = card.getByText("Read the brief the agents would get").closest("details")!
+    expect(card.getByText(/Nothing has started/)).toBeInTheDocument()
+    const brief = card.getByText("Read what the team would be given (the brief)").closest("details")!
     expect(brief).not.toHaveAttribute("open")
     expect(brief.querySelector("script")).toBeNull()
     expect(card.getByRole("button", { name: "Start research" })).toBeEnabled()
@@ -232,9 +232,9 @@ describe("confirm step", () => {
     const step = within(card.getByRole("group", { name: "Confirm before starting" }))
     expect(step.getByText(/This may spend money/).closest("p")).toHaveTextContent("estimated: about $1.80")
     expect(step.getByText(/A board review with 2 agents: Critic \(Scientific Reviewer\), Experimenter \(Data Scientist\)/)).toBeInTheDocument()
-    expect(step.getByLabelText("Cost limit (USD)")).toHaveValue(5)
-    expect(step.getByLabelText("Time limit (minutes)")).toHaveValue(15)
-    expect(step.getByLabelText("Rounds")).toHaveValue(4)
+    expect(step.getByLabelText("Most it may cost (US dollars)")).toHaveValue(5)
+    expect(step.getByLabelText("Most time it may take (minutes)")).toHaveValue(15)
+    expect(step.getByLabelText("Most rounds of discussion")).toHaveValue(4)
     expect(starts(t)).toHaveLength(0)
   })
   it("a paid plan cannot start without the tick, and Enter sends nothing", async () => {
@@ -244,8 +244,8 @@ describe("confirm step", () => {
     expect(go).toBeDisabled()
     await t.user.click(go)
     await t.user.keyboard("{Enter}")
-    await t.user.click(card.getByLabelText("Rounds")); await t.user.keyboard("{Enter}")
-    await t.user.click(card.getByLabelText("Cost limit (USD)")); await t.user.keyboard("{Enter}")
+    await t.user.click(card.getByLabelText("Most rounds of discussion")); await t.user.keyboard("{Enter}")
+    await t.user.click(card.getByLabelText("Most it may cost (US dollars)")); await t.user.keyboard("{Enter}")
     expect(starts(t)).toHaveLength(0)
     await t.user.click(card.getByLabelText(/I understand that this spends money/))
     expect(go).toBeEnabled()
@@ -266,7 +266,7 @@ describe("confirm step", () => {
   it("sends lowered limits and the agents that stay ticked", async () => {
     const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
     const card = await toConfirm(t)
-    await t.user.clear(card.getByLabelText("Cost limit (USD)")); await t.user.type(card.getByLabelText("Cost limit (USD)"), "2")
+    await t.user.clear(card.getByLabelText("Most it may cost (US dollars)")); await t.user.type(card.getByLabelText("Most it may cost (US dollars)"), "2")
     await t.user.click(card.getByRole("checkbox", { name: "Experimenter (Data Scientist)" }))
     await t.user.click(card.getByLabelText(/I understand that this spends money/))
     await t.user.click(card.getByRole("button", { name: "Start paid research" }))
@@ -276,10 +276,10 @@ describe("confirm step", () => {
   it("will not raise a limit: the message is next to the input and nothing is sent", async () => {
     const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
     const card = await toConfirm(t)
-    await t.user.clear(card.getByLabelText("Cost limit (USD)")); await t.user.type(card.getByLabelText("Cost limit (USD)"), "50")
+    await t.user.clear(card.getByLabelText("Most it may cost (US dollars)")); await t.user.type(card.getByLabelText("Most it may cost (US dollars)"), "50")
     await t.user.click(card.getByLabelText(/I understand that this spends money/))
     await t.user.click(card.getByRole("button", { name: "Start paid research" }))
-    expect(card.getByLabelText("Cost limit (USD)")).toHaveAccessibleDescription(/can be lowered, not raised above 5/)
+    expect(card.getByLabelText("Most it may cost (US dollars)")).toHaveAccessibleDescription(/can be lowered, not raised above 5/)
     expect(starts(t)).toHaveLength(0)
   })
   it("while paid calls are off a paid plan cannot be started, and the card says how a person turns them on", async () => {
@@ -287,27 +287,43 @@ describe("confirm step", () => {
     await t.ask("q")
     const card = await planCard()
     const note = card.getByRole("note")
-    expect(note).toHaveTextContent("paid calls are off, so it cannot be started")
-    expect(note).toHaveTextContent("NO_PAID_CALLS=0")
-    expect(note).toHaveTextContent("The dashboard cannot turn them on")
+    expect(note).toHaveTextContent("You are in Demo mode, so it cannot be started")
+    expect(note).toHaveTextContent("Real")
+    expect(note).toHaveTextContent("It asks you to confirm that it costs money.")
     const open = card.getByRole("button", { name: "Start research" })
     expect(open).toBeDisabled()
     await t.user.click(open)
     expect(card.queryByRole("group", { name: "Confirm before starting" })).toBeNull()
     expect(starts(t)).toHaveLength(0)
   })
-  it("a scripted plan needs no tick, and still starts only from the confirm step", async () => {
+  it("a practice plan starts in one click while paid calls are off: there is nothing for a confirm step to protect", async () => {
     const t = home(CATALOG_OFF, { "POST /api/chat": reply({ mode: "scripted", plan: SCRIPTED_PLAN }), "POST /api/chat/plans/plan-s/start": { status: 201, body: { kind: "board", id: "run-s" } } })
     await t.ask("q")
     const card = await planCard()
-    expect(card.queryByRole("note")).toBeNull()
-    expect(card.queryByRole("button", { name: "Start research" })).toBeNull() // a scripted run is not called research
-    await t.user.click(card.getByRole("button", { name: "Start practice run (not research)" }))
-    expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(0)
-    expect(card.queryByLabelText(/I understand that this spends money/)).toBeNull()
-    expect(card.getByText(/costs nothing and does no real research/)).toBeInTheDocument()
-    await t.user.click(card.getByRole("button", { name: "Start practice run (not research)" }))
+    expect(card.queryByRole("button", { name: "Start research" })).toBeNull() // a practice run is not called research
+    expect(card.getByText("Practice run: fixed text, not real research")).toBeInTheDocument() // and it says what it is before it starts
+    await t.user.click(card.getByRole("button", { name: "Start practice run" }))
     await waitFor(() => expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(1))
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")[0].body).toMatchObject({ confirm: true })
+    expect(await card.findByRole("group", { name: "The review this plan started" })).toBeInTheDocument()
+  })
+  it("the limits and the team of a practice plan can still be changed first, under More options", async () => {
+    const t = home(CATALOG_OFF, { "POST /api/chat": reply({ mode: "scripted", plan: SCRIPTED_PLAN }), "POST /api/chat/plans/plan-s/start": { status: 201, body: { kind: "board", id: "run-s" } } })
+    await t.ask("q")
+    const card = await planCard()
+    await t.user.click(card.getByText("More options"))
+    await t.user.click(card.getByRole("button", { name: "Change the limits or the team before starting" }))
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(0)
+    expect(card.getByText(/costs nothing and does no real research/)).toBeInTheDocument()
+    expect(card.getByLabelText("Most rounds of discussion")).toBeInTheDocument()
+  })
+  it("one click never starts anything that could cost money: a practice plan is confirmed when paid calls are on, a paid plan always", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode: "scripted", plan: SCRIPTED_PLAN }), "POST /api/chat/plans/plan-s/start": { status: 201, body: { kind: "board", id: "run-s" } } })
+    await t.ask("q")
+    const card = await planCard()
+    expect(card.queryByRole("button", { name: "Start practice run" })).toBeNull()
+    await t.user.click(card.getByRole("button", { name: "Start practice run (not research)" }))
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(0) // the first click only opens the confirm step
   })
 
   it("after 201 shows the run, follows its status, and opens it in the Board view", async () => {
@@ -330,7 +346,7 @@ describe("confirm step", () => {
     await emit({ type: "run.finished", usd: 1.25, minutes: 2 })
     expect(run.getByText("done")).toBeInTheDocument()
     expect(run.getByText("Decision: Go with conditions")).toBeInTheDocument()
-    expect(run.getByRole("status")).toHaveTextContent("The review is finished. 1 statement checked: 1 held up, 0 were proven wrong, 0 had too little evidence. Took 2:00 · cost $1.25")
+    expect(run.getByRole("status")).toHaveTextContent("The review is finished. 1 statement checked: 1 held up, 0 were proven wrong, 0 had too little evidence. It took 2 minutes and cost $1.25.")
     expect(t.onOpen).not.toHaveBeenCalled() // starting a plan does not navigate away
     await t.user.click(run.getByRole("button", { name: "See what they found" }))
     expect(sessionStorage.getItem("open.board")).toBe("202611150900-kras")
@@ -357,16 +373,16 @@ describe("confirm step", () => {
   }
   it("400 with a field: the message is next to that control, and the plan can be sent again", async () => {
     const { card } = await refusedWith({ status: 400, body: { error: "maxMinutes must be at least 5", field: "limits.maxMinutes" } })
-    await waitFor(() => expect(card.getByLabelText("Time limit (minutes)")).toHaveAccessibleDescription("maxMinutes must be at least 5"))
-    expect(card.getByLabelText("Time limit (minutes)")).toBeInvalid()
-    expect(card.getByLabelText("Cost limit (USD)")).toBeValid()
+    await waitFor(() => expect(card.getByLabelText("Most time it may take (minutes)")).toHaveAccessibleDescription("maxMinutes must be at least 5"))
+    expect(card.getByLabelText("Most time it may take (minutes)")).toBeInvalid()
+    expect(card.getByLabelText("Most it may cost (US dollars)")).toBeValid()
     expect(card.queryByText(/The plan was not started/)).toBeNull()
     expect(card.getByRole("button", { name: "Start paid research" })).toBeEnabled()
   })
   it("400 about the agents: next to the agents", async () => {
     const { card } = await refusedWith({ status: 400, body: { error: "the lead cannot be removed", field: "agents" } })
     expect(await card.findByText("the lead cannot be removed")).toBeInTheDocument()
-    expect(card.getByRole("group", { name: "Agents to include" })).toHaveAccessibleDescription("the lead cannot be removed")
+    expect(card.getByRole("group", { name: "Team members to include" })).toHaveAccessibleDescription("the lead cannot be removed")
   })
   it("400 without a field: under the card", async () => {
     const { card } = await refusedWith({ status: 400, body: { error: "the brief is too long" } })
@@ -376,7 +392,7 @@ describe("confirm step", () => {
     const { card } = await refusedWith({ status: 403, body: { error: "starting a board run with real models is refused." } })
     const alert = await card.findByRole("alert")
     expect(alert).toHaveTextContent("starting a board run with real models is refused.")
-    expect(alert).toHaveTextContent("NO_PAID_CALLS=0")
+    expect(alert).toHaveTextContent("Real")
     expect(card.queryByRole("status")).toBeNull()
   })
   it("404: the plan has expired and can no longer be started", async () => {
@@ -411,9 +427,9 @@ describe("effort", () => {
     const group = within(await screen.findByRole("group", { name: "Effort" }))
     expect(group.getAllByRole("radio").map((r) => (r as HTMLInputElement).value)).toEqual(["quick", "standard", "deep"])
     expect(group.getByRole("radio", { name: "Standard" })).toBeChecked() // the engine's default
-    expect(screen.getByText(/A full board review\./)).toHaveTextContent("6 agents · up to 4 rounds · up to 15:00 · up to $5.00 · strong models · Exa search, up to 8 searches")
+    expect(screen.getByText(/A full board review\./)).toHaveTextContent("6 agents · up to 4 rounds · up to 15 minutes · up to $5.00 · strong models · web search, up to 8 searches")
     await t.user.click(group.getByRole("radio", { name: "Deep" }))
-    expect(screen.getByText(/Every agent, more rounds\./)).toHaveTextContent("all agents · up to 8 rounds · up to 1:00:00 · up to $20.00")
+    expect(screen.getByText(/Every agent, more rounds\./)).toHaveTextContent("all agents · up to 8 rounds · up to 1 hour · up to $20.00")
     expect(localStorage.getItem("home.effort")).toBe("deep")
     await t.ask("q")
     await waitFor(() => expect(t.chats()).toHaveLength(1))
@@ -454,13 +470,13 @@ describe("effort", () => {
     let card = await planCard()
     const picker = within(card.getByRole("group", { name: "Effort for this plan" }))
     expect(picker.getByRole("radio", { name: "Standard" })).toBeChecked()
-    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    expect(card.getByText("at most $5.00, 15 minutes and 4 rounds of discussion")).toBeInTheDocument()
     await t.user.click(picker.getByRole("radio", { name: "Deep" }))
     await waitFor(() => expect(t.chats()).toHaveLength(2))
     expect(t.chats()[1].body).toEqual({ effort: "deep", messages: [{ role: "user", content: "Should we advance CMP-0423?" }] })
     expect(await screen.findByText("A deeper plan.")).toBeInTheDocument()
     card = await planCard()
-    expect(card.getByText("at most $20.00 · 1:00:00 · 8 rounds")).toBeInTheDocument() // the engine's numbers
+    expect(card.getByText("at most $20.00, 1 hour and 8 rounds of discussion")).toBeInTheDocument() // the engine's numbers
     expect(screen.getAllByRole("article", { name: "Reply" })).toHaveLength(1) // replaced, not added
     expect(screen.getByRole("group", { name: "Effort" }).querySelector("input:checked")).toHaveAttribute("value", "standard") // the chat's own choice is untouched
     await t.user.click(card.getByRole("button", { name: "Start research" }))
@@ -476,7 +492,7 @@ describe("effort", () => {
     const card = await planCard()
     await t.user.click(within(card.getByRole("group", { name: "Effort for this plan" })).getByRole("radio", { name: "Quick" }))
     expect(await card.findByText(/answered without a plan for this effort, so the plan here is unchanged/)).toBeInTheDocument()
-    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    expect(card.getByText("at most $5.00, 15 minutes and 4 rounds of discussion")).toBeInTheDocument()
     expect(within(card.getByRole("group", { name: "Effort for this plan" })).getByRole("radio", { name: "Standard" })).toBeChecked()
   })
 })
@@ -488,15 +504,15 @@ describe("what this can use", () => {
     const row = (name: string) => panel.getByText(name).closest("li")!
     await waitFor(() => expect(row("Claude (Anthropic)")).toHaveTextContent("key present"))
     expect(row("OpenAI")).toHaveTextContent("key missing")
-    expect(row("Exa search")).toHaveTextContent("key missing")
-    expect(panel.getByText("Paid calls on")).toBeInTheDocument()
+    expect(row("Web search (Exa)")).toHaveTextContent("key missing")
+    expect(panel.getByText("Real: costs money")).toBeInTheDocument()
     expect(t.view.container.querySelectorAll("input[type=password], input[type=text], input[type=search]")).toHaveLength(0)
   })
   it("says paid calls are off and how a person turns them on", async () => {
     home(CATALOG_OFF)
     const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByText("Paid calls off: practice runs only")).toBeInTheDocument()
-    expect(panel.getByRole("region", { name: "Paid calls" })).toHaveTextContent("NO_PAID_CALLS=0")
+    expect(await panel.findByText("Demo: practice runs only")).toBeInTheDocument()
+    expect(panel.getByRole("region", { name: "Paid calls" })).toHaveTextContent("Real")
     // a key that is present is not shown as usable while paid calls are off
     const claude = panel.getByText("Claude (Anthropic)").closest("li")!
     expect(within(claude).getByText("key present · off")).toHaveAttribute("data-kind", "neutral")
@@ -510,7 +526,7 @@ describe("what this can use", () => {
   it("says nothing of the kind when the board can use real models", async () => {
     home(CATALOG_ON, { "GET /api/status": { status: 200, body: { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } } } })
     const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    await panel.findByText("Paid calls on")
+    await panel.findByText("Real: costs money")
     expect(panel.queryByRole("note")).toBeNull()
   })
   it("groups agents as Board and Specialists, with triggers", async () => {
@@ -529,17 +545,17 @@ describe("what this can use", () => {
     home(CATALOG_ON)
     const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
     const skill = (name: string) => panel.getByText(name).closest("li")!
-    await waitFor(() => expect(skill("admet-benchmarks")).toHaveTextContent("index only, not installed"))
-    expect(skill("herg-triage")).not.toHaveTextContent("index only")
+    await waitFor(() => expect(skill("admet-benchmarks")).toHaveTextContent("known by name only: not installed"))
+    expect(skill("herg-triage")).not.toHaveTextContent("known by name only")
     expect(panel.getByText(/1 installed of 2/)).toBeInTheDocument()
   })
   it("says the engine is not running when the catalog cannot be read, and tries again", async () => {
     const t = home("down")
     const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByText("Engine not running")).toBeInTheDocument()
+    expect(await panel.findByText("The app's engine isn't running")).toBeInTheDocument()
     routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
     await t.user.click(panel.getByRole("button", { name: "Try again" }))
-    expect(await panel.findByText("Paid calls on")).toBeInTheDocument()
+    expect(await panel.findByText("Real: costs money")).toBeInTheDocument()
   })
 })
 
@@ -552,7 +568,7 @@ describe("what was checked", () => {
   it("shows the latest finished review's verdict counts with its own scripted label, and the like-for-like row", async () => {
     const t = home(CATALOG_ON, { "GET /api/runs": { status: 200, body: BOARD }, "GET /api/glhf/scoreboard": { status: 200, body: ROWS } })
     const strip = within(screen.getByRole("region", { name: "What was checked" }))
-    const review = await strip.findByRole("button", { name: /Latest board review/ })
+    const review = await strip.findByRole("button", { name: /Latest review/ })
     await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/runs/r-done/events"))).toBe(true)) // the finished one, not the newest
     await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: true })
     for (const verdict of ["verified", "verified", "contradicted", "unsupported"]) await emit({ type: "claim.checked", round: 1, member: "m", claim: `c-${verdict}-${Math.random()}`, kind: "k", verdict, checker: "jev" })
@@ -561,7 +577,7 @@ describe("what was checked", () => {
     expect(review).toHaveTextContent("1 was proven wrong")
     expect(review).toHaveTextContent("1 had too little evidence")
     expect(review).toHaveTextContent("of 4 statements checked")
-    const pair = strip.getByRole("button", { name: /Swarm vs single agent/ })
+    const pair = strip.getByRole("button", { name: /One agent or a team\?/ })
     expect(pair).toHaveTextContent("1.000 vs 1.000 · a tie")
     expect(pair).toHaveTextContent("Practice run: fixed text, not real research · demo case")
     expect(strip.getByText(/No model grades its own work/)).toBeInTheDocument()
@@ -574,7 +590,7 @@ describe("what was checked", () => {
   })
   it("labels a real review real even though paid calls are off now", async () => {
     home(CATALOG_OFF, { "GET /api/runs": { status: 200, body: [BOARD[1]] } })
-    const review = await within(screen.getByRole("region", { name: "What was checked" })).findByRole("button", { name: /Latest board review/ })
+    const review = await within(screen.getByRole("region", { name: "What was checked" })).findByRole("button", { name: /Latest review/ })
     await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: false })
     expect(review).toHaveTextContent("real model")
     expect(review).not.toHaveTextContent("scripted")
@@ -590,9 +606,9 @@ describe("an engine that was started before the chat routes existed", () => {
     const t = home("down", { "GET /api/chat/catalog": { status: 404, body: { error: "not found" } }, "POST /api/chat": { status: 404, body: { error: "not found" } } })
     const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
     expect(await panel.findByText(/running, but it has no chat routes yet/)).toBeInTheDocument()
-    expect(panel.queryByText("Engine not running")).toBeNull()
+    expect(panel.queryByText("The app's engine isn't running")).toBeNull()
     await t.ask("q")
-    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/it has no chat routes yet\. Restart it/))
+    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/it has no chat routes yet\. Stop the app and start it again/))
     expect(t.box()).toHaveValue("q")
   })
 })

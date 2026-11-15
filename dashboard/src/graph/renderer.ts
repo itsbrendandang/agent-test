@@ -249,7 +249,11 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   const settle = () => {
     settled = true
     clearTimeout(settleTimer)
-    if (fitOnSettle) { fitOnSettle = false; graph.zoomToFit(o.reducedMotion ? 0 : 600, 24) }
+    if (fitOnSettle) {
+      fitOnSettle = false
+      // A small graph is not zoomed in until its labels overlap: the fewer the nodes, the more room around them.
+      graph.zoomToFit(o.reducedMotion ? 0 : 600, sims.size < 12 ? 110 : sims.size < 30 ? 50 : 24)
+    }
     wake()
   }
   graph.onEngineStop(settle)

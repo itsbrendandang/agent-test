@@ -95,6 +95,7 @@ def github_record(item: Dict[str, str], repo: Dict[str, Any], retrieved_at: str,
     if licence in (None, "NOASSERTION"):
         licence = None
     description = common.clean_text(repo.get("description") or item["text"], 300) or item["name"]
+    description = common.safe_description(description, item["name"])
     topics = [str(t) for t in repo.get("topics") or []]
     texts = [item["name"], description, item["text"][:300], ", ".join(topics), item["section"]]
     return schema.make_record(

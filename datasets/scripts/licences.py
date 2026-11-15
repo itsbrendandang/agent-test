@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple, Union
 
 UNKNOWN = "unknown"
-MAX_NAME = 120
+MAX_NAME = 160
 
 
 class Licence(NamedTuple):
@@ -69,6 +69,8 @@ _ALIASES: Dict[str, str] = {
     "gnu general public license version 3": "GPL-3.0",
     "gnu general public license version 2": "GPL-2.0",
     "gnu general public license v3": "GPL-3.0",
+    "gnu lesser general public license v3.0": "LGPL-3.0",
+    "gnu lesser general public license version 3": "LGPL-3.0",
     "mit license (mit)": "MIT",
     "open data commons attribution license (odc-by) v1.0": "ODC-By-1.0",
     "odbl": "ODbL-1.0", "odc-odbl": "ODbL-1.0", "odbl 1.0": "ODbL-1.0", "odbl-1.0": "ODbL-1.0",
@@ -259,6 +261,28 @@ _HEDGED = re.compile(
 )
 
 
+# Words that may stand in a plain licence statement. A text with any other word says more than
+# "this licence" ("... with added limits", "... free for non-commercial purposes", "... for the
+# code") and is kept as written.
+_LICENCE_WORDS = {
+    "creative", "commons", "cc", "ccby", "by", "nc", "sa", "nd", "attribution", "noncommercial", "non", "commercial",
+    "sharealike", "share", "alike", "noderivatives", "noderivs", "no", "derivatives", "derivs", "derivative",
+    "works", "international", "intl", "unported", "generic", "universal", "public", "domain", "dedication",
+    "license", "licence", "licensed", "licenses", "licences", "deed", "legal", "code", "legalcode", "version", "v",
+    "the", "a", "an", "under", "is", "are", "this", "dataset", "data", "work", "available", "released",
+    "distributed", "terms", "of", "and", "igo", "us", "united", "states", "uk", "zero", "mark", "see", "at",
+    "open", "odc", "odbl", "pddl", "database", "apache", "mit", "software", "gnu", "general", "gpl", "lgpl", "agpl",
+    "lesser", "affero", "bsd", "clause", "new", "or", "later", "only",
+}
+_URL_IN_TEXT = re.compile(r"https?://\S+")
+
+
+def _plain_statement(text: str) -> bool:
+    """True when the text is only a licence name (and maybe its URL), with no other words."""
+    words = re.findall(r"[a-z]+", _URL_IN_TEXT.sub(" ", text.lower()))
+    return all(word in _LICENCE_WORDS for word in words)
+
+
 def _one(raw: str) -> Licence:
     text = re.sub(r"\s+", " ", raw).strip().strip(".").strip()
     link = re.fullmatch(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", text)
@@ -288,17 +312,18 @@ def _one(raw: str) -> Licence:
         # as written. Reading a licence out of it would be a guess.
         name = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text).strip()
         return Licence(name[:MAX_NAME], False, "unclear", False)
-    from_url = _cc_from_url(text)
-    if from_url:
-        commercial, share = properties(from_url)
-        return Licence(from_url, True, commercial, share)
-    for fragment, spdx_id in _KNOWN_URLS.items():
-        if fragment in low:
-            commercial, share = properties(spdx_id)
-            return Licence(spdx_id, True, commercial, share)
-    words = _cc_from_words(text)
-    if words:
-        return Licence(*words)
+    if _plain_statement(text):
+        from_url = _cc_from_url(text)
+        if from_url:
+            commercial, share = properties(from_url)
+            return Licence(from_url, True, commercial, share)
+        for fragment, spdx_id in _KNOWN_URLS.items():
+            if fragment in low:
+                commercial, share = properties(spdx_id)
+                return Licence(spdx_id, True, commercial, share)
+        words = _cc_from_words(_URL_IN_TEXT.sub(" ", text))
+        if words:
+            return Licence(*words)
     name = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text).strip()  # Markdown links keep their label
     return Licence((name or text)[:MAX_NAME], False, "unclear", False)
 
@@ -310,6 +335,11 @@ def normalise(raw: Union[str, Sequence[str], None], url: Optional[str] = None) -
         values = [raw]
     elif raw:
         values = [str(v) for v in raw if v is not None]
+    split: List[str] = []
+    for value in values:  # "A AND B" is two licences when both parts are known identifiers
+        pieces = [p.strip() for p in value.split(" AND ")]
+        split.extend(pieces if len(pieces) > 1 and all(_one(p).spdx for p in pieces) else [value])
+    values = split
     found: List[Licence] = []
     for value in values:
         value = value.strip()

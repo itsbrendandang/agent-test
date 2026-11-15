@@ -52,7 +52,7 @@ def to_record(item: Dict[str, Any], detail: Dict[str, Any], retrieved_at: str) -
     rows, columns = int(numbers.get("NumberOfInstances", 0)), int(numbers.get("NumberOfFeatures", 0))
     if rows < MIN_ROWS:
         return None
-    description = common.clean_text(detail.get("description"), 300)
+    description = common.safe_description(common.clean_text(detail.get("description"), 300), "")
     tags = detail.get("tag") or []
     tags = [tags] if isinstance(tags, str) else [str(t) for t in tags]
     texts = [name.replace("_", " ").replace("-", " "), description, ", ".join(tags)]

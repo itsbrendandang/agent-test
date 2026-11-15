@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { setCharactersShown, useCharacters } from "@/crew/store"
+import { ModeSwitch } from "@/components/PaidSwitch"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
+import { PAID_CHANGED } from "@/lib/paidSwitch"
 import { EngineOffline, PageHead } from "@/components/Shared"
-import { HOW_TO_TURN_ON, PAID_LABEL, paidState, type PaidState } from "@/lib/paid"
+import { HOW_TO_TURN_ON, paidState, type PaidState } from "@/lib/paid"
 import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
 import { call, isDesktop } from "@/system/desktop"
 
@@ -102,7 +104,18 @@ export function SettingsView() {
   )
 }
 
-interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean>; paid: PaidState }
+/** What each tool and key is for, in plain words. The engine's own name stays as the small second line. */
+const THING: Record<string, [string, string]> = {
+  docker: ["Docker", "Runs each analysis in a sealed box."],
+  uv: ["uv (Python tools)", "Starts the analysis programs."],
+  gcloud: ["Google Cloud tools", "Only needed for cloud runs."],
+  ANTHROPIC_API_KEY: ["Key for Claude (Anthropic)", "Lets real Claude models be used."],
+  OPENAI_API_KEY: ["Key for OpenAI", "Lets real OpenAI models be used."],
+  EXA_API_KEY: ["Key for web search (Exa)", "Lets the team look things up."],
+  HF_TOKEN: ["Key for Hugging Face", "Lets benchmark data be downloaded."],
+}
+
+interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean>; paid: PaidState; locked: boolean }
 
 // Read-only: which tools and keys the engine found. Key values never leave the engine; it reports set or not set.
 function EngineSection() {
@@ -111,29 +124,34 @@ function EngineSection() {
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let stale = false
-    const read = (path: string) => readEngine<{ tools?: Record<string, boolean>; keys?: Record<string, boolean>; paidCalls?: unknown }>(path)
+    const read = (path: string) => readEngine<{ tools?: Record<string, boolean>; keys?: Record<string, boolean>; paidCalls?: unknown; paidLocked?: unknown }>(path)
     Promise.all([read("/api/glhf/status"), read("/api/status")])
-      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys }, paid: paidState(swarm) }) })
+      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys }, paid: paidState(swarm), locked: swarm.paidLocked === true }) })
       .catch((e: unknown) => { if (!stale) { setFacts(null); setProblem(problemOf(e)) } })
     return () => { stale = true }
   }, [retry])
+  // The switch was used (here or in the status line): read the engine again.
+  useEffect(() => { const again = () => setRetry((n) => n + 1); window.addEventListener(PAID_CHANGED, again); return () => window.removeEventListener(PAID_CHANGED, again) }, [])
   const row = (name: string, on: boolean, yes: string, no: string) => (
-    <li key={name}><div className="keys-name"><strong>{name}</strong></div><span className="pill" data-kind={on ? "success" : "warning"}>{on ? yes : no}</span></li>
+    <li key={name}>
+      <div className="keys-name"><strong>{THING[name]?.[0] ?? name}</strong><span className="muted small">{THING[name] ? <>{THING[name][1]} <code>{name}</code></> : null}</span></div>
+      <span className="pill" data-kind={on ? "success" : "warning"}>{on ? yes : no}</span>
+    </li>
   )
   return (
     <section className="keys" aria-labelledby="engine-title">
-      <h2 id="engine-title">Engine</h2>
-      <p className="muted small">The engine starts runs and stores them. It reads its keys from the <code>.env</code> file in the repo root. Address: <code>{ENGINE}</code></p>
+      <h2 id="engine-title">What this computer can use</h2>
+      <p className="muted small">The engine is the program on this computer that starts runs and keeps their results. This page only reads from it. It reads its keys from a file called <code>.env</code>. Address: <code>{ENGINE}</code></p>
       {facts === undefined && <p className="muted small" role="status">Checking the engine…</p>}
       {facts === null && <EngineOffline needs="Tools and keys cannot be checked." said={problem.said} onRetry={() => { setFacts(undefined); setRetry((n) => n + 1) }} />}
       {facts && (
         <ul className="engine-facts">
           <li>
-            <div className="keys-name"><strong>Paid calls</strong></div>
-            <span className="pill" data-kind={facts.paid === "off" ? "neutral" : facts.paid === "on" ? "warning" : "waiting"}>{PAID_LABEL[facts.paid]}</span>
+            <div className="keys-name"><strong>Demo or Real</strong><span className="muted small">Whether runs may cost money.</span></div>
+            <ModeSwitch paid={facts.paid} locked={facts.locked} compact />
             <p className="engine-how muted small">
-              {facts.paid === "off" && "Real models, Exa search and cloud runs are refused. Practice runs (fixed text, no model) work and cost nothing. "}
-              {facts.paid === "on" && "Runs with real models, Exa search and Ask can spend API credits. To turn paid calls off, remove NO_PAID_CALLS=0 from .env and restart the engine. "}
+              {facts.paid === "off" && "Nothing that costs money can start: no real models, no web search, no cloud runs. Practice runs (fixed text, no model) work and cost nothing. "}
+              {facts.paid === "on" && "Runs with real models and web search cost money. Each one still asks you to confirm first. "}
               {facts.paid !== "on" && HOW_TO_TURN_ON}
             </p>
           </li>
@@ -151,7 +169,7 @@ export function TokenRow() {
   const held = useHasToken()
   return (
     <li>
-      <div className="keys-name"><strong>Session token</strong></div>
+      <div className="keys-name"><strong>Session token</strong><span className="muted small">A password for this session.</span></div>
       <span className="token-row">
         <span className="pill" data-kind={held ? "success" : "waiting"}>{held ? "held for this tab" : "not held"}</span>
         {held && <button type="button" className="btn" onClick={forgetToken}>Forget token</button>}

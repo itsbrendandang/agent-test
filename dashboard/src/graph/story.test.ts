@@ -112,3 +112,13 @@ describe("the replay's sentences come only from recorded events", () => {
     expect(s.steps.at(-1)!.label).toBe("memory recalled was recorded.")
   })
 })
+
+describe("the replay of a long run stays short", () => {
+  it("steps several events at a time for a long run, and one at a time for a short one", async () => {
+    const { stepsPerTick, replaySeconds, stepMs } = await import("./story")
+    expect(stepsPerTick(20)).toBe(1)
+    expect(stepsPerTick(750)).toBe(8)
+    expect(replaySeconds(750)).toBeLessThanOrEqual(40)
+    expect(replaySeconds(57)).toBe(Math.round((57 * stepMs(57)) / 1000))
+  })
+})
