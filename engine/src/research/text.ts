@@ -51,6 +51,14 @@ export function safeUrl(url: unknown): url is string {
   try { const u = new URL(url); return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password && u.hostname.includes(".") } catch { return false }
 }
 
+/**
+ * The address of a source's picture as it may be kept and shown: https only (a page served over https cannot show an
+ * http picture), the rules of `safeUrl`, and at most 1,000 characters. Anything else is no picture.
+ */
+export function imageUrl(url: unknown): string | undefined {
+  return safeUrl(url) && url.length <= 1_000 && url.startsWith("https://") ? url : undefined
+}
+
 // ── Markers ──────────────────────────────────────────────────────────────────────────────────────
 
 /** "[1, 2]" and "[1-3]" and "【1】" written as "[1][2]..." so that one form is left to read. */

@@ -47,7 +47,7 @@ import { answerNotes, specialistRoom, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
-import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
+import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
 import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
 export const DATABASES = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"] as const
@@ -530,7 +530,8 @@ export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[
     if (!item || !safeUrl(item.url)) continue
     const title = oneLine(withoutInlineTags(String(item.title ?? "")), MAX_TITLE_CHARS), text = plainBlock(withoutInlineTags(String(item.text ?? "")), MAX_SOURCE_CHARS)
     if (!title || text.length < 40) continue // nothing a statement could be checked against
-    out.push({ url: item.url, title, text, provider: provider as EvidenceItem["provider"] })
+    const image = imageUrl(item.image) // a picture the search returned with the page; never fetched by the engine
+    out.push({ url: item.url, title, text, provider: provider as EvidenceItem["provider"], ...(image ? { image } : {}) })
   }
   return out
 }
@@ -621,7 +622,7 @@ export function numberSources(candidates: Candidate[], max: number, hypotheses: 
     const note = noteOf(c.item, c.provider)
     const year = c.provider === "europepmc" ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts writes "(Journal, 2025)" at the end of a title
     const serves = hypotheses.filter((id) => c.serves.includes(id))
-    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
+    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), ...(c.item.image ? { image: c.item.image } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
   })
 }
 
@@ -1082,7 +1083,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const last = deps.earlier.filter((r) => r.mode === "real" && r.status === "done").at(-1)
       const known = keysOf()
       const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !known.has(urlKey(s.url)) && safeUrl(s.url) && s.text?.length >= 40)
-      const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text }))
+      const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text, ...(imageUrl(s.image) ? { image: s.image } : {}) }))
       const rescreening = { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }
       if (again.length && !allow(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)), "screen:earlier", rescreening)) {
         const place = slotNumber++

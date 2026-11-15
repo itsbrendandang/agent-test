@@ -118,6 +118,8 @@ export interface Source {
   earlier?: boolean
   /** Set once the final text exists: does it cite this source? */
   cited?: boolean
+  /** A picture of the source (https), as its search returned it: shown beside the answer, linked to the source. Absent when the search gave none, and in answers recorded before the field. */
+  image?: string
 }
 /** A source as the record keeps it: with the text every check was made against (an abstract or excerpts, never a full paper). */
 export interface StoredSource extends Source { text: string; studyType?: string; relevance?: number }

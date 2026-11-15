@@ -143,6 +143,14 @@
 .answer-sourcelist .source-title { font-size: 15px; font-weight: 600; }
 .answer-sourcelist .source-what b, .answer-sourcelist .source-title { white-space: normal; }
 .answer-foot { line-height: 1.5; }
+/* Pictures the searches returned with their pages: a strip that scrolls sideways, each linked to and credited with its source. */
+.answer-images ul { list-style: none; margin: 0; padding: 0 0 4px; display: flex; gap: 10px; overflow-x: auto; }
+.answer-images li { flex: 0 0 auto; }
+.answer-images a { display: flex; flex-direction: column; gap: 4px; width: 160px; color: inherit; text-decoration: none; }
+.answer-images img { width: 160px; height: 104px; object-fit: cover; border-radius: 10px; border: 1px solid var(--edge); background: var(--surface); }
+.answer-images a:hover img, .answer-images a:focus-visible img { border-color: var(--text-muted); }
+.answer-image-credit { display: flex; align-items: center; gap: 6px; color: var(--text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.answer-image-credit .source-n { min-width: 18px; height: 18px; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) { .answer-sourcelist li { transition: none; } }
 
 .answer-opening { font-size: 15px; color: var(--text-muted); }
