@@ -555,7 +555,7 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
 const urlKey = (url: string) => { try { const u = new URL(url); return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}` } catch { return url } }
 
 /** The indexes the literature search (scholarly.ts) also searches: a paper found there keeps its own name as its provider. */
-export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv"]
+export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"]
 const isPaperIndex = (value: unknown): value is Provider => (PAPER_INDEXES as readonly unknown[]).includes(value)
 const isPaper = (provider: Provider) => provider === "europepmc" || isPaperIndex(provider)
 /** Where a found item came from: the index of a literature search's paper, else the search that found it. */
@@ -605,7 +605,7 @@ export function exaSpentBy(config: BoardConfig, id: string): number {
   return Math.max(0, usd)
 }
 
-export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
+export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", crossref: "Only the abstract was read.", biorxiv: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
 
 /**
  * Why each numbered source was selected and what limits it, and why the others were not: assembled by code from what
@@ -746,10 +746,10 @@ export const countsOf = (sources: number, statements: Statement[]): Counts => ({
 
 // ── The run ──────────────────────────────────────────────────────────────────────────────────────
 
-const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar and arXiv", fixture: "Loading example sources" }
+const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv", fixture: "Loading example sources" }
 const NOT_SEARCHED: Partial<Record<Provider, string>> = {
   exa: "The web search did not run, so this answer rests on the other searches only.",
-  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv) was not searched, so this answer rests on the other searches only.",
+  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv) was not searched, so this answer rests on the other searches only.",
 }
 const hash = (value: unknown) => createHash("sha1").update(JSON.stringify(value)).digest("hex").slice(0, 16)
 /** First-pass calls that run at once, at most (as triage.ts does inside one FirstPass). */

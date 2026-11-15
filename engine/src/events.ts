@@ -31,7 +31,7 @@ export type BoardEvent =
  * public database (sources/). "fixture": a practice run's example source, not a search. Absent in runs recorded before
  * this field.
  */
-export type SearchProvider = "exa" | "europepmc" | "openalex" | "semanticscholar" | "arxiv" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem" | "fixture"
+export type SearchProvider = "exa" | "europepmc" | "openalex" | "semanticscholar" | "arxiv" | "crossref" | "biorxiv" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem" | "fixture"
 /** The searches of a board review. The research answer's paper indexes ("openalex", "semanticscholar", "arxiv") are not among them. */
 export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem", "fixture"]
 /**

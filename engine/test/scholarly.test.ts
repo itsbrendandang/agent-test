@@ -1,4 +1,4 @@
-// The research answer's literature search over four free sources (scholarly.ts). No test here reaches the network:
+// The research answer's literature search over six free sources (scholarly.ts). No test here reaches the network:
 // fetch is a fake that answers by host, and throws for any other address.
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -29,11 +29,24 @@ const ARXIV = `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.
 
 type Answer = (url: URL, init?: RequestInit) => Response | Promise<Response>
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+// Crossref and bioRxiv share the Crossref host; biorxiv is the request carrying filter=prefix:10.1101.
+const CROSSREF = { message: { items: [
+  // The same paper as Europe PMC's, by DOI: left out.
+  { DOI: "10.1056/NEJMoa2307563", title: ["Semaglutide and Cardiovascular Outcomes in Obesity without Diabetes"], "container-title": ["N Engl J Med"], issued: { "date-parts": [[2023]] }, abstract: "<jats:p>Duplicate by DOI.</jats:p>", type: "journal-article" },
+  { DOI: "10.1111/crossref.9", title: ["Semaglutide adherence in primary care"], "container-title": ["BMJ"], issued: { "date-parts": [[2023]] }, abstract: "<jats:p>Adherence to semaglutide was high in primary care.</jats:p>", type: "journal-article" },
+] } }
+const BIORXIV = { message: { items: [
+  { DOI: "10.1101/2023.05.05.539999", title: ["Semaglutide in a mouse model of obesity"], issued: { "date-parts": [[2023]] }, abstract: "<jats:p>Semaglutide reduced weight in mice.</jats:p>", type: "posted-content", "group-title": ["bioRxiv"] },
+] } }
+/** Crossref and bioRxiv answer empty by default, so tests that do not care about them are unaffected. */
+const crossrefEmpty: Answer = () => json({ message: { items: [] } })
+
 const DEFAULTS: Record<string, Answer> = {
   [LITERATURE_HOSTS.europepmc]: () => json(EUROPEPMC),
   [LITERATURE_HOSTS.openalex]: () => json(OPENALEX),
   [LITERATURE_HOSTS.semanticscholar]: () => json(S2),
   [LITERATURE_HOSTS.arxiv]: () => new Response(ARXIV, { status: 200 }),
+  [LITERATURE_HOSTS.crossref]: crossrefEmpty, // same host as biorxiv
 }
 function fakeNet(over: Record<string, Answer> = {}) {
   const calls: { url: URL; init?: RequestInit }[] = []
@@ -67,21 +80,26 @@ test("titles are compared without case, punctuation or the (Journal, year) end",
   assert.equal(titleKey("Semaglutide and Cardiovascular Outcomes. (N Engl J Med, 2023) [review]"), titleKey("semaglutide and cardiovascular outcomes"))
 })
 
-test("the four sources are merged: each paper once (by DOI or title), Europe PMC's copy first, sources taking turns", async () => {
-  const { calls, fetchFn } = fakeNet()
+test("the six sources are merged: each paper once (by DOI or title), Europe PMC's copy first, sources taking turns", async () => {
+  const crossrefByFilter: Answer = (url) => json((url.searchParams.get("filter") ?? "").includes("10.1101") ? BIORXIV : CROSSREF)
+  const { calls, fetchFn } = fakeNet({ [LITERATURE_HOSTS.crossref]: crossrefByFilter })
   const result = await scholarlyLive("semaglutide cardiovascular obesity", { fetchFn })
   assert.deepEqual(result.items.map((i) => i.url), [
     "https://pubmed.ncbi.nlm.nih.gov/37952131/",
     "https://doi.org/10.1000/openalex.2",
     "https://www.semanticscholar.org/paper/b",
     "https://arxiv.org/abs/2401.01234",
+    "https://doi.org/10.1111/crossref.9",
+    "https://doi.org/10.1101/2023.05.05.539999",
   ])
-  assert.deepEqual(result.items.map((i) => i.provider), ["europepmc", "openalex", "semanticscholar", "arxiv"])
+  assert.deepEqual(result.items.map((i) => i.provider), ["europepmc", "openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"])
   assert.deepEqual(result.notices, [])
-  // Only HTTPS, only the four allowed hosts, one request each, redirects refused.
+  // Only HTTPS, only the allowed hosts (crossref and biorxiv share one), one request each, redirects refused.
   assert.deepEqual(calls.map((c) => c.url.hostname).sort(), Object.values(LITERATURE_HOSTS).sort())
   for (const c of calls) assert.equal(c.init?.redirect, "error")
   assert.equal(calls.find((c) => c.url.hostname === LITERATURE_HOSTS.arxiv)?.url.searchParams.get("search_query"), "all:semaglutide AND all:cardiovascular AND all:obesity")
+  // bioRxiv is the Crossref request filtered to the preprint prefix.
+  assert.ok(calls.some((c) => c.url.hostname === LITERATURE_HOSTS.biorxiv && (c.url.searchParams.get("filter") ?? "").includes("10.1101")))
 })
 
 test("one source failing is skipped with a notice; the others are still used", async () => {

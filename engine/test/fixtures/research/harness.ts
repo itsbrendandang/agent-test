@@ -57,6 +57,8 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   if (url.startsWith("https://api.openalex.org/works?")) return net.openalex ? net.openalex(new URL(url).searchParams.get("search") ?? "") : jsonResponse({ results: [] })
   if (url.startsWith("https://api.semanticscholar.org/graph/v1/paper/search?")) return jsonResponse({ data: [] })
   if (url.startsWith("https://export.arxiv.org/api/query?")) return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 })
+  // Crossref and bioRxiv (scholarly.ts) share the Crossref host; find nothing here by default.
+  if (url.startsWith("https://api.crossref.org/works?")) return jsonResponse({ message: { items: [] } })
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 

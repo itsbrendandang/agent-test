@@ -1,4 +1,4 @@
-// The research answer's literature search: Europe PMC (literature.ts) and three more free scholarly indexes, searched
+// The research answer's literature search: Europe PMC (literature.ts) and five more free scholarly indexes, searched
 // at the same time and merged into one list. Taken from Anh Lam's glhf/scripts/fetch_literature.py.
 //
 //   europepmc        PubMed/MEDLINE, PubMed Central and preprints (literature.ts)
@@ -6,6 +6,8 @@
 //   semanticscholar  Semantic Scholar: works without a key; SEMANTIC_SCHOLAR_API_KEY (or S2_API_KEY) from the
 //                    environment only raises its rate limit. The key is free and is never logged.
 //   arxiv            arXiv preprints (physics, computing, quantitative biology)
+//   crossref         Crossref: the DOI registry across every publisher (abstracts when the publisher deposits one)
+//   biorxiv          bioRxiv/medRxiv preprints, via Crossref filtered to the 10.1101 prefix
 //
 // RULES (tested in test/scholarly.test.ts, which never reaches the network):
 // - No key and no charge for any of them: this adds no paid call. Only HTTPS, only to the hosts in LITERATURE_HOSTS; a
@@ -21,18 +23,20 @@ import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "./exa.ts"
 import { cleanDoi, europePmcPapers, type FoundPaper, plainText, readCapped } from "./literature.ts"
 
-export const SCHOLARLY_SOURCES = ["europepmc", "openalex", "semanticscholar", "arxiv"] as const
+export const SCHOLARLY_SOURCES = ["europepmc", "openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"] as const
 export type ScholarlySource = (typeof SCHOLARLY_SOURCES)[number]
 
-/** The only hosts the literature search may call, by source. */
+/** The only hosts the literature search may call, by source. (crossref and biorxiv share the Crossref API host.) */
 export const LITERATURE_HOSTS: Record<ScholarlySource, string> = {
   europepmc: "www.ebi.ac.uk",
   openalex: "api.openalex.org",
   semanticscholar: "api.semanticscholar.org",
   arxiv: "export.arxiv.org",
+  crossref: "api.crossref.org",
+  biorxiv: "api.crossref.org",
 }
 
-export const SOURCE_NAME: Record<ScholarlySource, string> = { europepmc: "Europe PMC", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv" }
+export const SOURCE_NAME: Record<ScholarlySource, string> = { europepmc: "Europe PMC", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv", crossref: "Crossref", biorxiv: "bioRxiv/medRxiv" }
 
 /** Papers asked of each added source. Europe PMC keeps its own 8 (literature.ts). */
 export const PER_SOURCE = 5
@@ -175,6 +179,40 @@ async function arxiv(query: string, fetchFn: typeof fetch, signal: AbortSignal):
   return parseArxiv(await get("arxiv", `https://${LITERATURE_HOSTS.arxiv}/api/query?${params}`, fetchFn, signal, { accept: "application/atom+xml" }))
 }
 
+// ── Crossref / bioRxiv ─────────────────────────────────────────────────────────────────────────────
+// Both use the Crossref API; bioRxiv/medRxiv is Crossref filtered to the 10.1101 DOI prefix.
+
+const firstStr = (value: unknown): string => (Array.isArray(value) ? str(value[0]) : str(value))
+
+/** The items of one Crossref answer. `source` sets the provider and, for biorxiv, the preprint mark. */
+export function parseCrossref(body: unknown, source: ScholarlySource = "crossref"): FoundPaper[] {
+  const items = ((body as { message?: { items?: unknown } })?.message ?? {}).items
+  if (!Array.isArray(items)) return []
+  const out: FoundPaper[] = []
+  for (const it of items as Record<string, unknown>[]) {
+    if (!it || typeof it !== "object") continue
+    const doi = cleanDoi(it.DOI)
+    if (!doi) continue
+    const parts = (((it.issued as { "date-parts"?: unknown[] } | undefined)?.["date-parts"] ?? [])[0]) as unknown[] | undefined
+    const published = Array.isArray(parts) ? year(parts[0]) : undefined
+    const preprint = source === "biorxiv" || str(it.type) === "posted-content"
+    const venue = preprint ? firstStr(it["group-title"]) || "preprint" : firstStr(it["container-title"]) || undefined
+    const p = paper(source, `https://doi.org/${doi}`, titled(plainText(firstStr(it.title)), venue, published, preprint ? "preprint" : undefined), str(it.abstract), doi)
+    if (p) out.push(p)
+  }
+  return out
+}
+
+async function crossref(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
+  const params = new URLSearchParams({ query, rows: String(PER_SOURCE) })
+  return parseCrossref(json(await get("crossref", `https://${LITERATURE_HOSTS.crossref}/works?${params}`, fetchFn, signal, { accept: "application/json" })), "crossref")
+}
+
+async function biorxiv(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
+  const params = new URLSearchParams({ query, rows: String(PER_SOURCE), filter: "prefix:10.1101" })
+  return parseCrossref(json(await get("biorxiv", `https://${LITERATURE_HOSTS.biorxiv}/works?${params}`, fetchFn, signal, { accept: "application/json" })), "biorxiv")
+}
+
 // ── Merge ────────────────────────────────────────────────────────────────────────────────────────
 
 /** A title as a merge key: lower case, accents and punctuation set aside, and without the "(Journal, 2024) [mark]" end. */
@@ -217,7 +255,11 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
   const sources = SCHOLARLY_SOURCES
   const run = (source: ScholarlySource, signal: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> => {
     if (source === "europepmc") return europePmcPapers(query, fetchFn, signal, MAX_BODY_BYTES).then((r) => ({ papers: r.papers, notices: r.notices.map((n) => `Europe PMC: ${n}`) }))
-    const work = source === "openalex" ? openAlex(query, fetchFn, signal) : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env) : arxiv(query, fetchFn, signal)
+    const work = source === "openalex" ? openAlex(query, fetchFn, signal)
+      : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env)
+      : source === "arxiv" ? arxiv(query, fetchFn, signal)
+      : source === "crossref" ? crossref(query, fetchFn, signal)
+      : biorxiv(query, fetchFn, signal)
     return work.then((papers) => ({ papers, notices: [] }))
   }
   const settled = await Promise.allSettled(sources.map((s) => inTime((signal) => run(s, signal), ms)))
