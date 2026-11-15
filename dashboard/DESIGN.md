@@ -30,8 +30,9 @@ Every view has the same three parts (`src/App.tsx`).
   "New search" there. Nothing else is in the header. There is no status strip and no Demo or Real control in it.
 - **The view**, inside one `<main>`. The view scrolls inside it. The header never lies over content.
   Content is at most 1100 px wide, with the same left edge on every view (the Overview's lab and the Agent Log too).
-  Graph and Research use the full width (`data-wide` on the view's root element): Graph for its picture,
-  Research for its inspector. Every other view shares the 1100 px column. The Overview and Research start
+  Graph and Research use a wider column, up to 1480 px (`data-wide` on the view's root element): Graph for its
+  picture, Research for its inspector. With the inspector open, Research has no cap and the inspector reaches the
+  right edge of the window. Every other view shares the 1100 px column. The Overview and Research start
   screens share one 800 px column for the question box.
 
 Under 480 px the header drops the view's title, so the place name and the actions stay inside the window.

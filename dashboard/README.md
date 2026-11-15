@@ -70,9 +70,9 @@ button, the place name, and two slots a view can fill
 (`<HeaderSlot area="title" | "actions">`, `src/components/HeaderSlot.tsx`). When the engine cannot be reached, the
 page says so once, with "Try again".
 
-Content is at most 1100 px wide, with the same left edge on every view. Graph and Research use the full width
-(`data-wide`): Graph for its picture, Research for its inspector. When the inspector is open it reaches the right
-edge of the window. Its tabs are Evidence, Hypotheses (when there are some), Results and Activity, on one line. The
+Content is at most 1100 px wide, with the same left edge on every view. Graph and Research use a wider column, up to
+1480 px (`data-wide`); see `DESIGN.md`. When the inspector is open, Research has no cap and the inspector reaches
+the right edge of the window. Its tabs are Evidence, Hypotheses (when there are some), Results and Activity, on one line. The
 Agent Lab scene is on Overview, not in the inspector.
 
 ## Run mode (Demo or Real) and provenance
