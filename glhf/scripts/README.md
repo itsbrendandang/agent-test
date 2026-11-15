@@ -3,12 +3,42 @@
 Helper scripts for **gathering data** for this project. Added on the `data-scrape`
 branch — they don't change any app code.
 
-There are two jobs these scripts do:
+There are three jobs these scripts do:
 
 1. **Gather evidence** to back up the claims the agents make.
 2. **Score** how good the agents are at answering science questions.
+3. **Autoresearch** — the AI proposes and runs its own experiments on a dataset.
 
 All downloaded data goes to `glhf/data/` and is gitignored (never committed).
+
+---
+
+## Autoresearch — `autoresearch.py` (AI runs experiments independently)
+
+Point it at a CSV/TSV. The AI **picks its own experiments** on the data, runs them,
+and reports what holds up:
+
+1. profiles the columns, 2. the model **proposes its own testable hypotheses**,
+3. the script **runs each one** (a safe menu: correlation, two-group comparison),
+4. the model **interprets** the results and flags what is uncertain.
+
+```bash
+pip install pandas scipy
+# key in .env:  ANTHROPIC_API_KEY=sk-ant-...
+python3 glhf/scripts/autoresearch.py --data mydata.csv
+python3 glhf/scripts/autoresearch.py --data mydata.csv --dry-run   # no API: profile + prompt only
+```
+
+Output: `glhf/data/autoresearch/<name>.report.md` and `.results.json`.
+
+**Safe by design:** it is a standalone demo tool that **does not touch the BixBench3
+swarm or any benchmark code**. The model only *chooses* columns and a test from a
+fixed menu; the script runs the stats (no arbitrary code execution).
+
+> How this relates to the product: the BixBench3 swarm already runs experiments
+> autonomously on *given* tasks (its **Proposer** role generates the claims to test).
+> `autoresearch.py` is the same idea shown on *your own* data, in a small, safe form
+> — useful as a demo of "AI runs experiments independently."
 
 ---
 
