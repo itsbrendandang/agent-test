@@ -201,7 +201,9 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
   const writer = parseModelId(config.models.strong, "board/config.yaml models.strong")
   const checker = firstPassModel(config, writer.qualified)
   const critic = criticModel(config, writer)
-  const specialist = level.specialistTier === "cheap" ? planner : writer
+  // A specialist's sentences are checked by the writer's checker, which is on another vendor than the writer. So the
+  // cheap tier is used only when it is the writer's vendor; otherwise the specialist runs on the writer's model.
+  const specialist = level.specialistTier === "cheap" && planner.vendor === writer.vendor ? planner : writer
   const get = (id: ModelId) => {
     const model = models.getModel(id.vendor, id.id)
     if (!model) throw new Error(`Model ${id.qualified} is not in the model catalog`)
@@ -1165,7 +1167,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (team.length) {
         const share = Math.max(60, Math.floor(level.words / 3))
         const wSystem = writerSystem(level.words), wUser = writerUser({ question: record.question, thread, searches: record.searches, sources })
-        const needed = brain.worstCase("write", wSystem.length + wUser.length) + brain.worstCase("critic", wSystem.length + wUser.length) + brain.worstCase("revise", wSystem.length + wUser.length)
+        // The critic also reads the draft, and the reviser the draft and its review: both are counted at their longest
+        // (the writer's whole output plus every specialist's section), so the estimate errs on the side of not asking.
+        const base = wSystem.length + wUser.length, longest = (level.maxOutputTokens + team.length * sectionTokens(level)) * CHARS_PER_TOKEN
+        const needed = brain.worstCase("write", base) + brain.worstCase("critic", base + longest) + brain.worstCase("revise", base + 2 * longest)
         const drafted = await Promise.allSettled(team.map(async (who): Promise<string> => {
           const step = `specialist:${who.name}`, heading = `### Method view: ${who.title}`
           const sSystem = specialistSystem(share, who.title), sUser = specialistUser({ question: record.question, why: who.why, notes: notesOf.get(who.name) ?? "", searches: record.searches, sources })
