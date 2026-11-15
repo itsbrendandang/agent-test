@@ -59,8 +59,8 @@ const flat = (text: unknown, max: number) => String(text ?? "").replace(/\s+/g, 
 export function efforts(config: BoardConfig): Effort[] {
   const m = config.meeting, usd = Math.min(m.max_usd, m.daily_usd)
   return [
-    { id: "quick", label: "Quick", description: "The lead, the member that searches, a member that makes checkable claims and the best-matched others (a method specialist when one fits); one round, the cheap model tier, a few searches.",
-      limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 3, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
+    { id: "quick", label: "Quick", description: "The lead, the member that searches, the evidence verifier, a member that makes checkable claims and the best-matched other (a method specialist when one fits); one round, the cheap model tier, a few searches.",
+      limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 4, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
     { id: "standard", label: "Standard", description: "The lead, the Critic and the members and method specialists that match the question, each on its own model tier, about half the rounds the config allows.",
       limits: { maxUsd: round2(usd * 0.6), maxMinutes: Math.max(1, Math.ceil(m.max_minutes * 2 / 3)), maxRounds: Math.max(1, Math.ceil(m.max_rounds / 2)) }, agents: "all", modelTier: "per agent", search: { exa: true, maxSearches: 12 } },
     { id: "deep", label: "Deep", description: "The members and method specialists that match plus the Critic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",

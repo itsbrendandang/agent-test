@@ -75,7 +75,7 @@ describe("a team review (boardLab)", () => {
     expect(CHARACTER_IDS.filter((id) => m.characters[id].state === "working" || m.characters[id].state === "fetching")).toEqual([])
   })
 
-  it("gives every search of a review to the Scout, the one member that searches; nothing kept is an empty trip", () => {
+  it("gives every search of a review to the Scout, the only member with the web search; nothing kept is an empty trip", () => {
     const m = boardLab(REVIEW_WITH_VISITOR.slice(0, 6))
     expect(trips(m, "scout").map((t) => [t.label, t.outcome])).toEqual([
       ["3 results from the web (Exa) (2 more screened out)", "carried"],

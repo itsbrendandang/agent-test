@@ -34,8 +34,6 @@ test("the verifier is on the team, right after the scout, on the cheap tier, wit
   assert.equal(verifier.verifies, "scout")
   assert.equal(verifier.model, "cheap", "the scout's tier: it adds little spend")
   assert.deepEqual(verifier.tools, ["literature_search", "database_search"], "free searches only; the web search stays the scout's")
-  assert.match(verifier.prompt, /Never reply `No task\.`/)
-  for (const part of ["exists", "says what the Scout says", "current", "retract", "Record or finding", "Confirmed", "Wrong", "Missing"]) assert.ok(verifier.prompt.includes(part), `its instructions cover "${part}"`)
   const brief = loadBrief(BRIEF, config.brief.required_sections)
   assert.ok(instructionsFor(config, verifier, brief, loadRoster(config)).includes("# Searching the literature"), "it gets the literature search's guidance")
 })

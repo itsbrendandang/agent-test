@@ -92,7 +92,7 @@ checkers:
 board:                       # order = speaking order in the transcript; remove a line to bench a member
   - scout                    # MUST STAY, and first: the member that gathers the sources (the only one with the web search). Without it a review gathers no sources and no statement about published work can be checked
   - evidence-verifier        # MUST STAY: rechecks the scout's sources and searches for what it missed (literature and databases, free), in every round, right after the scout. The lead reads its report before deciding
-  - proposer                 # members still reply in parallel each round (the scout replies before the others); the lead names each one's task
+  - proposer                 # members still reply in parallel each round (the scout, then the evidence verifier, reply before the others); the lead names each one's task
   - experimenter             # one agent, three modes (Pilot, full run, Reviser) named by the lead
   - methods-auditor
   - critic
