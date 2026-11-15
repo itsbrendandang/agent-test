@@ -44,16 +44,20 @@ view adds one. See "How the screens connect" in the main README.
 
 | Label (navigation) | Key (address) | File | What it shows |
 |---|---|---|---|
+| Overview | `Overview` | `OverviewView.tsx`, `src/overview/` | The question box, the answer asked from there right under it, then the Agent Lab scene. One quiet line of counts. |
 | Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work, read the answer with its sources. |
 | Saved research | `Runs` | `ExperimentsView.tsx` | Everything that was researched, newest first, with keyword search. Runs of the same brief are one row with their history. |
 | Compare | `Compare` | `SwarmView.tsx` | One agent alone and a team of nine on the same task, side by side. Start a run here (see below). |
 | Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |
 | Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
 | Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
-| Agent Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
-| Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
+| Agent Log | `Lab` | `LabView.tsx`, `src/lab/` | Every event of one run, with filters and downloads. (The animated Agent Lab scene is on Overview.) |
+| Benchmarks | `Benchmarks` | `BenchmarksView.tsx`, `src/overview/Benchmarks.tsx` | Our benchmark results beside the record to beat. |
+| Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), Usage and limits (spend today and the limits, `src/overview/Credits.tsx`), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
-Overview, Research, Agent Lab, Saved research and Compare are the primary places. Team review, Agents, Graph and Benchmarks sit under "More".
+Overview, Research and Saved research are the primary places: ask, read, find again. Two quieter groups follow, each
+with a heading: "How it works" (Agent Log, Team review, Graph, Agents) and "Evaluation" (Benchmarks, Compare). The
+groups are `PRIMARY` and `GROUPS` in `src/nav.ts`.
 Settings has one entry, at the foot of the navigation.
 
 ## The shell

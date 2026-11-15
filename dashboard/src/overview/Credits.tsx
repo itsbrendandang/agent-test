@@ -1,4 +1,4 @@
-// What real runs have cost today, against the limits the engine enforces. Read from GET /api/paid, which is the
+// Settings → Usage and limits: what real runs have cost today, against the limits the engine enforces. Read from GET /api/paid, which is the
 // engine's own count: this page adds nothing up. It shows our limits and our spend, not the balance of an account
 // at Anthropic, OpenAI or Exa: no provider tells the engine that, so it is not shown.
 import { useEffect, useState } from "react"
@@ -22,13 +22,14 @@ export function Credits() {
   const spent = num(caps.spentTodayUsd), daily = num(caps.dailyUsd), run = num(caps.maxUsd), exaUsed = num(caps.exaUsedUsd), exaTop = num(caps.exaCeilingUsd)
   const share = (part: number | undefined, whole: number | undefined) => (part === undefined || !whole ? 0 : Math.min(100, (part / whole) * 100))
   return (
-    <section aria-labelledby="ov-credits" className="ov-credits">
-      <div className="ov-row-label" id="ov-credits">API credits <small>{paid === null ? "The engine did not say." : real ? "Real mode: runs spend money, inside these limits." : "Demo mode: nothing can be spent."}</small></div>
+    <section aria-labelledby="usage-title" className="set-section ov-credits">
+      <h2 id="usage-title">Usage and limits</h2>
+      <p className="muted small">{paid === null ? "The engine did not say." : real ? "Real mode is on. Runs stay inside these limits." : "Demo mode: nothing can be spent."}</p>
       {paid !== null && (
         <div className="ov-tiles">
           <div className="ov-tile"><b>{usd(spent)}</b><span>Spent today</span><small>of a {usd(daily)} daily limit</small><div className="ov-track" aria-hidden="true"><i data-made="research" style={{ width: `${share(spent, daily)}%` }} /></div></div>
           <div className="ov-tile"><b>{usd(run)}</b><span>Limit per run</span><small>A run stops when it reaches it.</small></div>
-          <div className="ov-tile"><b>{usd(exaUsed)}</b><span>Web search (Exa)</span><small>of a {usd(exaTop)} ceiling, all time</small><div className="ov-track" aria-hidden="true"><i data-made="research" style={{ width: `${share(exaUsed, exaTop)}%` }} /></div></div>
+          <div className="ov-tile"><b>{usd(exaUsed)}</b><span>Exa search</span><small>of a {usd(exaTop)} ceiling, all time</small><div className="ov-track" aria-hidden="true"><i data-made="research" style={{ width: `${share(exaUsed, exaTop)}%` }} /></div></div>
           <div className="ov-tile"><b>Not known</b><span>Account balances</span><small>Providers do not report them to the app. Check each provider's own page.</small></div>
         </div>
       )}

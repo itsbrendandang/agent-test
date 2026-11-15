@@ -11,7 +11,7 @@ export const DEFAULT_VIEW: View = "Overview"
 export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Log", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
-  Overview: "How much has been run, and how much of it is research.",
+  Overview: "Ask a question and watch the team work on it.",
   Home: "Ask a research question and read the answer with its sources.",
   Runs: "Everything that was researched, newest first, with keyword search.",
   Compare: "One agent against a team of nine, on the same benchmark task.",
@@ -22,10 +22,15 @@ export const ABOUT: Record<View, string> = {
   Lab: "The full event log of a run, with agent filters and downloads.",
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
-/** The everyday workflow: these get the weight. */
-export const PRIMARY: readonly View[] = ["Overview", "Home", "Lab", "Runs", "Compare"]
-/** Advanced views: kept, quieter, under "More". */
-export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Benchmarks"]
+/** The everyday loop, as in a search tool: ask, read the answer, find it again. These get the weight. */
+export const PRIMARY: readonly View[] = ["Overview", "Home", "Runs"]
+/** The quieter groups under the main one: how an answer was made, then the benchmark views. Each has a heading. */
+export const GROUPS: readonly { id: string; label: string; views: readonly View[] }[] = [
+  { id: "how", label: "How it works", views: ["Lab", "Board", "Graph", "Agents"] },
+  { id: "eval", label: "Evaluation", views: ["Benchmarks", "Compare"] },
+]
+/** Every view in the quieter groups, in order. */
+export const MORE: readonly View[] = GROUPS.flatMap((g) => g.views)
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }

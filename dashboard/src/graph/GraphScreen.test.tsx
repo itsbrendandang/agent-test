@@ -177,7 +177,7 @@ describe("Graph view", () => {
     expect(fake.flown).toEqual([]) // list mode: nothing to fly
     // selection is kept in sync with the list
     expect(within(await firstRow()).getAllByRole("button")[0]).toHaveAttribute("aria-pressed", "true")
-    fireEvent.click(within(panel).getByRole("button", { name: /Open this run in Board/ }))
+    fireEvent.click(within(panel).getByRole("button", { name: /Open this run in Team review/ }))
     expect(location.hash).toBe("#Board/r1") // the review's own address: App hands the run to the Board view
   })
 

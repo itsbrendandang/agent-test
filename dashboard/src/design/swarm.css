@@ -122,8 +122,9 @@
 .swarm-more[open] summary { margin-bottom: 8px; }
 .swarm-more .swarm-settings, .swarm-more .swarm-table { max-width: 640px; }
 .swarm-result { display: flex; flex-direction: column; gap: 10px; align-self: stretch; text-align: left; padding-bottom: 12px; border-bottom: 1px solid var(--edge); }
-.swarm-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; align-self: stretch; }
-.swarm-steps li { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 96px; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 10px; font-size: 13px; }
+/* An even grid, so the nine role chips line up in columns instead of leaving one alone on a ragged second row. */
+.swarm-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; align-self: stretch; }
+.swarm-steps li { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 10px; font-size: 13px; }
 .swarm-step { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .swarm-steps li[data-step="now"] { border-color: var(--ink); font-weight: 600; }
 .swarm-steps li[data-step="now"] .swarm-step { color: var(--text); }

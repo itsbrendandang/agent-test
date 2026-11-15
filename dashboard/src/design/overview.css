@@ -76,10 +76,11 @@
 .ov-eval th[scope="row"] { text-align: left; font-weight: 600; }
 .ov-eval thead th { font-weight: 600; color: var(--text-muted); font-size: 12.5px; }
 
-/* The home page: one centred column, a question box first, everything else quiet beneath it. */
-.ov-page > * { width: min(860px, 100%); margin-inline: auto; flex: none; }
+/* The home page: one centred column, a question box first, everything else quiet beneath it. The column is 800px,
+   the same as Research's, so the two start screens line up; the lab uses the 1100px column every other view uses. */
+.ov-page > * { width: min(800px, 100%); margin-inline: auto; flex: none; }
 .ov-hero { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-3); padding-top: clamp(16px, 7vh, 72px); }
-.ov-hero h2 { font-size: 22px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
+.ov-hero h2 { font-size: 28px; font-weight: 650; line-height: 1.2; text-align: center; letter-spacing: -0.01em; }
 .ov-stage { display: flex; justify-content: center; gap: 10px; height: 52px; }
 .ov-agent { width: 44px; height: 44px; align-self: flex-end; animation: ov-bob 2.8s ease-in-out var(--delay) infinite; transform-origin: 50% 100%; }
 .ov-agent svg { width: 100%; height: 100%; display: block; }
@@ -130,13 +131,16 @@
 .ov-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
 
 .ov-credits { display: flex; flex-direction: column; gap: var(--space-2); }
-.ov-credits .ov-row-label { margin-top: 0; }
-.ov-page .ov-credits .ov-tile b { font-size: 20px; }
+/* Usage and limits (Settings): the same compact tiles the Overview used, in the settings column. */
+.ov-credits .ov-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-2); }
+.ov-credits .ov-tile { border: 0; background: var(--neutral-bg); border-radius: var(--radius-control); padding: 10px 12px; }
+.ov-credits .ov-tile b { font-size: 20px; }
+.ov-credits .ov-tile span { font-size: 13.5px; }
 .ov-credits .ov-track { margin-top: 6px; height: 6px; }
 
 /* The lab under the question box, the answer asked from this page, and the one line of counts. */
 .ov-lab { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.ov-page > .ov-lab { width: 100%; max-width: none; }
+.ov-page > .ov-lab { width: min(1100px, 100%); max-width: none; }
 .ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
 .ov-answer { min-width: 0; }
 .ov-counts { font-size: 13px; color: var(--text-muted); }

@@ -223,6 +223,7 @@
 
 /* ── The Lab view: one compact toolbar, then the scene and the panel filling the window ── */
 .lab-page { gap: 8px; }
+.lab-page .event-log-heading h2 { font-size: 20px; font-weight: 650; } /* the same page title size and weight as Team review and Compare */
 .lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
 .lab-picker { flex: 1 1 260px; min-width: 0; max-width: 560px; font-weight: 600; background: var(--surface, #fff); }
 .lab-picker [data-slot="select-value"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -62,14 +62,16 @@ describe("one header row", () => {
 })
 
 describe("the navigation", () => {
-  it("has the primary places, a quieter More group, and Settings once: in the profile menu at the foot", async () => {
+  it("has the primary places, two quieter groups, and Settings once: in the profile menu at the foot", async () => {
     await show("#Home")
     const nav = within(screen.getByRole("navigation", { name: "Places" }))
     const names = nav.getAllByRole("button").map((b) => b.textContent)
-    expect(names).toEqual(["Overview", "Research", "Agent Log", "Saved research", "Compare", "Team review", "Agents", "Graph", "Benchmarks"])
-    const more = within(nav.getByRole("list", { name: "More" })).getAllByRole("button")
-    expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Benchmarks"])
-    for (const b of more) expect(b).toHaveAttribute("data-quiet")
+    expect(names).toEqual(["Overview", "Research", "Saved research", "Agent Log", "Team review", "Graph", "Agents", "Benchmarks", "Compare"])
+    const how = within(nav.getByRole("list", { name: "How it works" })).getAllByRole("button")
+    expect(how.map((b) => b.textContent)).toEqual(["Agent Log", "Team review", "Graph", "Agents"])
+    const evaluation = within(nav.getByRole("list", { name: "Evaluation" })).getAllByRole("button")
+    expect(evaluation.map((b) => b.textContent)).toEqual(["Benchmarks", "Compare"])
+    for (const b of [...how, ...evaluation]) expect(b).toHaveAttribute("data-quiet")
     expect(nav.getByRole("button", { name: "Research" })).not.toHaveAttribute("data-quiet")
     expect(screen.queryByRole("button", { name: "Settings" })).toBeNull() // no bare Settings item any more
     const profile = screen.getByRole("button", { name: "Set up your profile: profile and settings" })

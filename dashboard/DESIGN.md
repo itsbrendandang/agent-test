@@ -17,8 +17,9 @@ With Docker only: `docker compose up`, then open http://localhost:5317.
 Every view has the same three parts (`src/App.tsx`).
 
 - **The navigation** (`src/components/AppSidebar.tsx`, on the shadcn sidebar in `src/components/ui/sidebar.tsx`).
-  - Three places carry the everyday work: Research, Saved research, Compare.
-  - The advanced places sit under "More", quieter: Team review, Agents, Graph, Lab.
+  - Three places carry the everyday work: Overview, Research, Saved research (ask, read, find again).
+  - Two quieter groups follow, each with a heading: "How it works" (Agent Log, Team review, Graph, Agents) and
+    "Evaluation" (Benchmarks, Compare). `PRIMARY` and `GROUPS` in `src/nav.ts`.
   - Settings is at the foot, once. The characters sit above it on a wide window.
   - On a wide window the sidebar folds to icons. The choice is remembered (`shell.sidebar`).
   - Under 768 px it is a drawer. The menu button in the header opens it. Choosing a place closes it.
@@ -26,7 +27,9 @@ Every view has the same three parts (`src/App.tsx`).
   slots a view may fill: a title and actions (`src/components/HeaderSlot.tsx`). Research puts the question and
   "New search" there. Nothing else is in the header. There is no status strip and no Demo or Real control in it.
 - **The view**, inside one `<main>`. The view scrolls inside it. The header never lies over content.
-  Content is at most 1100 px wide. Graph uses the full width (`data-wide` on the view's root element).
+  Content is at most 1100 px wide, with the same left edge on every view (the Overview's lab and the Agent Log too).
+  Graph alone uses the full width (`data-wide` on the view's root element). The Overview and Research start
+  screens share one 800 px column for the question box.
 
 Under 480 px the header drops the view's title, so the place name and the actions stay inside the window.
 

@@ -109,10 +109,14 @@ the key, so a typo cannot switch the limit off.
 
 ## What is in the app
 
+The sidebar has three groups. **Overview, Research, Saved research** come first: ask, read, find again.
+**How it works** holds Agent Log, Team review, Graph and Agents. **Evaluation** holds Benchmarks and Compare.
+Settings opens from the profile row at the foot.
+
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. It is also the conversation in Research, so a follow-up there continues it. Totals and charts separate practice from research. |
-| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
+| Overview | Ask in the "Let's research together!" question box. The answer is written right under the box. Below it, follow the six-room Agent Lab and its activity panel. The answer is also the conversation in Research, so a follow-up there continues it. One quiet line counts research and practice apart. |
+| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
@@ -120,7 +124,7 @@ the key, so a typo cannot switch the limit off.
 | Graph | One run as a picture of who said what. |
 | Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab stays on Overview. |
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
-| Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
+| Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
 
 ### How the screens connect
 
@@ -176,8 +180,8 @@ of an answer in progress.
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
 only the biology word, never a person in the search. When none is about biology, or the feed
-cannot be read, curated biology questions are shown. On Overview a click fills the box; on
-Research it sends the question. If the engine cannot be reached, the older example questions stay.
+cannot be read, curated biology questions are shown. On Overview and on Research a click fills
+the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in four free sources at once: Europe PMC (PubMed and
 preprints), OpenAlex, Semantic Scholar and arXiv. A source that fails is skipped and named; a
