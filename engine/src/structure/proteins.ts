@@ -114,7 +114,7 @@ export function sequencesIn(text: string): Found[] {
   }
   // A run of capitals, maybe split into blocks by spaces or line breaks (numbers between blocks, as in a GenBank listing, are allowed).
   const all = rest.join("\n")
-  for (const m of all.matchAll(/[A-Z]{10,}(?:(?:[ \t\d]*\n[ \t\d]*|[ \t\d]+)[A-Z]+)*/g)) {
+  for (const m of all.matchAll(/[A-Z]{10,}(?:(?:[ \t\d]*\n[ \t\d]*|[ \t\d]+)[A-Z]+(?!\w))*/g)) {
     const end = m.index + m[0].length
     if (/\w/.test(all[m.index - 1] ?? "") || /\w/.test(all[end] ?? "")) continue
     add(((s) => (s ? { sequence: s } : undefined))(asSequence(m[0].replace(/[\s\d]+/g, ""))))

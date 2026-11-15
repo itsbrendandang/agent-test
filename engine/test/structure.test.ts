@@ -70,13 +70,16 @@ test("sequences written in a text: FASTA with UniProt's header, one run, blocks 
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "MSDKIIHLTDDSFDTDVLKADG",
   ]) assert.deepEqual(sequencesIn(none), [], none)
   assert.deepEqual(sequencesIn(`x${THIOREDOXIN}`), [], "glued to a word before")
+  assert.deepEqual(sequencesIn(`Fold this:\n${THIOREDOXIN}\nThe protein is small.`), [{ sequence: THIOREDOXIN }], "a capitalised word on the next line")
+  assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} Is it stable?`), [{ sequence: THIOREDOXIN }], "a capitalised word after a space")
+  assert.deepEqual(sequencesIn(`Sequence: ${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}\nIs it stable?`), [{ sequence: THIOREDOXIN }], "blocks, then a capitalised word")
 })
 
 test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
   for (const tail of ["a", "1", "_"]) {
     const started = performance.now()
     assert.deepEqual(sequencesIn(`${"MKTAYIAKQRQISFVKSHFSRQ".repeat(20)}${tail}`), [], tail)
-    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}${tail}`), [], `blocks glued to ${tail}`)
+    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}${tail}`).map((f) => f.sequence), [THIOREDOXIN.slice(0, 100)], `blocks, the last glued to ${tail}: that block is not taken`)
     assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")} ${tail}`).map((f) => f.sequence), [THIOREDOXIN], `blocks, then ${tail}`)
     assert.ok(performance.now() - started < 500, `${tail}: ${Math.round(performance.now() - started)} ms`)
   }
