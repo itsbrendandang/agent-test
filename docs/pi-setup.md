@@ -29,7 +29,7 @@ Then it loads these:
 | What | Where | Why it matters |
 |---|---|---|
 | Repository rules | `AGENTS.md` | The rules every agent follows here |
-| Skills | `.agents/skills/` | Exa search, the Biomni method catalog |
+| Skills | `.agents/skills/` | Exa search, the method catalog |
 | Agent profiles | `.pi/agents/` | reviewer, advisor, docs-writer, dashboard-qa |
 | Package | `.pi/settings.json` | One package, `pi-agents` 0.40.1. It gives Pi the tools to start other agents. See below. |
 
