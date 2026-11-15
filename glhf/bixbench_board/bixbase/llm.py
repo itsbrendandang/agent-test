@@ -22,6 +22,8 @@ DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.1"
 MAX_COMPLETION_TOKENS = 8192
 _RETRIES = 3
+# Baseline gpt-5.1 calls took at most 16 s; a silent stall otherwise waits for the SDK default of 600 s.
+_REQUEST_TIMEOUT_S = float(os.environ.get("BIXBASE_REQUEST_TIMEOUT_S", "60"))
 
 
 @dataclass
@@ -75,11 +77,11 @@ class LLMClient:
         if self.provider == "anthropic":
             import anthropic
 
-            self._client = anthropic.Anthropic()
+            self._client = anthropic.Anthropic(timeout=_REQUEST_TIMEOUT_S)
         elif self.provider == "openai":
             import openai
 
-            self._client = openai.OpenAI()
+            self._client = openai.OpenAI(timeout=_REQUEST_TIMEOUT_S)
         else:
             raise ValueError(f"unknown provider {self.provider!r}")
 
