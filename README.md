@@ -143,8 +143,8 @@ statement is still checked once. It has no hypotheses, specialists, critic or re
 
 **The answer is written in real time.** While a research answer is made, its text appears as the
 writer writes it, under quiet lines that say what the team is doing ("Searching the web: found 6,
-kept 4."). The text comes from the engine's own event stream (`answer.delta` pieces, at least every
-200 ms), not from the page. A reconnect or a reload continues the stream where it stopped. A
+kept 4."). The text comes from the engine's own event stream (`answer.delta` pieces; see
+[docs/research-answer.md](docs/research-answer.md#the-api)), not from the page. A reconnect or a reload continues the stream where it stopped. A
 finished answer is shown at once; it is never typed out again. In Demo mode the scripted writer
 gives its fixed text a few words at a time, so the same view can be tried for free. The chat view
 for one answer is `dashboard/src/research/LiveChat.tsx` (the AI Elements Conversation and Message,
