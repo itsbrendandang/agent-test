@@ -158,6 +158,27 @@ ROOT_GREP = (
 )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def leave_the_volume_as_it_was() -> Any:
+    """The synthetic capsule is zipped anew for every test, so each test uploads a new (tiny)
+    folder. Whatever these tests added to the Volume is removed when they are done, and the
+    Volume is audited: only staged data folders, nothing that must never be uploaded."""
+    import modal
+
+    from bixbench_v1 import modal_stage
+
+    volume = modal.Volume.from_name(modal_stage.VOLUME_NAME, create_if_missing=True)
+    before = {str(entry.path).strip("/") for entry in volume.listdir("/")}
+    yield
+    for entry in volume.listdir("/"):
+        name = str(entry.path).strip("/")
+        if name not in before:
+            volume.remove_file(f"/{name}", recursive=True)
+    assert {str(entry.path).strip("/") for entry in volume.listdir("/")} == before
+    assert modal_stage.audit_volume(volume) == []
+    assert alive() == []  # and no sandbox of the app is running
+
+
 @pytest.fixture(autouse=True)
 def no_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in paid.PAID_KEYS:  # nothing but Modal can be reached from these tests

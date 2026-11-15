@@ -5,9 +5,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { loadConfig } from "../src/config.ts"
-import { buildRecommendations, exaSpentBy, fallbackPlan, missingOf, noteOf, numberSources, readNotes, readOpening, readPlan, selectionOf, splitBlocks, usable, verdictOf } from "../src/research/pipeline.ts"
+import { buildRecommendations, exaSpentBy, fallbackPlan, missingOf, noteOf, numberSources, readNotes, readOpening, readPlan, readRejudged, selectionOf, splitBlocks, usable, verdictOf } from "../src/research/pipeline.ts"
 import { criticSystem, criticUser, plannerSystem, plannerUser, reviserUser, searchedBlock, sourcesBlock, writerSystem, writerUser } from "../src/research/prompts.ts"
-import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_ANSWER_CHARS, plainBlock, safeUrl, scrub, sentencesOf, statementKey, withAdviceLine } from "../src/research/text.ts"
+import { ADVICE_LINE, citedSentences, cleanAnswer, clip, directAnswer, keywordsOf, looksMedical, MAX_ANSWER_CHARS, plainBlock, safeUrl, scrub, sentencesOf, statementKey, withAdviceLine, withoutGapMarkers, withoutInlineTags, withoutRepeats } from "../src/research/text.ts"
 import { DEFAULTS, limitsOf, type Statement, type StoredSource } from "../src/research/types.ts"
 
 const level = DEFAULTS.levels.standard
@@ -47,6 +47,48 @@ test("cited sentences: the marker belongs to the sentence it ends, before or aft
   assert.ok(all.includes("Yes."))
   assert.equal(statementKey({ text: "The Rate  fell.", sources: [2, 1] }), statementKey({ text: "the rate fell", sources: [1, 2] }))
   assert.equal(directAnswer("**Yes, in one trial** [1]. It fell [2].\n\nMore."), "Yes, in one trial. It fell.")
+})
+
+test("a sentence about what is absent is the answer's own remark: markers in the \"Not found in these sources:\" paragraph are removed, so it is never a checked claim", () => {
+  const md = "It fell by 20% [1].\n\n**Not found in these sources:** separate results, since only 15 patients received it [1]. With median follow-up of 14.3 months [1], they give no longer-term survival data.\n\nThe sources disagree: one says up [1] and one says down [2]."
+  const out = cleanAnswer(md, 2).markdown
+  assert.equal(out, "It fell by 20% [1].\n\n**Not found in these sources:** separate results, since only 15 patients received it. With median follow-up of 14.3 months, they give no longer-term survival data.\n\nThe sources disagree: one says up [1] and one says down [2].")
+  assert.deepEqual(citedSentences(out).map((s) => s.text), ["It fell by 20%.", "The sources disagree: one says up and one says down."], "the paragraph that says the sources disagree keeps its markers and is checked")
+  assert.equal(withoutGapMarkers("- Not found in these sources: x [2].\n\nA finding [2]."), "- Not found in these sources: x.\n\nA finding [2].")
+  assert.equal(cleanAnswer("A [1]. B. [2] C.", 2).markdown, "A [1]. B [2]. C.", "a marker after the full stop is written before it")
+})
+
+test("repetition: a sentence written twice is kept once (the cited one); a phrase two neighbouring sentences share is reported, not rewritten", () => {
+  const twice = withoutRepeats("The median was 9.8 months with the drug [1]. Some background that is given here once.\n\n- The median was 9.8 months with the drug.\n- Another point that stands alone [2].\n\nSome background that is given here once. A closing line.")
+  assert.equal(twice.markdown, "The median was 9.8 months with the drug [1]. Some background that is given here once.\n\n- Another point that stands alone [2].\n\nA closing line.")
+  assert.equal(twice.removed.length, 2)
+  const citedLater = withoutRepeats("The trial enrolled 338 patients in total. More text follows here.\n\nThe trial enrolled 338 patients in total [1].")
+  assert.equal(citedLater.markdown, "More text follows here.\n\nThe trial enrolled 338 patients in total [1].", "of two, the cited one stays")
+  // The first real answer: the same six words in two neighbouring sentences.
+  const real = withoutRepeats("The trial found that **divarasib was superior to a control arm**. The control arm was mostly sotorasib, so the trial does not allow a separate comparison with adagrasib. It was an open-label trial of 338 patients, and the control arm was mostly sotorasib (156 of 171 patients) [1].")
+  assert.deepEqual(real.repeated, ["the control arm was mostly sotorasib"])
+  assert.equal(real.removed.length, 0)
+  assert.ok(real.markdown.includes("so the trial does not allow"), "code does not rewrite a sentence")
+  const fine = withoutRepeats("- **Progression-free survival:** The median was 9.8 months with divarasib and 5.7 months with control [1].\n- **Overall survival:** The median was 17.7 months with divarasib and 12.0 months with control [1]. Short. Short.")
+  assert.deepEqual([fine.removed, fine.repeated], [[], []], "parallel sentences with different numbers are not a repeat; very short sentences are left alone")
+})
+
+test("quoted text is cut at a word end with an ellipsis; inline markup is taken out of titles and text", () => {
+  const note = "The trial compared divarasib with a combined control arm that was 'mostly sotorasib' (156 of 171 control patients) and only 15 patients received adagrasib."
+  assert.equal(clip(note, 60), "The trial compared divarasib with a combined control arm…")
+  assert.equal(clip("Short enough.", 60), "Short enough.")
+  assert.ok(clip("x".repeat(500), 60).length <= 60)
+  assert.equal(clip("First sentence is here and long enough. Second sentence is cut somewhere in the middle of it", 70), "First sentence is here and long enough. Second sentence is cut…")
+  assert.equal(clip("A first sentence that takes most of the room that there is. Then more words follow", 70), "A first sentence that takes most of the room that there is.…", "at a sentence end when one is near")
+  assert.equal(withoutInlineTags("Divarasib in <i>KRAS</i> G12C: IC<sub>50</sub> &lt;5 nM <b>bold</b>, a < b and c > d"), "Divarasib in KRAS G12C: IC50 &lt;5 nM bold, a < b and c > d")
+  assert.equal(usable([{ url: "https://a.org/1", title: "Role of <i>KRAS</i>", text: "The <i>KRAS</i> G12C mutation was found in 13% of the tumours that were studied here." }], "europepmc")[0].title, "Role of KRAS")
+})
+
+test("the reviewer's second look is read strictly: one status for each note that exists, the first one given", () => {
+  const out = readRejudged(JSON.stringify({ notes: [{ note: 1, status: "resolved", why: "the opening now says 'control arm'" }, { note: 2, status: "fixed" }, { note: 3, status: "partly" }, { note: 9, status: "resolved" }, { note: 1, status: "open" }, { note: "2", status: "open" }] }), 3)!
+  assert.deepEqual([...out], [[0, { status: "resolved", why: "the opening now says 'control arm'" }], [2, { status: "partly" }]])
+  assert.equal(readRejudged("all resolved", 3), undefined)
+  assert.equal(readRejudged(JSON.stringify({ notes: {} }), 3), undefined)
 })
 
 test("the medical line is added once, by code; a word rule says when a question is about health", () => {
@@ -202,6 +244,9 @@ test("the selection says why each source was kept and what limits it, from what 
   assert.match(sel.criteria, /not a calibrated score/)
   assert.ok(!/\d+%|score of|confidence/i.test(JSON.stringify(sel.selected)), "no percentage and no score")
   assert.equal(sel.notSelected.length, 1)
+  assert.deepEqual(sel.counts, { results: 5, unique: 5, selected: 4 })
+  const twice = selectionOf([source(1)], [{ title: "Dup", url: "https://x.org/1", provider: "exa", reason: "Screened as not about the question." }, { title: "Dup again", url: "https://www.x.org/1/", provider: "europepmc", reason: "Screened as not about the question." }, { title: "Also selected", url: "https://pubmed.ncbi.nlm.nih.gov/1", provider: "exa", reason: "x" }], 12, "standard", 9)
+  assert.deepEqual([twice.notSelected.map((n) => n.title), twice.counts], [["Dup"], { results: 9, unique: 2, selected: 1 }], "an address is listed once, and not as 'not selected' when it was selected")
 })
 
 test("'What is missing' is built by code from what did not run, what found nothing and what did not pass its check", () => {

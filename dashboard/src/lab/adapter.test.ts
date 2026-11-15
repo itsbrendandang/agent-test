@@ -327,8 +327,14 @@ describe("a research answer (answerLab)", () => {
     expect(trips(m, "navigator").map((t) => t.to)).toEqual(["proposer"]) // the plan goes to the hypotheses first
     expect(trips(m, "scout").filter((t) => t.kind === "fetch")).toHaveLength(2) // the two hypotheses' web searches overlap
     expect(trips(m, "guardian").map((t) => [t.kind, t.to, t.short])).toEqual([["handoff", "proposer", "h1 ✓"], ["handoff", "proposer", "h2 ✕"]])
-    expect(trips(m, "guardian")[0].label).toBe("the mark of hypothesis h1: ✓ Supported (2 sources for, 0 against)")
-    expect(m.log.some((l) => l.text === "2 hypotheses set up to test against published sources.")).toBe(true)
+    expect(trips(m, "guardian")[0].label).toBe("the result for hypothesis h1: ✓ Supported (2 sources for, 0 against)")
+    expect(m.log.some((l) => l.text === "2 hypotheses set up. Tested against published sources, not by experiment.")).toBe(true)
+    // the Research view's words: sources that disagree are said; a practice run's result is an example, with no mark
+    const mixed = answerLab([...events.slice(0, 9), h(10, "hypothesis.checked", { id: "h2", verdict: "unsupported", for: [1], against: [3], mixed: true })])
+    expect(trips(mixed, "guardian").at(-1)?.label).toBe("the result for hypothesis h2: ? Insufficient evidence: the sources disagree (1 source for, 1 against)")
+    const practice = answerLab([{ ...events[0], mode: "demo" }, ...events.slice(1)])
+    expect(trips(practice, "guardian").map((t) => [t.label, t.short])).toEqual([["the result for hypothesis h1: Example result: Supported (2 sources for, 0 against)", "h1: example"], ["the result for hypothesis h2: Example result: Contradicted (0 sources for, 1 against)", "h2: example"]])
+    expect(practice.log.some((l) => l.tone === "bad")).toBe(false)
     // an answer without the step keeps the Proposer out of the run
     expect(answerLab(REAL_ANSWER).characters.proposer.inRun).toBe(false)
   })

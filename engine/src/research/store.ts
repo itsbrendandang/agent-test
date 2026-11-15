@@ -97,6 +97,10 @@ export class ResearchLog {
   /** The last seq written (0 for an empty log). */
   get lastSeq(): number { return this.seq }
   has(key: string): boolean { return this.byKey.has(key) }
+  /** The steps the log shows as started and not finished. */
+  openSteps(): string[] {
+    return [...this.byKey.keys()].filter((key) => key.startsWith("step.started:") && !this.byKey.has(`step.finished:${key.slice("step.started:".length)}`)).map((key) => key.slice("step.started:".length))
+  }
   /** When the event with this key was written, if it was. */
   at(key: string): number | undefined { return this.byKey.get(key)?.at }
   emit(key: string, event: ResearchEvent): Stamped {

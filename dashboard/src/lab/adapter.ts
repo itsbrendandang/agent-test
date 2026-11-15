@@ -12,6 +12,7 @@
 import { provenanceOf } from "@/lib/provenance"
 import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
+import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
 import {
   CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
   type Activity, type CharacterId, type LabModel, type LabState, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
@@ -464,14 +465,18 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         break
       }
       case "review.note": if (str(e.text)) b.log(at, `${b.name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, b.name("critic"), e.severity === "blocking" ? "warn" : undefined); break
-      case "hypotheses": if (Array.isArray(e.items)) b.log(at, e.items.length ? `${plural(e.items.length, "hypothesis", "hypotheses")} set up to test against published sources.` : "No hypothesis was needed for this question.", b.name("proposer")); break
+      case "hypotheses": if (Array.isArray(e.items)) b.log(at, e.items.length ? `${plural(e.items.length, "hypothesis", "hypotheses")} set up. ${HYPOTHESES_NOTE}` : "No hypothesis was needed for this question.", b.name("proposer")); break
       case "hypothesis.checked": {
+        // The mark is the engine's (code works it out); the same words as the Research view. In a practice run it
+        // is an example, said without a mark.
         const id = clip(str(e.id) ?? "", 8), mark = markOf(e.verdict)
-        const count = (v: unknown) => (Array.isArray(v) ? v.length : 0)
-        const label = `the mark of hypothesis ${id}: ${MARK_GLYPH[mark]} ${MARK_WORD[mark]} (${plural(count(e.for), "source")} for, ${count(e.against)} against)`
-        // code works the mark out; the Guardian carries it to where the hypotheses were set up
-        b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: "planning", to: "proposer", label, short: `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
-        b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        const nums = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [])
+        const sides = sidesLine({ verdict: "unchecked", for: nums(e.for), against: nums(e.against), forStatements: [], againstStatements: [], mixed: e.mixed === true })
+        const practice = m.provenance === "practice"
+        const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : ""}`
+        const label = `the result for hypothesis ${id}: ${said} (${sides})`
+        b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: "planning", to: "proposer", label, short: practice ? `${id}: example` : `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
+        b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), !practice && mark === "contradicted" ? "bad" : undefined)
         break
       }
       case "review.resolved": if (Array.isArray(e.notes)) { const closed = (e.notes as Record<string, unknown>[]).filter((x) => x?.resolved === true).length; b.log(at, `${b.name("critic")} judged its notes against the revised answer: ${closed} of ${e.notes.length} resolved.`, b.name("critic")) } break

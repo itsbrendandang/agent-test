@@ -54,7 +54,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
 
 // ── The fake models ──────────────────────────────────────────────────────────────────────────────
 
-export type Role = "plan" | "screen" | "check" | "write" | "critic" | "revise"
+export type Role = "plan" | "hypothesize" | "screen" | "check" | "stance" | "write" | "critic" | "revise" | "rejudge"
 export interface Call { role: Role; provider: string; model: string; system: string; user: string; options: { maxTokens?: number; reasoning?: string; signal?: AbortSignal } }
 /** What a fake model answers: text, or `{error}` for a call the vendor fails (the text is the vendor's message). */
 export type Reply = string | { error: string }
@@ -62,9 +62,12 @@ export type Script = Partial<Record<Role, (call: Call, n: number) => Reply | Pro
 
 const roleOf = (system: string): Role =>
   system.startsWith("You plan the searches") ? "plan"
+    : system.startsWith("You set up the hypotheses") ? "hypothesize"
+    : system.startsWith("You are given hypotheses and numbered statements") ? "stance"
     : system.startsWith("You screen search results") ? "screen"
       : system.startsWith("You check claims against one piece of source text") ? "check"
-        : system.includes("# Your task here") ? "critic"
+        : system.includes("# Your task now") ? "rejudge"
+          : system.includes("# Your task here") ? "critic"
           : system.includes("# The revision") ? "revise" : "write"
 
 const unescape = (text: string) => text.replaceAll("&lt;", "<")
@@ -83,6 +86,10 @@ export const DEFAULTS: { [R in Role]: (call: Call, n: number) => string } = {
     web: [{ query: "semaglutide cardiovascular outcomes in adults with overweight or obesity without diabetes, randomized trial results", objective: "Reports of the trial rank first; leave out market news. Pull the event rates and the hazard ratio." }],
     literature: ["semaglutide cardiovascular outcomes obesity without diabetes", "semaglutide major adverse cardiovascular events trial"],
   }),
+  // No hypotheses unless a test asks for them: the question is treated as a plain one.
+  hypothesize: () => JSON.stringify({ needed: false, reason: "This is a plain question with one answer to look up." }),
+  // Every statement points the way it was filed, unless a test says otherwise.
+  stance: (call) => JSON.stringify({ stances: [...call.user.matchAll(/<statement i="(\d+)"/g)].map((m) => ({ i: Number(m[1]), stance: "supports" })) }),
   // Keeps a passage that names semaglutide; calls a title with "review" or "meta-analysis" a review.
   screen: (call) => {
     const passages = [...call.user.matchAll(/<passage i="(\d+)">\n([\s\S]*?)\n<\/passage>/g)]
@@ -114,6 +121,12 @@ export const DEFAULTS: { [R in Role]: (call: Call, n: number) => string } = {
     { severity: "blocking", statement: 4, text: "\"cures heart disease in every patient\" is stated by no source; source [1] reports a lower event rate in one trial population. Remove it." },
     { severity: "minor", statement: null, text: "The answer does not say how long patients were followed." },
   ] }),
+  // The reviewer's second look: a note about a sentence is resolved when that sentence's words are gone from the revision; a general note is left open.
+  rejudge: (call) => {
+    const revised = unescape(/<revised>\n([\s\S]*?)\n<\/revised>/.exec(call.user)?.[1] ?? "")
+    const notes = [...(/<notes>\n([\s\S]*?)\n<\/notes>/.exec(call.user)?.[1] ?? "").matchAll(/^(\d+)\. \[\w+\] (.*)$/gm)]
+    return JSON.stringify({ notes: notes.map((n) => { const quoted = /"([^"]{8,})"/.exec(unescape(n[2]))?.[1]; const gone = quoted !== undefined && !revised.includes(quoted); return { note: Number(n[1]), status: gone ? "resolved" : "open", why: gone ? "those words are no longer in the answer" : "the revised answer does not deal with it" } }) })
+  },
   // The draft with every sentence that failed its check removed, as the reviser is told to do.
   revise: (call) => {
     const draft = unescape(/<draft>\n([\s\S]*?)\n<\/draft>/.exec(call.user)?.[1] ?? "")

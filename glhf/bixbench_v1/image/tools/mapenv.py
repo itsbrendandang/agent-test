@@ -6,7 +6,22 @@ same name and version whose build string matches after removing the hash (same v
 build number), preferring builds published before the official image was made. Then every
 dependency of every chosen record is checked against the chosen set; a missing dependency is
 added (x86-only packages), an unsatisfied one is reported.
-Runs inside the official image (it uses conda's own MatchSpec)."""
+Runs inside the official image (it uses conda's own MatchSpec).
+
+How it was run (2026-11-15), with W a scratch folder on the host:
+
+    mkdir -p $W/repodata $W/arm64 $W/out
+    for c in conda-forge=https://conda.anaconda.org/conda-forge bioconda=https://conda.anaconda.org/bioconda \
+             main=https://repo.anaconda.com/pkgs/main; do
+      for s in linux-64 linux-aarch64 noarch; do
+        curl -sfL -o $W/repodata/${c%%=*}-$s.json.zst ${c#*=}/$s/repodata.json.zst; done; done
+    cp image/arm64-official.inventory.json $W/arm64/inventory.json; cp image/tools/mapenv.py $W/
+    docker run --rm --network none -v $W:/w futurehouse/bixbench:aviary-notebook-env python /w/mapenv.py
+    # -> $W/out/explicit-linux-64.txt (src/bixbench_v1/modal_env/) and $W/out/mapping.json
+    #    (image/conda-mapping.json)
+
+The channel index changes over time (builds are added, metadata is patched), so a later run can
+pick another build of the same version; the committed list is the one the image was built from."""
 import io, json, re, sys, datetime, collections
 import zstandard
 from conda.models.match_spec import MatchSpec

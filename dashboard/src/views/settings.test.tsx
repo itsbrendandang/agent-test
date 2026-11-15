@@ -129,6 +129,12 @@ describe("copy", () => {
     expect(container.textContent).not.toMatch(/\u2014/)
     for (const el of container.querySelectorAll("[title], [aria-label]")) expect(`${el.getAttribute("title") ?? ""}${el.getAttribute("aria-label") ?? ""}`).not.toMatch(/\u2014/)
   })
+  it("Appearance names the four characters as decoration", async () => {
+    await show()
+    const look = screen.getByRole("region", { name: "Appearance" })
+    expect(look).toHaveTextContent("Momo, Ember, Fuji and Sage are decoration, not the agents that do the work.")
+    expect(within(look).getByRole("checkbox", { name: "Show characters" })).toBeChecked()
+  })
   it("Help is unchanged and opens How this works", async () => {
     const asked = vi.fn(); window.addEventListener("app.help", asked)
     await show()

@@ -4,10 +4,10 @@ You type a question on the Search screen. The engine searches, writes a short an
 the answer reviewed, and shows you the answer with its numbered sources. This page says what happens, what it
 costs, and what the marks mean.
 
-> **Status.** Built and tested with fake models and a fake network (`engine/test/research-*.test.ts`). No real
-> model has written an answer yet. Until the first real question has been asked, a real answer is switched off:
-> in Real mode `POST /api/research` answers 503 unless the engine was started with `RESEARCH_PREVIEW=1`. Demo
-> mode works without it.
+> **Status.** Built and tested with fake models and a fake network (`engine/test/research-*.test.ts`). One real
+> answer has been written so far (a `quick` one: 30.9 seconds, $0.074, 14 cited sentences). That is one run, not a
+> measurement of quality. A real answer needs the engine to be started with `RESEARCH_PREVIEW=1`; without it, in
+> Real mode, `POST /api/research` answers 503. Demo mode works without it.
 
 The two levels on this page are `quick` and `standard`. The third level, `deep`, is the team review
 ([drug-board.md](drug-board.md)): it gives you a plan that you confirm. This page does not change it.
@@ -27,7 +27,9 @@ flowchart LR
     check --> revise["One revision"]
     critic --> revise
     revise --> recheck["Check changed sentences again"]
+    revise --> second["Critic reads the revision:<br/>is each note resolved?"]
     recheck --> save["Save the answer and its files"]
+    second --> save
 ```
 
 | Step | Who does it | What it does |
@@ -42,6 +44,7 @@ flowchart LR
 | Statement checker | cheap model of **another vendor** than the writer | Every cited sentence is checked against every source it cites. The checker must quote a passage. Code then looks for that passage, and for the sentence's numbers, in the source text. |
 | Critic | `models.rival`, **another vendor** than the writer | Reads the whole draft with the sources. It looks for what the sentence check cannot see: a conclusion stronger than its sources, a missing caveat, a preprint or a review used as if it were a primary result, sources that disagree, a part of the question that was skipped. Its instructions start with the board critic's own (`board/agents/critic.md`). |
 | Revise | strong model | One revision. It must remove or soften what failed. Every cited sentence it changed or added is checked again. |
+| Second look | the critic again | It reads the revised text and says for each of its notes: resolved, partly, or open. Only "resolved" counts as resolved. When it cannot be asked, the record says what code can see (the sentence is gone or changed) and what the writer itself reported, and says which of the two it is. |
 | Save | code | The record, the event log, and three files: `answer.md`, `sources.json`, `sources.csv`. |
 
 The prompts are plain files you can read and edit: `engine/src/research/prompts/`.
@@ -52,6 +55,10 @@ The prompts are plain files you can read and edit: `engine/src/research/prompts/
 - Which markers stand. A marker that names no kept source is removed. Links and web addresses that are not a
   source's own are removed.
 - What the cited sentences are, and the mark of each one (`route` in `engine/src/triage.ts`).
+- That a sentence about what is absent is not a sourced claim. Markers inside the "Not found in these sources:"
+  paragraph are removed, so those sentences are the answer's own remarks and are not sent to the quote check.
+- That a sentence is in the text once. A sentence the writer wrote twice is shown once. A phrase that two
+  neighbouring sentences share is reported in the record's `note`; code does not rewrite a sentence.
 - That a sentence which failed its check is not shown as holding up after the revision. If the revision keeps a
   failed sentence and drops its marker, code puts the marker back and the sentence stays marked as failed.
 - What was searched. The writer is given a list written by code. A search that did not run is listed as "did not run".
@@ -60,6 +67,51 @@ The prompts are plain files you can read and edit: `engine/src/research/prompts/
 Text from a source is data. It reaches a model only inside the board's escaped evidence block
 (`evidenceBlock` in `engine/src/board.ts`). The instructions a model gets are the same whatever a source says
 (tested with a hostile source).
+
+## Hypotheses (Standard level)
+
+At the Standard level the answer can set up **hypotheses** and test each one against the evidence. "Tested"
+means **checked against published sources** (papers, trial records, pages). It is not an experiment, and the
+answer and the app say so.
+
+1. **Set before any search.** After the prepare step, the planner is asked for 2 to 4 competing hypotheses that
+   can be checked. If your message already states several hypotheses or questions, those are used, in your
+   words (`origin: "user"`). For each one it writes, before anything is searched: the statement, what a source
+   would report if it holds (`supportIf`), and what a source would report if it does not (`contradictIf`). For a
+   plain factual question it may answer "no hypotheses needed"; then the answer runs as described above.
+2. **Each hypothesis has its own searches,** run at the same time for all of them: its web search (Exa) first,
+   then its literature search (Europe PMC), and a database lookup when it planned one and the level has room.
+   Results are screened against the hypothesis itself. **No limit is raised for this.** Each hypothesis uses one
+   web search and one literature query of the level, so with today's limits (3 and 3) at most 3 are tested. A
+   proposal that does not fit is set aside and named under "What is missing". The numbered sources (12) are
+   shared: the hypotheses take turns, so each one has its share.
+3. **The answer** starts with a paragraph that compares the hypotheses, then has one section for each:
+   `### H1: ...` with lines `**For:**`, `**Against:**` and `**Not found:**`. The writer gives no mark.
+4. **The mark is given by code** (`markOf` in `engine/src/research/pipeline.ts`), never by a model's say-so. A
+   sentence counts for or against a hypothesis only when all three hold:
+   - the writer filed it under that hypothesis's `For:` or `Against:` line;
+   - it passed the quote check against its source (`verified`);
+   - a model of **another vendor** than the writer, asked separately and **not told the side**, says it points
+     that way (step `check:stance`, prompt `prompts/stance.md`).
+
+| Checked sentences | Mark |
+|---|---|
+| at least one for it, none against it | **Supported** (`verified`) |
+| at least one against it, none for it | **Contradicted** (`contradicted`) |
+| some for it and some against it | **Insufficient evidence** (`unsupported`, with `mixed: true`: "the sources disagree") |
+| none | **Insufficient evidence** (`unsupported`) |
+| sentences passed the quote check, but which way they point was not judged; or the answer ended early | **Not checked** (`unchecked`) |
+
+The rule for mixed evidence is deliberately plain: code does not weigh one study against another, so evidence
+on both sides is shown as "the sources disagree", with the source numbers on each side. One checked sentence
+from one abstract is enough for Supported or Contradicted; the note of every mark gives the counts ("2 checked
+statements from 2 sources for it; none against it"), so a thin mark can be seen to be thin. A mark says what
+these sources report. It does not say the hypothesis is true.
+
+In the events: `hypotheses` (id, text, supportIf, contradictIf, origin; `cut` for what was set aside), a
+`hypothesis` tag on each search and screening step, `hypotheses` on each source, `hypothesis` and `side` on each
+statement, and one `hypothesis.checked` per hypothesis (the mark, the source numbers for and against, the
+statement indexes). The record holds the same under `hypotheses`.
 
 ## The marks, and what they do not prove
 
@@ -76,6 +128,7 @@ What `verified` does **not** prove:
 - A quote that exists does not prove that the passage supports the sentence. A web page can hold text written to be quoted.
 - Only abstracts and short excerpts are read, never the full paper. A number that is only in the full text cannot be checked.
 - A sentence that cites two sources is `verified` when one of them states it.
+- A sentence about what the sources do not contain is not checked: no passage can be quoted for an absence.
 - A sentence with no marker is not checked at all. The writer is told to use such a sentence only for plain
   background or to say what was not found. The critic looks for breaches of that rule; code cannot.
 
@@ -102,6 +155,7 @@ Set in `board/config.yaml` under `research:`. Hard bounds hold whatever the file
 | Literature queries | up to 2 | up to 3 |
 | Database lookups | 0 | up to 2 |
 | Numbered sources | up to 6 | up to 12 |
+| Hypotheses tested (`hypotheses`) | none | up to 3 (each uses one web search and one literature query) |
 | Writer's output tokens (draft, and again for the revision) | 2,000 | 3,000 |
 | Length asked for | 220 words | 380 words |
 | Time limit (`time_limit_seconds`) | 120 s | 120 s |
@@ -140,12 +194,18 @@ its 3,000-character cut, every output at its token limit, and 3 characters a tok
 | Critic (GPT-5 mini) | $0.0034 | $0.0073 | $0.0041 | $0.0089 |
 | Revision (Sonnet) | $0.0205 | $0.0436 | $0.0292 | $0.0668 |
 | Re-check | $0.0003 | $0.0069 | $0.0003 | $0.0138 |
-| **Total** | **about $0.05** | **$0.11** | **about $0.07** | **$0.19** |
+| Critic's second look (GPT-5 mini) | $0.0015 | $0.0040 | $0.0015 | $0.0040 |
+| Hypotheses set up (Haiku) and stance check (GPT-4o mini), Standard only | | | $0.0008 | $0.0034 |
+| **Total** | **about $0.05** | **$0.12** | **about $0.07** | **$0.21** |
 
-So both levels fit their limits with the review and the revision included. The `standard` limit of $0.60 is
-about three times its worst case; it could be lowered to $0.30. Not verified: the real token counts, the hidden
-reasoning tokens of the writer and the critic (they bill as output and are inside the output limits used above),
-and the price of one Exa search.
+A Standard answer that tests **3 hypotheses** uses all three web searches ($0.021) and a longer answer with one
+section for each: expected **about $0.10**, worst case $0.21, limit $0.60.
+
+So both levels fit their limits with the review, the revision and the second look included. Measured once:
+the first real `quick` answer cost $0.074 and took 30.9 seconds (before the second look was added). That is
+above the expected figure and under the worst case; one run is not enough to correct the estimate. Not
+verified: the token counts over many answers, the hidden reasoning tokens of the writer and the critic (they
+bill as output and are inside the output limits used above), and the price of one Exa search.
 
 ## Follow-up questions
 
@@ -174,8 +234,11 @@ answer and every queued question. The work runs again from the top, and each sto
 instead of being done again. So an answer continues where it stopped, and a finished step is never paid twice.
 The event log goes on with the next `seq`, with no repeated event, and holds one `research.resumed` event.
 Limits of this: a call that was in flight when the engine died has no stored result and is made again (one
-call); time while the engine was down does not count against the time limit; a real answer is not continued
-while paid calls are off.
+call, and the vendor may bill both); an Exa search in flight at that moment stays in the Exa ledger at the assumed
+price, so the ledger never counts too little; time while the engine was down does not count against the time
+limit, and time worked before it does; a cancel made while the engine was down holds at the next start; a real
+answer is not continued while paid calls are off (it waits, as a team review does). One process works on one
+answer: each answer folder has a lock.
 
 ## Demo mode
 
@@ -198,9 +261,11 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they
 usually come: `research.queued`, `research.started`, `step.started` / `step.progress` / `step.finished` (kinds:
-prepare, search, evaluate, write, check, review, revise, save; status: completed, empty, failed, cancelled),
-`opening`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`, `statement.checked`,
-`review.note`, `answer.revised`, `sources.cited`, `recommendations`, `missing`, `artifact.created`, and one of
+prepare, hypothesize, search, evaluate, write, check, review, revise, save; status: completed, empty, failed, cancelled),
+`opening`, `hypotheses`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`,
+`statement.checked`, `hypothesis.checked`,
+`review.note`, `answer.revised`, `review.resolved`, `sources.cited`, `recommendations`, `missing`,
+`artifact.created`, and one of
 `research.finished`, `research.failed`, `research.cancelled`. The exact shapes are in
 `engine/src/research/types.ts`. Example streams made by the code are in `engine/test/fixtures/research/`.
 
@@ -213,11 +278,16 @@ prepare, search, evaluate, write, check, review, revise, save; status: completed
 ## Limits
 
 - Abstracts and excerpts only. No full paper is read.
-- No real model has written an answer yet. The model ids, the reply formats and the cost are not verified.
+- One real answer has been written. That shows the model ids and the reply formats work; it says little about
+  how often an answer is good.
 - The marks say what a checker found in a source. They are not a proof (see above).
 - Recommendations are kept only when they rest on a kept source that a checked sentence cites. The text of a
   recommendation is written by a model.
-- Whether a critic's general note was "addressed" is what the writer reports. Code checks only notes that point
-  at a sentence (was it removed or rewritten).
+- Whether a note of the critic is resolved is the critic's own judgement of the revised text (`by: "reviewer"`).
+  It is a model's judgement, not a proof. When the critic could not be asked, the record shows `by: "code"`
+  (the sentence is gone or changed) or `by: "writer"` (only the writer's own report).
+- A repeated phrase is reported, not fixed: there is one revision, and code does not rewrite prose.
 - The time limit is 120 seconds of work. A slow vendor can end an answer early; the answer then says so.
+- A hypothesis is tested against published sources only. Nothing is run, measured or simulated. Whether a
+  checked sentence points for or against a hypothesis is the agreement of two models; it is not a proof.
 - This is a research summary. It is not medical advice.

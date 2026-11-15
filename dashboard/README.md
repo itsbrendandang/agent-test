@@ -47,7 +47,7 @@ addresses still work (`#Experiments`, `#Swarm`, `#Worlds`, and the on-screen wor
 | Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
 | Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
 | Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
-| Settings | `Settings` | `SettingsView.tsx` | Demo or Real, the session token, help, and a "Technical" disclosure with tools, keys (set or not) and file names. |
+| Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
 Research, Saved research and Compare are the primary places. Team review, Agents, Graph and Lab sit under "More".
 Settings has one entry, at the foot of the navigation.
@@ -57,22 +57,24 @@ Settings has one entry, at the foot of the navigation.
 `src/App.tsx`: the navigation (`src/components/AppSidebar.tsx`, on the shadcn Sidebar: a compact sidebar that folds
 to icons on a wide window, a drawer below 768 px), one header row, and the view inside `<main>`. The header takes
 its own row and the view scrolls inside the content area, so nothing lies over content. The header holds the menu
-button, the place name, the "Next run" selector, and two slots a view can fill
+button, the place name, and two slots a view can fill
 (`<HeaderSlot area="title" | "actions">`, `src/components/HeaderSlot.tsx`). When the engine cannot be reached, the
 page says so once, with "Try again".
 
-## Next run (Demo or Real) and provenance
+## Run mode (Demo or Real) and provenance
 
 Two different things, never mixed:
 
-- **How the next run is made**: the "Next run: Demo | Real" selector in the header (also in Settings). **Demo** is
-  the default: practice runs with fixed example answers, free. **Real** uses real AI models and searches and costs
-  money. Choosing Real opens a dialog with the spending limits and a tick box, and needs the engine's session token;
-  choosing Demo is one click. The state is read from the engine (`GET /api/glhf/status`, `GET /api/paid`) and is
-  never stored in the browser. Code: `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`, `src/lib/shell.ts`.
+- **How the next run is made**: the Demo | Real control in Settings, under "Run mode". It is the one place to
+  switch; the header has no switch. **Demo** is the default: fixed example answers, free. **Real** uses live AI
+  models and web search and costs money. Choosing Real opens a dialog with the spending limits and a tick box, and
+  needs the engine's session token; choosing Demo is one click. The state is read from the engine
+  (`GET /api/glhf/status`, `GET /api/paid`), again every few seconds and right after a switch, and is never stored
+  in the browser. Code: `ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`,
+  `src/lib/shell.ts`. (`NextRun` in the same file is the old header control, kept unused.)
 - **How an existing result was made**: the `Provenance` badge (`src/components/Provenance.tsx`): "Practice" or
   "Live research" (or "Local model"), an icon and the word. It is read from the record's own data
-  (`provenanceOf` in `src/lib/provenance.ts`) and never from the selector: a practice result seen while Real is
+  (`provenanceOf` in `src/lib/provenance.ts`) and never from the run mode: a practice result seen while Real is
   chosen still says Practice.
 
 ## Words on screen
@@ -152,7 +154,7 @@ run page have none. The engine side is tested in
 
 ## Characters
 
-`src/components/Buddy.tsx` draws the characters (Momo, Ember, Fuji and friends) and `Splash.tsx` the
+`src/components/Buddy.tsx` draws the characters (Momo, Ember, Fuji, Sage and friends) and `Splash.tsx` the
 loading screen. They are decoration: small, and kept away from the main controls. `src/crew/` holds
 their saved names and looks.
 

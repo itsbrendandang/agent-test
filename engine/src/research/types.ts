@@ -27,6 +27,8 @@ export interface Level {
   maxOutputTokens: number
   /** The length the writer is asked for, in words. */
   words: number
+  /** Hypotheses one answer may test, at most (0 = the level tests none). Each needs one web search and one literature query, so fewer are tested when those run out. */
+  hypotheses: number
 }
 
 export interface ResearchLimits {
@@ -48,8 +50,8 @@ export const DEFAULTS: ResearchLimits = {
   maxInProgress: 3,
   perOriginPerMinute: 6,
   levels: {
-    quick: { maxUsd: 0.15, queries: 2, exaSearches: 1, databaseLookups: 0, sourcesKept: 6, maxOutputTokens: 2_000, words: 220 },
-    standard: { maxUsd: 0.6, queries: 3, exaSearches: 3, databaseLookups: 2, sourcesKept: 12, maxOutputTokens: 3_000, words: 380 },
+    quick: { maxUsd: 0.15, queries: 2, exaSearches: 1, databaseLookups: 0, sourcesKept: 6, maxOutputTokens: 2_000, words: 220, hypotheses: 0 },
+    standard: { maxUsd: 0.6, queries: 3, exaSearches: 3, databaseLookups: 2, sourcesKept: 12, maxOutputTokens: 3_000, words: 380, hypotheses: 3 },
   },
 }
 
@@ -58,14 +60,15 @@ export interface ResearchYaml {
   time_limit_seconds?: number; max_question_chars?: number; max_in_progress?: number; per_origin_per_minute?: number
   quick?: LevelYaml; standard?: LevelYaml
 }
-export interface LevelYaml { max_usd?: number; queries?: number; exa_searches?: number; database_lookups?: number; sources_kept?: number; max_output_tokens?: number; words?: number }
+export interface LevelYaml { max_usd?: number; queries?: number; exa_searches?: number; database_lookups?: number; sources_kept?: number; max_output_tokens?: number; words?: number; hypotheses?: number }
 
 const num = (value: unknown, fallback: number, min: number, max: number, whole = true): number =>
   typeof value === "number" && Number.isFinite(value) && value >= min && value <= max && (!whole || Number.isInteger(value)) ? value : fallback
 
 /**
  * The limits in force: the defaults, changed by the `research:` block of board/config.yaml. Hard bounds hold whatever
- * the file says: quick makes exactly one Exa search, standard at most 3, and no level is given more than $5 or 20 sources.
+ * the file says: quick makes exactly one Exa search and tests no hypotheses, standard makes at most 3 searches and tests
+ * at most 4 hypotheses, and no level is given more than $5 or 20 sources.
  */
 export function limitsOf(config: Pick<BoardConfig, "research">): ResearchLimits {
   const y = (config.research ?? {}) as ResearchYaml
@@ -79,6 +82,7 @@ export function limitsOf(config: Pick<BoardConfig, "research">): ResearchLimits 
       sourcesKept: num(l.sources_kept, d.sourcesKept, 1, 20),
       maxOutputTokens: num(l.max_output_tokens, d.maxOutputTokens, 300, 8_000),
       words: num(l.words, d.words, 60, 1_000),
+      hypotheses: effort === "quick" ? 0 : num(l.hypotheses, d.hypotheses, 0, 4),
     }
   }
   return {
@@ -99,6 +103,10 @@ export interface Source {
   provider: Provider
   /** A short plain label: "preprint", "review", "clinical", "in vitro", "example source"; comma-joined when two apply. */
   note?: string
+  /** The year of publication, when the search gave one (Europe PMC does; a web page usually has none). */
+  published?: string
+  /** The hypotheses whose searches found this source ("h1", "h2"). Absent when the answer tests no hypotheses. */
+  hypotheses?: string[]
   /** True for a source of an earlier answer in the thread that this answer lists again. */
   earlier?: boolean
   /** Set once the final text exists: does it cite this source? */
@@ -110,12 +118,12 @@ export interface StoredSource extends Source { text: string; studyType?: string;
 export interface SearchLine { provider: Provider; query: string; ran: boolean; found: number; kept: number; reason?: string }
 
 /** What a step is. "prepare" is the one measured preparation phase (planning the queries). */
-export type StepKind = "prepare" | "search" | "evaluate" | "fetch" | "write" | "check" | "review" | "revise" | "save"
+export type StepKind = "prepare" | "hypothesize" | "search" | "evaluate" | "fetch" | "write" | "check" | "review" | "revise" | "save"
 /** "empty": a search that ran and found nothing. Not a failure and not a success. */
 export type StepStatus = "completed" | "empty" | "failed" | "cancelled"
 /** A safe summary of what a step was given, for a details view. Never a key, a header, a token, a path or a prompt. */
 export type StepInput = Record<string, string | number | boolean>
-export interface StepStart { step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput }
+export interface StepStart { step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput; /** The hypothesis this search or screening is for. */ hypothesis?: string }
 export interface StepEnd { step: string; status: StepStatus; ms: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
 /** A step as the record keeps it: "running" until its end is known. */
 export interface StepRecord extends StepStart { status: StepStatus | "running"; ms?: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
@@ -124,7 +132,10 @@ export interface Selection {
   /** The rule that was applied, in plain words, written by code. */
   criteria: string
   selected: { n: number; why: string; limitation?: string }[]
+  /** Each address once, also when two searches found it. */
   notSelected: { title: string; url: string; provider: Provider; reason: string }[]
+  /** `results`: what the searches returned, summed. `unique`: the different addresses among them. `selected`: the numbered sources. */
+  counts: { results: number; unique: number; selected: number }
 }
 
 export type RecommendationLabel = "Recommended next step" | "Alternative" | "Needs verification"
@@ -136,6 +147,39 @@ export interface Recommendation {
   basis: number[]
   /** What taking the step would do. */
   does: string
+}
+
+/** Which way a checked statement points for the hypothesis it is filed under, as a model of another vendor than the writer judged it. */
+export type Stance = "supports" | "contradicts" | "neither" | "unchecked"
+
+/**
+ * One hypothesis a Standard answer tests, set BEFORE any search, and (once the checks are done) its mark. "Tested"
+ * means checked against published sources. It is not an experiment.
+ */
+export interface Hypothesis {
+  /** "h1", "h2", ... in the order they were set. */
+  id: string
+  /** One checkable sentence. */
+  text: string
+  /** What a source would report if it holds, and if it does not: written before anything was searched. */
+  supportIf: string
+  contradictIf: string
+  /** "user": the person stated it; "planner": the planner proposed it. */
+  origin: "user" | "planner"
+  /**
+   * The mark, given by code (pipeline.ts markOf) from the checked statements: "verified" = Supported, "contradicted" =
+   * Contradicted, "unsupported" = Insufficient evidence, "unchecked" = Not checked.
+   */
+  verdict?: Verdict
+  /** Source numbers of the checked statements that count for it, and against it. */
+  for?: number[]
+  against?: number[]
+  /** Indexes of those statements in the final text. */
+  forStatements?: number[]
+  againstStatements?: number[]
+  /** True when checked statements stand on both sides: shown as Insufficient evidence, "the sources disagree". */
+  mixed?: boolean
+  note?: string
 }
 
 export interface Artifact { id: string; name: string; type: string; bytes: number; at: number }
@@ -158,6 +202,11 @@ export interface Statement {
   note?: string
   /** Final stage only: true when this sentence stood unchanged in the draft and its verdict was copied. */
   carried?: boolean
+  /** The hypothesis whose section the sentence is in, and the line it is filed under. */
+  hypothesis?: string
+  side?: "for" | "against"
+  /** Final statements that passed their check and are filed under a hypothesis: which way a second model says they point. */
+  stance?: Stance
 }
 
 export type Severity = "blocking" | "major" | "minor"
@@ -170,6 +219,8 @@ export interface ReviewNote {
   statement: number | null
   resolved?: boolean
   how?: string
+  /** Who says so: the reviewer itself after reading the revision, code (the sentence is gone or changed), or only the writer's own report. */
+  by?: "reviewer" | "code" | "writer"
 }
 
 export interface Counts { sources: number; statements: number; verified: number; contradicted: number; unsupported: number; unchecked: number }
@@ -197,6 +248,10 @@ export interface ResearchRecord {
   models: ModelNames
   /** The one sentence that says what will be done. */
   opening?: string
+  /** The hypotheses this answer tests (Standard level; empty when none were needed), each with its mark once checked. */
+  hypotheses?: Hypothesis[]
+  /** Why no hypotheses were set, or which were set aside because the level's limits do not fit them. */
+  hypothesesNote?: string
   steps: StepRecord[]
   searches: SearchLine[]
   sources: StoredSource[]
@@ -231,6 +286,8 @@ export type ResearchEvent =
   | { type: "research.resumed"; afterSeq: number }
   | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
   | { type: "opening"; text: string }
+  | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
+  | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note">)
   | ({ type: "step.started" } & StepStart)
   | { type: "step.progress"; step: string; done: number; total?: number; note?: string }
   | ({ type: "step.finished" } & StepEnd)
@@ -240,8 +297,9 @@ export type ResearchEvent =
   | { type: "answer.written"; markdown: string }
   | { type: "review.started"; reviewer: "checker" | "critic"; model: string; step: string }
   | ({ type: "statement.checked" } & Statement)
-  | ({ type: "review.note" } & Omit<ReviewNote, "resolved" | "how">)
-  | { type: "answer.revised"; markdown: string; notes: { index: number; resolved: boolean; how?: string }[] }
+  | ({ type: "review.note" } & Omit<ReviewNote, "resolved" | "how" | "by">)
+  | { type: "review.resolved"; notes: { index: number; resolved: boolean; how?: string; by?: ReviewNote["by"] }[] }
+  | { type: "answer.revised"; markdown: string; notes: { index: number; resolved: boolean; how?: string; by?: ReviewNote["by"] }[] }
   | { type: "sources.cited"; n: number[] }
   | { type: "recommendations"; items: Recommendation[] }
   | { type: "missing"; items: string[] }

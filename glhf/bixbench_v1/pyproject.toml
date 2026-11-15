@@ -14,6 +14,11 @@ dependencies = ["bixbench3", "huggingface-hub"]
 [project.scripts]
 bixbench-v1 = "bixbench_v1.cli:main"
 
+# Lets Inspect find the `bixbench_modal` sandbox provider by name (for example when it reads an
+# eval log of a Modal run). The module does nothing when the optional `modal` group is absent.
+[project.entry-points.inspect_ai]
+bixbench_v1 = "bixbench_v1._registry"
+
 [tool.uv.sources]
 bixbench3 = { path = "../bixbench", editable = true }
 

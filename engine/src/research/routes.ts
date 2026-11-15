@@ -170,15 +170,18 @@ export function createResearch(deps: ResearchDeps) {
         try {
           const limits = limitsOf(config)
           const earlier = threadRecords(config, record.thread, now()).filter((r) => r.id !== id && (r.startedAt < record.startedAt || (r.startedAt === record.startedAt && r.id < id)))
+          const halted = AbortSignal.any([runtime.signal, ...(active.get(id) ? [active.get(id)!.halt.signal] : [])])
           const remember: PipelineDeps["remember"] = async (key, work) => {
             const kept = await runtime.memo<JsonValue>(key, context)
             if (kept !== undefined) return kept as never
             const outcome = await work()
+            if (halted.aborted) throw new Interrupted() // the engine stopped while this step was at work: its result is not stored, as with a killed process
             const winner = await runtime.memo<JsonValue>(key, JSON.parse(JSON.stringify(outcome)) as JsonValue, context) // stored before the pipeline relies on it
             if (deps.onStored?.(key) === "stop") void kill()
             return winner as never
           }
-          const shared = { config, limits, env, earlier, remember, now: deps.now, interrupted: AbortSignal.any([runtime.signal, ...(active.get(id) ? [active.get(id)!.halt.signal] : [])]), cancel: active.get(id)?.cancel.signal, cancelRequested: () => existsSync(cancelFile(id)) }
+          const stored = async () => Object.keys(((await runtime.getTask(runtime.taskId, context)) as { memos?: Record<string, unknown> } | undefined)?.memos ?? {})
+          const shared = { config, limits, env, earlier, remember, stored, now: deps.now, interrupted: halted, cancel: active.get(id)?.cancel.signal, cancelRequested: () => existsSync(cancelFile(id)) }
           let pipeline: PipelineDeps
           if (record.mode === "demo") {
             pipeline = {
@@ -270,7 +273,7 @@ export function createResearch(deps: ResearchDeps) {
    */
   function resume(): string[] {
     const started: string[] = []
-    for (const record of listRecords(config, 0).reverse()) {
+    for (const record of listRecords(config, 0).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))) {
       if (ended(record.status) || active.has(record.id)) continue
       if (record.mode === "real" && (deps.mock() || paidCallsOff(env))) continue
       launch(record.id)

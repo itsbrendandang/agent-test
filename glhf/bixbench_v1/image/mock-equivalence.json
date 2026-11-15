@@ -1,0 +1,452 @@
+{
+ "docker": "runs/modal-proof/docker",
+ "modal": "runs/modal-proof/modal",
+ "model": "mock (scripted)",
+ "runs": {
+  "bix-29_b8c485ff/glhf": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "analyst"
+    ],
+    [
+     "phase.finished",
+     "analyst"
+    ],
+    [
+     "phase.started",
+     "critic"
+    ],
+    [
+     "phase.finished",
+     "critic"
+    ],
+    [
+     "phase.started",
+     "reconciler"
+    ],
+    [
+     "phase.finished",
+     "reconciler"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    {
+     "checked": true,
+     "visible_to_critic": []
+    },
+    {
+     "checked": true,
+     "visible_to_critic": []
+    }
+   ],
+   "steps": [
+    20,
+    20
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    7,
+    7
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    30,
+    30
+   ],
+   "total_tokens": [
+    48660,
+    48649
+   ],
+   "seconds": [
+    11.3,
+    29.2
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 2,
+   "modal_sandbox_seconds": 29.6,
+   "modal_sandbox_usd": 0.007825,
+   "same_mechanics": true
+  },
+  "bix-29_b8c485ff/single": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "single"
+    ],
+    [
+     "phase.finished",
+     "single"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    null,
+    null
+   ],
+   "steps": [
+    10,
+    10
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    4,
+    4
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    13,
+    13
+   ],
+   "total_tokens": [
+    20535,
+    20490
+   ],
+   "seconds": [
+    8.5,
+    19.5
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 1,
+   "modal_sandbox_seconds": 16.0,
+   "modal_sandbox_usd": 0.004216,
+   "same_mechanics": true
+  },
+  "bix-2_30b33e47/glhf": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "analyst"
+    ],
+    [
+     "phase.finished",
+     "analyst"
+    ],
+    [
+     "phase.started",
+     "critic"
+    ],
+    [
+     "phase.finished",
+     "critic"
+    ],
+    [
+     "phase.started",
+     "reconciler"
+    ],
+    [
+     "phase.finished",
+     "reconciler"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    {
+     "checked": true,
+     "visible_to_critic": []
+    },
+    {
+     "checked": true,
+     "visible_to_critic": []
+    }
+   ],
+   "steps": [
+    12,
+    12
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    7,
+    7
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    22,
+    22
+   ],
+   "total_tokens": [
+    31601,
+    31583
+   ],
+   "seconds": [
+    10.8,
+    36.3
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 2,
+   "modal_sandbox_seconds": 38.8,
+   "modal_sandbox_usd": 0.010242,
+   "same_mechanics": true
+  },
+  "bix-2_30b33e47/single": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "single"
+    ],
+    [
+     "phase.finished",
+     "single"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    null,
+    null
+   ],
+   "steps": [
+    6,
+    6
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    4,
+    4
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    9,
+    9
+   ],
+   "total_tokens": [
+    12914,
+    12888
+   ],
+   "seconds": [
+    8.3,
+    20.8
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 1,
+   "modal_sandbox_seconds": 16.5,
+   "modal_sandbox_usd": 0.004366,
+   "same_mechanics": true
+  },
+  "bix-46_d37acffb/glhf": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "analyst"
+    ],
+    [
+     "phase.finished",
+     "analyst"
+    ],
+    [
+     "phase.started",
+     "critic"
+    ],
+    [
+     "phase.finished",
+     "critic"
+    ],
+    [
+     "phase.started",
+     "reconciler"
+    ],
+    [
+     "phase.finished",
+     "reconciler"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    {
+     "checked": true,
+     "visible_to_critic": []
+    },
+    {
+     "checked": true,
+     "visible_to_critic": []
+    }
+   ],
+   "steps": [
+    12,
+    12
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    7,
+    7
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    22,
+    22
+   ],
+   "total_tokens": [
+    31313,
+    31295
+   ],
+   "seconds": [
+    11.4,
+    31.3
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 2,
+   "modal_sandbox_seconds": 32.1,
+   "modal_sandbox_usd": 0.008476,
+   "same_mechanics": true
+  },
+  "bix-46_d37acffb/single": {
+   "status": [
+    "done",
+    "done"
+   ],
+   "same_status": true,
+   "same_answer_statuses": true,
+   "same_phases": true,
+   "phases": [
+    [
+     "phase.started",
+     "single"
+    ],
+    [
+     "phase.finished",
+     "single"
+    ]
+   ],
+   "same_question_records": true,
+   "blind_check": [
+    null,
+    null
+   ],
+   "steps": [
+    6,
+    6
+   ],
+   "same_tool_calls": true,
+   "same_tool_outputs": true,
+   "differing_steps": [],
+   "files": [
+    4,
+    4
+   ],
+   "same_file_names": true,
+   "only_docker": [],
+   "only_modal": [],
+   "same_answers_json": true,
+   "messages": [
+    9,
+    9
+   ],
+   "total_tokens": [
+    12764,
+    12724
+   ],
+   "seconds": [
+    7.7,
+    16.7
+   ],
+   "sandbox": [
+    "docker",
+    "modal"
+   ],
+   "image": [
+    "futurehouse/bixbench:aviary-notebook-env",
+    "bixbench-v1-env:amd64-1"
+   ],
+   "modal_sandboxes": 1,
+   "modal_sandbox_seconds": 13.1,
+   "modal_sandbox_usd": 0.003462,
+   "same_mechanics": true
+  }
+ },
+ "all_same_mechanics": true
+}

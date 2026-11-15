@@ -118,6 +118,7 @@ research:
     queries: 3
     exa_searches: 3          # at most 3
     database_lookups: 2      # lookups in the public databases (engine/src/sources/), when that module is present
+    hypotheses: 3            # hypotheses one answer may test (0 = none). Each uses one web search and one literature query of this level, so never more than exa_searches or queries
     sources_kept: 12
     max_output_tokens: 3000
     words: 380

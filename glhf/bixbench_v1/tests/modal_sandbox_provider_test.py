@@ -351,6 +351,18 @@ def test_cleanup_does_not_depend_on_the_cancelled_task(world: World) -> None:
     assert modal_cost.read(world.context.ledgers[0])[0]["what"] == "interrupted"
 
 
+def test_a_plan_that_opens_the_boundary_never_reaches_modal(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Whatever builds the arguments, they are checked right before Sandbox.create.
+    real = boundary.sandbox_plan
+    for change in ({"block_network": False}, {"cpu": (2.0, 64.0)}, {"timeout": None}):
+        monkeypatch.setattr(boundary, "sandbox_plan", lambda cfg, change=change: real(cfg) | change)
+        with pytest.raises(ValueError, match="BixBench sandbox"):
+            start()
+    assert world.created == []
+
+
 def test_only_a_typed_config_starts_a_sandbox(world: World) -> None:
     for bad in (None, "compose.yaml", {"image": "x"}):
         with pytest.raises(ValueError, match="BixModalConfig"):

@@ -27,7 +27,32 @@ NEXT STEPS
 REVIEW NOTES
 1: addressed`
 
+// ── The Standard level's demo: two example hypotheses, tested against the example sources ─────────────────────────
+
+export const DEMO_HYPOTHESES = JSON.stringify({ needed: true, hypotheses: [
+  { text: "Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients.", supportIf: "A clinical report gives a response rate in previously treated patients.", contradictIf: "Clinical reports find no responses in these patients.", origin: "planner", web: { query: "demo", objective: "demo" }, literature: "demo example" },
+  { text: "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.", supportIf: "Studies of patients who progressed find no resistance mutations.", contradictIf: "Sequencing of patients who progressed finds resistance mutations.", origin: "planner", web: { query: "demo", objective: "demo" }, literature: "demo example" },
+] })
+
+/** One sentence for H1, one against H2, and one filed for H2 that does not bear on it: the stance check sets that one aside. */
+export const DEMO_HYPOTHESES_DRAFT = `**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.** In the example sources there is a finding for H1 and a finding against H2.
+
+### H1: KRAS G12C inhibitors produce responses
+**For:** Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1].
+**Not found:** an example source that reports no responses.
+
+### H2: Tumours do not become resistant
+**For:** Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2].
+**Against:** Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification [3].
+
+Switch to Real to ask your question for real.
+
+NEXT STEPS`
+
+export const DEMO_STANCES = JSON.stringify({ stances: [{ i: 0, stance: "supports" }, { i: 1, stance: "neither" }, { i: 2, stance: "contradicts" }] })
+
 const fixed = (text: string) => async () => ({ text, usd: 0, truncated: false })
+const tests = (system: string, user: string) => system.includes("# This answer tests hypotheses") || user.includes("<hypotheses>")
 
 /** The four model steps as fixed text. Costs nothing; every name is "scripted". */
 export const demoBrain: Brain = {
@@ -36,7 +61,10 @@ export const demoBrain: Brain = {
   criticIndependent: true,
   worstCase: () => 0,
   plan: fixed(JSON.stringify({ key_question: "KRAS G12C inhibitors: response, hERG and resistance (demo)", medical: false, researchable: true, web: [{ query: "demo", objective: "demo" }], literature: ["demo example"] })),
-  write: async (_system, _user, _signal, onDelta) => { onDelta(DEMO_DRAFT); return { text: DEMO_DRAFT, usd: 0, truncated: false } },
-  critique: fixed(DEMO_NOTES),
+  write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_HYPOTHESES_DRAFT : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } },
+  critique: async (system, user) => ({ text: tests(system, user) ? JSON.stringify({ notes: [] }) : DEMO_NOTES, usd: 0, truncated: false }),
+  hypothesize: fixed(DEMO_HYPOTHESES),
+  stance: fixed(DEMO_STANCES),
   revise: fixed(DEMO_REVISED),
+  rejudge: fixed(JSON.stringify({ notes: [{ note: 1, status: "resolved", why: "Demo text: the sentence is no longer in the answer." }] })),
 }

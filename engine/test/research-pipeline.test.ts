@@ -31,10 +31,10 @@ test("a standard answer, start to end: the web search opens it, the other search
     assert.deepEqual(types(events).slice(0, 4), ["research.started", "step.started", "step.finished", "opening"])
     assert.equal(events.at(-1)?.type, "research.finished")
     const order = (type: string, n = 0) => events.findIndex((x, i) => x.type === type && i >= n)
-    assert.ok(order("sources") < order("selection") && order("selection") < order("answer.written") && order("answer.written") < order("review.note") && order("review.note") < order("answer.revised") && order("answer.revised") < order("sources.cited") && order("sources.cited") < order("recommendations") && order("recommendations") < order("missing") && order("missing") < order("artifact.created"))
+    assert.ok(order("sources") < order("selection") && order("selection") < order("answer.written") && order("answer.written") < order("review.note") && order("review.note") < order("answer.revised") && order("answer.revised") < order("review.resolved") && order("review.resolved") < order("sources.cited") && order("sources.cited") < order("recommendations") && order("recommendations") < order("missing") && order("missing") < order("artifact.created"))
     // Every step that started has finished, once, after its start, with a measured time.
     const started = of(events, "step.started"), finished = of(events, "step.finished")
-    assert.deepEqual(started.map((s) => s.step).sort(), ["check", "evaluate:europepmc:1", "evaluate:europepmc:2", "evaluate:exa:1", "prepare", "review", "revise", "save", "search:europepmc:1", "search:europepmc:2", "search:exa:1", "write"])
+    assert.deepEqual(started.map((s) => s.step).sort(), ["check", "evaluate:europepmc:1", "evaluate:europepmc:2", "evaluate:exa:1", "hypotheses", "prepare", "review", "review:2", "revise", "save", "search:europepmc:1", "search:europepmc:2", "search:exa:1", "write"])
     for (const s of started) {
       const end = finished.filter((f) => f.step === s.step)
       assert.equal(end.length, 1, s.step)
@@ -43,7 +43,11 @@ test("a standard answer, start to end: the web search opens it, the other search
       assert.ok(s.label.length > 5 && !/[{}<>]/.test(s.label))
     }
     assert.deepEqual(started.find((s) => s.step === "prepare")?.kind, "prepare")
-    assert.deepEqual(started.map((s) => s.kind).filter((k, i, a) => a.indexOf(k) === i).sort(), ["check", "evaluate", "prepare", "review", "revise", "save", "search", "write"])
+    assert.deepEqual(started.map((s) => s.kind).filter((k, i, a) => a.indexOf(k) === i).sort(), ["check", "evaluate", "hypothesize", "prepare", "review", "revise", "save", "search", "write"])
+    // Standard asks whether hypotheses are needed; here the planner says no, and the answer runs as a plain one.
+    assert.deepEqual(of(events, "hypotheses").map((h) => [h.items, h.needed, h.reason]), [[[], false, "This is a plain question with one answer to look up."]])
+    assert.ok(of(events, "hypotheses")[0].seq < step(events, "search:exa:1").started!.seq)
+    assert.deepEqual([record.hypotheses, record.hypothesesNote, of(events, "hypothesis.checked").length], [[], "This is a plain question with one answer to look up.", 0])
     // The web search opens the answer and is finished, with its screening, before any other search starts; the others overlap.
     assert.equal(e.net.requests[0].url, "https://api.exa.ai/search")
     assert.ok(step(events, "evaluate:exa:1").finished!.seq < step(events, "search:europepmc:1").started!.seq)
@@ -56,18 +60,21 @@ test("a standard answer, start to end: the web search opens it, the other search
     assert.equal(e.pmcRequests().length, 2)
     // Who did what: planner and screening on the cheap tier, the writer on the strong tier, the checker and the critic on the other vendor.
     const by = (role: string) => [...new Set(e.calls.filter((c) => c.role === role).map((c) => `${c.provider}/${c.model}`))]
-    assert.deepEqual([by("plan"), by("screen"), by("write"), by("revise"), by("check"), by("critic")], [["anthropic/claude-haiku-5-5"], ["anthropic/claude-haiku-5-5"], ["anthropic/claude-sonnet-5-5"], ["anthropic/claude-sonnet-5-5"], ["openai/gpt-4o-mini"], ["openai/gpt-5-mini"]])
+    assert.deepEqual([by("plan"), by("screen"), by("write"), by("revise"), by("check"), by("critic"), by("rejudge")], [["anthropic/claude-haiku-5-5"], ["anthropic/claude-haiku-5-5"], ["anthropic/claude-sonnet-5-5"], ["anthropic/claude-sonnet-5-5"], ["openai/gpt-4o-mini"], ["openai/gpt-5-mini"], ["openai/gpt-5-mini"]])
     assert.deepEqual(record.models, { planner: "anthropic/claude-haiku-5-5", writer: "anthropic/claude-sonnet-5-5", checker: "openai/gpt-4o-mini", critic: "openai/gpt-5-mini" })
-    assert.deepEqual([e.count("plan"), e.count("write"), e.count("critic"), e.count("revise")], [1, 1, 1, 1])
+    assert.deepEqual([e.count("plan"), e.count("write"), e.count("critic"), e.count("revise"), e.count("rejudge")], [1, 1, 1, 1, 1])
     assert.equal(e.count("screen"), 2, "the two literature searches gave the same eight results: screened once, not twice")
     // Sources: numbered 1..n by code; found, selected and cited are three different things.
     assert.deepEqual(record.sources.map((s) => s.n), record.sources.map((_s, i) => i + 1))
     assert.equal(record.sources[0].url, EXA_RESULTS[0].url)
     assert.equal(record.sources.filter((s) => s.provider === "europepmc").length, 8)
     assert.ok(record.sources.some((s) => /review/.test(s.note ?? "")), "a review is labelled")
-    assert.deepEqual(of(events, "sources")[0].items.map((s) => Object.keys(s).sort().join()), record.sources.map((s) => ["n", ...(s.note ? ["note"] : []), "provider", "title", "url"].sort().join()), "the event carries no source text")
+    assert.deepEqual(of(events, "sources")[0].items.map((s) => Object.keys(s).sort().join()), record.sources.map((s) => ["n", ...(s.note ? ["note"] : []), ...(s.published ? ["published"] : []), "provider", "title", "url"].sort().join()), "the event carries no source text")
     const selection = of(events, "selection")[0]
     assert.deepEqual(selection.selected.map((s) => s.n), record.sources.map((s) => s.n))
+    assert.deepEqual(selection.counts, { results: 19, unique: 11, selected: 9 }, "3 + 8 + 8 results; the eight papers both literature searches found are counted once")
+    assert.equal(record.sources.find((s) => s.provider === "europepmc")?.published, "2026")
+    assert.equal(record.sources[0].published, undefined, "a web page has no date")
     assert.deepEqual(selection.notSelected.map((s) => [s.url, s.reason]), [[EXA_RESULTS[1].url, "Screened as not about the question."], [EXA_RESULTS[2].url, "No text came back for it, so nothing could be checked against it."]])
     assert.deepEqual(of(events, "sources.cited")[0].n, [1, 2, 3])
     assert.deepEqual(record.sources.filter((s) => s.cited).map((s) => s.n), [1, 2, 3])
@@ -88,7 +95,13 @@ test("a standard answer, start to end: the web search opens it, the other search
     const revised = of(events, "answer.revised")[0]
     assert.equal(revised.markdown, record.answer!.markdown)
     assert.ok(!revised.markdown.includes("cures heart disease"))
-    assert.deepEqual(revised.notes, [{ index: 0, resolved: true, how: "the sentence was removed or rewritten" }, { index: 1, resolved: false, how: "the writer did not address it: no source states the follow-up time" }])
+    assert.deepEqual(revised.notes, [{ index: 0, resolved: true, how: "the sentence was removed or rewritten", by: "code" }, { index: 1, resolved: false, how: "the writer did not address it: no source states the follow-up time", by: "writer" }], "what code and the writer's report show, until the reviewer has read the revision")
+    assert.deepEqual(of(events, "review.resolved")[0].notes, [
+      { index: 0, resolved: true, how: "the reviewer read the revision and judged it resolved: those words are no longer in the answer", by: "reviewer" },
+      { index: 1, resolved: false, how: "the reviewer read the revision and judged it not resolved: the revised answer does not deal with it", by: "reviewer" },
+    ], "the reviewer that raised the notes judges each one against the revised text")
+    assert.deepEqual(record.review.notes.map((n) => [n.resolved, n.by]), [[true, "reviewer"], [false, "reviewer"]])
+    assert.ok(step(events, "review:2").started!.seq > of(events, "answer.revised")[0].seq)
     assert.deepEqual(record.statements.map((s) => [s.stage, s.index, s.verdict, s.carried]), [["final", 0, "verified", true], ["final", 1, "verified", true], ["final", 2, "verified", true]])
     assert.equal(record.draft, draft)
     assert.equal(record.answer!.direct.startsWith("Yes, in the population that was studied."), true)
@@ -134,6 +147,54 @@ test("code, not the writer, decides: a marker with no source goes, a link goes, 
     assert.deepEqual(record.missing, ["Not found in its source [1]: \"Semaglutide cures heart disease in 99% of patients.\""])
     assert.match(readFileSync(join(e.runs, ".research", record.id, "answer.md"), "utf8"), /## What is missing\n\n- Not found in its source \[1\]/)
   } finally { await e.close() }
+})
+
+test("from the first real answer: a remark about what is absent is not a checked claim, a repeated sentence is shown once, and a note is judged resolved by the reviewer after the revision", async () => {
+  const opener = "The one phase 3 trial reported so far found that **the drug beat both older drugs** on survival."
+  const e = await engine({ script: {
+    write: (call) => { const s = sourcesIn(call.user); return `${opener} ${first(s[0].text)} [1].\n\n${first(s[1].text)} [2].\n\nNot found in these sources: separate results for each older drug, since few patients received the second one [1]. With the follow-up reported [2], they give no longer-term survival data.` },
+    critic: () => JSON.stringify({ notes: [{ severity: "major", statement: null, text: "The opening words \"the drug beat both older drugs\" overstate source [1], which compares it with a mixed control arm. Say \"was superior to the control arm\"." }] }),
+    revise: (call) => { const s = sourcesIn(call.user); return `The one phase 3 trial reported so far found that **the drug was superior to the control arm** on survival. ${first(s[0].text)} [1]. ${first(s[0].text)}.\n\n${first(s[1].text)} [2].\n\nNot found in these sources: separate results for each older drug [1]. They give no longer-term survival data.\n\nREVIEW NOTES\n1: addressed` },
+    rejudge: () => JSON.stringify({ notes: [{ note: 1, status: "resolved", why: "the opening now says \"was superior to the control arm\"" }, { note: 7, status: "resolved" }, { note: 1, status: "open" }] }),
+  } })
+  try {
+    const { record, events } = await paidAllowed(() => e.answer({ question: Q, effort: "quick" }))
+    // (1) No marker is left in the "Not found" paragraph, in the draft or in the final text, and its sentences are not statements.
+    for (const text of [record.draft!, record.answer!.markdown]) assert.ok(!/\[\d\]/.test(text.slice(text.indexOf("Not found in these sources:"))), text)
+    assert.deepEqual(of(events, "statement.checked").filter((s) => s.stage === "draft").map((s) => s.index).sort(), [0, 1])
+    assert.deepEqual(record.statements.map((s) => [s.sources, s.verdict]), [[[1], "verified"], [[2], "verified"]])
+    assert.ok(!e.calls.filter((c) => c.role === "check").some((c) => /longer-term survival|separate results/.test(c.user)), "a sentence about absence is never sent to the quote check")
+    // (2) The sentence the revision wrote twice is in the text once, and the cited one is the one kept.
+    const sentence = first(record.sources[0].text)
+    assert.equal(record.answer!.markdown.split(sentence).length - 1, 1)
+    assert.ok(record.answer!.markdown.includes(`${sentence} [1].`))
+    assert.match(record.note ?? "", /1 sentence that the writer wrote twice is shown once\./)
+    // (3) The reviewer read the revision: its note is resolved, by the reviewer's own judgement, and nothing calls it open.
+    assert.deepEqual(record.review.notes.map((n) => [n.resolved, n.by, n.how]), [[true, "reviewer", "the reviewer read the revision and judged it resolved: the opening now says \"was superior to the control arm\""]])
+    assert.deepEqual(of(events, "answer.revised")[0].notes.map((n) => [n.resolved, n.by]), [[true, "writer"]], "before the reviewer's second look, only the writer's own report")
+    assert.deepEqual(record.missing, [])
+    assert.ok(!record.recommendations.some((r) => /team review/.test(r.text)), "no open concern, so no team review is proposed")
+    assert.equal(of(events, "research.finished")[0].review.notes.resolved, 1)
+    assert.match(e.calls.find((c) => c.role === "rejudge")!.user, /<revised>\nThe one phase 3 trial reported so far found that \*\*the drug was superior to the control arm\*\*/)
+  } finally { await e.close() }
+  // When the reviewer cannot be asked again, the record says so and keeps what code and the writer's report show.
+  const down = await engine({ script: { rejudge: () => ({ error: "529 overloaded_error" }) } })
+  try {
+    const { record, events } = await paidAllowed(() => down.answer({ question: Q, effort: "quick" }))
+    assert.deepEqual([step(events, "review:2").finished?.status, record.status], ["failed", "done"])
+    assert.match(step(events, "review:2").finished?.consequence ?? "", /was not judged by the reviewer/)
+    assert.deepEqual(record.review.notes.map((n) => [n.resolved, n.by]), [[true, "code"], [false, "writer"]])
+    assert.deepEqual(of(events, "review.resolved")[0].notes.map((n) => n.by), ["code", "writer"])
+  } finally { await down.close() }
+  // "Partly" is not "resolved", and the reviewer's own judgement stands over what code saw (the sentence was removed).
+  const partly = await engine({ script: { rejudge: () => JSON.stringify({ notes: [{ note: 1, status: "partly", why: "the claim is gone but the direct answer still implies it" }, { note: 2, status: "open" }] }) } })
+  try {
+    const { record } = await paidAllowed(() => partly.answer({ question: Q, effort: "quick" }))
+    assert.deepEqual(record.review.notes.map((n) => [n.severity, n.resolved, n.by]), [["blocking", false, "reviewer"], ["minor", false, "reviewer"]])
+    assert.equal(record.review.notes[0].how, "the reviewer read the revision and judged it only partly resolved: the claim is gone but the direct answer still implies it")
+    assert.ok(record.missing?.some((m) => m.startsWith("A reviewer's blocking concern was not resolved:")), "an open blocking concern is said in What is missing")
+    assert.ok(record.recommendations.some((r) => r.text === "Have a team review this question."), "and a team review is proposed")
+  } finally { await partly.close() }
 })
 
 test("a statement holds up only when the checker's quote is really in the source, with the statement's numbers; anything else is reported as it is", async () => {

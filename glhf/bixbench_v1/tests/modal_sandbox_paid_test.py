@@ -136,12 +136,33 @@ def test_a_direct_modal_run_is_refused_before_the_volume_is_touched(
             out_dir=tmp_path / "direct", solver="single", model="mock", sandbox="modal",
         )  # fmt: skip
     assert not list((synthetic.staged.parent / "mounts").iterdir())  # the neutral folder is gone
-    # Switch off: the guard lets it through to the (fake) Volume and then to the provider,
-    # whose import of Modal is the spy.
+    # Switch off: the guard lets it through, as far as the import of Modal (the spy).
     monkeypatch.setenv(paid.SWITCH, "0")
-    with pytest.raises(Reached, match="import"):
+    with pytest.raises(Reached, match="import modal"):
         modal_run.prepare(**arguments)
-    assert volume.uploads == 2 and any(name.endswith("/data/counts.csv") for name in volume.files)
+
+
+def test_without_the_optional_packages_the_option_says_what_to_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, synthetic: Synthetic
+) -> None:
+    monkeypatch.setenv(paid.SWITCH, "0")
+    real_import = builtins.__import__
+
+    def not_installed(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "modal":
+            raise ModuleNotFoundError("No module named 'modal'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", not_installed)
+    data_dir, manifest = staged_capsule(synthetic)
+    volume = FakeVolume()
+    with pytest.raises(RuntimeError, match="uv run --group modal"):
+        modal_run.prepare(
+            data_dir=data_dir, manifest=manifest, outputs_dir=tmp_path / "outputs",
+            run_dir=tmp_path / "run", run_name="syn-1/single", capsule="syn-1", solver="single",
+            time_limit_seconds=300, backstop_seconds=180, volume=volume,
+        )  # fmt: skip
+    assert volume.uploads == 0
 
 
 def test_the_folder_cap_stops_a_modal_run_before_the_volume_is_touched(

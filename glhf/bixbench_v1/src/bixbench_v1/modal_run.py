@@ -110,9 +110,14 @@ def prepare(
     unique = list({path.resolve(): path for path in files}.values())
     # The cap is read from the first shared ledger (the --out folder's), else this run's own.
     modal_cost.check_cap(unique[1] if len(unique) > 1 else unique[0], usd_cap, worst)
-    if volume is None:
+    try:
         import modal
-
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "--sandbox modal needs the optional packages: run the command with "
+            "`uv run --group modal ...` (see the README, 'The sandbox on Modal')"
+        ) from error
+    if volume is None:
         volume = modal.Volume.from_name(modal_stage.VOLUME_NAME, create_if_missing=True)
     began = time.time()
     staged, uploaded = modal_stage.ensure_uploaded(volume, data_dir, manifest)

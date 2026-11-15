@@ -4,8 +4,10 @@ the Volume, and the cost ledger. Each guard has a test that fails when the guard
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tarfile
@@ -302,7 +304,15 @@ def test_only_the_staged_data_files_are_uploaded_under_a_neutral_name(synthetic:
     data_dir, manifest = staged_capsule(synthetic)
     volume = FakeVolume()
     staged, uploaded = modal_stage.ensure_uploaded(volume, data_dir, manifest)
-    assert uploaded and len(staged.key) == 32 and UUID not in staged.key
+    assert uploaded and len(staged.key) == 32
+    # The folder name is a hash of the content: not the capsule's uuid in any spelling.
+    assert (
+        staged.key
+        == hashlib.sha256(f"{staged.listing_sha256}:{staged.content_sha256}".encode()).hexdigest()[
+            :32
+        ]
+    )
+    assert UUID.replace("-", "")[:16] not in staged.key
     names = sorted(volume.files)
     assert names == sorted(
         [f"{staged.key}/complete.json"] + [f"{staged.key}/data/{p}" for p in manifest.paths]
@@ -318,6 +328,10 @@ def test_only_the_staged_data_files_are_uploaded_under_a_neutral_name(synthetic:
     before = volume.uploads
     again, uploaded_again = modal_stage.ensure_uploaded(volume, data_dir, manifest)
     assert not uploaded_again and again == staged and volume.uploads == before
+    # A copy that is marked complete but has lost a file is not trusted: it is uploaded again.
+    del volume.files[f"{staged.key}/data/counts.csv"]
+    _, repaired = modal_stage.ensure_uploaded(volume, data_dir, manifest)
+    assert repaired and f"{staged.key}/data/counts.csv" in volume.files
 
 
 def test_the_listing_and_content_hashes_are_what_the_sandbox_computes(
@@ -463,3 +477,206 @@ def test_a_docker_run_imports_neither_modal_nor_the_provider() -> None:
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# Comparing the two images ---------------------------------------------------------------------------
+def inventory(machine: str, conda: dict[str, str], apt: dict[str, str]) -> dict[str, Any]:
+    return {
+        "platform": {"machine": machine, "python": "3.12.2"},
+        "os_release": {"PRETTY_NAME": "Debian GNU/Linux 12 (bookworm)"},
+        "debian_version": "12.7",
+        "env": {"PATH": "/opt/conda/bin"},
+        "env_all": {"PATH": "/opt/conda/bin"}
+        | ({"PYTHONHASHSEED": "0", "NEW_VAR": "1"} if machine == "x86_64" else {}),
+        "conda": [{"name": n, "version": v, "build": f"h_{machine}"} for n, v in conda.items()],
+        "pip": [{"name": "numpy", "version": "2.0.2"}],
+        "r": {"rversion": "R version 4.3.3", "packages": [{"name": "DESeq2", "version": "1.42.0"}]},
+        "apt": [{"name": n, "version": v} for n, v in apt.items()],
+        "tools": {"mafft": {"output": "v7.526"}, "iqtree2": {"output": f"2.3.6 for {machine}"}},
+        "requirements_txt": ["numpy==2.0.2"],
+        "udocker_images": ["busco"],
+        "udocker_layers": ["sha256:1"],
+    }
+
+
+def test_the_image_diff_names_every_package_that_differs() -> None:
+    from bixbench_v1 import modal_image
+
+    official = inventory(
+        "aarch64",
+        {"numpy": "2.0.2", "reproc": "14.2.4", "sysroot_linux-aarch64": "2.17", "arm-only": "1"},
+        {"wget": "1.21.3-1+b1", "libhwasan0": "12.2.0-14"},
+    )
+    ours = inventory(
+        "x86_64",
+        {"numpy": "2.0.2", "reproc": "14.2.5", "sysroot_linux-64": "2.17", "x86-only": "1"},
+        {"wget": "1.21.3-1+b2", "libquadmath0": "12.2.0-14"},
+    )
+    result = modal_image.diff(official, ours)
+    conda = result["conda"]
+    assert conda["same_version"] == 2  # numpy and the sysroot, whose NAME carries the platform
+    assert conda["version_differs"] == {"reproc": {"official": "14.2.4", "modal": "14.2.5"}}
+    assert conda["only_in_official"] == {"arm-only": "1"} and conda["only_in_modal"] == {
+        "x86-only": "1"
+    }
+    assert result["apt"]["version_differs"] == {
+        "wget": {"official": "1.21.3-1+b1", "modal": "1.21.3-1+b2"}
+    }
+    assert result["tools_differ"] == ["iqtree2"]
+    # A variable Modal adds that the provider does not remove is reported, not hidden.
+    assert result["env_removed_by_the_provider"] == ["PYTHONHASHSEED"]
+    assert result["env_left_after_the_provider"] == ["NEW_VAR"]
+    text = modal_image.diff_markdown(result)
+    assert "`reproc`: official 14.2.4, Modal 14.2.5" in text and "NEW_VAR" in text
+
+
+def test_the_fixed_analysis_is_compared_digit_by_digit() -> None:
+    from bixbench_v1 import modal_image
+
+    def results(value: float, text: str, count: int) -> dict[str, Any]:
+        return {
+            "results": {"s": {"x": [1.0, value], "text": text, "n": count}, "versions": {}},
+            "errors": {},
+        }
+
+    same = modal_image.compare_equivalence(
+        results(0.123456789, "t", 3), results(0.123456789, "t", 3)
+    )
+    assert same["identical"] == same["values"] == 4 and same["fewest_agreeing_digits"] == 17
+    near = modal_image.compare_equivalence(
+        results(0.123456789, "t", 3), results(0.123456790, "u", 4)
+    )
+    assert near["fewest_agreeing_digits"] == 8  # relative difference 8e-9
+    assert near["text_or_integer_differs"] == ["s.n", "s.text"]  # an integer is never "close"
+    assert near["sections"]["s"]["worst"] == "s.x[1]"
+    assert "s.x[1]" in modal_image.equivalence_markdown(near)
+
+
+def test_the_committed_evidence_says_what_the_readme_says() -> None:
+    """The numbers quoted in the README come from these files; if an image is rebuilt and they
+    change, this fails and the README has to be read again."""
+    from bixbench_v1 import modal_image
+
+    diff = json.loads((modal_image.EVIDENCE / "diff.json").read_text())
+    assert diff["python"] == {"official": "3.12.2", "modal": "3.12.2"}
+    assert diff["r"]["official"] == diff["r"]["modal"] == "R version 4.3.3 (2024-02-29)"
+    assert (diff["conda"]["official_count"], diff["conda"]["same_version"]) == (843, 840)
+    assert sorted(diff["conda"]["version_differs"]) == [
+        "kernel-headers_linux-64",
+        "reproc",
+        "reproc-cpp",
+    ]
+    assert diff["r_packages"]["same_version"] == diff["r_packages"]["official_count"] == 333
+    assert diff["pip"]["version_differs"] == {} and diff["pip"]["only_in_official"] == {}
+    assert (diff["apt"]["official_count"], diff["apt"]["same_version"]) == (268, 266)
+    assert diff["udocker_layers_same"] is True and diff["env_left_after_the_provider"] == []
+    equivalence = json.loads((modal_image.EVIDENCE / "equivalence.json").read_text())
+    assert equivalence["text_or_integer_differs"] == []
+    assert equivalence["errors"] == {"official": {}, "modal": {}}
+    double = [v["fewest_digits"] for k, v in equivalence["sections"].items() if k != "scanpy"]
+    assert min(double) >= 10 and equivalence["sections"]["scanpy"]["fewest_digits"] >= 5
+    mock = json.loads((modal_image.EVIDENCE / "mock-equivalence.json").read_text())
+    assert mock["all_same_mechanics"] is True and len(mock["runs"]) == 6
+    blind = json.loads((modal_image.EVIDENCE / "gvisor-blind-check.json").read_text())
+    assert "FAILS in one sandbox" in blind["verdict"]["System V IPC"]
+
+
+def test_the_explicit_package_list_is_pinned_by_file_and_hash() -> None:
+    from bixbench_v1 import modal_image
+
+    lines = [
+        line for line in modal_image.EXPLICIT.read_text().splitlines() if line.startswith("http")
+    ]
+    assert len(lines) == 843 and "@EXPLICIT" in modal_image.EXPLICIT.read_text()
+    for line in lines:  # an exact file and its md5: nothing is left to a solver
+        assert re.fullmatch(r"https://[^#]+\.(conda|tar\.bz2)#[0-9a-f]{32}", line), line
+        assert "/linux-64/" in line or "/noarch/" in line
+    assert (
+        "@sha256:" in modal_image.BASE_IMAGE
+        and "add_python" not in modal_image.definition.__code__.co_names
+    )
+
+
+# The solver's hook: a new sandbox for the critic when the provider can make one -------------------
+class FakeEnvironment:
+    """Stands in for a sandbox environment; records what the blind check runs in it."""
+
+    def __init__(self) -> None:
+        self.ran: list[str] = []
+
+    async def exec(self, cmd: list[str], **kwargs: Any) -> Any:
+        from bixbench_v1 import solvers
+
+        text = cmd[-1] if cmd[0] == "bash" else " ".join(cmd[:2])
+        for name in ("_SETUP", "_COLLECT", "_BLIND_CHECK", "_BLIND", "_IPC_REMOVE"):
+            if text == getattr(solvers, name):
+                text = name
+        self.ran.append(text if len(text) < 40 else text[:40])
+        return SimpleNamespace(success=True, stdout="[]" if cmd[0] == "python3" else "", stderr="")
+
+
+class FreshEnvironment(FakeEnvironment, boundary.FreshSandbox):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__()
+        self.fail, self.kept = fail, None
+
+    async def fresh_sandbox(self, keep: list[str]) -> None:
+        if self.fail:
+            raise RuntimeError("no capacity")
+        self.kept = keep
+        self.ran.append("FRESH")
+
+
+def blind(monkeypatch: pytest.MonkeyPatch, environment: FakeEnvironment) -> list[str]:
+    import asyncio
+
+    from bixbench_v1 import solvers
+
+    proxy = SimpleNamespace(_sandbox=environment, exec=environment.exec)  # as Inspect wraps it
+    monkeypatch.setattr(solvers, "sandbox", lambda: proxy)
+    return asyncio.run(solvers.blind_check())
+
+
+def test_the_critic_gets_a_new_sandbox_when_the_provider_can_make_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = FreshEnvironment()
+    assert blind(monkeypatch, environment) == []
+    ran = environment.ran
+    # The analyst's scripts are collected, then the sandbox is replaced, set up again, and only
+    # then swept and checked as the critic's user: the same steps as in Docker, in a new place.
+    assert ran.index("_COLLECT") < ran.index("FRESH") < ran.index("_SETUP") < ran.index("_BLIND")
+    assert ran.index("_BLIND") < ran.index("_BLIND_CHECK") and environment.kept == [
+        "/outputs/glhf/work"
+    ]
+
+
+def test_local_docker_keeps_its_one_container_and_its_own_blind_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = FakeEnvironment()
+    assert blind(monkeypatch, environment) == []
+    assert "FRESH" not in environment.ran and "_SETUP" not in environment.ran
+    assert "_BLIND" in environment.ran and "_BLIND_CHECK" in environment.ran
+
+
+def test_the_critic_does_not_run_when_the_new_sandbox_cannot_be_made(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = FreshEnvironment(fail=True)
+    visible = blind(monkeypatch, environment)
+    assert len(visible) == 1 and "fresh sandbox for the critic failed: no capacity" in visible[0]
+    assert "_BLIND_CHECK" not in environment.ran  # never falls back to the one-sandbox check
+
+
+def test_an_unknown_sandbox_name_is_refused_before_anything_is_staged(
+    synthetic: Synthetic, tmp_path: Path
+) -> None:
+    from bixbench_v1 import runner
+
+    with pytest.raises(ValueError, match="unknown sandbox"):
+        runner.run_capsule(
+            synthetic.capsule, hub_dir=synthetic.hub, staged_root=synthetic.staged,
+            out_dir=tmp_path / "run", solver="single", model="mock", sandbox="e2b",
+        )  # fmt: skip
+    assert not (tmp_path / "run" / "run.json").exists()

@@ -20,6 +20,8 @@ this image is not comparable with published BixBench numbers or with a local Doc
     uv run --group modal python -m bixbench_v1.modal_image build      # build and publish (billed)
     uv run --group modal python -m bixbench_v1.modal_image inventory  # list what is in it (billed)
     uv run python -m bixbench_v1.modal_image diff                     # compare inventories (free)
+    uv run --group modal python -m bixbench_v1.modal_image equivalence          # fixed analysis (billed)
+    uv run python -m bixbench_v1.modal_image compare-equivalence      # compare its results (free)
 
 `build` and `inventory` use Modal and are refused while NO_PAID_CALLS is on.
 """
@@ -28,12 +30,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import paid
-from .modal_boundary import MODAL_ADDED_ENV
+from .modal_boundary import MODAL_ADDED_ENV, clean_env_command
 
 if TYPE_CHECKING:  # the `modal` package is in the optional dependency group "modal"
     import modal
@@ -151,6 +154,149 @@ def inventory(
         return document
     finally:
         sandbox.terminate()
+
+
+def equivalence(
+    image_name: str = PUBLISHED, cpu: float = 4.0, memory_mib: int = 8192
+) -> dict[str, Any]:
+    """Run image/tools/equivalence.py (a fixed analysis, no model, no data from outside) in a
+    network-blocked Modal sandbox of the image, started as the provider starts commands."""
+    paid.refuse_modal(f"an equivalence sandbox of {image_name}")
+    import modal
+
+    script = (EVIDENCE / "tools" / "equivalence.py").read_text(encoding="utf-8")
+    app = modal.App.lookup(APP_NAME, create_if_missing=True)
+    sandbox = modal.Sandbox.create(
+        "sleep", "infinity", app=app, image=modal.Image.from_name(image_name), timeout=1200,
+        cpu=(cpu, cpu), memory=(memory_mib, memory_mib), block_network=True,
+    )  # fmt: skip
+    try:
+        sandbox.filesystem.write_text(script, "/tmp/equivalence.py")
+        process = sandbox.exec(*clean_env_command(["python", "/tmp/equivalence.py"]))
+        out = process.stdout.read()
+        process.wait()
+        document: dict[str, Any] = json.loads(out)
+        return document
+    finally:
+        sandbox.terminate()
+
+
+def _leaves(value: Any, path: str = "") -> list[tuple[str, Any]]:
+    if isinstance(value, dict):
+        return [leaf for k, v in value.items() for leaf in _leaves(v, f"{path}.{k}" if path else k)]
+    if isinstance(value, list):
+        return [leaf for i, v in enumerate(value) for leaf in _leaves(v, f"{path}[{i}]")]
+    return [(path, value)]
+
+
+def compare_equivalence(official: dict[str, Any], ours: dict[str, Any]) -> dict[str, Any]:
+    """Every value of the fixed analysis, official image against Modal image. A number is
+    compared by relative difference and reported as the count of leading significant digits
+    that agree (17 = the same double); text and integers must be equal."""
+    a = dict(_leaves({k: v for k, v in official["results"].items() if k != "versions"}))
+    b = dict(_leaves({k: v for k, v in ours["results"].items() if k != "versions"}))
+    rows: list[dict[str, Any]] = []
+    for name in sorted(set(a) | set(b)):
+        x, y = a.get(name), b.get(name)
+        row: dict[str, Any] = {"name": name, "official": x, "modal": y}
+        numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (x, y))
+        if numeric and (isinstance(x, float) or isinstance(y, float)):
+            fx, fy = float(x), float(y)  # type: ignore[arg-type]
+            if fx == fy or (math.isnan(fx) and math.isnan(fy)):
+                row |= {"same": True, "digits": 17, "relative_difference": 0.0}
+            else:
+                relative = abs(fx - fy) / max(abs(fx), abs(fy))
+                row |= {
+                    "same": False,
+                    "digits": max(0, min(17, math.floor(-math.log10(relative)))),
+                    "relative_difference": relative,
+                }
+        else:
+            row |= {"same": x == y, "digits": None}
+        rows.append(row)
+    sections: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        section = (
+            row["name"].split(".")[0]
+            if not row["name"].startswith("r.")
+            else "r." + row["name"].split(".")[1]
+        )
+        cell = sections.setdefault(
+            section,
+            {
+                "values": 0,
+                "identical": 0,
+                "text_or_integer_differs": [],
+                "fewest_digits": 17,
+                "worst": None,
+            },
+        )
+        cell["values"] += 1
+        cell["identical"] += int(bool(row["same"]))
+        if row["digits"] is None and not row["same"]:
+            cell["text_or_integer_differs"].append(row["name"])
+        if row["digits"] is not None and row["digits"] < cell["fewest_digits"]:
+            cell["fewest_digits"], cell["worst"] = row["digits"], row["name"]
+    numeric_rows = [r for r in rows if r["digits"] is not None]
+    return {
+        "official": official["results"].get("versions"),
+        "modal": ours["results"].get("versions"),
+        "errors": {"official": official.get("errors"), "modal": ours.get("errors")},
+        "values": len(rows),
+        "identical": sum(1 for r in rows if r["same"]),
+        "numbers": len(numeric_rows),
+        "numbers_identical_to_the_last_bit": sum(1 for r in numeric_rows if r["same"]),
+        "fewest_agreeing_digits": min((r["digits"] for r in numeric_rows), default=None),
+        "text_or_integer_differs": [
+            r["name"] for r in rows if r["digits"] is None and not r["same"]
+        ],
+        "sections": sections,
+        "differing_values": [r for r in rows if not r["same"]],
+    }
+
+
+def equivalence_markdown(d: dict[str, Any]) -> str:
+    lines = [
+        "# The same fixed analysis in the official image and in the Modal image",
+        "",
+        "Made by `python -m bixbench_v1.modal_image compare-equivalence` from the two result files in",
+        "this folder (`equivalence.arm64-official.json`, `equivalence.amd64-modal.json`). The script is",
+        "`tools/equivalence.py`: seeded synthetic data, no model, no network, one thread.",
+        "",
+        f"- Official: {d['official']}",
+        f"- Modal: {d['modal']}",
+        f"- Errors: official {d['errors']['official'] or 'none'}, Modal {d['errors']['modal'] or 'none'}",
+        f"- Values compared: {d['values']}; identical: {d['identical']}",
+        f"- Numbers: {d['numbers']}; identical to the last bit: {d['numbers_identical_to_the_last_bit']}; "
+        f"fewest agreeing significant digits in any number: {d['fewest_agreeing_digits']}",
+        f"- Text or integer values that differ: {d['text_or_integer_differs'] or 'none'}",
+        "",
+        "A double holds 15 to 17 significant digits. Two CPU architectures use different compiled",
+        "kernels (OpenBLAS, libm, fused multiply-add), so the last one to three digits of a direct",
+        "calculation can differ; an iterative fit stops at its tolerance and agrees to fewer.",
+        "scanpy computes in single precision (float32, about 7 significant digits), so its numbers",
+        "can agree to 7 digits at most.",
+        "",
+        "| section | values | identical | fewest agreeing digits | where |",
+        "|---|---|---|---|---|",
+    ]
+    for name, cell in d["sections"].items():
+        lines.append(
+            f"| {name} | {cell['values']} | {cell['identical']} | "
+            f"{cell['fewest_digits'] if cell['worst'] else 'all identical'} | {cell['worst'] or ''} |"
+        )
+    lines += [
+        "",
+        "## Every value that differs",
+        "",
+        "| value | official | Modal | agreeing digits |",
+        "|---|---|---|---|",
+    ]
+    for row in d["differing_values"]:
+        lines.append(
+            f"| {row['name']} | {row['official']!r} | {row['modal']!r} | {row['digits']} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 # Comparing two inventories ---------------------------------------------------------------------
@@ -354,6 +500,9 @@ def main() -> int:
     sub = commands.add_parser("inventory", help="write image/amd64-modal.inventory.json (billed)")
     sub.add_argument("--image", default=PUBLISHED)
     commands.add_parser("diff", help="write image/diff.json and image/DIFF.md (free)")
+    sub = commands.add_parser("equivalence", help="run the fixed analysis on Modal (billed)")
+    sub.add_argument("--image", default=PUBLISHED)
+    commands.add_parser("compare-equivalence", help="write image/equivalence.json and .md (free)")
     arguments = parser.parse_args()
     paid.enforce()
     try:
@@ -364,6 +513,18 @@ def main() -> int:
             target = EVIDENCE / "amd64-modal.inventory.json"
             target.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n")
             print(f"wrote {target}")
+        elif arguments.command == "equivalence":
+            target = EVIDENCE / "equivalence.amd64-modal.json"
+            target.write_text(json.dumps(equivalence(arguments.image), indent=1) + "\n")
+            print(f"wrote {target}")
+        elif arguments.command == "compare-equivalence":
+            result = compare_equivalence(
+                json.loads((EVIDENCE / "equivalence.arm64-official.json").read_text()),
+                json.loads((EVIDENCE / "equivalence.amd64-modal.json").read_text()),
+            )
+            (EVIDENCE / "equivalence.json").write_text(json.dumps(result, indent=1) + "\n")
+            (EVIDENCE / "EQUIVALENCE.md").write_text(equivalence_markdown(result))
+            print(f"wrote {EVIDENCE / 'equivalence.json'} and {EVIDENCE / 'EQUIVALENCE.md'}")
         else:
             official = json.loads((EVIDENCE / "arm64-official.inventory.json").read_text())
             ours = json.loads((EVIDENCE / "amd64-modal.inventory.json").read_text())

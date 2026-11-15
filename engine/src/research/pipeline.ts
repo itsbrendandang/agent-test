@@ -42,10 +42,11 @@ import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../exale
 import { PaidCallsOff } from "../paid.ts"
 import { describeModelFailure, FatalModelError, firstPassModel, isFatalModelError, type ModelId, parseModelId } from "../providers.ts"
 import { type FirstPass, type FirstPassRuling, parseJson, quietReasoning } from "../triage.ts"
-import { criticSystem, criticUser, MAX_NOTES, plannerSystem, plannerUser, providerName, reviserSystem, reviserUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
+import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
+import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
 import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
-import type { Counts, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
+import type { Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
 export const DATABASES = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"] as const
 export type Database = (typeof DATABASES)[number]
@@ -75,11 +76,17 @@ export interface Brain {
   checkerIndependent: boolean
   criticIndependent: boolean
   /** Worst-case dollars of one call of each step, given the size of its input in characters. */
-  worstCase(step: "plan" | "write" | "critic" | "revise" | "screen" | "check", inputChars: number): number
+  worstCase(step: "plan" | "hypothesize" | "write" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
   write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<Reply>
   critique(system: string, user: string, signal: AbortSignal): Promise<Reply>
   revise(system: string, user: string, signal: AbortSignal): Promise<Reply>
+  /** The critic again, after the revision: does the revised text resolve each of its notes. */
+  rejudge(system: string, user: string, signal: AbortSignal): Promise<Reply>
+  /** Standard level: the hypotheses to test, set before any search (the planner's model). */
+  hypothesize(system: string, user: string, signal: AbortSignal): Promise<Reply>
+  /** Which way each checked statement points for its hypothesis (the checker's model: another vendor than the writer). */
+  stance(system: string, user: string, signal: AbortSignal): Promise<Reply>
 }
 
 export interface PipelineDeps {
@@ -98,6 +105,8 @@ export interface PipelineDeps {
    * stored outcome without running `work`. A failure is an outcome too, so a replay takes the same path.
    */
   remember: <T>(key: string, work: () => Promise<Outcome<T>>) => Promise<Outcome<T>>
+  /** The keys of the steps already stored for this answer (empty for one that starts now). Read once, at the start of an invocation. */
+  stored?: () => Promise<string[]>
   /** True once a person asked to cancel this answer (kept on disk, so it holds across a restart). */
   cancelRequested?: () => boolean
   /** Aborted when the engine is stopping. The answer then stops where it is, writes nothing more, and continues at the next start. */
@@ -151,7 +160,7 @@ const lowReasoning = (model: Pick<Model<never>, "reasoning" | "thinkingLevelMap"
   return map.low !== null ? "low" : quietReasoning(model)
 }
 
-export const PLAN_TOKENS = 700, CRITIC_TOKENS = 2_500
+export const PLAN_TOKENS = 700, CRITIC_TOKENS = 2_500, REJUDGE_TOKENS = 1_200, HYPOTHESES_TOKENS = 1_400, STANCE_TOKENS = 700
 /** Characters per token assumed when a step's worst case is worked out. Real text is nearer 4, so this over-counts. */
 export const CHARS_PER_TOKEN = 3
 
@@ -216,6 +225,9 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
         case "plan": return price(planner, inputChars, PLAN_TOKENS)
         case "write": case "revise": return price(writer, inputChars, level.maxOutputTokens)
         case "critic": return price(critic.model, inputChars, CRITIC_TOKENS)
+        case "rejudge": return price(critic.model, inputChars, REJUDGE_TOKENS)
+        case "hypothesize": return price(planner, inputChars, HYPOTHESES_TOKENS)
+        case "stance": return price(checker.model, inputChars, STANCE_TOKENS)
         case "screen": return price(planner, inputChars, 800) // triage.ts: at most 800 output tokens, on the cheap tier
         case "check": return price(checker.model, inputChars, 1_500) // triage.ts: at most 1,500 output tokens
       }
@@ -224,6 +236,9 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     write: (system, user, signal, onDelta) => ask(writer, "the writer", system, user, level.maxOutputTokens, "low", signal, onDelta),
     critique: (system, user, signal) => ask(critic.model, "the critic", system, user, CRITIC_TOKENS, "low", signal),
     revise: (system, user, signal) => ask(writer, "the writer (revision)", system, user, level.maxOutputTokens, "low", signal),
+    rejudge: (system, user, signal) => ask(critic.model, "the critic (second look)", system, user, REJUDGE_TOKENS, "low", signal),
+    hypothesize: (system, user, signal) => ask(planner, "the planner (hypotheses)", system, user, HYPOTHESES_TOKENS, "quiet", signal),
+    stance: (system, user, signal) => ask(checker.model, "the stance check", system, user, STANCE_TOKENS, "quiet", signal),
   }
 }
 
@@ -306,6 +321,112 @@ export function readNotes(text: string, cited: number): ReviewNote[] | undefined
   return notes
 }
 
+/** The critic's second look, read strictly: for each of its notes (1-based in the text, 0-based keys here) "resolved", "partly" or "open", and a few words why. Undefined when the reply is not the expected JSON. */
+export function readRejudged(text: string, notes: number): Map<number, { status: "resolved" | "partly" | "open"; why?: string }> | undefined {
+  const body = parseJson(text)
+  if (!isObject(body) || !Array.isArray(body.notes)) return undefined
+  const out = new Map<number, { status: "resolved" | "partly" | "open"; why?: string }>()
+  for (const n of body.notes) {
+    if (!isObject(n) || typeof n.note !== "number" || !Number.isInteger(n.note) || n.note < 1 || n.note > notes || out.has(n.note - 1)) continue
+    if (n.status !== "resolved" && n.status !== "partly" && n.status !== "open") continue
+    const why = oneLine(n.why, 200)
+    out.set(n.note - 1, { status: n.status, ...(why ? { why } : {}) })
+  }
+  return out
+}
+
+// ── Hypotheses ───────────────────────────────────────────────────────────────────────────────────
+
+/** A hypothesis with the searches planned for it. */
+export interface PlannedHypothesis extends Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin"> {
+  web: { query: string; objective: string }
+  literature: string
+  database?: { source: Database; query: string }
+}
+export const MAX_HYPOTHESES = 4
+
+/**
+ * The planner's hypotheses, read strictly. A hypothesis is kept only with its text and with what would support and
+ * what would contradict it (both written before any search). Fewer than two usable ones means none are tested. At
+ * most `fit` are tested: the rest are set aside, with the reason, and never silently dropped. `fit` is what the
+ * level's own limits allow (one web search and one literature query for each).
+ */
+export function readHypotheses(text: string, fit: number, databases: boolean): { needed: boolean; reason?: string; items: PlannedHypothesis[]; cut: { text: string; reason: string }[] } {
+  const body = parseJson(text)
+  const none = (reason: string) => ({ needed: false, reason, items: [], cut: [] })
+  if (!isObject(body)) return none("The planner's reply could not be read, so no hypotheses were set.")
+  if (body.needed === false) return none(oneLine(body.reason, 240) || "The planner judged that this question needs no hypotheses.")
+  const line = (v: unknown, max: number) => (typeof v === "string" ? oneLine(v, max) : "")
+  const usable: Omit<PlannedHypothesis, "id">[] = []
+  for (const h of (Array.isArray(body.hypotheses) ? body.hypotheses : []).slice(0, 8)) {
+    if (!isObject(h)) continue
+    const statement = line(h.text, 300), supportIf = line(h.supportIf, 300), contradictIf = line(h.contradictIf, 300)
+    if (statement.length < 15 || supportIf.length < 8 || contradictIf.length < 8) continue // no hypothesis without what would support and what would contradict it
+    if (usable.some((u) => sameText(u.text) === sameText(statement))) continue
+    const web = isObject(h.web) ? h.web : {}
+    const query = line(web.query, MAX_QUERY_CHARS)
+    const literature = line(h.literature, 120).replace(/["()]/g, " ").replace(/\b(AND|OR|NOT)\b/g, " ").replace(/\s+/g, " ").trim()
+    const db = isObject(h.database) && (DATABASES as readonly string[]).includes(String(h.database.source)) && line(h.database.query, 200).length >= 2 ? { source: h.database.source as Database, query: line(h.database.query, 200) } : undefined
+    usable.push({
+      text: statement, supportIf, contradictIf, origin: h.origin === "user" ? "user" : "planner",
+      web: { query: query.length >= 3 ? query : statement, objective: line(web.objective, 400) || DEFAULT_OBJECTIVE },
+      literature: literature.length >= 3 ? literature : keywordsOf(statement),
+      ...(databases && db ? { database: db } : {}),
+    })
+    if (usable.length >= MAX_HYPOTHESES) break
+  }
+  if (usable.length < 2) return none("The planner did not give two usable hypotheses, so none were set.")
+  const allowed = Math.max(0, Math.min(fit, MAX_HYPOTHESES))
+  if (allowed < 2) return { needed: true, reason: "The level's limits do not fit two hypotheses, so none were tested.", items: [], cut: usable.map((u) => ({ text: u.text, reason: "the level's limits do not fit two hypotheses" })) }
+  return {
+    needed: true,
+    items: usable.slice(0, allowed).map((u, i) => ({ id: `h${i + 1}`, ...u })),
+    cut: usable.slice(allowed).map((u) => ({ text: u.text, reason: `the Standard level has ${plural(allowed, "web search", "web searches")} and ${plural(allowed, "literature query", "literature queries")} for hypotheses, one of each for a hypothesis` })),
+  }
+}
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/** The stance check's reply, read strictly: one known word for each statement index that exists, the first given. */
+export function readStances(text: string, n: number): Map<number, Stance> | undefined {
+  const body = parseJson(text)
+  if (!isObject(body) || !Array.isArray(body.stances)) return undefined
+  const out = new Map<number, Stance>()
+  for (const e of body.stances) {
+    if (!isObject(e) || typeof e.i !== "number" || !Number.isInteger(e.i) || e.i < 0 || e.i >= n || out.has(e.i)) continue
+    if (e.stance === "supports" || e.stance === "contradicts" || e.stance === "neither") out.set(e.i, e.stance)
+  }
+  return out
+}
+
+/**
+ * The mark of one hypothesis, given by code and by nothing else. A statement counts only when all three hold: the
+ * writer filed it under this hypothesis's "For:" or "Against:" line; it passed the quote check against its source
+ * ("verified"); and a model of another vendor, asked separately and not told the side, says it points that way.
+ *   for >= 1, against = 0   -> verified      (Supported)
+ *   against >= 1, for = 0   -> contradicted  (Contradicted)
+ *   both                    -> unsupported   (Insufficient evidence), with mixed: the sources disagree
+ *   neither                 -> unsupported   (Insufficient evidence)
+ *   none, and statements filed under it whose direction could not be judged -> unchecked (Not checked)
+ * One checked statement from one source is enough for a mark; the counts are in the note, so a thin mark is seen as thin.
+ * "Tested" means checked against published sources. It is not an experiment.
+ */
+export function markOf(id: string, statements: Statement[]): Required<Pick<Hypothesis, "verdict" | "for" | "against" | "forStatements" | "againstStatements" | "note">> & { mixed?: boolean } {
+  const filed = statements.filter((s) => s.hypothesis === id && s.side)
+  const passed = filed.filter((s) => s.verdict === "verified")
+  const pro = passed.filter((s) => s.side === "for" && s.stance === "supports"), con = passed.filter((s) => s.side === "against" && s.stance === "contradicts")
+  const unjudged = passed.filter((s) => s.stance === undefined || s.stance === "unchecked")
+  const numbers = (list: Statement[]) => [...new Set(list.flatMap((s) => s.sources))].sort((a, b) => a - b)
+  const said = (list: Statement[]) => `${plural(list.length, "checked statement")} from ${plural(numbers(list).length, "source")}`
+  const base = { for: numbers(pro), against: numbers(con), forStatements: pro.map((s) => s.index), againstStatements: con.map((s) => s.index) }
+  const dropped = filed.length - pro.length - con.length
+  const rest = dropped > 0 ? ` ${plural(dropped, "statement")} filed under it ${dropped === 1 ? "is" : "are"} not counted (not checked, not found in the source, or not pointing that way).` : ""
+  if (pro.length && con.length) return { ...base, verdict: "unsupported", mixed: true, note: `The sources disagree: ${said(pro)} for it, ${said(con)} against it.${rest}` }
+  if (pro.length) return { ...base, verdict: "verified", note: `${said(pro)} for it; none against it.${rest}` }
+  if (con.length) return { ...base, verdict: "contradicted", note: `${said(con)} against it; none for it.${rest}` }
+  if (unjudged.length) return { ...base, verdict: "unchecked", note: `${plural(unjudged.length, "statement")} filed under it passed the quote check, but which way ${unjudged.length === 1 ? "it points" : "they point"} was not judged.` }
+  return { ...base, verdict: "unsupported", note: `No checked statement for or against it.${rest}` }
+}
+
 const MARKER = (name: string) => new RegExp(`(^|\\n)[ \\t>*_#]*${name}[ \\t*_:]*(\\n|$)`, "i")
 
 /**
@@ -342,8 +463,8 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
   const cited = [...new Set(o.statements.flatMap((s) => s.sources))].sort((a, b) => a - b)
   const needs: Recommendation[] = o.statements.filter((s) => s.verdict === "contradicted" || s.verdict === "unsupported").slice(0, 2).map((s) => ({
     label: "Needs verification",
-    text: `Check this sentence against its source yourself: "${oneLine(s.text, 220)}"`,
-    why: s.verdict === "contradicted" ? `The checker found that source ${s.sources.map((n) => `[${n}]`).join("")} says otherwise.` : `The check did not find it in source ${s.sources.map((n) => `[${n}]`).join("")}${s.note ? ` (${oneLine(s.note, 140)})` : ""}.`,
+    text: `Check this sentence against its source yourself: "${clip(s.text, 220)}"`,
+    why: s.verdict === "contradicted" ? `The checker found that source ${s.sources.map((n) => `[${n}]`).join("")} says otherwise.` : `The check did not find it in source ${s.sources.map((n) => `[${n}]`).join("")}${s.note ? ` (${clip(s.note, 140)})` : ""}.`,
     basis: s.sources,
     does: "Opening the source shows whether the sentence can stand. Until then it is not shown as holding up.",
   }))
@@ -352,7 +473,7 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
   const team: Recommendation[] = open && basis.length ? [{
     label: "Alternative",
     text: "Have a team review this question.",
-    why: `The critic's ${open.severity} note was not resolved: "${oneLine(open.text, 200)}"`,
+    why: `The reviewer's ${open.severity} note was not resolved: "${clip(open.text, 260)}"`,
     basis,
     does: "It drafts a plan for a board review (the Deep level): several members and a critic discuss the question in rounds. You see the plan and its cost limit before anything starts.",
   }] : []
@@ -382,7 +503,7 @@ export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[
   const out: EvidenceItem[] = []
   for (const item of items) {
     if (!item || !safeUrl(item.url)) continue
-    const title = oneLine(item.title, MAX_TITLE_CHARS), text = plainBlock(item.text, MAX_SOURCE_CHARS)
+    const title = oneLine(withoutInlineTags(String(item.title ?? "")), MAX_TITLE_CHARS), text = plainBlock(withoutInlineTags(String(item.text ?? "")), MAX_SOURCE_CHARS)
     if (!title || text.length < 40) continue // nothing a statement could be checked against
     out.push({ url: item.url, title, text, provider: provider as EvidenceItem["provider"] })
   }
@@ -401,7 +522,7 @@ export function noteOf(item: EvidenceItem, provider: Provider): string | undefin
 }
 
 /** `order`: the place of its search in the plan, then its place in that search's results. Sources are numbered from this, so a replay numbers them the same. */
-export interface Candidate { item: EvidenceItem; provider: Provider; earlier?: boolean; order?: number }
+export interface Candidate { item: EvidenceItem; provider: Provider; earlier?: boolean; order?: number; /** The hypothesis whose search found it. */ hypothesis?: string }
 
 /** What this answer has spent on Exa, from the Exa ledger's own lines for it (reservations and their corrections). */
 export function exaSpentBy(config: BoardConfig, id: string): number {
@@ -422,8 +543,12 @@ export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only 
  * the screening returned (its yes / partly / no and the study type) and from what is known about the source. Where the
  * screening gave nothing, only that is said. No score is made up.
  */
-export function selectionOf(sources: StoredSource[], notSelected: Selection["notSelected"], max: number, effort: string): Selection {
+export function selectionOf(sources: StoredSource[], notSelected: Selection["notSelected"], max: number, effort: string, results = sources.length + notSelected.length): Selection {
+  // An address is listed once: not again when a second search found it too, and not as "not selected" when it was selected.
+  const taken = new Set(sources.map((s) => urlKey(s.url)))
+  const others = notSelected.filter((s) => { const key = urlKey(s.url); if (taken.has(key)) return false; taken.add(key); return true })
   return {
+    counts: { results, unique: sources.length + others.length, selected: sources.length },
     criteria: `Kept: results that the screening model judged to help answer the question and that report findings of their own, or are reviews. At most ${max} are numbered at the ${effort} level, the most relevant first, with the searches taking turns so that one search cannot fill the list. "Relevant" is the screening model's yes, partly or no. It is not a calibrated score.`,
     selected: sources.map((s) => {
       const judged = s.relevance === 1 ? "Screened as answering the question" : s.relevance === 0.5 ? "Screened as partly answering the question" : "Not screened; kept as found"
@@ -431,7 +556,7 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
       const limits = [/preprint/.test(s.note ?? "") && "A preprint: not peer reviewed.", /review/.test(s.note ?? "") && "A review: it summarises other studies.", READ_LIMIT[s.provider] ?? "A database record, not a paper."].filter(Boolean).join(" ")
       return { n: s.n, why: `${s.earlier ? "Listed again from the earlier answer in this thread. " : ""}${judged}${study}.`, ...(limits ? { limitation: limits } : {}) }
     }),
-    notSelected: notSelected.slice(0, 40),
+    notSelected: others.slice(0, 40),
   }
 }
 
@@ -439,19 +564,39 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
  * The numbered sources: the candidates that passed screening, each address once, the most relevant first, the
  * providers taking turns inside one relevance level (so web pages cannot push every paper out), cut to `max`.
  */
-export function numberSources(candidates: Candidate[], max: number): StoredSource[] {
-  const seen = new Set<string>()
-  const unique = [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).filter((c) => { const k = urlKey(c.item.url); if (seen.has(k)) return false; seen.add(k); return true })
+export function numberSources(candidates: Candidate[], max: number, hypotheses: string[] = []): StoredSource[] {
+  // Each address once. One that several hypotheses' searches found serves each of them.
+  const byKey = new Map<string, Candidate & { serves: string[] }>()
+  for (const c of [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    const key = urlKey(c.item.url), first = byKey.get(key)
+    if (!first) byKey.set(key, { ...c, serves: c.hypothesis ? [c.hypothesis] : [] })
+    else if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
+  }
+  const unique = [...byKey.values()]
   const tier = (c: Candidate) => (c.item.relevance === 1 ? 0 : c.item.relevance === 0.5 ? 2 : 1) // screened "yes", not screened, screened "partly"
-  const ordered: Candidate[] = []
-  for (const t of [0, 1, 2]) {
-    const queues = new Map<Provider, Candidate[]>()
-    for (const c of unique.filter((x) => tier(x) === t)) queues.set(c.provider, [...(queues.get(c.provider) ?? []), c])
-    for (let more = true; more;) { more = false; for (const q of queues.values()) { const next = q.shift(); if (next) { ordered.push(next); more = true } } }
+  /** The most relevant first; inside one relevance level the searches take turns. */
+  const inOrder = (list: (Candidate & { serves: string[] })[]) => {
+    const ordered: typeof list = []
+    for (const t of [0, 1, 2]) {
+      const queues = new Map<Provider, typeof list>()
+      for (const c of list.filter((x) => tier(x) === t)) queues.set(c.provider, [...(queues.get(c.provider) ?? []), c])
+      for (let more = true; more;) { more = false; for (const q of queues.values()) { const next = q.shift(); if (next) { ordered.push(next); more = true } } }
+    }
+    return ordered
+  }
+  let ordered = inOrder(unique)
+  if (hypotheses.length) {
+    // The hypotheses take turns too, so that each one gets its share of the numbered sources.
+    const queues = hypotheses.map((id) => inOrder(unique.filter((c) => c.serves.includes(id))))
+    const taken = new Set<Candidate>(), turns: typeof ordered = []
+    for (let more = true; more;) { more = false; for (const q of queues) { let next = q.shift(); while (next && taken.has(next)) next = q.shift(); if (next) { taken.add(next); turns.push(next); more = true } } }
+    ordered = [...turns, ...ordered.filter((c) => !taken.has(c))]
   }
   return ordered.slice(0, max).map((c, i) => {
     const note = noteOf(c.item, c.provider)
-    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(c.earlier ? { earlier: true } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
+    const year = c.provider === "europepmc" ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts writes "(Journal, 2025)" at the end of a title
+    const serves = hypotheses.filter((id) => c.serves.includes(id))
+    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
   })
 }
 
@@ -465,7 +610,7 @@ interface SourceRuling { n: number; ruling?: FirstPassRuling; failed?: string }
  * unchecked when no usable check was made; unsupported otherwise. The only place a Statement gets its verdict.
  */
 export function verdictOf(stage: Statement["stage"], index: number, sentence: Sentence, rulings: SourceRuling[], checker: string): Statement {
-  const base = { stage, index, text: sentence.text, sources: sentence.sources }
+  const base = { stage, index, text: sentence.text, sources: sentence.sources, ...(sentence.hypothesis ? { hypothesis: sentence.hypothesis } : {}), ...(sentence.hypothesis && sentence.side ? { side: sentence.side } : {}) }
   const withQuote = (r: SourceRuling) => ({ ...(r.ruling?.quote ? { quote: r.ruling.quote, quoteSource: r.n } : {}), quoteFound: r.ruling?.quoteFound === true })
   const contradicted = rulings.find((r) => r.ruling?.verdict === "contradicted")
   if (contradicted) return { ...base, verdict: "contradicted", ...withQuote(contradicted), checker: contradicted.ruling!.checkedBy, note: `source [${contradicted.n}] says otherwise` }
@@ -487,9 +632,16 @@ export const MAX_MISSING = 10
  * that failed, the cited sentences of the final text that did not pass their check, the reviewer's concerns that were
  * left open, and an early end. Empty when nothing is missing. It is shown as the last part of the answer.
  */
-export function missingOf(record: Pick<ResearchRecord, "searches" | "steps" | "sources" | "statements" | "review" | "stopped">): string[] {
+export function missingOf(record: Pick<ResearchRecord, "searches" | "steps" | "sources" | "statements" | "review" | "stopped" | "hypotheses">, cut: { text: string; reason: string }[] = []): string[] {
   const out: string[] = []
-  const quote = (text: string) => `"${oneLine(text, 180)}"`
+  const quote = (text: string) => `"${clip(text, 220)}"`
+  for (const h of record.hypotheses ?? []) {
+    const name = h.id.toUpperCase()
+    if (h.mixed) out.push(`The sources disagree on ${name}: ${quote(h.text)}`)
+    else if (h.verdict === "unsupported") out.push(`No checked evidence for or against ${name}: ${quote(h.text)}`)
+    else if (h.verdict === "unchecked") out.push(`${name} was not checked: ${quote(h.text)}`)
+  }
+  for (const c of cut) out.push(`A hypothesis that was proposed and not tested, because ${clip(c.reason, 200)}: ${quote(c.text)}`)
   for (const s of record.searches) {
     if (!s.ran) out.push(s.reason ? `${oneLine(s.reason, 260).replace(/\.$/, "")}.` : `${providerName(s.provider)} did not run.`) // the reason is a whole sentence that names the search
     else if (!s.found) out.push(`${providerName(s.provider)} found nothing for "${oneLine(s.query, 120)}".`)
@@ -527,7 +679,6 @@ const NOT_SEARCHED: Partial<Record<Provider, string>> = {
   exa: "The web search did not run, so this answer rests on the other searches only.",
   europepmc: "PubMed and preprints were not searched, so this answer rests on the other searches only.",
 }
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const hash = (value: unknown) => createHash("sha1").update(JSON.stringify(value)).digest("hex").slice(0, 16)
 /** First-pass calls that run at once, at most (as triage.ts does inside one FirstPass). */
 export const MAX_FIRST_PASS = 4
@@ -604,8 +755,18 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
    * a key or model name a vendor refuses.
    */
   const asked = new Map<string, Promise<Outcome<unknown>>>()
+  const keyOf = (step: string, input: unknown) => `${record.id}:${step}:${hash(input)}`
+  /**
+   * `guard` for one step: a step whose outcome is already stored costs nothing and is always let through. That is what
+   * makes a restart safe with a cancel or a limit: everything that was done before is read back first, and the answer
+   * ends at the first step that would have to be bought, with all it had.
+   */
+  const allow = (worst: number, step: string, input: unknown): StopReason | undefined => {
+    if (interrupted()) throw new Interrupted()
+    return storedBefore.has(keyOf(step, input)) ? undefined : guard(worst)
+  }
   const once = async <T>(step: string, input: unknown, work: () => Promise<{ value: T; usd: number }>): Promise<T> => {
-    const key = `${record.id}:${step}:${hash(input)}`
+    const key = keyOf(step, input)
     // Two steps with the very same input (two searches that returned the same results) share one call and are charged once.
     const first = !asked.has(key)
     if (first) asked.set(key, deps.remember<T>(key, async () => {
@@ -659,18 +820,26 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   const lines: (SearchLine & { slot: number })[] = []
   let sources: StoredSource[] = []
   let reviewNotes: ReviewNote[] = []
+  let tested: PlannedHypothesis[] = []
+  let cut: { text: string; reason: string }[] = []
   let proposed: string[] = []
   let medical = looksMedical(record.question)
   /** Cited sentences of the shown text that no check reached are recorded as not checked: a missing check is said, never left blank. */
   const markUnchecked = (why: StopReason) => {
     if (record.statements.length || !sources.length || !record.answer) return
-    record.statements = citedSentences(record.answer.markdown).map((sentence, index) => ({ stage: "draft" as const, index, text: sentence.text, sources: sentence.sources, verdict: "unchecked" as const, quoteFound: false, checker: brain.names.checker, note: `not checked: ${STOP_WORDS[why]}` }))
+    record.statements = citedSentences(record.answer.markdown).map((sentence, index) => ({ stage: "draft" as const, index, text: sentence.text, sources: sentence.sources, ...(sentence.hypothesis ? { hypothesis: sentence.hypothesis } : {}), ...(sentence.hypothesis && sentence.side ? { side: sentence.side } : {}), verdict: "unchecked" as const, quoteFound: false, checker: brain.names.checker, note: `not checked: ${STOP_WORDS[why]}` }))
     for (const s of record.statements) emit(`statement:unchecked:${s.index}`, { type: "statement.checked", ...s })
+  }
+  /** A step that an earlier invocation started and this one never reached again (the engine stopped in it) is closed with the answer. */
+  const closeLeftOpen = (status: StepStatus, error?: string) => {
+    for (const step of log.openSteps()) emit(`step.finished:${step}`, { type: "step.finished", step, status, ms: 0, ...(error ? { error: scrub(error, env, 300) } : {}) })
   }
   /** Calls left behind at a halt still end and are still billed: wait for them (not for ever), so their cost is in the record. */
   const settle = async () => { if (background.size) await Promise.race([Promise.allSettled([...background]), new Promise((resolve) => setTimeout(resolve, 20_000).unref())]) }
 
+  let storedBefore = new Set<string>()
   try {
+    storedBefore = new Set(resumed && deps.stored ? await deps.stored() : [])
     if (resumed) emit(`resumed:${log.lastSeq}`, { type: "research.resumed", afterSeq: log.lastSeq })
     else emit("started", { type: "research.started", id: record.id, thread: record.thread, question: record.question, effort: record.effort, mode: record.mode, caps: record.caps, models: record.models })
     save()
@@ -682,7 +851,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0 })
       const user = plannerUser(record.question, thread)
       begin({ step: "prepare", kind: "prepare", label: "Preparing the searches", input: { model: brain.names.planner, level: record.effort, webSearches: level.exaSearches, literatureQueries: level.queries, databaseLookups: databasesOn ? level.databaseLookups : 0 } })
-      const why = guard(brain.worstCase("plan", system.length + user.length))
+      const why = allow(brain.worstCase("plan", system.length + user.length), "plan", { system, user })
       if (why) { endFor("prepare", why); throw new Stop(why) }
       try {
         plan = readPlan((await model("plan", { system, user }, () => brain.plan(system, user, signal))).text, record.question, level)
@@ -702,37 +871,65 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       save()
     }
 
+    // ── hypotheses (Standard level): what to test, written before anything is searched ─────────────
+    // Each hypothesis needs one web search and one literature query of the level, so the level's own limits say how
+    // many can be tested. No limit is raised for them; what does not fit is set aside and said.
+    if (level.hypotheses > 0) {
+      const fit = Math.min(level.hypotheses, level.exaSearches, level.queries, Math.floor(level.sourcesKept / 2))
+      const system = hypothesesSystem({ max: MAX_HYPOTHESES, databases: databasesOn }), user = hypothesesUser(record.question, thread)
+      begin({ step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test", input: { model: brain.names.planner, atMost: fit } })
+      const why = allow(brain.worstCase("hypothesize", system.length + user.length), "hypotheses", { system, user })
+      if (why) { endFor("hypotheses", why); throw new Stop(why) }
+      let set: ReturnType<typeof readHypotheses> = { needed: false, reason: "The hypotheses could not be set up, so the question is answered without them.", items: [], cut: [] }
+      try { set = readHypotheses((await model("hypotheses", { system, user }, () => brain.hypothesize(system, user, signal))).text, fit, databasesOn) } catch (error) {
+        if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor("hypotheses", stop.reason); throw stop ?? error }
+      }
+      tested = set.items
+      record.hypotheses = tested.map(({ id, text, supportIf, contradictIf, origin }) => ({ id, text, supportIf, contradictIf, origin }))
+      const cutNote = set.cut.length ? `${plural(set.cut.length, "more hypothesis", "more hypotheses")} ${set.cut.length === 1 ? "was" : "were"} proposed and not tested, because ${set.cut[0].reason}.` : ""
+      if (!tested.length || cutNote) record.hypothesesNote = [tested.length ? "" : set.reason ?? "No hypotheses were needed.", cutNote].filter(Boolean).join(" ")
+      cut = set.cut
+      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
+      emit("hypotheses", { type: "hypotheses", items: record.hypotheses, needed: set.needed, ...(tested.length ? {} : { reason: set.reason }), ...(set.cut.length ? { cut: set.cut } : {}) })
+      save()
+    }
+
     // ── search and evaluate ──────────────────────────────────────────────────────────────────────
     // Every search has a place in the plan (`slot`). Sources are ordered by it and results are compared only with
     // what earlier STAGES found (`known`), never with a search running beside it: so the outcome does not depend on
     // which reply arrived first, and a replay after a restart gives the same numbered list.
+    interface Tag { hypothesis: PlannedHypothesis; index: number; place: number; chain: Set<string> }
     const counter = new Map<Provider, number>()
-    let slotNumber = 0
+    let slotNumber = 1_000 // searches that belong to no hypothesis come after those that do
     const line = (l: SearchLine & { slot: number }) => { lines.push(l); record.searches = [...lines].sort((a, b) => a.slot - b.slot).map(({ slot: _slot, ...rest }) => rest); save() }
     const keysOf = () => new Set(pool.map((c) => urlKey(c.item.url)))
     /** Screen one search's results and add what is kept to the pool. */
-    const evaluate = async (provider: Provider, i: number, place: number, query: string, found: EvidenceItem[], known: Set<string>) => {
+    const evaluate = async (provider: Provider, i: number, place: number, query: string, found: EvidenceItem[], known: Set<string>, tag?: Tag) => {
       const fresh = found.filter((item) => !known.has(urlKey(item.url)))
       const order = (item: EvidenceItem) => place * 1_000 + found.indexOf(item)
+      const hypothesis = tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}
+      // For a hypothesis, results are screened against the hypothesis itself: does this help to test it.
+      const question = tag?.hypothesis ? oneLine(`Is this so: ${tag.hypothesis.text} (Evidence for it or against it both count.)`, 600) : plan.keyQuestion
       let kept = found.length - fresh.length
       if (fresh.length) {
         const step = `evaluate:${provider}:${i}`
-        begin({ step, kind: "evaluate", label: `Screening ${plural(fresh.length, "result")}`, provider, input: { results: fresh.length, model: brain.names.planner, question: plan.keyQuestion } })
-        const why = guard(brain.worstCase("screen", fresh.reduce((n, it) => n + Math.min(1_500, it.text.length) + Math.min(200, it.title.length) + 30, 600 + plan.keyQuestion.length)))
+        begin({ step, kind: "evaluate", label: `Screening ${plural(fresh.length, "result")}`, provider, input: { results: fresh.length, model: brain.names.planner, question }, ...hypothesis })
+        const screening = { items: fresh.map((f) => [f.url, f.title, f.text]), question }
+        const why = allow(brain.worstCase("screen", fresh.reduce((n, it) => n + Math.min(1_500, it.text.length) + Math.min(200, it.title.length) + 30, 600 + question.length)), `screen:${provider}`, screening)
         if (why) { endFor(step, why, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place }); throw new Stop(why) }
         try {
-          let screened = await firstPassOnce(`screen:${provider}`, { items: fresh.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }, (firstPass) => firstPass.triage(fresh, plan.keyQuestion))
+          let screened = await firstPassOnce(`screen:${provider}`, screening, (firstPass) => firstPass.triage(fresh, question))
           // A database record (a trial registration, a label) often "reports no results of its own": it is kept unless it is off the question, as the board keeps it.
           const record_ = (DATABASES as readonly string[]).includes(provider)
           screened = screened.map((s) => (record_ && !s.keep && s.item.relevance !== 0 ? { ...s, keep: true } : s))
           screened.forEach((s, at) => {
-            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]) }); kept++ }
+            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); tag?.chain?.add(urlKey(s.item.url)); kept++ }
             else notSelected.push({ title: s.item.title, url: s.item.url, provider, order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
           })
           end(step, "completed", { found: fresh.length, kept: screened.filter((s) => s.keep).length, summary: `${screened.filter((s) => s.keep).length} of ${fresh.length} kept.` })
         } catch (error) {
           if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) { endFor(step, stop.reason, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place }) } throw stop ?? error }
-          for (const item of fresh) { pool.push({ item, provider, order: order(item) }); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
+          for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); tag?.chain?.add(urlKey(item.url)); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
           notes.push(`The results of one ${providerName(provider)} search could not be screened for relevance and were kept as found.`)
           end(step, "failed", { found: fresh.length, kept: fresh.length, error: `The screening did not answer (${error.message}).`, consequence: "These results were kept without screening, so some may be off the question." })
         }
@@ -743,13 +940,15 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
      * One search step, then the screening of what it found. `run` gives the results or throws; `refuse` is a reason not
      * to run at all. The search's outcome is stored (also "it failed" and "it was refused"), so a replay does not search again.
      */
-    const search = async (provider: Provider, query: string, input: Record<string, string | number | boolean>, known: Set<string>, run: () => Promise<SearchResult>, refuse?: () => string | undefined) => {
-      const i = (counter.get(provider) ?? 0) + 1
-      counter.set(provider, i)
-      const place = slotNumber++
+    const search = async (provider: Provider, query: string, input: Record<string, string | number | boolean>, known: Set<string>, run: () => Promise<SearchResult>, refuse?: () => string | undefined, tag?: Tag) => {
+      // Step numbers and places come from the plan when the search belongs to a hypothesis (its chain runs beside the
+      // others, so the order of calls is not the order of the plan); otherwise from the order of the calls, which is the plan's.
+      const i = tag?.index ?? (counter.get(provider) ?? 0) + 1
+      counter.set(provider, Math.max(counter.get(provider) ?? 0, i))
+      const place = tag?.place ?? slotNumber++
       const step = `search:${provider}:${i}`
-      begin({ step, kind: "search", label: SEARCH_LABEL[provider] ?? `Searching ${providerName(provider)}`, provider, query, input: { provider: providerName(provider), query, ...input } })
-      const stop = guard(0)
+      begin({ step, kind: "search", label: SEARCH_LABEL[provider] ?? `Searching ${providerName(provider)}`, provider, query, input: { provider: providerName(provider), query, ...input }, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
+      const stop = allow(0, `search:${provider}`, { query, input })
       if (stop) { endFor(step, stop); throw new Stop(stop) }
       let result: { items: EvidenceItem[]; notices: string[] }
       try {
@@ -773,9 +972,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         return line({ provider, query, ran: true, found: 0, kept: 0, slot: place })
       }
       end(step, "completed", { found: found.length, summary: `${plural(found.length, "result")}.${said ? ` ${said}` : ""}` })
-      await evaluate(provider, i, place, query, found, known)
+      await evaluate(provider, i, place, query, found, known, tag)
     }
-    const web = (w: { query: string; objective: string }, known: Set<string>) => {
+    const web = (w: { query: string; objective: string }, known: Set<string>, tag?: Tag) => {
       const callId = `exa:${hash([w.query, w.objective])}`
       let reserved = 0
       return search("exa", w.query, { objective: w.objective, type: "auto", contents: "highlights" }, known, async () => {
@@ -798,7 +997,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         reserved = reservation.reserved
         exaUsd = exaSpentBy(config, record.id)
         return undefined
-      })
+      }, tag)
     }
     /** Run steps side by side. Each one ends its own step; the first reason to end the answer is thrown once all are done. */
     const together = async (work: Promise<void>[]) => {
@@ -806,7 +1005,22 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const first = failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
       if (first) throw first
     }
-    if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
+    /** The searches of one hypothesis: its web search first, then its literature search and (when it has one and the level has room) its database lookup. */
+    const databaseOf = new Map(tested.filter((h) => h.database).slice(0, level.databaseLookups).map((h) => [h.id, h.database!]))
+    const chainOf = async (h: PlannedHypothesis, at: number) => {
+      const chain = new Set<string>() // what this hypothesis's own searches already kept: nothing a search beside it found
+      const tag = (stage: number, index: number): Tag => ({ hypothesis: h, index, place: at * 10 + stage, chain })
+      if (deps.fixtures) return search("fixture", oneLine(h.text, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(h.text), undefined, tag(0, at + 1))
+      await web(h.web, new Set(), tag(0, at + 1))
+      const db = databaseOf.get(h.id)
+      const sameBefore = db ? tested.slice(0, at).filter((x) => databaseOf.get(x.id)?.source === db.source).length : 0
+      await together([
+        search("europepmc", h.literature, { maxResults: 8, text: "abstracts" }, new Set(chain), () => deps.literature(h.literature), undefined, tag(1, at + 1)),
+        ...(db && deps.database ? [search(db.source, db.query, { text: "database records" }, new Set(chain), () => deps.database!(db.source, db.query), undefined, tag(2, sameBefore + 1))] : []),
+      ])
+    }
+    if (tested.length) await together(tested.map((h, at) => chainOf(h, at))) // every hypothesis at the same time, each opened by its web search
+    else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
     else {
       // The web search opens every answer. What it cannot do is said, and the other searches still run, all at once.
       const [first, ...moreWeb] = plan.web.slice(0, level.exaSearches)
@@ -821,12 +1035,13 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const last = deps.earlier.filter((r) => r.mode === "real" && r.status === "done").at(-1)
       const known = keysOf()
       const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !known.has(urlKey(s.url)) && safeUrl(s.url) && s.text?.length >= 40)
-      if (again.length && !guard(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)))) {
+      const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text }))
+      const rescreening = { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }
+      if (again.length && !allow(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)), "screen:earlier", rescreening)) {
         const place = slotNumber++
         begin({ step: "evaluate:earlier", kind: "evaluate", label: `Screening ${plural(again.length, "source")} of the earlier answer`, input: { results: again.length, from: last!.id } })
         try {
-          const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text }))
-          const screened = await firstPassOnce("screen:earlier", { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }, (firstPass) => firstPass.triage(items, plan.keyQuestion))
+          const screened = await firstPassOnce("screen:earlier", rescreening, (firstPass) => firstPass.triage(items, plan.keyQuestion))
           let kept = 0
           screened.forEach((s, at) => { if (s.keep && s.item.relevance === 1) { pool.push({ item: s.item, provider: again[at].provider, earlier: true, order: place * 1_000 + at }); kept++ } })
           end("evaluate:earlier", "completed", { found: again.length, kept, summary: `${kept} of ${again.length} listed again.` })
@@ -838,7 +1053,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
 
     // ── sources and the selection ────────────────────────────────────────────────────────────────
-    sources = numberSources(pool, level.sourcesKept)
+    sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
     const numbered = new Set(sources.map((s) => urlKey(s.url)))
     const seen = new Set<string>()
     for (const c of [...pool].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
@@ -848,7 +1063,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       notSelected.push({ title: c.item.title, url: c.item.url, provider: c.provider, order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${level.sourcesKept} sources are numbered at the ${record.effort} level and more relevant ones came first.` })
     }
     record.sources = sources
-    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), level.sourcesKept, record.effort)
+    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), level.sourcesKept, record.effort, lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)
     emit("sources", { type: "sources", items: record.sources.map(({ text: _t, studyType: _s, relevance: _r, ...s }) => s) })
     emit("selection", { type: "selection", ...record.selection })
     save()
@@ -862,9 +1077,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       emit("answer.written", { type: "answer.written", markdown: text })
     } else {
       // ── write ──────────────────────────────────────────────────────────────────────────────────
-      const system = writerSystem(level.words), user = writerUser({ question: record.question, thread, searches: record.searches, sources })
+      const testing = record.hypotheses ?? []
+      const system = writerSystem(level.words, testing.length > 0), user = writerUser({ question: record.question, thread, searches: record.searches, sources, hypotheses: testing })
       begin({ step: "write", kind: "write", label: `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
-      const whyNot = guard(brain.worstCase("write", system.length + user.length))
+      const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.
@@ -887,7 +1103,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const urls = sources.map((s) => s.url)
       const finishText = (raw: string, truncated: boolean) => {
         let text = truncated ? raw.slice(0, Math.max(raw.lastIndexOf(". ") + 1, raw.lastIndexOf(".\n") + 1) || raw.length) : raw
-        text = cleanAnswer(text, sources.length, urls).markdown
+        const tidy = withoutRepeats(cleanAnswer(text, sources.length, urls).markdown)
+        text = tidy.markdown
+        if (tidy.removed.length) notes.push(`${plural(tidy.removed.length, "sentence")} that the writer wrote twice ${tidy.removed.length === 1 ? "is" : "are"} shown once.`)
+        for (const phrase of tidy.repeated.slice(0, 2)) notes.push(`The text repeats a phrase: "${oneLine(phrase, 120)}".`)
         if (truncated) text += "\n\n(The text was cut here: the writer reached its length limit.)"
         return medical && !demo ? withAdviceLine(text) : text
       }
@@ -935,7 +1154,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           if (!brain.checkerIndependent) return fail("no checker from another vendor than the writer is configured")
           const claims = group.map((it) => it.sentence.text), source = textOf(n)
           let why: StopReason | undefined
-          try { why = ending ?? guard(brain.worstCase("check", 1_400 + source.length + claims.reduce((sum, c) => sum + c.length + 30, 0))) } catch (error) { broke ??= error; return }
+          try { why = allow(brain.worstCase("check", 1_400 + source.length + claims.reduce((sum, c) => sum + c.length + 30, 0)), `check:${stage}:${n}`, { claims, source }) ?? (storedBefore.has(keyOf(`check:${stage}:${n}`, { claims, source })) ? undefined : ending) } catch (error) { broke ??= error; return }
           if (why) { soft(why); return fail(STOP_WORDS[why]) }
           try {
             const out = await firstPassOnce(`check:${stage}:${n}`, { claims, source }, (firstPass) => firstPass.check(deps.writerModel, claims, source))
@@ -961,8 +1180,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         emit("review.started:critic", { type: "review.started", reviewer: "critic", model: brain.names.critic, step: "review" })
         const unreviewed = "The draft was not reviewed as a whole. The statement checks still apply."
         if (!brain.criticIndependent) { notes.push("The critic did not run: no model from another vendor than the writer is configured."); end("review", "failed", { error: "No model from another vendor than the writer is configured for the critic.", consequence: unreviewed }); return [] }
-        const cSystem = criticSystem(config), cUser = criticUser({ question: record.question, searches: record.searches, sources, draft, cited })
-        const why = ending ?? guard(brain.worstCase("critic", cSystem.length + cUser.length))
+        const cSystem = criticSystem(config), cUser = criticUser({ question: record.question, searches: record.searches, sources, draft, cited, hypotheses: testing })
+        const why = allow(brain.worstCase("critic", cSystem.length + cUser.length), "critic", { cSystem, cUser }) ?? (storedBefore.has(keyOf("critic", { cSystem, cUser })) ? undefined : ending)
         if (why) { soft(why); notes.push(`The critic did not run: ${STOP_WORDS[why]}.`); endFor("review", why, unreviewed); return [] }
         try {
           const read = readNotes((await model("critic", { cSystem, cUser }, () => brain.critique(cSystem, cUser, signal))).text, cited.length)
@@ -995,11 +1214,11 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const failed = draftStatements.filter((s) => s.verdict === "contradicted" || s.verdict === "unsupported")
       const notPassed = draftStatements.filter((s) => s.verdict !== "verified")
       if (failed.length || reviewNotes.length) {
-        const rSystem = reviserSystem(level.words)
-        const rUser = reviserUser({ question: record.question, thread, searches: record.searches, sources, draft, statements: draftStatements, notes: reviewNotes })
+        const rSystem = reviserSystem(level.words, testing.length > 0)
+        const rUser = reviserUser({ question: record.question, thread, searches: record.searches, sources, draft, statements: draftStatements, notes: reviewNotes, hypotheses: testing })
         const unrevised = "The first draft is shown, with the marks of its review."
         begin({ step: "revise", kind: "revise", label: "Revising the answer once", input: { model: brain.names.writer, failedStatements: failed.length, criticNotes: reviewNotes.length } })
-        const why = guard(brain.worstCase("revise", rSystem.length + rUser.length))
+        const why = allow(brain.worstCase("revise", rSystem.length + rUser.length), "revise", { rSystem, rUser })
         if (why) { endFor("revise", why, unrevised); throw new Stop(why) }
         let revision: { text: string; truncated: boolean } | undefined
         try { revision = await model("revise", { rSystem, rUser }, () => brain.revise(rSystem, rUser, signal)) } catch (error) {
@@ -1028,7 +1247,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           const carried = new Map<number, Statement>(), fresh: { index: number; sentence: Sentence }[] = []
           finalCited.forEach((sentence, index) => {
             const was = before.get(statementKey(sentence))
-            if (was) carried.set(index, { ...was, stage: "final", index, carried: true })
+            if (was) { const { hypothesis: _h, side: _s, stance: _t, ...kept } = was; carried.set(index, { ...kept, stage: "final", index, carried: true, ...(sentence.hypothesis ? { hypothesis: sentence.hypothesis } : {}), ...(sentence.hypothesis && sentence.side ? { side: sentence.side } : {}) }) }
             else fresh.push({ index, sentence })
           })
           end("revise", "completed", { summary: `${plural(finalCited.length - fresh.length, "cited sentence")} kept, ${fresh.length} new or changed, ${Math.max(0, draftStatements.length - (finalCited.length - fresh.length))} removed or rewritten.` })
@@ -1036,24 +1255,89 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           reviewNotes = reviewNotes.map((n) => {
             if (n.statement !== null && draftStatements[n.statement]) {
               const gone = !kept.has(statementKey(draftStatements[n.statement]))
-              return { ...n, resolved: gone, how: gone ? "the sentence was removed or rewritten" : "the sentence was kept unchanged" }
+              if (gone) return { ...n, resolved: true, how: "the sentence was removed or rewritten", by: "code" as const }
             }
+            // What the writer says it did is a report, not a check. The reviewer is asked below; this stands only when it cannot be.
             const said = split.reported.get(n.index)
-            return { ...n, resolved: said?.addressed === true, how: said?.addressed ? "the writer reports it addressed this (not checked by code)" : said?.why ? `the writer did not address it: ${said.why}` : "the writer did not say it addressed this" }
+            return { ...n, resolved: said?.addressed === true, how: said?.addressed ? "the writer reports it addressed this (not checked)" : said?.why ? `the writer did not address it: ${said.why}` : "the writer did not say it addressed this", by: "writer" as const }
           })
           proposed = split.nextSteps
           record.answer = { markdown: final, direct: directAnswer(final) }
           record.review = { ...record.review, revised: true, notes: reviewNotes }
           // Until the changed sentences are checked, they are recorded as not checked: never as holding up.
-          record.statements = finalCited.map((sentence, index) => carried.get(index) ?? { stage: "final", index, text: sentence.text, sources: sentence.sources, verdict: "unchecked", quoteFound: false, checker: brain.names.checker, note: "not checked: the check of this changed sentence did not finish", carried: false })
-          emit("answer.revised", { type: "answer.revised", markdown: final, notes: reviewNotes.map((n) => ({ index: n.index, resolved: n.resolved === true, ...(n.how ? { how: n.how } : {}) })) })
+          const tags = (sentence: Sentence) => ({ ...(sentence.hypothesis ? { hypothesis: sentence.hypothesis } : {}), ...(sentence.hypothesis && sentence.side ? { side: sentence.side } : {}) })
+          record.statements = finalCited.map((sentence, index) => carried.get(index) ?? { stage: "final", index, text: sentence.text, sources: sentence.sources, ...tags(sentence), verdict: "unchecked", quoteFound: false, checker: brain.names.checker, note: "not checked: the check of this changed sentence did not finish", carried: false })
+          const resolution = () => reviewNotes.map((n) => ({ index: n.index, resolved: n.resolved === true, ...(n.how ? { how: n.how } : {}), ...(n.by ? { by: n.by } : {}) }))
+          emit("answer.revised", { type: "answer.revised", markdown: final, notes: resolution() })
           for (const s of carried.values()) emit(`statement:final:${s.index}`, { type: "statement.checked", ...s })
           save()
-          const rechecked = new Map((await checkAll("check:2", "final", fresh)).map((s) => [s.index, s]))
-          record.statements = finalCited.map((_s, index) => (carried.get(index) ?? rechecked.get(index)) as Statement)
+          /**
+           * The reviewer that raised the notes reads the revision and says, note by note, whether it is resolved. That is
+           * the record's answer. Where it cannot be asked (a limit, a failed call, an unreadable reply), what code can
+           * see and what the writer reported stay, and the record says which of the two each one is.
+           */
+          const rejudge = async (): Promise<void> => {
+            if (!reviewNotes.length || !brain.criticIndependent) return
+            const jSystem = rejudgeSystem(config), jUser = rejudgeUser({ question: record.question, notes: reviewNotes, revised: final })
+            begin({ step: "review:2", kind: "review", label: `Reading the revision against ${plural(reviewNotes.length, "note")} of the reviewer`, input: { model: brain.names.critic, notes: reviewNotes.length } })
+            const unjudged = "Whether the revision resolved the reviewer's notes was not judged by the reviewer; the record says what code and the writer's own report show."
+            const why = allow(brain.worstCase("rejudge", jSystem.length + jUser.length), "rejudge", { jSystem, jUser }) ?? (storedBefore.has(keyOf("rejudge", { jSystem, jUser })) ? undefined : ending)
+            if (why) { soft(why); return endFor("review:2", why, unjudged) }
+            try {
+              const judged = readRejudged((await model("rejudge", { jSystem, jUser }, () => brain.rejudge(jSystem, jUser, signal))).text, reviewNotes.length)
+              if (!judged) return end("review:2", "failed", { error: "The reviewer's reply could not be read.", consequence: unjudged })
+              reviewNotes = reviewNotes.map((n) => {
+                const j = judged.get(n.index)
+                return j ? { ...n, resolved: j.status === "resolved", how: `the reviewer read the revision and judged it ${j.status === "open" ? "not resolved" : j.status === "partly" ? "only partly resolved" : "resolved"}${j.why ? `: ${j.why}` : ""}`, by: "reviewer" as const } : n
+              })
+              end("review:2", "completed", { found: judged.size, summary: `${reviewNotes.filter((n) => n.resolved).length} of ${reviewNotes.length} resolved.` })
+            } catch (error) {
+              if (error instanceof StepFailed) return end("review:2", "failed", { error: `The reviewer did not answer (${error.message}).`, consequence: unjudged })
+              const stop = asStop(error)
+              if (stop) { soft(stop.reason); return endFor("review:2", stop.reason, unjudged) }
+              if (!(error instanceof Interrupted)) end("review:2", "failed", { error: "The reviewer's key or model name was refused by its vendor." })
+              throw error
+            }
+          }
+          const second = await Promise.allSettled([checkAll("check:2", "final", fresh), rejudge()])
+          const failures = second.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason as unknown)
+          if (failures.some((f) => f instanceof Interrupted)) throw new Interrupted()
+          const rechecked = new Map((second[0].status === "fulfilled" ? second[0].value : []).map((s) => [s.index, s]))
+          record.statements = finalCited.map((sentence, index) => carried.get(index) ?? rechecked.get(index) ?? { stage: "final" as const, index, text: sentence.text, sources: sentence.sources, ...tags(sentence), verdict: "unchecked" as const, quoteFound: false, checker: brain.names.checker, note: "not checked: the check of this changed sentence did not finish", carried: false })
+          record.review = { ...record.review, notes: reviewNotes }
+          emit("review.resolved", { type: "review.resolved", notes: resolution() })
           save()
+          if (failures.length) throw failures[0]
           if (ending) throw new Stop(ending)
         }
+      }
+
+      // ── hypotheses: which way do the checked statements point ────────────────────────────────────
+      // The writer filed each sentence under "For:" or "Against:". That is the writer's word. A model of another vendor
+      // is asked the same question without being told the side; a statement counts only where the two agree (markOf).
+      const judged = testing.length ? record.statements.filter((st) => st.verdict === "verified" && st.side && testing.some((h) => h.id === st.hypothesis)) : []
+      if (judged.length) {
+        const sUser = stanceUser(testing, judged.map((st) => ({ hypothesis: st.hypothesis as string, text: st.text })))
+        const unjudged = "A hypothesis whose statements could not be judged is marked Not checked."
+        begin({ step: "check:stance", kind: "check", label: `Checking which way ${plural(judged.length, "statement")} ${judged.length === 1 ? "points" : "point"}`, input: { statements: judged.length, hypotheses: testing.length, checker: brain.names.checker, rule: "a statement counts for or against a hypothesis only when this model, not told the writer's choice, says it points that way" } })
+        if (!brain.checkerIndependent) end("check:stance", "failed", { error: "No model from another vendor than the writer is configured.", consequence: unjudged })
+        else {
+          const why = allow(brain.worstCase("stance", STANCE.length + sUser.length), "stance", { sUser })
+          if (why) { endFor("check:stance", why, unjudged); throw new Stop(why) }
+          try {
+            const stances = readStances((await model("stance", { sUser }, () => brain.stance(STANCE, sUser, signal))).text, judged.length)
+            if (!stances) end("check:stance", "failed", { error: "The reply could not be read.", consequence: unjudged })
+            else {
+              judged.forEach((st, at) => { st.stance = stances.get(at) ?? "unchecked" })
+              const agree = judged.filter((st) => (st.side === "for" && st.stance === "supports") || (st.side === "against" && st.stance === "contradicts")).length
+              end("check:stance", "completed", { found: judged.length, kept: agree, summary: `${agree} of ${judged.length} point the way they were filed.` })
+            }
+          } catch (error) {
+            if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor("check:stance", stop.reason, unjudged); throw stop ?? error }
+            end("check:stance", "failed", { error: `The stance check did not answer (${error.message}).`, consequence: unjudged })
+          }
+        }
+        save()
       }
     }
   } catch (error) {
@@ -1062,8 +1346,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const stop = asStop(error)
     if (stop?.reason === "cancelled") {
       for (const step of [...running.keys()]) end(step, "cancelled")
+      closeLeftOpen("cancelled")
       if (!record.sources.length && pool.length) { // cancelled during the searches: what was found by then is kept
-        sources = numberSources(pool, level.sourcesKept)
+        sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
         record.sources = sources
         emit("sources", { type: "sources", items: sources.map(({ text: _t, studyType: _s, relevance: _r, ...rest }) => rest) })
       }
@@ -1080,6 +1365,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     if (!stop) {
       const text = error instanceof FatalModelError ? scrub(error.message, env, 600) : `The answer could not be finished: ${message(error)}`
       for (const step of [...running.keys()]) end(step, "failed", { error: text })
+      closeLeftOpen("failed", text)
       record.status = "failed"; record.error = text; record.finishedAt = now(); record.seconds = Math.round(worked() / 100) / 10
       save()
       emit("end", { type: "research.failed", error: text, spentUsd: record.usd })
@@ -1089,6 +1375,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
     stopped = stop.reason as Stopped
     for (const step of [...running.keys()]) endFor(step, stopped)
+    closeLeftOpen("failed", `This step did not finish: ${STOP_WORDS[stopped]}.`)
     const where = record.review.revised ? "after the revision" : record.statements.length || reviewNotes.length ? "during the review, before the revision" : record.draft ? "after the first draft, before its review was finished" : sources.length ? "before an answer was written" : "during the searches"
     notes.unshift(`This answer ended early, ${where}: ${STOP_WORDS[stopped]}. ${record.draft ? "What is shown is what was done by then; a sentence with no passed check is not shown as holding up." : "The sources found by then are listed."}`)
     markUnchecked(stopped)
@@ -1102,6 +1389,16 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   }
   clearTimeout(timeout)
   if (interrupted()) { frozen = true; throw new Interrupted() }
+
+  // ── the mark of each hypothesis, from the checked statements (code, not a model) ─────────────────
+  if (record.hypotheses?.length) {
+    record.hypotheses = record.hypotheses.map((h) => {
+      const mark = markOf(h.id, record.statements)
+      // An answer that ended before the checks cannot say "no evidence": it says the hypothesis was not checked.
+      return stopped && mark.verdict === "unsupported" && !mark.mixed ? { ...h, ...mark, verdict: "unchecked" as const, note: `Not checked: ${STOP_WORDS[stopped]}.` } : { ...h, ...mark }
+    })
+    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.note ? { note: h.note } : {}) })
+  }
 
   // ── what was used, what to do next, and the files ────────────────────────────────────────────────
   const final = record.answer?.markdown ?? ""
@@ -1118,7 +1415,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   record.counts = countsOf(sources.length, record.statements)
   if (stopped) record.stopped = stopped
   if (notes.length) record.note = notes.join(" ").slice(0, 2_000)
-  record.missing = missingOf(record)
+  record.missing = missingOf(record, cut)
   emit("missing", { type: "missing", items: record.missing })
 
   begin({ step: "save", kind: "save", label: "Saving the answer and its files" })

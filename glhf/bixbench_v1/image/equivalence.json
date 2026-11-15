@@ -1,0 +1,1554 @@
+{
+ "official": {
+  "machine": "aarch64",
+  "python": "3.12.2",
+  "numpy": "2.0.2",
+  "scipy": "1.14.1",
+  "pandas": "2.2.3",
+  "sklearn": "1.6.0",
+  "statsmodels": "0.14.4",
+  "cpu_count": 14
+ },
+ "modal": {
+  "machine": "x86_64",
+  "python": "3.12.2",
+  "numpy": "2.0.2",
+  "scipy": "1.14.1",
+  "pandas": "2.2.3",
+  "sklearn": "1.6.0",
+  "statsmodels": "0.14.4",
+  "cpu_count": 4
+ },
+ "errors": {
+  "official": {},
+  "modal": {}
+ },
+ "values": 419,
+ "identical": 238,
+ "numbers": 372,
+ "numbers_identical_to_the_last_bit": 191,
+ "fewest_agreeing_digits": 5,
+ "text_or_integer_differs": [],
+ "sections": {
+  "command_line_tools": {
+   "values": 22,
+   "identical": 22,
+   "text_or_integer_differs": [],
+   "fewest_digits": 17,
+   "worst": null
+  },
+  "numpy_linear_algebra": {
+   "values": 32,
+   "identical": 10,
+   "text_or_integer_differs": [],
+   "fewest_digits": 14,
+   "worst": "numpy_linear_algebra.eigenvalues_symmetric[0]"
+  },
+  "pandas_sklearn": {
+   "values": 62,
+   "identical": 42,
+   "text_or_integer_differs": [],
+   "fewest_digits": 14,
+   "worst": "pandas_sklearn.logistic_coefficients[11]"
+  },
+  "pydeseq2": {
+   "values": 74,
+   "identical": 14,
+   "text_or_integer_differs": [],
+   "fewest_digits": 12,
+   "worst": "pydeseq2.adjusted_p[0]"
+  },
+  "r.base": {
+   "values": 41,
+   "identical": 32,
+   "text_or_integer_differs": [],
+   "fewest_digits": 13,
+   "worst": "r.base.glm_coefficients[3]"
+  },
+  "r.clusterprofiler": {
+   "values": 20,
+   "identical": 18,
+   "text_or_integer_differs": [],
+   "fewest_digits": 14,
+   "worst": "r.clusterprofiler.adjusted_p[0]"
+  },
+  "r.deseq2": {
+   "values": 86,
+   "identical": 53,
+   "text_or_integer_differs": [],
+   "fewest_digits": 12,
+   "worst": "r.deseq2.apeglm_log2_fold_change[2]"
+  },
+  "scanpy": {
+   "values": 31,
+   "identical": 19,
+   "text_or_integer_differs": [],
+   "fewest_digits": 5,
+   "worst": "scanpy.pca_variance_ratio[1]"
+  },
+  "scipy_statistics": {
+   "values": 22,
+   "identical": 16,
+   "text_or_integer_differs": [],
+   "fewest_digits": 10,
+   "worst": "scipy_statistics.curve_fit[0]"
+  },
+  "statsmodels": {
+   "values": 29,
+   "identical": 12,
+   "text_or_integer_differs": [],
+   "fewest_digits": 13,
+   "worst": "statsmodels.ols_pvalues[1]"
+  }
+ },
+ "differing_values": [
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[0]",
+   "official": 210.09002705776228,
+   "modal": 210.090027057762,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.35283477414136e-15
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[1]",
+   "official": 223.99523952950142,
+   "modal": 223.99523952950128,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 6.344266398273324e-16
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[2]",
+   "official": 232.80341609977484,
+   "modal": 232.80341609977486,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2208458924942507e-16
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[3]",
+   "official": 236.37245577909889,
+   "modal": 236.3724557790989,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2024120719448555e-16
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[4]",
+   "official": 238.18191247459166,
+   "modal": 238.18191247459174,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.579832213342722e-16
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[5]",
+   "official": 250.70852577005854,
+   "modal": 250.70852577005843,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.534621922905238e-16
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[6]",
+   "official": 269.0557852515012,
+   "modal": 269.05578525150185,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.3239701271779213e-15
+  },
+  {
+   "name": "numpy_linear_algebra.eigenvalues_symmetric[7]",
+   "official": 284.72814272936245,
+   "modal": 284.7281427293624,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.996410271071742e-16
+  },
+  {
+   "name": "numpy_linear_algebra.matmul_trace",
+   "official": 238.17149950550913,
+   "modal": 238.1714995055092,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.3866591501848926e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[0]",
+   "official": 14.990935352050666,
+   "modal": 14.990935352050661,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.5548619169195255e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[1]",
+   "official": 14.458761539340124,
+   "modal": 14.45876153934013,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.914271072434659e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[2]",
+   "official": 13.80972576737346,
+   "modal": 13.809725767373457,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2863085547991332e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[3]",
+   "official": 13.34847978140551,
+   "modal": 13.348479781405505,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.99226773795183e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[5]",
+   "official": 13.145471315239131,
+   "modal": 13.14547131523913,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.351307075114892e-16
+  },
+  {
+   "name": "numpy_linear_algebra.singular_values[7]",
+   "official": 12.251123501857377,
+   "modal": 12.251123501857382,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.3498627023005814e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[0]",
+   "official": 0.010895871550575002,
+   "modal": 0.010895871550575,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.5920924433853677e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[1]",
+   "official": 0.013542462162267482,
+   "modal": 0.01354246216226748,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2809513182987941e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[3]",
+   "official": 0.004398746683375022,
+   "modal": 0.00439874668337502,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.943676689847044e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[4]",
+   "official": 0.022473969772285416,
+   "modal": 0.022473969772285402,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 6.175049601129369e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[5]",
+   "official": -0.013426505458246623,
+   "modal": -0.013426505458246621,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2920141293439326e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[6]",
+   "official": -0.006791832464920575,
+   "modal": -0.006791832464920578,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.831197585342145e-16
+  },
+  {
+   "name": "numpy_linear_algebra.solve[7]",
+   "official": -0.01563192545347683,
+   "modal": -0.015631925453476823,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.4389246382721775e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[11]",
+   "official": 0.029763098641722427,
+   "modal": 0.02976309864172243,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.1656874150496154e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[1]",
+   "official": 0.22806886291296458,
+   "modal": 0.22806886291296455,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.216982242166962e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[2]",
+   "official": 0.15422131857648133,
+   "modal": 0.15422131857648136,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.7997236615419276e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[5]",
+   "official": 0.03430707584242317,
+   "modal": 0.034307075842423165,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.0225838937070778e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[7]",
+   "official": 0.048922657192533754,
+   "modal": 0.04892265719253374,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.8366790775895125e-16
+  },
+  {
+   "name": "pandas_sklearn.forest_importances[9]",
+   "official": 0.04227475525535246,
+   "modal": 0.042274755255352445,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.282760059517405e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[0]",
+   "official": -1.5850692135889235,
+   "modal": -1.5850692135889228,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.2025534851366496e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[10]",
+   "official": -0.029858257508374408,
+   "modal": -0.029858257508374435,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 9.295778766675926e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[11]",
+   "official": 0.12258622894065059,
+   "modal": 0.12258622894065038,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.6981256289236175e-15
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[2]",
+   "official": -1.1604105549888712,
+   "modal": -1.1604105549888708,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.827000779515674e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[3]",
+   "official": 0.21529181296771097,
+   "modal": 0.21529181296771113,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 7.735243221661648e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[4]",
+   "official": -0.42332911789448446,
+   "modal": -0.42332911789448396,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.1801700850775087e-15
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[5]",
+   "official": 0.1299561235117143,
+   "modal": 0.12995612351171454,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.9221886109748625e-15
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[6]",
+   "official": 0.1609681503747061,
+   "modal": 0.16096815037470605,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.4485798030254706e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[7]",
+   "official": -0.3250363241915317,
+   "modal": -0.32503632419153183,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.415689084555803e-16
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[8]",
+   "official": 0.04156223918003293,
+   "modal": 0.04156223918003276,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 4.006845082922733e-15
+  },
+  {
+   "name": "pandas_sklearn.logistic_coefficients[9]",
+   "official": -0.048644634314575254,
+   "modal": -0.04864463431457509,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.4234701532924368e-15
+  },
+  {
+   "name": "pandas_sklearn.pca_explained_variance[0]",
+   "official": 0.19044858110196103,
+   "modal": 0.1904485811019609,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 7.286894828785658e-16
+  },
+  {
+   "name": "pandas_sklearn.pca_explained_variance[1]",
+   "official": 0.10702580734023409,
+   "modal": 0.10702580734023404,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 5.186707076620162e-16
+  },
+  {
+   "name": "pandas_sklearn.pca_explained_variance[2]",
+   "official": 0.09621109621536914,
+   "modal": 0.09621109621536918,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.3272933228249276e-16
+  },
+  {
+   "name": "pydeseq2.adjusted_p[0]",
+   "official": 1.0030000038119914e-05,
+   "modal": 1.0030000038115577e-05,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.3238371619736667e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[10]",
+   "official": 0.0017911345992832532,
+   "modal": 0.0017911345992826574,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.326815942456149e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[11]",
+   "official": 0.022763560986111004,
+   "modal": 0.02276356098610818,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.2406362170722592e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[1]",
+   "official": 5.02491135225106e-06,
+   "modal": 5.0249113522490985e-06,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.9040057989523423e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[2]",
+   "official": 8.314095749238877e-08,
+   "modal": 8.314095749235493e-08,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.0703901231673374e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[3]",
+   "official": 2.252526376989395e-05,
+   "modal": 2.2525263769886425e-05,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.340711469698644e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[4]",
+   "official": 5.068000852350515e-07,
+   "modal": 5.068000852348242e-07,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.485446507254271e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[5]",
+   "official": 0.001795999272956973,
+   "modal": 0.001795999272956664,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.720477417842315e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[6]",
+   "official": 1.9407322582305613e-05,
+   "modal": 1.9407322582298888e-05,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.4654144448193916e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[7]",
+   "official": 0.005452245093626604,
+   "modal": 0.005452245093625774,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.5224282272732125e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[8]",
+   "official": 0.007612653203128578,
+   "modal": 0.007612653203127203,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.8058990972380432e-13
+  },
+  {
+   "name": "pydeseq2.adjusted_p[9]",
+   "official": 0.14716953089931145,
+   "modal": 0.1471695308993001,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 7.71357383381137e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[0]",
+   "official": 0.10564666770171467,
+   "modal": 0.10564666770171144,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 3.060697161173487e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[10]",
+   "official": 0.20645737779451423,
+   "modal": 0.20645737779450984,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.124109583351442e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[11]",
+   "official": 0.2168112281232829,
+   "modal": 0.21681122812327708,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.688362097173206e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[1]",
+   "official": 0.13873892609206367,
+   "modal": 0.1387389260920597,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.8608029662858815e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[2]",
+   "official": 0.1184819294288197,
+   "modal": 0.11848192942881638,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.7994068817559907e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[3]",
+   "official": 0.16233127615357568,
+   "modal": 0.16233127615357135,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.667304723177177e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[4]",
+   "official": 0.14707905808399532,
+   "modal": 0.14707905808399174,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.43438413398824e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[5]",
+   "official": 0.16290857200791592,
+   "modal": 0.16290857200791187,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.4874774788922185e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[6]",
+   "official": 0.11301671216800559,
+   "modal": 0.11301671216800298,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.308529471279132e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[7]",
+   "official": 0.22990678587560348,
+   "modal": 0.22990678587559832,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.2454913824510994e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[8]",
+   "official": 0.307447064883166,
+   "modal": 0.3074470648831607,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.7152739347092213e-14
+  },
+  {
+   "name": "pydeseq2.dispersions[9]",
+   "official": 0.254262946188302,
+   "modal": 0.25426294618829587,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.4015401091577903e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[0]",
+   "official": 0.28272892336806194,
+   "modal": 0.282728923368058,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.3940178777848124e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[10]",
+   "official": 0.3810680247434421,
+   "modal": 0.38106802474343804,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.0634096215787412e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[11]",
+   "official": 0.41505629307856673,
+   "modal": 0.4150562930785619,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.1635699151308259e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[1]",
+   "official": 0.3280992459072779,
+   "modal": 0.32809924590727374,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.2689259101561336e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[2]",
+   "official": 0.2975829295361642,
+   "modal": 0.2975829295361603,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.3244347528813255e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[3]",
+   "official": 0.3642869905573278,
+   "modal": 0.3642869905573236,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.1581109408055226e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[4]",
+   "official": 0.3244573755742467,
+   "modal": 0.3244573755742429,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.1634065266800327e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[5]",
+   "official": 0.3650272870249225,
+   "modal": 0.36502728702491866,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.0493104409192499e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[6]",
+   "official": 0.28824781600976745,
+   "modal": 0.2882478160097643,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.0977136493115624e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[7]",
+   "official": 0.41191212562610524,
+   "modal": 0.41191212562610086,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.0646399254704149e-14
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[8]",
+   "official": 0.46487403837115865,
+   "modal": 0.4648740383711547,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 8.478192826661038e-15
+  },
+  {
+   "name": "pydeseq2.lfc_standard_error[9]",
+   "official": 0.4497868552501185,
+   "modal": 0.44978685525011386,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.0366991940733085e-14
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[0]",
+   "official": 1.469845675538671,
+   "modal": 1.4698456755386733,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.5106661101932063e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[10]",
+   "official": 1.502401024890454,
+   "modal": 1.502401024890468,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 9.310969493845242e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[1]",
+   "official": -1.7712865073379964,
+   "modal": -1.7712865073379955,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 5.014312568975287e-16
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[2]",
+   "official": 1.8912657147470957,
+   "modal": 1.891265714747089,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.522158782771414e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[3]",
+   "official": -1.822691889585115,
+   "modal": -1.8226918895851172,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.2182234759138217e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[4]",
+   "official": 1.933522228164917,
+   "modal": 1.9335222281649178,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.593577496872557e-16
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[5]",
+   "official": -1.4341817897990508,
+   "modal": -1.4341817897990505,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.5482319361769537e-16
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[6]",
+   "official": 1.4562963616151865,
+   "modal": 1.4562963616151894,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.9821376610622575e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[7]",
+   "official": -1.479431111953082,
+   "modal": -1.4794311119530834,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 9.005269787732012e-16
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[8]",
+   "official": 1.6194089957956326,
+   "modal": 1.619408995795641,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 5.210354523815411e-15
+  },
+  {
+   "name": "pydeseq2.log2_fold_change[9]",
+   "official": -1.0971517443643237,
+   "modal": -1.097151744364325,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.2142965969781015e-15
+  },
+  {
+   "name": "pydeseq2.p_values[0]",
+   "official": 2.0060000076239827e-07,
+   "modal": 2.0060000076231153e-07,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.3241010680504474e-13
+  },
+  {
+   "name": "pydeseq2.p_values[10]",
+   "official": 8.06010569677464e-05,
+   "modal": 8.060105696771959e-05,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.3258743400140823e-13
+  },
+  {
+   "name": "pydeseq2.p_values[11]",
+   "official": 0.0017072670739583253,
+   "modal": 0.0017072670739581134,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.240890237591725e-13
+  },
+  {
+   "name": "pydeseq2.p_values[1]",
+   "official": 6.715161508386333e-08,
+   "modal": 6.715161508383894e-08,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.6323626576220807e-13
+  },
+  {
+   "name": "pydeseq2.p_values[2]",
+   "official": 2.0785239373097192e-10,
+   "modal": 2.0785239373088732e-10,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.070439868842484e-13
+  },
+  {
+   "name": "pydeseq2.p_values[3]",
+   "official": 5.631315942473488e-07,
+   "modal": 5.631315942471606e-07,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.3410875065592586e-13
+  },
+  {
+   "name": "pydeseq2.p_values[4]",
+   "official": 2.5340004261752573e-09,
+   "modal": 2.5340004261741207e-09,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 4.485185361090598e-13
+  },
+  {
+   "name": "pydeseq2.p_values[5]",
+   "official": 8.53099654654562e-05,
+   "modal": 8.530996546544153e-05,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.720477417842315e-13
+  },
+  {
+   "name": "pydeseq2.p_values[6]",
+   "official": 4.366647581018763e-07,
+   "modal": 4.36664758101725e-07,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 3.4649295001727614e-13
+  },
+  {
+   "name": "pydeseq2.p_values[7]",
+   "official": 0.0003286309893414192,
+   "modal": 0.0003286309893413668,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.593488338881064e-13
+  },
+  {
+   "name": "pydeseq2.p_values[8]",
+   "official": 0.0004948224582033575,
+   "modal": 0.0004948224582032682,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.8054608785781942e-13
+  },
+  {
+   "name": "pydeseq2.p_values[9]",
+   "official": 0.014716953089931145,
+   "modal": 0.01471695308993001,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 7.720646181458506e-14
+  },
+  {
+   "name": "pydeseq2.size_factors[5]",
+   "official": 1.0178944637578624,
+   "modal": 1.0178944637578622,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.1814108714697898e-16
+  },
+  {
+   "name": "r.base.glm_coefficients[2]",
+   "official": 0.112475139795311,
+   "modal": 0.112475139795312,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 8.883747323906753e-15
+  },
+  {
+   "name": "r.base.glm_coefficients[3]",
+   "official": 0.00822161107618978,
+   "modal": 0.00822161107618989,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.3292720608378082e-14
+  },
+  {
+   "name": "r.base.lm_coefficients[0]",
+   "official": 0.0614433486312815,
+   "modal": 0.0614433486312814,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.693973568778092e-15
+  },
+  {
+   "name": "r.base.lm_coefficients[2]",
+   "official": -0.644193293624049,
+   "modal": -0.644193293624048,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.551088364396687e-15
+  },
+  {
+   "name": "r.base.lm_p[0]",
+   "official": 0.597988761000065,
+   "modal": 0.597988761000066,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.6709356217524806e-15
+  },
+  {
+   "name": "r.base.lm_p[1]",
+   "official": 3.20365035405524e-37,
+   "modal": 3.2036503540551e-37,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 4.380008171060878e-14
+  },
+  {
+   "name": "r.base.lm_p[2]",
+   "official": 2.67771603661567e-14,
+   "modal": 2.67771603661569e-14,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 7.423974215239989e-15
+  },
+  {
+   "name": "r.base.lm_p[3]",
+   "official": 0.0588372829653141,
+   "modal": 0.058837282965314,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.6510707116093393e-15
+  },
+  {
+   "name": "r.base.prcomp_sdev[5]",
+   "official": 0.990715150456322,
+   "modal": 0.990715150456321,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.0085650973465082e-15
+  },
+  {
+   "name": "r.clusterprofiler.adjusted_p[0]",
+   "official": 2.03398353459981e-59,
+   "modal": 2.03398353459982e-59,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 5.000016921218649e-15
+  },
+  {
+   "name": "r.clusterprofiler.p_values[0]",
+   "official": 4.06796706919962e-60,
+   "modal": 4.06796706919965e-60,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 7.336981351788218e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[0]",
+   "official": 3.41446398553427e-06,
+   "modal": 3.41446398553424e-06,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 8.806556389208066e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[10]",
+   "official": 0.287459348181339,
+   "modal": 0.287459348181335,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.390388906792221e-14
+  },
+  {
+   "name": "r.deseq2.adjusted_p[11]",
+   "official": 0.175259922744426,
+   "modal": 0.175259922744428,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.1402500999840344e-14
+  },
+  {
+   "name": "r.deseq2.adjusted_p[1]",
+   "official": 0.162487771577684,
+   "modal": 0.162487771577685,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 6.1493902738700895e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[3]",
+   "official": 0.166682139316215,
+   "modal": 0.166682139316214,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 5.994647814467051e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[4]",
+   "official": 0.354135505518962,
+   "modal": 0.354135505518961,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.821520877152317e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[5]",
+   "official": 0.577783064716191,
+   "modal": 0.577783064716189,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.458740081464491e-15
+  },
+  {
+   "name": "r.deseq2.adjusted_p[8]",
+   "official": 4.09151347849197e-07,
+   "modal": 4.09151347849182e-07,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 3.6617000856324665e-14
+  },
+  {
+   "name": "r.deseq2.adjusted_p[9]",
+   "official": 0.0319124305300328,
+   "modal": 0.0319124305300327,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.2615318491850846e-15
+  },
+  {
+   "name": "r.deseq2.apeglm_log2_fold_change[11]",
+   "official": -0.508732946915548,
+   "modal": -0.508732946915553,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 9.820483696021587e-15
+  },
+  {
+   "name": "r.deseq2.apeglm_log2_fold_change[1]",
+   "official": -0.926220144350264,
+   "modal": -0.926220144350265,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.0787939867833161e-15
+  },
+  {
+   "name": "r.deseq2.apeglm_log2_fold_change[2]",
+   "official": 0.00810356914915968,
+   "modal": 0.0081035691491585,
+   "same": false,
+   "digits": 12,
+   "relative_difference": 1.457810336896685e-13
+  },
+  {
+   "name": "r.deseq2.apeglm_log2_fold_change[6]",
+   "official": -0.128303791979648,
+   "modal": -0.128303791979649,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 7.78777233895885e-15
+  },
+  {
+   "name": "r.deseq2.apeglm_log2_fold_change[7]",
+   "official": 0.119131745299334,
+   "modal": 0.119131745299335,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 8.387359050704838e-15
+  },
+  {
+   "name": "r.deseq2.dispersions[4]",
+   "official": 0.274268356064374,
+   "modal": 0.274268356064373,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.643149856952936e-15
+  },
+  {
+   "name": "r.deseq2.dispersions[5]",
+   "official": 0.496025046952723,
+   "modal": 0.496025046952722,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.0144158612576605e-15
+  },
+  {
+   "name": "r.deseq2.dispersions[8]",
+   "official": 0.118258551476317,
+   "modal": 0.118258551476316,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 8.449289372217158e-15
+  },
+  {
+   "name": "r.deseq2.lfc_standard_error[11]",
+   "official": 0.325364169178744,
+   "modal": 0.325364169178743,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.071022616549132e-15
+  },
+  {
+   "name": "r.deseq2.lfc_standard_error[4]",
+   "official": 0.46862778099675,
+   "modal": 0.468627780996749,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.1321841399103277e-15
+  },
+  {
+   "name": "r.deseq2.lfc_standard_error[6]",
+   "official": 0.32093940844653,
+   "modal": 0.320939408446531,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.1133625097620544e-15
+  },
+  {
+   "name": "r.deseq2.log2_fold_change[10]",
+   "official": -0.445079493604297,
+   "modal": -0.445079493604299,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 4.489987683193453e-15
+  },
+  {
+   "name": "r.deseq2.log2_fold_change[11]",
+   "official": -0.590796014329491,
+   "modal": -0.590796014329488,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 5.073836135963062e-15
+  },
+  {
+   "name": "r.deseq2.log2_fold_change[2]",
+   "official": 0.00968857696704585,
+   "modal": 0.00968857696704582,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.222869847015662e-15
+  },
+  {
+   "name": "r.deseq2.log2_fold_change[3]",
+   "official": 0.653016212287875,
+   "modal": 0.653016212287876,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.53013157002931e-15
+  },
+  {
+   "name": "r.deseq2.log2_fold_change[6]",
+   "official": -0.153389978833874,
+   "modal": -0.153389978833873,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 6.514119955937966e-15
+  },
+  {
+   "name": "r.deseq2.p_values[0]",
+   "official": 1.54035969272223e-07,
+   "modal": 1.54035969272221e-07,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.3059957743854893e-14
+  },
+  {
+   "name": "r.deseq2.p_values[10]",
+   "official": 0.139046752378442,
+   "modal": 0.13904675237844,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.4372154761919608e-14
+  },
+  {
+   "name": "r.deseq2.p_values[11]",
+   "official": 0.0694011724150859,
+   "modal": 0.0694011724150867,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.1597955262759561e-14
+  },
+  {
+   "name": "r.deseq2.p_values[3]",
+   "official": 0.0634979578347484,
+   "modal": 0.0634979578347482,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.2783230235366775e-15
+  },
+  {
+   "name": "r.deseq2.p_values[5]",
+   "official": 0.385729891358479,
+   "modal": 0.385729891358478,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.5904155849670236e-15
+  },
+  {
+   "name": "r.deseq2.p_values[6]",
+   "official": 0.632692471415994,
+   "modal": 0.632692471415997,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 4.737850222524603e-15
+  },
+  {
+   "name": "r.deseq2.p_values[8]",
+   "official": 1.17495902394263e-08,
+   "modal": 1.17495902394255e-08,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 6.800717773501185e-14
+  },
+  {
+   "name": "r.deseq2.p_values[9]",
+   "official": 0.00711831157186195,
+   "modal": 0.00711831157186193,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.802535372656511e-15
+  },
+  {
+   "name": "scanpy.dispersions_norm[0]",
+   "official": 2.525252342224121,
+   "modal": 2.5252525806427,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 9.441375525329937e-08
+  },
+  {
+   "name": "scanpy.dispersions_norm[1]",
+   "official": 2.5028719902038574,
+   "modal": 2.5028717517852783,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 9.525799962392141e-08
+  },
+  {
+   "name": "scanpy.dispersions_norm[2]",
+   "official": 1.9287981986999512,
+   "modal": 1.9287985563278198,
+   "same": false,
+   "digits": 6,
+   "relative_difference": 1.8541483633895933e-07
+  },
+  {
+   "name": "scanpy.dispersions_norm[3]",
+   "official": 2.9402449131011963,
+   "modal": 2.940244674682617,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 8.108799985987994e-08
+  },
+  {
+   "name": "scanpy.dispersions_norm[4]",
+   "official": 1.3041568994522095,
+   "modal": 1.304157018661499,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 9.140716021536258e-08
+  },
+  {
+   "name": "scanpy.dispersions_norm[6]",
+   "official": 1.576897382736206,
+   "modal": 1.5768972635269165,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 7.559736661109252e-08
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[0]",
+   "official": 0.23493540287017822,
+   "modal": 0.23493541777133942,
+   "same": false,
+   "digits": 7,
+   "relative_difference": 6.342662734807754e-08
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[1]",
+   "official": 0.03839696943759918,
+   "modal": 0.0383969284594059,
+   "same": false,
+   "digits": 5,
+   "relative_difference": 1.0672246764077761e-06
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[2]",
+   "official": 0.035959504544734955,
+   "modal": 0.03595951199531555,
+   "same": false,
+   "digits": 6,
+   "relative_difference": 2.0719359589458322e-07
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[3]",
+   "official": 0.03463519737124443,
+   "modal": 0.03463520482182503,
+   "same": false,
+   "digits": 6,
+   "relative_difference": 2.1511582319931654e-07
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[4]",
+   "official": 0.03319496288895607,
+   "modal": 0.03319495916366577,
+   "same": false,
+   "digits": 6,
+   "relative_difference": 1.1222456584523896e-07
+  },
+  {
+   "name": "scanpy.pca_variance_ratio[5]",
+   "official": 0.032481465488672256,
+   "modal": 0.032481446862220764,
+   "same": false,
+   "digits": 6,
+   "relative_difference": 5.734486179142825e-07
+  },
+  {
+   "name": "scipy_statistics.chi2_contingency[1]",
+   "official": 0.005724360155979677,
+   "modal": 0.005724360155979683,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 1.0606481773472072e-15
+  },
+  {
+   "name": "scipy_statistics.curve_fit[0]",
+   "official": 0.40039964366401526,
+   "modal": 0.40039964367263053,
+   "same": false,
+   "digits": 10,
+   "relative_difference": 2.1516690376937225e-11
+  },
+  {
+   "name": "scipy_statistics.curve_fit[1]",
+   "official": 3.0035217483465586,
+   "modal": 3.00352174838874,
+   "same": false,
+   "digits": 10,
+   "relative_difference": 1.4043970059822884e-11
+  },
+  {
+   "name": "scipy_statistics.gammaln_betainc[0]",
+   "official": 469.60554712992945,
+   "modal": 469.6055471299295,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.21045032811507e-16
+  },
+  {
+   "name": "scipy_statistics.mann_whitney[1]",
+   "official": 0.00018146779548886878,
+   "modal": 0.00018146779548886872,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.9873128991419564e-16
+  },
+  {
+   "name": "scipy_statistics.tiny_p_value",
+   "official": 3.7325642988777124e-36,
+   "modal": 3.732564298877714e-36,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 3.580333111603499e-16
+  },
+  {
+   "name": "statsmodels.logit_params[0]",
+   "official": 0.14714153971338378,
+   "modal": 0.14714153971338392,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 9.431590721999316e-16
+  },
+  {
+   "name": "statsmodels.logit_params[1]",
+   "official": 3.524387356939361,
+   "modal": 3.5243873569393616,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.2600465410695303e-16
+  },
+  {
+   "name": "statsmodels.logit_params[3]",
+   "official": -0.09902944755462616,
+   "modal": -0.09902944755462625,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 9.80965935421529e-16
+  },
+  {
+   "name": "statsmodels.ols_params[0]",
+   "official": 0.1466960744364619,
+   "modal": 0.1466960744364625,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 3.973297105374559e-15
+  },
+  {
+   "name": "statsmodels.ols_params[1]",
+   "official": 1.468679907290487,
+   "modal": 1.4686799072904877,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 4.535595615276164e-16
+  },
+  {
+   "name": "statsmodels.ols_params[2]",
+   "official": -0.6328258517258927,
+   "modal": -0.6328258517258921,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 8.77194746072137e-16
+  },
+  {
+   "name": "statsmodels.ols_params[3]",
+   "official": 0.2315716324171356,
+   "modal": 0.23157163241713613,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.2772907509975535e-15
+  },
+  {
+   "name": "statsmodels.ols_pvalues[0]",
+   "official": 0.22775236479946293,
+   "modal": 0.22775236479946084,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 9.140050743293434e-15
+  },
+  {
+   "name": "statsmodels.ols_pvalues[1]",
+   "official": 2.556908491513285e-35,
+   "modal": 2.556908491513358e-35,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 2.843246066717047e-14
+  },
+  {
+   "name": "statsmodels.ols_pvalues[2]",
+   "official": 4.984875403239233e-11,
+   "modal": 4.9848754032391416e-11,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.8279115721194184e-14
+  },
+  {
+   "name": "statsmodels.ols_pvalues[3]",
+   "official": 0.01681984734741663,
+   "modal": 0.016819847347416306,
+   "same": false,
+   "digits": 13,
+   "relative_difference": 1.918320421506343e-14
+  },
+  {
+   "name": "statsmodels.ols_r2",
+   "official": 0.7534712200043444,
+   "modal": 0.7534712200043445,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 1.473477679238704e-16
+  },
+  {
+   "name": "statsmodels.poisson_deviance",
+   "official": 141.26909730202712,
+   "modal": 141.2690973020271,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.0118844087776425e-16
+  },
+  {
+   "name": "statsmodels.poisson_params[0]",
+   "official": 1.0562614727151876,
+   "modal": 1.0562614727151873,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 2.1021746097985708e-16
+  },
+  {
+   "name": "statsmodels.poisson_params[1]",
+   "official": 0.385258610925975,
+   "modal": 0.38525861092597524,
+   "same": false,
+   "digits": 15,
+   "relative_difference": 5.763520882540264e-16
+  },
+  {
+   "name": "statsmodels.poisson_params[2]",
+   "official": 0.0325232245166823,
+   "modal": 0.032523224516682214,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 2.5602235966540257e-15
+  },
+  {
+   "name": "statsmodels.poisson_params[3]",
+   "official": -0.08281673897061571,
+   "modal": -0.08281673897061623,
+   "same": false,
+   "digits": 14,
+   "relative_difference": 6.200173482697977e-15
+  }
+ ]
+}

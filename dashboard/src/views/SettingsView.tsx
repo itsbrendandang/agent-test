@@ -65,7 +65,7 @@ export function SettingsView() {
         <label className="newrun-check">
           <input type="checkbox" checked={characters} onChange={(e) => setCharactersShown(e.target.checked)} /> Show characters
         </label>
-        <p className="muted small">Momo, Ember and Fuji are decoration, not the agents that do the work. The choice is remembered in this browser.</p>
+        <p className="muted small">Momo, Ember, Fuji and Sage are decoration, not the agents that do the work. The choice is remembered in this browser.</p>
       </section>
       <section className="set-section" aria-labelledby="help-title">
         <h2 id="help-title">Help</h2>

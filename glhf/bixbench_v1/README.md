@@ -52,7 +52,8 @@ Other options of `run`: `--unit question` (one run per question, as the official
 code does), `--answer-mode mcq|mcq-refusal`, `--role-model critic=openai/gpt-5.5`,
 `--swarm-budget equal|extended` (default: `$BIXBENCH_V1_SWARM_BUDGET`, else `equal`),
 `--repeats N` (N runs of each unit per solver; repeat k uses seed + k and the folder
-`<solver>-rk`), `--judge-model`, `--judge-temperature` (a number, or `default` for the
+`<solver>-rk`), `--sandbox modal` (the analysis runs in a Modal Sandbox and not in local Docker;
+billed, another image, not comparable: see "The sandbox on Modal"), `--judge-model`, `--judge-temperature` (a number, or `default` for the
 provider's default), `--no-judge`, `--seed`, `--image`, `--force`. `--critic-hints` is still
 accepted and is ignored: the critic is never shown anything of the analyst's. `report` takes
 `--model` when a folder holds runs of several models; they are never pooled.
@@ -81,6 +82,7 @@ Paid calls are off unless `NO_PAID_CALLS` is exactly `0`. This package uses the 
 | `bixbench-v1 run` with a real model or a real `--role-model` | Refused before anything starts. |
 | The LLM judge, in `run` or in `grade` | Refused, whichever profile's default it is (`openai/gpt-4o` for per-mode and official, `anthropic/claude-3-5-sonnet-20241022` for paper) or a named one. Use `--no-judge`: the code rules grade what they can and the rest stays ungraded. |
 | A model on our own endpoint (`openai-api/<service>/<model>`), and any use of Modal | Refused: it is billed by the second. See the next section. |
+| `--sandbox modal` (also with `--model mock`), `modal-sandboxes`, building the Modal image | Refused before anything starts: a Modal sandbox is billed by the second. |
 | `--model mock` | Runs. With the default judge setting it uses no judge. If you name a judge model, that is refused. |
 | `download`, `list`, `audit`, `report` | Work. They call no model. |
 | Provider keys | Set to empty in the process before `.env` is loaded, so `.env` cannot put them back. |
@@ -346,8 +348,155 @@ It is published for linux/arm64 only: 5.66 GB compressed, 18.3 GB on disk, 158 s
 this machine (Apple Silicon, runs natively). Debian 12, Python 3.12 (pandas, scipy, statsmodels,
 scanpy, pydeseq2, gseapy, biopython), R 4.3.3 (DESeq2, clusterProfiler, org.Hs.eg.db, fgsea,
 apeglm), mafft, iqtree2, clipkit, phykit, blastn. Not in it: edgeR, limma, org.Mm.eg.db,
-Seurat, msigdbr, ReactomePA. An x86-64 host would need emulation or its own build.
-`run.json` records the image id.
+Seurat, msigdbr, ReactomePA. An x86-64 host would need emulation or its own build
+(we made one for Modal: see the next section). `run.json` records the image id.
+
+## The sandbox on Modal (`--sandbox modal`)
+
+What it is. With `--sandbox modal` the analysis of a run (the commands the solver runs on the
+capsule's data) happens in a [Modal](https://modal.com) Sandbox and not in local Docker.
+Everything else stays where the command runs: Inspect, the model calls, the question file, the
+answer key, grading, the run folder. Without the option nothing changes: the default is local
+Docker with the official image.
+
+**Not comparable.** The official image exists for linux/arm64 only and Modal runs linux/amd64
+only. So a Modal run uses our own amd64 rebuild of that image (`bixbench-v1-env:amd64-1`). It
+is close, and it is not the official image. A score from a Modal run is **not comparable with
+published BixBench numbers and not comparable with a local Docker run or the earlier local
+pilot**. Do not put Modal runs and Docker runs in one table. A comparison between models or
+between the two solvers is fair when every run of it used this same Modal image.
+`run.json` records `settings.sandbox` ("docker" or "modal"), the image name and the image id.
+No real model has run in this sandbox yet: everything below was measured with the scripted
+model (`--model mock`) or with no model.
+
+How close the image is (all files are in [`image/`](image/), made by code, not by hand):
+
+| What | Official arm64 image | Our Modal amd64 image |
+|---|---|---|
+| Base | `continuumio/miniconda3:24.9.2-0`, Debian 12.7 | the same tag, amd64 variant |
+| Python, R | 3.12.2, R 4.3.3, OpenBLAS 0.3.28 | the same |
+| Conda packages (843) | | 840 at the same version. 3 differ: `reproc` and `reproc-cpp` 14.2.5 for 14.2.4 (the amd64 `mamba` needs it), `kernel-headers_linux-64` 3.10.0 for 4.18.0 (compiler headers). 387 are the identical file; the other 453 are the same version built for the other processor. |
+| R packages (333) | | all 333 at the same version |
+| Python packages as pip lists them (254) | | the same 254 versions; pip also lists `PyQt5`, which conda installs in both |
+| Debian packages (268) | | 266 at the same version; `wget` differs by a rebuild number; one library exists only on each processor (`libhwasan0`, `libquadmath0`) |
+| Tools (mafft, IQ-TREE, BLAST, FastQC, SPAdes, ...) | | same versions; the udocker BUSCO image has the same layers |
+| Environment variables | PATH, LANG, LC_ALL, DEBIAN_FRONTEND | Modal adds 12 more (for example `PYTHONHASHSEED=0`, `PYTHONPATH`). The provider starts every command without them. |
+
+The full list by package name: [`image/DIFF.md`](image/DIFF.md) and `image/diff.json`. What
+cannot be matched: every compiled package is a different binary for a different processor, and
+the kernel is Modal's gVisor, not Linux in Docker.
+
+The same fixed analysis in both images (`image/tools/equivalence.py`: seeded synthetic data, no
+model, one thread; numpy, scipy, statsmodels, scikit-learn, PyDESeq2, scanpy, R with DESeq2,
+apeglm and clusterProfiler, mafft, IQ-TREE, BLAST): 419 values. Every text and integer result
+is identical (alignments, tree topology, BLAST hits, counts of significant genes, gene
+rankings). Double-precision numbers agree to at least 10 significant digits (12 or more
+everywhere but one curve fit); scanpy's single-precision numbers agree to 5 to 7. So an answer
+rounded to a few digits should not change, and a last digit of a long number can. Details:
+[`image/EQUIVALENCE.md`](image/EQUIVALENCE.md).
+
+How to run. Needs a Modal account (`modal token new` once) and the optional packages:
+
+```bash
+uv sync --group modal                     # once: inspect-sandboxes 0.6.1 and modal 1.6.1
+# One capsule, scripted model (billed for sandbox seconds only: about a cent)
+NO_PAID_CALLS=0 uv run --group modal bixbench-v1 run --capsules bix-46 --model mock \
+    --sandbox modal --out runs/modal-try
+# Real model: the same options as a Docker run, plus --sandbox modal
+NO_PAID_CALLS=0 uv run --group modal bixbench-v1 run --capsules bix-46 --solvers single,glhf \
+    --model anthropic/claude-sonnet-5-5 --max-tokens 320000 --time-limit 1800 \
+    --sandbox modal --out runs/modal-bix-46
+NO_PAID_CALLS=0 uv run --group modal bixbench-v1 modal-sandboxes   # is anything still running?
+```
+
+Options: `--modal-cpu` (default 4 cores), `--modal-memory-gib` (default 16), `--modal-usd-cap`
+(default 5: a run does not start if the folder's sandbox spend plus the most this run could
+cost would pass it). `--sandbox modal` is a paid call: it is refused unless `NO_PAID_CALLS` is
+exactly `0`, like a real model. The image is built once with
+`uv run --group modal python -m bixbench_v1.modal_image build` (10 minutes); it is already
+published in the owner's workspace.
+
+What goes to Modal: the staged data files of the capsules you run (the same files Docker
+mounts at `/data`), once per capsule, into the Volume `bixbench-v1-staged-f8cc3bdc` under a
+folder named by a hash. Never uploaded: the question file, a capsule zip, a notebook, the
+staging manifest, the shuffle salt, a run folder, any key. The sandbox is created with no
+environment, no secret and no network.
+
+Integrity, each checked in a real Modal sandbox (`tests/modal_sandbox_cloud_test.py`, opt-in
+and billed; `tests/modal_sandbox_*_test.py` without the cloud):
+
+| Rule | How on Modal | Result on Modal |
+|---|---|---|
+| No network | `block_network=True`; a probe in every sandbox, before the solver, must fail to reach anything, or the run stops | TCP, DNS and HTTPS all fail from inside |
+| Only the staged data, read-only | one Volume folder, mounted read-only, copied to a real `/data` owned by root; file names, sizes and SHA-256 of every file must equal the host's, or the run stops | holds; the role users cannot write to `/data` (root can, in its own sandbox only; the Volume cannot be written) |
+| No answers, no salt, no key | nothing is passed in; the probe looks for secret-like variables and answer files | no capsule id, answer text or salt in files, environment, mount table or Modal's own container arguments |
+| Blind critic | the critic gets **its own new sandbox**; the analyst's sandbox is terminated first; the adapter's blind check then runs in the new one | passes. In ONE sandbox it does not: see below |
+| Limits and timeout | CPU and memory request = limit; lifetime = time limit + 180 s + 600 s, at most 24 h | holds; past the memory limit Modal ends the whole sandbox, not only the process |
+| Nothing left running | every sandbox is terminated at the end, on an error and on Ctrl+C or `kill`; a last check by tag terminates anything left | sandboxes listed afterwards: none |
+
+Why the critic needs its own sandbox. Under gVisor (Modal's runtime) there is no
+`/proc/sysvipc` and no `/dev/mqueue`. We re-ran the adapter's blind check there with the three
+known side channels planted (`image/gvisor-blind-check.json`):
+
+| Side channel | The adapter's check in one Modal sandbox | With a new sandbox for the critic |
+|---|---|---|
+| A background process disguised by name | passes (killed by uid, as in Docker) | passes |
+| `/dev/mqueue` | fails open: the check has nothing to list; no message can be sent, but a queue the analyst made still exists for the critic, and a name can carry an answer | passes (the queue does not exist) |
+| System V shared memory and message queue | **fails**: `ipcrm -a` removes nothing, the check sees nothing, and the critic's user reads the analyst's data | passes (the objects do not exist) |
+
+So on Modal the swarm uses two sandboxes one after the other: the analyst's, then a new one for
+the critic and the reconciler. The analyst's scripts are kept on the host and added to
+`outputs/glhf/work/deriv_a/` at the end. If the new sandbox cannot be made, the critic does not
+run. Local Docker is unchanged (one container, the full check).
+
+The same mechanics. The three pilot capsules, both solvers, scripted model, once in Docker and
+once on Modal: the same statuses, phases, tool calls, tool outputs (the machine name in a
+shell prompt aside), output files and `answers.json` in all six runs
+(`image/mock-equivalence.json`, made by `image/tools/compare_runs.py`).
+
+Cost. Modal's prices for sandboxes, read with `modal billing rates` on 2026-11-15: 0.1419 USD
+per core per hour and 0.024 USD per GiB per hour; Volumes 0.09 USD per GiB per month. The
+default sandbox (4 cores, 16 GiB) is 0.95 USD per hour. Each sandbox gets one line in
+`<out>/<capsule>/<solver>/modal_ledger.jsonl`, `<out>/modal_ledger.jsonl` and the cumulative
+`runs/modal_ledger.jsonl` (seconds from create to terminate as this machine measured them;
+Modal's own `modal billing report` is the authority). `budget.json` repeats seconds and dollars
+per run, and the command prints a per-capsule table at the end.
+
+| | Sandbox seconds | Cost |
+|---|---|---|
+| Measured, scripted model, per capsule (single + swarm, 3 sandboxes) | 45 to 55 | 0.012 to 0.015 USD |
+| Estimate, real model, per capsule: the pilot's 51 s + 84 s, plus 10 s per sandbox | about 165 | about 0.04 USD |
+| Estimate, all 59 capsules, both solvers, at that speed | about 9,700 | about 2.6 USD |
+| The same at 3 minutes per run | about 23,000 | about 6 USD |
+
+The estimates are arithmetic, not measurements: no real model has run here. A sandbox adds
+about 10 seconds to a run (start, copy the data in, probe, copy the outputs out).
+
+How to clean up. A run ends its own sandboxes. After a process that was killed outright
+(`kill -9`, a crash of the machine), sandboxes live until their own timeout; end them with
+`NO_PAID_CALLS=0 uv run --group modal bixbench-v1 modal-sandboxes --terminate`. To remove what
+is stored: `modal volume delete bixbench-v1-staged-f8cc3bdc` (the staged data; uploaded again
+when needed) and `modal image names delete bixbench-v1-env:amd64-1` (then build it again
+before the next run). `modal app list` shows the app `bixbench-v1-sandbox`; it holds no
+running container between runs and costs nothing while idle. `modal app stop
+bixbench-v1-sandbox --yes` removes it; the next run makes it again (checked: the published
+image stays).
+
+Known limits of the Modal path:
+
+- Not comparable with Docker runs or published numbers (above).
+- Past its memory limit the whole sandbox ends and the run fails; in Docker only the process
+  dies. Use `--modal-memory-gib` for large capsules.
+- `/outputs` is copied to the host when the run ends. If the machine that runs the command
+  dies mid-run, that run's outputs are lost (it is run again; the sandbox ends at its timeout).
+  After Ctrl+C the sandbox is terminated and gets its ledger line, but its outputs may not be
+  collected; the run is recorded as failed and runs again next time.
+- Results can differ in a last digit between Modal's own machines (different processors
+  choose different math kernels), as they do between the two images.
+- The `modal` package here is 1.6.1, because inspect-sandboxes 0.6.1 does not import with
+  1.6.2 or later. The `modal` command line tool can be newer.
+- Two runs of the same capsule must not start at the same moment on one machine: they share
+  the local staged folder (true for Docker too).
 
 ## Problems to know about
 

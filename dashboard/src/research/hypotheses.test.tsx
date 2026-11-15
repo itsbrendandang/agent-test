@@ -3,11 +3,13 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
+import F_DEMO from "@/test/research/stream-hypotheses-demo.jsonl?raw"
+import F_REAL from "@/test/research/stream-hypotheses.jsonl?raw"
 import { Hypotheses, HypothesesTable } from "./Hypotheses"
 import { HYPOTHESES_NOTE } from "./hypothesisWords"
 import { Inspector } from "./Inspector"
 import { tabsOf } from "./inspectorState"
-import { foldAnswer, fromRecord, hypothesisDoing, type ResearchEvent } from "./model"
+import { foldAnswer, fromRecord, hypothesisDoing, withMarks, type ResearchEvent } from "./model"
 
 let seq = 0
 const ev = (type: string, rest: object = {}): ResearchEvent => ({ seq: ++seq, at: seq, run: "a-1", type, ...rest } as ResearchEvent)
@@ -130,5 +132,57 @@ describe("the inspector's Hypotheses tab", () => {
     render(<HypothesesTable state={foldAnswer(START())} />)
     const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1)
     expect(rows[0]).toHaveTextContent("No result recorded"); expect(rows[0].querySelector(".answer-markword")).toBeNull()
+  })
+})
+
+// The engine's own streams, made by its real code (copies of engine/test/fixtures/research/stream-hypotheses*.jsonl).
+describe("the engine's hypothesis streams", () => {
+  const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
+  const real = lines(F_REAL), demo = lines(F_DEMO)
+  it("real-shaped: three tested, one cut; Supported, the sources disagree, and no checked evidence", () => {
+    const s = foldAnswer(real)
+    expect(s.hypotheses.map((h) => h.id)).toEqual(["h1", "h2", "h3"]); expect(s.hypothesesCut).toHaveLength(1)
+    render(<Hypotheses state={s} onSource={() => {}} />)
+    const [one, two, three] = cards()
+    expect(one).toHaveTextContent("✓ Supported"); expect(one).toHaveTextContent("2 sources for, 0 against")
+    expect(within(one).getAllByRole("button").map((b) => b.textContent)).toEqual(["1", "4"])
+    expect(two).toHaveTextContent("? Insufficient evidence: the sources disagree"); expect(two).toHaveTextContent("1 source for, 1 against")
+    expect(three).toHaveTextContent("? Insufficient evidence"); expect(three).not.toHaveTextContent("disagree"); expect(three).toHaveTextContent("No checked statement for or against it.")
+    expect(three).toHaveTextContent("FornoneAgainstnone")
+    expect(screen.getByRole("region", { name: "Hypotheses" })).toHaveTextContent("1 more hypothesis was proposed but not tested")
+  })
+  it("at every point of the stream a card has a mark only if the engine has reported that hypothesis's result", () => {
+    for (let n = 1; n <= real.length; n++) {
+      const part = real.slice(0, n); const s = foldAnswer(part)
+      const reported = new Set(part.filter((e) => e.type === "hypothesis.checked").map((e) => e.id))
+      for (const h of s.hypotheses) expect(!!h.result).toBe(reported.has(h.id))
+    }
+  })
+  it("says Searching and Screening results for the hypothesis whose own step is running", () => {
+    const at = (step: string) => real.slice(0, real.findIndex((e) => e.type === "step.started" && e.step === step) + 1)
+    expect(hypothesisDoing(foldAnswer(at("search:exa:2")), "h2")).toBe("Searching")
+    expect(hypothesisDoing(foldAnswer(at("evaluate:exa:3")), "h3")).toBe("Screening results")
+    expect(hypothesisDoing(foldAnswer(at("check:stance")), "h1")).toBe("Checking")
+  })
+  it("places every checked statement's mark in the text, under its For: and Against: lines", () => {
+    for (const events of [real, demo]) {
+      const s = foldAnswer(events)
+      const { unplaced, text } = withMarks(s.markdown, s.statements, s.sources, "k")
+      expect(unplaced).toEqual([])
+      expect(text).toContain("### H1:"); expect(text).toContain("**For:**")
+    }
+  })
+  it("demo: the same map, labelled as examples, with no check glyph", () => {
+    const s = foldAnswer(demo)
+    render(<Hypotheses state={s} />)
+    expect(cards()).toHaveLength(2)
+    expect(cards()[0]).toHaveTextContent("Example result: Supported"); expect(cards()[1]).toHaveTextContent("Example result: Contradicted")
+    expect(screen.getByRole("region", { name: "Hypotheses" })).not.toHaveTextContent(/✓|✕/)
+  })
+  it("the sources know which hypotheses found them, and the tagged statements their side", () => {
+    const s = foldAnswer(real)
+    expect(s.sources.some((x) => x.hypotheses?.includes("h1"))).toBe(true)
+    expect(s.statements.filter((x) => x.hypothesis).every((x) => ["h1", "h2", "h3"].includes(x.hypothesis!))).toBe(true)
+    expect(s.statements.some((x) => x.side === "against")).toBe(true)
   })
 })

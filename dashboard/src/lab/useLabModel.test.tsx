@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { answerLab, type LabEvent } from "./adapter"
-import { ENGINE_CANCELLED, ENGINE_DEMO, ENGINE_FAILED_SOURCE, ENGINE_REAL } from "./fixtures/engine-streams"
+import { ENGINE_CANCELLED, ENGINE_DEMO, ENGINE_FAILED_SOURCE, ENGINE_HYPOTHESES, ENGINE_HYPOTHESES_DEMO, ENGINE_REAL } from "./fixtures/engine-streams"
 import { REAL_ANSWER } from "./fixtures/streams"
 import { Lab } from "./Lab"
 import { CHARACTER_IDS } from "./model"
@@ -96,6 +96,30 @@ describe("the engine's example answer streams", () => {
     expect(m.status).toBe("cancelled")
     expect(CHARACTER_IDS.filter((id) => m.characters[id].inRun).every((id) => m.characters[id].state === "cancelled")).toBe(true)
     expect(CHARACTER_IDS.flatMap((id) => m.characters[id].trips).every((t) => t.kind !== "fetch" || t.back !== undefined)).toBe(true)
+  })
+
+  it("a Standard answer with hypotheses: the Proposer sets them up, three chains of searches overlap, the Guardian carries each result", () => {
+    const m = answerLab(ENGINE_HYPOTHESES)
+    expect(m.status).toBe("done")
+    expect(working(ENGINE_HYPOTHESES)).toEqual([])
+    expect(m.characters.proposer).toMatchObject({ inRun: true, state: "done" })
+    expect(m.characters.scout.trips.filter((t) => t.kind === "fetch" && t.provider === "exa")).toHaveLength(3) // one web search a hypothesis
+    const results = m.characters.guardian.trips.filter((t) => t.id.startsWith("hypothesis:"))
+    expect(results.map((t) => [t.kind, t.to, t.room])).toEqual([["handoff", "proposer", "planning"], ["handoff", "proposer", "planning"], ["handoff", "proposer", "planning"]])
+    for (const t of results) expect(t.label).toMatch(/^the result for hypothesis h[123]: (✓ Supported|✕ Contradicted|\? Insufficient evidence|○ Not checked)(: the sources disagree)? \(\d+ sources? for, \d+ against\)$/)
+    expect(m.log.some((l) => l.text === "3 hypotheses set up. Tested against published sources, not by experiment.")).toBe(true)
+    // while the three chains run, the searches are out at the same time
+    const mid = answerLab(ENGINE_HYPOTHESES.filter((e) => (e.seq as number) <= (ENGINE_HYPOTHESES.find((x) => x.step === "search:exa:3")!.seq as number)))
+    expect(mid.characters.scout.trips.filter((t) => t.kind === "fetch" && t.back === undefined)).toHaveLength(3)
+    expect(mid.characters.scout.state).toBe("fetching")
+  })
+
+  it("a practice answer with hypotheses says its results are examples", () => {
+    const m = answerLab(ENGINE_HYPOTHESES_DEMO)
+    expect(m).toMatchObject({ status: "done", provenance: "practice" })
+    const results = m.characters.guardian.trips.filter((t) => t.id.startsWith("hypothesis:"))
+    expect(results).toHaveLength(2)
+    for (const t of results) { expect(t.label).toMatch(/Example result: /); expect(t.label).not.toMatch(/[✓✕?○]/) }
   })
 
   it("the practice answer is Practice", () => {

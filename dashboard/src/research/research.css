@@ -359,7 +359,8 @@
 /* the inspector's table */
 .hyp-tablewrap { overflow-x: auto; }
 .hyp-tablewrap:focus-visible { outline: 2px solid var(--focus, #2f6feb); outline-offset: 2px; }
-.hyp-table { border-collapse: collapse; font-size: 12.5px; min-width: 620px; }
+.hyp-table { border-collapse: collapse; font-size: 12.5px; min-width: 860px; overflow-wrap: normal; table-layout: fixed; }
+.hyp-table th:nth-child(1) { width: 200px; } .hyp-table th:nth-child(2), .hyp-table th:nth-child(3) { width: 190px; } .hyp-table th:nth-child(4) { width: 170px; }
 .hyp-table th, .hyp-table td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-top: 1px solid var(--edge, #dedbd2); font-weight: 400; }
 .hyp-table thead th { border-top: 0; font-size: 11px; font-weight: 600; color: var(--text-muted, #6b675f); white-space: nowrap; }
 .hyp-table tbody th { font-weight: 500; min-width: 180px; }
