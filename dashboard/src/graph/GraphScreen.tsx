@@ -1,7 +1,7 @@
 // The Graph view: a 3D picture of one run, with a sentence that says what happened, a replay, and a list of the same graph
 // for keyboard and screen readers. Wording follows the dashboard's shared glossary (see words.ts).
-import { lazy, Suspense, useCallback, useMemo, useState } from "react"
-import { Loading } from "@/components/Crew"
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react"
+import { GridCheckerInvertLoader } from "@/components/ui/grid-checker-invert-loader"
 import { PRACTICE } from "@/lib/words"
 import { EngineOffline, ModeLabel, PageHead } from "@/components/Shared"
 import { setOpen, takeOpen } from "@/lib/open"
@@ -26,6 +26,16 @@ const storedMode = (): "graph" | "list" | null => { try { const v = localStorage
 const when = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 
 const ABOUT = "Who said what in one run, and what each check found. Contradicted statements are the easiest to find."
+
+// The graph's loading state: the grid-checker loader over the status text.
+function GraphLoading({ children }: { children: ReactNode }) {
+  return (
+    <div className="loading loading-block">
+      <GridCheckerInvertLoader dotSize={6} gap={5} />
+      <p className="loading-text" role="status">{children}</p>
+    </div>
+  )
+}
 
 const toggle = <T,>(set: ReadonlySet<T>, v: T): Set<T> => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n }
 const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((x) => b.has(x))
@@ -140,7 +150,7 @@ export function GraphScreen() {
     return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
       <EngineOffline needs="Runs come from the engine." onRetry={list.reload} /></div>
   }
-  if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading runs…</Loading></div>
+  if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><GraphLoading>Loading runs…</GraphLoading></div>
   if (!current) {
     return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
       <p className="graph-empty card-surface">No runs yet. Start one in Board or Compare, and its graph appears here.</p></div>
@@ -243,7 +253,7 @@ export function GraphScreen() {
 
       {list.failed.length === 1 && <p className="pill" data-kind="warning" role="status">The list of {list.failed[0] === "board" ? "reviews" : "team-of-nine runs"} could not be loaded, so only the other kind is listed.</p>}
       {source.error && <div className="engine-offline card-surface" role="alert"><h2>This run could not be loaded</h2><p className="muted">The engine did not answer for {current.id}.</p><button type="button" className="btn" onClick={source.reload}>Try again</button></div>}
-      {source.loading && <Loading className="loading-block">Loading the graph…</Loading>}
+      {source.loading && <GraphLoading>Loading the graph…</GraphLoading>}
 
       {full && (
         <>
@@ -253,7 +263,7 @@ export function GraphScreen() {
               {unavailable !== undefined && <p className="graph-fallback" role="status">The 3D view is not available here ({unavailable}) so the list is shown instead. It has the same information.</p>}
               <div className="graph-body">
                 {!useList && (
-                  <Suspense fallback={<Loading className="loading-block">Loading the 3D view…</Loading>}>
+                  <Suspense fallback={<GraphLoading>Loading the 3D view…</GraphLoading>}>
                     <GraphCanvas nodes={layout.nodes} links={layout.links} revealed={revealed} runKind={full.kind} style={style} fitKey={`${key}|${[...hiddenKinds]}|${[...hiddenVerdicts]}|${[...hiddenLinks]}`} focus={focus} paused={!visibleTab}
                       onSelect={select} onStep={stepBy} onUnavailable={(r) => setUnavailable(r)}
                       summary={`3D graph of a ${current.kind === "swarm" ? "team-of-nine run" : "review"}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
