@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
 import { isLocalModel, localRefusal } from "./local.ts"
-import { onPaidChange, paidCallsOff } from "./paid.ts"
+import { onPaidChange, paidCallsOff } from "./paid/paid.ts"
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 

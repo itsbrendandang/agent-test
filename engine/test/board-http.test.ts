@@ -7,9 +7,9 @@ import { join } from "node:path"
 import { Readable } from "node:stream"
 import { test } from "node:test"
 import type { IncomingMessage } from "node:http"
-import { acquireRunLock, lockHolder, newRunDir, overLimit, rememberRun, RunBusy, spentToday } from "../src/board.ts"
+import { acquireRunLock, lockHolder, newRunDir, overLimit, rememberRun, RunBusy, spentToday } from "../src/board/board.ts"
 import { BriefRejected, loadBrief } from "../src/brief.ts"
-import { checkerEnv, parseVerdict } from "../src/checkers.ts"
+import { checkerEnv, parseVerdict } from "../src/board/checkers.ts"
 import { type BoardConfig, loadConfig } from "../src/config.ts"
 import { stamp } from "../src/glhf/proc.ts"
 import { allowedHost, allowedOrigin, dashboardOrigins, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
@@ -193,7 +193,7 @@ test("run lock: a lock that names a reused pid, our own pid or pid 1 is stale (t
 test("run lock: released when the process is stopped with SIGTERM or SIGINT", async () => {
   const config = tempConfig()
   const dir = join(config.paths.runs, newRunDir(config, "r")), file = join(dir, "run.lock")
-  const board = new URL("../src/board.ts", import.meta.url).href
+  const board = new URL("../src/board/board.ts", import.meta.url).href
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     const child = spawn(process.execPath, ["--input-type=module", "-e", `import { acquireRunLock } from ${JSON.stringify(board)}; acquireRunLock(${JSON.stringify(dir)}); console.log("locked"); setInterval(() => {}, 1000)`], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, DRUG_BOARD_MOCK: "1" } })
     await new Promise<void>((ok, fail) => { child.stdout.once("data", () => ok()); child.once("exit", () => fail(new Error("child ended before taking the lock"))) })

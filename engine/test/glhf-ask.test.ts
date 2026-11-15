@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
-import { allow, ask, AskAborted, type Entry, handleAsk, keywords, parseReply, renderIndex } from "../src/ask.ts"
+import { allow, ask, AskAborted, type Entry, handleAsk, keywords, parseReply, renderIndex } from "../src/search/ask.ts"
 
 // These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
 // fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.

@@ -2,8 +2,8 @@
 // Scripted checkers only: nothing here reaches a network.
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { checkRound, type ClaimDeps } from "../src/board.ts"
-import type { Claim } from "../src/claims.ts"
+import { checkRound, type ClaimDeps } from "../src/board/board.ts"
+import type { Claim } from "../src/board/claims.ts"
 
 const claim = (text: string): Claim => ({ kind: "brief", text, source: "brief" })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

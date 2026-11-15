@@ -3,8 +3,8 @@
 // With a run: the members that run really has: the board members its plan kept (overrides.json narrows the roster)
 // and the method specialists its plan added, each with a plain title, why it was chosen and the methods it reads.
 import { existsSync } from "node:fs"
-import { type AgentDef, loadAgent, loadRoster } from "../agents.ts"
-import { applyOverrides, runDir } from "../board.ts"
+import { type AgentDef, loadAgent, loadRoster } from "../board/agents.ts"
+import { applyOverrides, runDir } from "../board/board.ts"
 import type { BoardConfig } from "../config.ts"
 import { HttpError, isSafeId } from "../http.ts"
 import { runSpecialists } from "../specialists.ts"

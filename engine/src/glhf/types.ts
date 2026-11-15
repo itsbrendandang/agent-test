@@ -1,6 +1,6 @@
 // The GLHF run-tracker contract. The dashboard's Swarm view is built against these shapes; do not rename.
 import { discoverLocalModels, type LocalModel, type ModelClass } from "../local.ts"
-import { paidCallsOff } from "../paid.ts"
+import { paidCallsOff } from "../paid/paid.ts"
 
 // "cancelled": stopped on request (POST /api/glhf/runs/:id/cancel). It is settled like done and failed, but it is
 // not a result: the scoreboard leaves it out.

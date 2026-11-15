@@ -13,11 +13,11 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic"
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai"
 import type { ModelRef } from "@earendil-works/pi-durable"
-import type { AgentDef } from "./agents.ts"
+import type { AgentDef } from "./board/agents.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, type Tier } from "./config.ts"
 import { localName, localServer } from "./local.ts"
 import { mockLeadTurn, mockMemberTurn } from "./mock.ts"
-import { refusePaid } from "./paid.ts"
+import { refusePaid } from "./paid/paid.ts"
 import { modelsNeeded, parseModelId } from "./providers.ts"
 
 export const LOCAL_PROVIDER = "ollama"

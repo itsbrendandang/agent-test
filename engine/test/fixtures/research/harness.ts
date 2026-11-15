@@ -10,7 +10,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createModels, fauxAssistantMessage, fauxProvider, type Models } from "@earendil-works/pi-ai"
 import { type BoardConfig, loadConfig } from "../../../src/config.ts"
-import { mockRulings } from "../../../src/triage.ts"
+import { mockRulings } from "../../../src/board/triage.ts"
 import { createResearch, type ResearchDeps } from "../../../src/research/routes.ts"
 import type { ResearchRecord, Stamped } from "../../../src/research/types.ts"
 

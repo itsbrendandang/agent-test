@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { test } from "node:test"
-import { applyOverrides, runDir } from "../src/board.ts"
+import { applyOverrides, runDir } from "../src/board/board.ts"
 import { loadConfig } from "../src/config.ts"
 
 function setup(overrides?: unknown) {

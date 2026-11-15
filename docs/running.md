@@ -222,7 +222,7 @@ you report a run that used them.
 
 ## Paid calls (`NO_PAID_CALLS`)
 
-Code: `engine/src/paid.ts`. Tests: `engine/test/paid.test.ts` (the tests check that nothing
+Code: `engine/src/paid/paid.ts`. Tests: `engine/test/paid.test.ts` (the tests check that nothing
 reaches the network).
 
 The engine has one switch for everything that costs money. The switch is **on** (no paid
@@ -245,10 +245,10 @@ it starts, so a change needs a restart (with Docker: stop and `docker compose up
 | A cloud run | Refused. HTTP 400 with `field: "mode"`. | same |
 | `--exa` (Exa documentation search in a run) | Refused. HTTP 400 with `field: "exa"`. | same |
 | A paid run that was accepted earlier (a queued partner, or a run left by an engine that allowed paid calls) | Not launched. It ends as `failed` with `not launched: ...`. | `paidRun` in `engine/src/glhf/task.ts` |
-| Ask (`POST /api/ask`) | No model call. The answer is the word search, and it says why. | `engine/src/ask.ts` |
-| Drug board models | The board runs on scripted models, also when keys are set. A board run that was started with real models is not continued (HTTP 403 on resume). | `mockMode` in `engine/src/config.ts`, `refusePaidRun` in `engine/src/board.ts`, `engine/src/models.ts` |
-| Drug board checkers: the first-pass checker, OpenAI, Claude Code | Refused before any call or process. | `engine/src/triage.ts`, `engine/src/checkers.ts` |
-| Drug board Exa search | Refused before the request. | `engine/src/exa.ts` |
+| Ask (`POST /api/ask`) | No model call. The answer is the word search, and it says why. | `engine/src/search/ask.ts` |
+| Drug board models | The board runs on scripted models, also when keys are set. A board run that was started with real models is not continued (HTTP 403 on resume). | `mockMode` in `engine/src/config.ts`, `refusePaidRun` in `engine/src/board/board.ts`, `engine/src/models.ts` |
+| Drug board checkers: the first-pass checker, OpenAI, Claude Code | Refused before any call or process. | `engine/src/board/triage.ts`, `engine/src/board/checkers.ts` |
+| Drug board Exa search | Refused before the request. | `engine/src/search/exa.ts` |
 
 The CLI goes through the same checks: `npm run glhf -- run --model <real model> ...` prints
 the refusal and ends with status 1.
@@ -258,7 +258,7 @@ the refusal and ends with status 1.
 While the switch is on, every process that the engine starts (the local runner, `bixbench3`,
 `uv`) gets an environment in which these keys are empty: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`. It also gets
-`NO_PAID_CALLS=1` (`childEnv` in `engine/src/paid.ts`). So if something further down tries a
+`NO_PAID_CALLS=1` (`childEnv` in `engine/src/paid/paid.ts`). So if something further down tries a
 paid call by mistake, it has no key.
 
 The keys are set to empty, not removed, because the Python runner would read a removed key

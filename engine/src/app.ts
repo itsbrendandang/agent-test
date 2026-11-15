@@ -27,19 +27,19 @@
 import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, watch } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
-import { loadAgent, loadRoster } from "./agents.ts"
-import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board.ts"
+import { loadAgent, loadRoster } from "./board/agents.ts"
+import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
 import { cancelPaidRuns, handleGlhf, hasSessionToken, TOKEN_FILE } from "./glhf/routes.ts"
 import { handleBixV1 } from "./bixv1/routes.ts"
 import { gate, guard, HttpError, isSafeId, linesFrom, readJson, safeId, tokenNeeded } from "./http.ts"
-import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid.ts"
-import { handlePaid } from "./paidswitch.ts"
+import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid/paid.ts"
+import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
-import { search } from "./search.ts"
+import { search } from "./search/search.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
 export const DEFAULT_HOST = "127.0.0.1"
@@ -60,7 +60,7 @@ export interface AppOptions {
   start?: (briefFile: string) => Promise<string>
   env?: NodeJS.ProcessEnv
   /** Options for POST /api/ask (tests: a fake fetch and key). */
-  ask?: import("./ask.ts").AskOptions
+  ask?: import("./search/ask.ts").AskOptions
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -172,7 +172,7 @@ export function createApp(options: AppOptions = {}) {
       if (url.pathname === "/api/ask") { // AI search over experiments
         // The keyword answer for the dashboard or a token holder; the model call (money) for a token holder only.
         if (!gate(req, res, "scripted", "asking about the experiments", trust)) return
-        return (await import("./ask.ts")).handleAsk(req, res, listRuns(), { ...options.ask, model: hasToken(req) })
+        return (await import("./search/ask.ts")).handleAsk(req, res, listRuns(), { ...options.ask, model: hasToken(req) })
       }
       if (url.pathname === "/api/roster") {
         const lead = loadAgent(config, "lead-scientist")

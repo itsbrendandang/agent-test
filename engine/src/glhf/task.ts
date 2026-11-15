@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync, wri
 import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
-import { childEnv, HOW_TO_ALLOW, paidCallsOff } from "../paid.ts"
+import { childEnv, HOW_TO_ALLOW, paidCallsOff } from "../paid/paid.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { bixbenchDir, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, runFile, type Stored, tail, trackerLog } from "./store.ts"
 import { type GlhfRun, type RunRequest, settled, type Usage } from "./types.ts"

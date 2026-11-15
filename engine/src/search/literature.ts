@@ -3,7 +3,7 @@
 // preprints. No key and no charge. A query that finds nothing is tried again with fewer words.
 // What it returns is the paper's abstract: a "verified" statement must quote a passage that is in it.
 // A scripted (practice) run never reaches the network: it gets the fixture sources.
-import type { EvidenceItem } from "./events.ts"
+import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "./exa.ts"
 
 export const LITERATURE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"

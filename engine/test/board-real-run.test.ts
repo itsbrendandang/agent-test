@@ -22,13 +22,13 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 
-const board = await import("../src/board.ts")
+const board = await import("../src/board/board.ts")
 const { startRun, runBoard, loadState, evidenceBlock, memberInput, replyPhases, summarize, providerOf } = board
 const { loadConfig } = await import("../src/config.ts")
-const { loadAgent, loadRoster } = await import("../src/agents.ts")
-const { shortSummary } = await import("../src/claims.ts")
+const { loadAgent, loadRoster } = await import("../src/board/agents.ts")
+const { shortSummary } = await import("../src/board/claims.ts")
 const { EventLog } = await import("../src/events.ts")
-const { runPreflight, WORST_CASE } = await import("../src/preflight.ts")
+const { runPreflight, WORST_CASE } = await import("../src/paid/preflight.ts")
 const { FatalModelError, isFatalModelError, describeModelFailure } = await import("../src/providers.ts")
 const { createApp } = await import("../src/app.ts")
 const { agentsFor, efforts, planFrom, rankAgents } = await import("../src/chat/plan.ts")

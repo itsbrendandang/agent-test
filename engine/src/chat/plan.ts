@@ -6,7 +6,7 @@
 // (planFrom below): unknown names are dropped, text is cut, and it cannot set limits, `paid` or `search`.
 import { randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import * as board from "../board.ts"
+import * as board from "../board/board.ts"
 import { BriefRejected, loadBrief } from "../brief.ts"
 import { type BoardConfig, path } from "../config.ts"
 import { HttpError, isSafeId } from "../http.ts"
@@ -314,7 +314,7 @@ export function planFrom(ctx: PlanContext, question: string, effortId: EffortId,
     if (!chosenSkills.some((s) => s.name === name)) chosenSkills.push({ name: name as string, why: flat((item as { why?: unknown } | null)?.why, 240) || "Chosen by the model." })
   }
   if (badSkills) warnings.push(`${badSkills} skill name(s) the model gave are unknown or not installed and were removed.`)
-  if (!chosenSkills.length && usesSearch && installed.some((s) => s.name === "build-with-exa")) chosenSkills.push({ name: "build-with-exa", why: "The board's search tool follows this skill's request shape (engine/src/exa.ts). The run does not load the skill file." })
+  if (!chosenSkills.length && usesSearch && installed.some((s) => s.name === "build-with-exa")) chosenSkills.push({ name: "build-with-exa", why: "The board's search tool follows this skill's request shape (engine/src/search/exa.ts). The run does not load the skill file." })
   for (const skill of methodSkills(agents)) if (!chosenSkills.some((s) => s.name === skill.name)) chosenSkills.push(skill)
 
   const derived = derive(ctx, effort, agents, members)

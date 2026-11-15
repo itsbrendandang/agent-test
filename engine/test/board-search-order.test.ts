@@ -5,11 +5,11 @@ import { join } from "node:path"
 import { test } from "node:test"
 
 process.env.NO_PAID_CALLS = "1"
-const { instructionsFor, loadAgent, loadRoster, searchOrder, SEARCH_TOOLS } = await import("../src/agents.ts")
+const { instructionsFor, loadAgent, loadRoster, searchOrder, SEARCH_TOOLS } = await import("../src/board/agents.ts")
 const { loadBrief } = await import("../src/brief.ts")
 const { loadConfig } = await import("../src/config.ts")
-const { SEARCH_GUIDANCE } = await import("../src/exa.ts")
-const { LITERATURE_GUIDANCE } = await import("../src/literature.ts")
+const { SEARCH_GUIDANCE } = await import("../src/search/exa.ts")
+const { LITERATURE_GUIDANCE } = await import("../src/search/literature.ts")
 
 const config = loadConfig()
 const brief = loadBrief(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), config.brief.required_sections)

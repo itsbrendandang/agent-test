@@ -15,14 +15,14 @@
 import { createModels } from "@earendil-works/pi-ai"
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic"
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai"
-import { loadRoster } from "./agents.ts"
-import { spentToday } from "./board.ts"
-import { type BoardConfig } from "./config.ts"
+import { loadRoster } from "../board/agents.ts"
+import { spentToday } from "../board/board.ts"
+import { type BoardConfig } from "../config.ts"
 import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal, maxSearches } from "./exaledger.ts"
-import { checkTierPrices } from "./models.ts"
+import { checkTierPrices } from "../models.ts"
 import { paidSwitchLocked } from "./paid.ts"
-import { modelsNeeded, parseModelId, type Vendor, VENDOR_KEY } from "./providers.ts"
-import { serviceName, SOURCES } from "./sources/index.ts"
+import { modelsNeeded, parseModelId, type Vendor, VENDOR_KEY } from "../providers.ts"
+import { serviceName, SOURCES } from "../sources/index.ts"
 
 export interface PreflightDeps { env: NodeJS.ProcessEnv; fetch: typeof fetch; config: BoardConfig; log: (line: string) => void }
 export interface PreflightResult { ok: boolean; refused?: boolean; problems: string[]; endpoints: string[]; worstCaseUsd?: number }

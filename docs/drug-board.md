@@ -38,11 +38,11 @@ In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and
 | While paid calls are off | What happens | Code |
 |---|---|---|
 | Board models (lead and members) | Scripted. No real provider is registered. | `engine/src/models.ts` |
-| First-pass checker (cheap model) | Refused before any call. | `engine/src/triage.ts` |
-| OpenAI checker | Refused before any call. | `engine/src/checkers.ts` |
-| Claude Code checker | Refused before the process is started. | `engine/src/checkers.ts` |
-| Exa literature search | Refused before the request. | `engine/src/exa.ts` |
-| A run that was started with real models | Not continued, in the engine (HTTP 403 on resume) and in `npm run resume` (exit status 3). It stays paused. A finished run and a scripted run are not affected. | `refusePaidRun` in `engine/src/board.ts` |
+| First-pass checker (cheap model) | Refused before any call. | `engine/src/board/triage.ts` |
+| OpenAI checker | Refused before any call. | `engine/src/board/checkers.ts` |
+| Claude Code checker | Refused before the process is started. | `engine/src/board/checkers.ts` |
+| Exa literature search | Refused before the request. | `engine/src/search/exa.ts` |
+| A run that was started with real models | Not continued, in the engine (HTTP 403 on resume) and in `npm run resume` (exit status 3). It stays paused. A finished run and a scripted run are not affected. | `refusePaidRun` in `engine/src/board/board.ts` |
 
 In a scripted run the checkers and the search give scripted answers, so nothing is refused; the refusals above are a second barrier for code paths that would reach a real service. Tested in `engine/test/paid.test.ts`, with no network.
 
@@ -54,7 +54,7 @@ With paid calls allowed, a live run needs the key of **every tier** in `board/co
 | `OPENAI_API_KEY` | `rival` tier (the Critic, GPT-5 mini), first-pass checker of Claude members' claims, literature checker | yes |
 | `EXA_API_KEY` | Search, for a member that has the `exa_search` tool (the scout) | yes while the scout can search |
 
-Claude Code (the checker for computed claims) uses your existing `claude` login. By default it runs with `--restricted` and **cannot run code**: it checks a claim by reasoning and answers "unsupported" when that is not enough. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools` (`Read Write`), and with a fixed list of environment variables, so other providers' keys are not passed (`engine/src/checkers.ts`). It is not in a container. The `--restricted` mode was not tested with a live call. Details: [configuration.md](configuration.md#drug-board-boardconfigyaml).
+Claude Code (the checker for computed claims) uses your existing `claude` login. By default it runs with `--restricted` and **cannot run code**: it checks a claim by reasoning and answers "unsupported" when that is not enough. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools` (`Read Write`), and with a fixed list of environment variables, so other providers' keys are not passed (`engine/src/board/checkers.ts`). It is not in a container. The `--restricted` mode was not tested with a live call. Details: [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
 ## The board (`board/agents/*.md`)
 
@@ -73,7 +73,7 @@ round, and each call resends its whole conversation.
 | Methods Auditor | agent `methods-auditor` | Were the methods right? | strong |
 | Critic | agent `critic` | Is the conclusion true? Works on its own, not from the Auditor's report | rival (second vendor) |
 | Reviser | agent `experimenter`, mode `revise` | Fixes only what was flagged; at most 2 review rounds | strong |
-| Finisher | code | `write_memo` is refused until the memo has every section in `MEMO_SECTIONS` (`engine/src/board.ts`). It never fills a section in. | none |
+| Finisher | code | `write_memo` is refused until the memo has every section in `MEMO_SECTIONS` (`engine/src/board/board.ts`). It never fills a section in. | none |
 | Reporter | agent `reporter` | Supported findings and the rejection log | strong |
 | Board (shared record) | code | One budget per run, the claim ledger in `run.json` and `verification_ledger.json`, verdicts from the checkers | none |
 
@@ -100,7 +100,7 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
 ## How it stays cheap
 
 1. **A cheap model before the expensive ones.** Every Exa result is screened by the `cheap` tier (relevant? reports results? study type?) before a member reads it, in one call per search. A result already in the pool, or already dropped for the same key question, is not screened again.
-2. **A cheap model makes the first check of each claim.** Members end each reply with a `CLAIMS` section. The first pass reads the cited source and answers in strict JSON: `supports`, `contradicts`, `not_stated` or `unclear`, **with a quote** of the source passage. Code then decides (`engine/src/triage.ts`):
+2. **A cheap model makes the first check of each claim.** Members end each reply with a `CLAIMS` section. The first pass reads the cited source and answers in strict JSON: `supports`, `contradicts`, `not_stated` or `unclear`, **with a quote** of the source passage. Code then decides (`engine/src/board/triage.ts`):
    - `supports` is **verified** only if the quote is really in the source text (case and spacing aside), is at least 20 characters, and contains every number of the claim (digits inside names such as CMP-0517 or H358 are ignored; a minus sign counts);
    - `contradicts` is **contradicted** only if its quote is in the source;
    - `not_stated` is **unsupported**;
@@ -117,7 +117,7 @@ Every key of `board/config.yaml` is listed in [configuration.md](configuration.m
 
 With `memory.enabled: true`, each member's verified and contradicted claims are added to `board/expertise/<member>.md` after a run, under the heading `## From earlier runs`. The file is read into that member's instructions in the next run. Text above the heading is yours and is kept. Scripted runs write to the run folder, so made-up claims never reach `board/expertise/`.
 
-All first-pass wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/triage.ts`. Which provider and key each tier needs: `engine/src/providers.ts`.
+All first-pass wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/board/triage.ts`. Which provider and key each tier needs: `engine/src/providers.ts`.
 
 ## Before the first real run
 
@@ -180,10 +180,10 @@ Decision support only. This doesn't replace expert review or regulatory judgment
 
 ## Free literature search (Europe PMC)
 
-The scout has a second search tool, `literature_search` (`engine/src/literature.ts`). It searches PubMed and
+The scout has a second search tool, `literature_search` (`engine/src/search/literature.ts`). It searches PubMed and
 preprints through [Europe PMC](https://europepmc.org/RestfulWebService) and returns abstracts. It needs no key and
 costs nothing, so it does not use the Exa credit. The order of the scout's searches is fixed in its instructions
-(`searchOrder` in `engine/src/agents.ts`, and `board/agents/scout.md`): one `exa_search` on the brief's main question
+(`searchOrder` in `engine/src/board/agents.ts`, and `board/agents/scout.md`): one `exa_search` on the brief's main question
 opens every review, then `literature_search` on each key question, then `exa_search` again only for what the other
 searches cannot find. The caps are unchanged (20 Exa searches a run, the $40 lifetime ceiling), and a refused or
 failed search is said plainly and never replaced by example sources. Its results go through the same screening and the same evidence pool as Exa's, and a
@@ -229,7 +229,7 @@ instructions) and `engine/src/chat/plan.ts` (choosing).
 
 The scout has a third search tool, `database_search` (`engine/src/sources/`, one file per database). It reads one
 public database and returns its records. None needs a key and none costs money. In the scout's order of searches it
-comes third: web search, then the literature, then the databases (`searchOrder` in `engine/src/agents.ts`).
+comes third: web search, then the literature, then the databases (`searchOrder` in `engine/src/board/agents.ts`).
 
 | `source` | Database | What a lookup returns | The record's page (the URL to cite) |
 |---|---|---|---|
