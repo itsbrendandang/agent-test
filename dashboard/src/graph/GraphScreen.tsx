@@ -143,9 +143,9 @@ export function GraphScreen() {
   }
   // The address says which run is shown and which node is selected, so it can be copied and Back returns here.
   useEffect(() => {
-    if (pending || !/^#Graph\b/.test(window.location.hash)) return
+    if (waiting || pending || !/^#Graph\b/.test(window.location.hash)) return
     replaceAddress(graphLink(current.kind, current.id, selected ?? undefined))
-  }, [current, selected, pending])
+  }, [current, selected, pending, waiting])
   const stepBy = useCallback((by: 1 | -1) => {
     if (order.length === 0) return
     const i = order.findIndex((n) => n.id === selected)
