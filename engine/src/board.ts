@@ -30,10 +30,10 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { type AgentDef, instructionsFor, loadAgent, loadRoster } from "./agents.ts"
 import { type Brief, loadBrief } from "./brief.ts"
 import { type Claim, parseClaims, stripClaims } from "./claims.ts"
-import { claudeCodeCheck, computedCanRun, NOT_RERUN, openaiCheck } from "./checkers.ts"
+import { claudeCodeCheck, computedCanRun, literatureCheck, NOT_RERUN, openaiCheck } from "./checkers.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
-import { assertBoardKeys } from "./providers.ts"
-import { refusePaid } from "./paid.ts"
+import { assertBoardKeys, escalationModel } from "./providers.ts"
+import { paidCallsOff, refusePaid } from "./paid.ts"
 import { type Checker, EventLog, type EvidenceItem, type Verdict } from "./events.ts"
 import { exaSearch, OBJECTIVE_DESCRIPTION, type SearchResult } from "./exa.ts"
 import { exaAssumed, maxSearches, reserveSearch, settleSearch } from "./exaledger.ts"
@@ -219,14 +219,18 @@ export async function gateRound(
   return { round, refusal }
 }
 
+const PAID_OFF_NOTE = "paid calls were switched off: not checked"
+
 /** What claim checking needs from the run. The checkers are passed in, so tests can count their calls. */
 export interface ClaimDeps {
   state: Pick<RunState, "ledger" | "escalations" | "checkerUsd">
   maxEscalations: number
   /** The first-pass checker rules on several of one member's claims against one piece of evidence (a model from another vendor than the member's). */
   firstPass: (member: string, claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; quote?: string; quoteFound?: boolean; reason?: string; checkedBy?: string; p?: number }[]>
-  computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number }>
-  literatureCheck: (claim: Claim, evidence: string) => Promise<{ verdict: Verdict; note: string; usd: number }>
+  computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number; checkedBy?: string }>
+  literatureCheck: (claim: Claim, evidence: string, member: string) => Promise<{ verdict: Verdict; note: string; usd: number; checkedBy?: string }>
+  /** True when paid calls were switched off while this real run was working (read live at each call): no further paid check, and the claim is recorded as unchecked. */
+  paidOff?: () => boolean
   /** True once the run has spent max_usd: no further paid check is made, and the claim is recorded as unchecked. Checked before every first-pass and escalation call. */
   capReached?: () => Promise<boolean>
   /** False when the Claude Code checker cannot re-execute code (computedCanRun): computed claims are then recorded as unchecked, with no call and no escalation used. Default true. */
@@ -274,13 +278,15 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
     return true
   }
   const escalate = async (claim: Claim, evidence: string, why?: string) => {
+    if (deps.paidOff?.()) return record(claim, "unchecked", claim.kind === "computed" ? "claude-code" : "first-pass", undefined, PAID_OFF_NOTE)
     if (await deps.capReached?.()) return record(claim, "unchecked", claim.kind === "computed" ? "claude-code" : "first-pass", undefined, "spend cap reached (max_usd): not checked")
     if (state.escalations >= deps.maxEscalations) return record(claim, "unchecked", "first-pass", undefined, `escalation budget used up${why ? ` (first pass: ${why})` : ""}`)
     state.escalations++
     deps.save()
-    const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence)
+    const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence, member)
     state.checkerUsd += ruling.usd
-    record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, why ? `${ruling.note} [first pass escalated: ${why}]` : ruling.note)
+    const by = claim.kind === "computed" ? "claude-code" : ruling.checkedBy?.startsWith("anthropic/") ? "anthropic" : "openai"
+    record(claim, ruling.verdict, by, undefined, why ? `${ruling.note} [first pass escalated: ${why}]` : ruling.note, ruling.checkedBy)
   }
 
   // Group claims by the evidence they cite, so the first-pass checker reads each piece of evidence once.
@@ -295,6 +301,7 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
   for (const [source, group] of groups) {
     const evidence = deps.evidenceFor(source)
     if (!evidence) { for (const c of group) record(c, "unsupported", "first-pass", undefined, "source is not in the screened evidence pool"); continue }
+    if (deps.paidOff?.()) { for (const c of group) record(c, "unchecked", "first-pass", undefined, PAID_OFF_NOTE); continue }
     if (await deps.capReached?.()) { for (const c of group) record(c, "unchecked", "first-pass", undefined, "spend cap reached (max_usd): not checked"); continue }
     const results = await deps.firstPass(member, group.map((c) => c.text), evidence)
     for (const [i, claim] of group.entries()) {
@@ -323,6 +330,8 @@ export interface SearchDeps {
   search: (query: string, objective: string) => Promise<SearchResult>
   /** True once the run has spent max_usd. */
   capReached: () => Promise<boolean>
+  /** True when paid calls were switched off (read live at each call). No search is started then. */
+  paidOff?: () => boolean
 }
 
 /**
@@ -337,6 +346,7 @@ export async function searchOnce(deps: SearchDeps, callId: string, args: { query
   const stored = state.searched?.[callId]
   if (stored) return { result: { items: stored.items, notices: stored.notices } }
   const used = Object.keys(state.searched ?? {}).length, cap = maxSearches(config)
+  if (deps.paidOff?.()) return { refused: "Paid calls were switched off: no more searches in this run. Work from what you have and say so.", limit: true }
   if (used >= cap) return { refused: `Search budget used up: ${used} of ${cap} searches for this run. Work from what you have and say so.`, limit: true }
   if (await deps.capReached()) return { refused: `Spend cap reached ($${config.meeting.max_usd}): no more searches in this run. Work from what you have and say so.`, limit: true }
   const reservation = reserveSearch(config, state.runId, callId)
@@ -422,12 +432,16 @@ export function newRunDir(config: BoardConfig, base: string): string {
  */
 export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean } = {}): Promise<void> {
   const config = options.config ?? loadConfig()
-  if (loadState(config, runId).finished) return
-  refusePaidRun(loadState(config, runId))
-  if (!(options.mock ?? MOCK)) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
-  checkDailyBudget(config, new Date(), options.mock ?? MOCK) // also on resume, so a restart cannot spend past the cap
+  const first = loadState(config, runId)
+  if (first.finished) return
+  refusePaidRun(first)
+  // A run keeps the mode it started in (scripted or real), whatever the engine's mode is now: the paid switch can
+  // change the engine's mode at any time, and a real run must never turn scripted (or the reverse) half-way.
+  const mock = options.mock ?? first.mock ?? MOCK
+  if (!mock) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
+  checkDailyBudget(config, new Date(), mock) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
-  try { await runLocked(config, runId, onLog) } finally { release() }
+  try { await runLocked(config, runId, mock, onLog) } finally { release() }
 }
 
 /** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
@@ -452,7 +466,7 @@ export function applyOverrides(config: BoardConfig, runId: string): BoardConfig 
   }
 }
 
-async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLog) => void): Promise<void> {
+async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?: (log: EventLog) => void): Promise<void> {
   const config = applyOverrides(base, runId)
   const state = loadState(config, runId) // read under the lock
   if (state.finished) return
@@ -462,8 +476,8 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
   const roster = loadRoster(config)
   const log = new EventLog(`${runDir(config, runId)}/events.jsonl`)
   onLog?.(log)
-  const models = buildModels([lead, ...roster])
-  const firstPass = new FirstPass(models, config)
+  const models = buildModels([lead, ...roster], mock)
+  const firstPass = new FirstPass(models, config, mock)
   const firstPassBefore = state.firstPassUsd ?? state.jevUsd ?? 0 // jevUsd: a run recorded before Jev was removed
   const memberModel = (member: string) => { const a = roster.find((r) => r.name === member); return a ? config.models[a.model] : undefined }
   const save = () => saveState(config, state)
@@ -482,7 +496,7 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
     replay: "safe",
     execute: async (args, api) => {
       const member = memberOf(api)
-      const out = await searchOnce({ state, config, mock: MOCK, search: (q, o) => exaSearch(q, o), capReached: async () => (await spend()) >= config.meeting.max_usd }, api.callId, args)
+      const out = await searchOnce({ state, config, mock, search: (q, o) => exaSearch(q, o, mock), capReached: async () => (await spend()) >= config.meeting.max_usd, paidOff: () => paidCallsOff() }, api.callId, args)
       if (out.refused) {
         if (out.limit) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })
         save()
@@ -576,10 +590,17 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
     state,
     maxEscalations: config.meeting.max_escalations ?? 12,
     firstPass: (member, claims, evidence) => firstPass.check(memberModel(member), claims, evidence),
-    computedCheck: (claim) => claudeCodeCheck(config, claim.text, claim.source),
-    literatureCheck: (claim, evidence) => openaiCheck(models, config, claim.text, evidence),
+    computedCheck: (claim) => claudeCodeCheck(config, claim.text, claim.source, mock),
+    literatureCheck: async (claim, evidence, member) => {
+      if (mock) return openaiCheck(models, config, claim.text, evidence, true)
+      const { model, independent } = escalationModel(config, memberModel(member))
+      // No checker from another vendor than the author: the claim is left unchecked rather than graded by its own vendor.
+      if (!independent) return { verdict: "unchecked" as const, note: "no escalation checker from another vendor than the claim's author is configured", usd: 0 }
+      return literatureCheck(models, config, claim.text, evidence, model, false)
+    },
     capReached: async () => (await spend()) >= config.meeting.max_usd,
-    computedCanRun: MOCK || computedCanRun(config),
+    computedCanRun: mock || computedCanRun(config),
+    paidOff: () => !mock && paidCallsOff(), // a real run whose paid calls were switched off: no further paid check; claims are recorded unchecked
     evidenceFor: (source) => (source === "brief" ? briefEvidence(brief) : state.evidence[source]?.text),
     save: () => { state.firstPassUsd = firstPassBefore + firstPass.usd; save() },
     emit: (key, event) => log.emit(key, event),
@@ -597,7 +618,7 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
   // cost is charged at the fallback price, so it cannot run under the budget for free.
   const spend = async () => {
     const usage = await harness.usage(ctx)
-    const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, MOCK)
+    const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, mock)
     if (models.estimated) state.costEstimated = true
     rollDay(state) // before the total changes: a run that works past midnight starts a new day's count
     state.firstPassUsd = firstPassBefore + firstPass.usd
@@ -606,13 +627,13 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
   }
 
   const leadConversation = await harness.root(ctx, {
-    agent: { model: modelFor(config, lead), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: config.meeting.lead_turns ?? 20 },
+    agent: { model: modelFor(config, lead, mock), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: config.meeting.lead_turns ?? 20 },
   })
   for (const agent of roster) {
     if (state.members[agent.name]) continue
     const c = await harness.createConversation({
       ownership: { kind: "ownerless" },
-      agent: { model: modelFor(config, agent), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
+      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
     }, ctx)
     state.members[agent.name] = c.id
     save()
@@ -629,7 +650,7 @@ async function runLocked(base: BoardConfig, runId: string, onLog?: (log: EventLo
     // between repeats these three steps on resume, and each is safe to repeat.
     const usd = await spend()
     save()
-    rememberRun(config, runId, state.ledger, MOCK ? `${runDir(config, runId)}/expertise` : undefined)
+    rememberRun(config, runId, state.ledger, mock ? `${runDir(config, runId)}/expertise` : undefined)
     log.emit("finished", { type: "run.finished", usd, minutes: (Date.now() - state.startedAt) / 60_000 })
     state.finished = true
     save()

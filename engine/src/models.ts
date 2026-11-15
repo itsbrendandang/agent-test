@@ -45,6 +45,23 @@ export function localProvider(names: string[], env: NodeJS.ProcessEnv = process.
   return createProvider({ id: LOCAL_PROVIDER, name: "Ollama (this machine)", baseUrl, auth: { apiKey: { name: "Ollama", resolve: async () => ({ auth: { apiKey: "ollama" } }) } }, models, api: openAICompletionsApi() })
 }
 
+/**
+ * A provider whose every model call first checks the paid state, live. Models are built when a real run starts, but
+ * the paid switch (paid.ts) can go off while that run is working: this makes the next model call of an in-flight real
+ * run throw PaidCallsOff instead of spending. (The harness reports the failed turn; the run stops and stays resumable.)
+ */
+export function gateProvider<P extends object>(provider: P): P {
+  const calls = new Set(["stream", "streamSimple", "classify", "generateImages"])
+  return new Proxy(provider, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target)
+      if (typeof value !== "function") return value
+      if (!calls.has(String(key))) return value.bind(target)
+      return (...args: unknown[]) => { refusePaid(`a model call to ${String((target as { id?: string }).id ?? "a provider")}`); return value.apply(target, args) }
+    },
+  })
+}
+
 export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, config?: Pick<BoardConfig, "local_models">): Models {
   const models = createModels()
   if (mock && local) { // real agents on this machine; nothing paid is registered
@@ -53,8 +70,8 @@ export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, conf
   }
   if (!mock) {
     refusePaid("the drug board with real models (Anthropic, OpenAI)") // no real provider is registered while paid calls are off
-    models.setProvider(anthropicProvider()) // ANTHROPIC_API_KEY: the lead, strong and cheap tiers
-    models.setProvider(openaiProvider()) // OPENAI_API_KEY: the rival tier, the first-pass checker for Anthropic members, the literature checker
+    models.setProvider(gateProvider(anthropicProvider())) // ANTHROPIC_API_KEY: the lead, strong and cheap tiers
+    models.setProvider(gateProvider(openaiProvider())) // OPENAI_API_KEY: the rival tier, the first-pass checker for Anthropic members, the literature checker
     checkTierPrices(models, loadConfig())
     return models
   }
@@ -76,9 +93,9 @@ export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, conf
   return models
 }
 
-export function modelFor(config: BoardConfig, agent: AgentDef): ModelRef {
-  if (MOCK && LOCAL) return { provider: LOCAL_PROVIDER, modelId: localModelFor(config, agent.model, LOCAL) }
-  return MOCK
+export function modelFor(config: BoardConfig, agent: AgentDef, mock = MOCK): ModelRef {
+  if (mock && LOCAL) return { provider: LOCAL_PROVIDER, modelId: localModelFor(config, agent.model, LOCAL) }
+  return mock
     ? { provider: `mock-${agent.name}`, modelId: "mock" }
     : (({ vendor, id }) => ({ provider: vendor, modelId: id }))(parseModelId(config.models[agent.model], `board/config.yaml models.${agent.model}`))
 }

@@ -13,12 +13,15 @@ A variable that is already set in your shell wins over `.env`.
 | `ANTHROPIC_API_KEY` | Claude models as swarm agents. Also the Ask box in the dashboard. On the drug board: the `lead`, `strong` and `cheap` tiers. | For runs with Claude models, and for a live drug board. |
 | `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). On the drug board: the `rival` tier, the first-pass checker for claims made by a Claude member, and the literature checker. | For every cloud run, and for a live drug board. |
 | `HF_TOKEN` | Access to the dataset `EdisonScientific/BixBench3` on Hugging Face. | For cloud runs. |
-| `EXA_API_KEY` | Exa search: the swarm's `--exa`, and the drug board's search for any member that has the `exa_search` tool (none has it today). | For `--exa`. For a live board run only if a member can search. |
+| `EXA_API_KEY` | Exa search: the swarm's `--exa`, and the drug board's search for any member that has the `exa_search` tool (the scout). | For `--exa`, and for a live board run (the scout searches). |
 | `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). Approved lessons are sent there when a person runs the `approve` command, and runs ask past.dev for lessons first. While paid calls are off, a run started by the engine does not get this key and reads the local file. | Optional. Without it, runs read the approved file `glhf/memory/lessons.md`. |
 
 No key is needed for `npm run demo` or for a scripted drug board run. A **live** drug board run needs the key of every tier in `board/config.yaml` (Anthropic and OpenAI today). If one is missing, the run is refused when it starts, with the tier and the key named (HTTP 503 from `POST /api/runs`). It is never silently run with scripted models.
 
-## Paid calls: `NO_PAID_CALLS`
+## Paid calls: `NO_PAID_CALLS` and the runtime switch
+
+The engine starts with the state `NO_PAID_CALLS` gives. The dashboard's paid switch (`POST /api/paid`, `engine/src/paidswitch.ts`) can change it **for the running process only**: it is kept in memory, never written to `.env`, and a restart or crash goes back to the `.env` value. To turn it on the request needs the session token, `{"on": true, "confirm": "I will be charged"}` exactly, a JSON body, the usual Origin and Host checks, and every key the board's roster needs (else 409 naming them). Turning it off needs the token. Each attempt that passes the token check is appended to `board/runs/.paid-switch-audit.jsonl` (time, direction, origin; never the token). `PAID_SWITCH_LOCKED=1` refuses all changes. A board run keeps the mode it started in. Turning paid calls off stops new paid calls at the next call of a running board run, and asks the tracker to stop local GLHF runs that can spend; it cannot stop a cloud run's VM. `GET /api/paid` shows the state.
+
 
 A key alone does not allow spending. The engine refuses every paid step unless this variable
 is exactly `0`.
@@ -73,6 +76,7 @@ Set these in `.env` or in your shell. All are optional.
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
+| `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
 
 ### Run tracker

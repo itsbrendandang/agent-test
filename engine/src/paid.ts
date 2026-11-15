@@ -1,6 +1,7 @@
 // The kill switch for everything that costs money: NO_PAID_CALLS.
 //
-// It is ON unless a person writes NO_PAID_CALLS=0 in .env (or exports it). While it is on, the engine refuses,
+// It is ON unless a person writes NO_PAID_CALLS=0 in .env (or exports it), or turns paid calls on for this engine
+// process with the paid switch (see THE RUNTIME SWITCH below). While it is on, the engine refuses,
 // before any network call or paid subprocess:
 //   - GLHF runs with a paid model, local or cloud, and Exa search on a run   (glhf/tracker.ts, glhf/task.ts)
 //   - the drug board with paid models: it runs with scripted models, or with a local model when
@@ -21,8 +22,44 @@
 import "./env.ts" // first: NO_PAID_CALLS=0 may be in .env
 import { isLocalModel, isScripted, localName, localRefusal } from "./local.ts"
 
-/** True unless NO_PAID_CALLS is exactly "0". Unset, empty, "1", "true", "off" or a typo all mean: no paid calls. */
-export const paidCallsOff = (env: NodeJS.ProcessEnv = process.env): boolean => (env.NO_PAID_CALLS ?? "").trim() !== "0"
+// THE RUNTIME SWITCH. The state starts from the environment (NO_PAID_CALLS, read as above), and the engine's paid
+// switch (POST /api/paid, paidswitch.ts) can change it for the life of THIS PROCESS only. The override lives in
+// memory: it is never written to .env and it is gone when the engine restarts or crashes, so the engine always
+// comes back on the safe side. Every gate reads the live value at the moment of the call (paidCallsOff below), not a
+// value kept from import. The override applies to the process's own environment only: a function called with another
+// `env` object (tests, a child's environment) is judged by that object alone.
+let override: boolean | undefined
+const listeners = new Set<() => void>()
+
+/** Run `callback` after every change of the override (config.ts uses it to keep MOCK live). */
+export const onPaidChange = (callback: () => void): void => { listeners.add(callback) }
+
+/** Set the override: true = paid calls on, false = off, undefined = back to the environment's value. */
+export function setPaidOverride(on: boolean | undefined): void {
+  override = on
+  for (const callback of listeners) callback()
+}
+
+/** The state and where it comes from: the environment, or the switch (the override is set). */
+export const paidState = (env: NodeJS.ProcessEnv = process.env): { paid: boolean; source: "env" | "switch" } =>
+  ({ paid: !paidCallsOff(env), source: env === process.env && override !== undefined ? "switch" : "env" })
+
+/**
+ * Is the switch locked? PAID_SWITCH_LOCKED=1 refuses every change by the switch. CI sets it; so does `npm test`; and a
+ * process started by `node --test` counts as locked unless PAID_SWITCH_LOCKED=0 is set on purpose, so a test or an
+ * agent cannot turn paid calls on by accident.
+ */
+export const paidSwitchLocked = (env: NodeJS.ProcessEnv = process.env): boolean => {
+  const set = (env.PAID_SWITCH_LOCKED ?? "").trim()
+  return set === "1" || (set !== "0" && env.NODE_TEST_CONTEXT !== undefined)
+}
+
+/**
+ * True unless paid calls are on. From the environment: unless NO_PAID_CALLS is exactly "0" (unset, empty, "1", "true",
+ * "off" or a typo all mean: no paid calls). For the process's own environment, the switch's override wins.
+ */
+export const paidCallsOff = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  env === process.env && override !== undefined ? !override : (env.NO_PAID_CALLS ?? "").trim() !== "0"
 
 export const HOW_TO_ALLOW = "Paid calls are off (NO_PAID_CALLS). Only the person who pays may turn them on: set NO_PAID_CALLS=0 in .env and restart the engine."
 
@@ -85,7 +122,9 @@ const DOTENV_OVERRIDES = ["VSCODE_IPYTHON_KERNEL", "VSCODE_CLI_REQUIRE_TOKEN", "
  * (The address of a local model server is checked again, and pinned, by the Python runner: paid.py `use_local`.)
  */
 export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  if (!paidCallsOff(env)) return env
+  // On: the child sees NO_PAID_CALLS=0 even when the engine's own variable says otherwise (the switch turned paid
+  // calls on at runtime), or the Python runner would read the variable and refuse.
+  if (!paidCallsOff(env)) return env.NO_PAID_CALLS?.trim() === "0" ? env : { ...env, NO_PAID_CALLS: "0" }
   const out: NodeJS.ProcessEnv = { ...env, NO_PAID_CALLS: "1" }
   for (const key of PAID_KEYS) out[key] = ""
   for (const key of DOTENV_OVERRIDES) delete out[key]

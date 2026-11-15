@@ -8,7 +8,7 @@ import { loadAgent, loadRoster } from "../agents.ts"
 import { type BoardConfig, ROOT } from "../config.ts"
 import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "../exaledger.ts"
 import { MODEL_CHOICES } from "../glhf/types.ts"
-import { paidCallsOff } from "../paid.ts"
+import { paidCallsOff, paidState } from "../paid.ts"
 
 export type ProviderId = "anthropic" | "openai"
 export interface Provider { id: ProviderId; keyPresent: boolean; models: string[] }
@@ -16,6 +16,8 @@ export interface CatalogAgent { name: string; title: string; source: "board" | "
 export interface CatalogSkill { name: string; description: string; installed: boolean }
 export interface Catalog {
   paidCalls: boolean
+  /** Where paidCalls comes from: "env" (NO_PAID_CALLS) or "switch" (POST /api/paid, this process only). */
+  paidSource: "env" | "switch"
   providers: Provider[]
   /** exa.usedUsd: Exa spend this engine has recorded in board/runs/.exa-ledger.jsonl; ceilingUsd: the lifetime limit it enforces (meeting.exa_ceiling_usd). */
   search: { exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number } }
@@ -110,6 +112,7 @@ export function buildCatalog(config: BoardConfig, env: NodeJS.ProcessEnv = proce
   const board: CatalogAgent[] = [lead, ...members].map((m, i) => ({ name: m.name, title: m.title, source: "board", role: i === 0 ? "lead" : "member", tools: m.tools, ...(m.deliverable ? { deliverable: m.deliverable } : {}) }))
   return {
     paidCalls: !paidCallsOff(env),
+    paidSource: paidState(env).source,
     providers: providers(config, env),
     search: { exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) } },
     agents: [...board, ...specialists.map(({ basedOn: _b, purpose: _p, ...agent }) => agent)],

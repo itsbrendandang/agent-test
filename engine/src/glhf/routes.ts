@@ -202,3 +202,18 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
     json(res, error instanceof HttpError ? error.status : 500, { error: message })
   }
 }
+
+/**
+ * Stop every local GLHF run that can spend (a paid model, Exa, or memory), for the paid switch going off: the runner is
+ * a separate process that was given the provider keys when it started, so only stopping it ends its spending. A cloud
+ * run cannot be stopped from here (its VM is removed with `bixbench3 cancel`) and is left; the ids returned are the
+ * runs that were asked to stop.
+ */
+export async function cancelPaidRuns(): Promise<string[]> {
+  const stopped: string[] = []
+  for (const run of tracker?.unfinished() ?? []) {
+    if (!paidRun(run) || run.mode !== "local") continue
+    try { await tracker!.cancel(run.id); stopped.push(run.id) } catch { /* settled meanwhile, or not stoppable: nothing to report */ }
+  }
+  return stopped
+}

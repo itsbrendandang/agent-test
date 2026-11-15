@@ -7,7 +7,7 @@ import { dirname } from "node:path"
 
 export type Verdict = "verified" | "unsupported" | "contradicted" | "unchecked"
 /** Who ruled on a claim. "first-pass" is the cheap direct-API model (triage.ts). "jev" only appears in runs recorded before Jev was removed; it means the same first stage. */
-export type Checker = "first-pass" | "jev" | "openai" | "claude-code"
+export type Checker = "first-pass" | "jev" | "openai" | "anthropic" | "claude-code"
 
 export type BoardEvent =
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }

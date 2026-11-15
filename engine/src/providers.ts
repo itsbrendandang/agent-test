@@ -81,6 +81,21 @@ export function firstPassModel(config: BoardConfig, memberModel: string | undefi
 }
 
 /**
+ * The model that rules on a contested literature claim made by a member running on `memberModel`: the OpenAI checker
+ * model, or the strong-tier Claude model when the author is on OpenAI. `independent` is false only when neither is
+ * from another vendor than the author's; the caller then records the claim as unchecked instead of letting a model grade
+ * its own vendor's claim.
+ */
+export function escalationModel(config: BoardConfig, memberModel: string | undefined): { model: ModelId; independent: boolean } {
+  const openai = parseModelId(`openai/${config.checkers.openai_model}`, "board/config.yaml checkers.openai_model")
+  const claude = parseModelId(config.models.strong, "board/config.yaml models.strong")
+  const memberVendor = memberModel ? parseModelId(memberModel, "the member's model").vendor : undefined
+  if (memberVendor === undefined) return { model: openai, independent: false }
+  const pick = [openai, claude].find((m) => m.vendor !== memberVendor)
+  return pick ? { model: pick, independent: true } : { model: openai, independent: false }
+}
+
+/**
  * One line saying what a board run started now would be: scripted, local or real. Printed at start-up next to the
  * paid-calls line, so the two cannot be read as contradicting each other.
  */

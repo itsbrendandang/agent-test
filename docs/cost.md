@@ -1,7 +1,9 @@
 # Cost and efficiency of one real research run
 
-Written 2026-11-14 by the `runnable` agent. No money was spent. The one-line answer is in section 0; the arithmetic is
-in sections 1 to 4; the proposal is in sections 5 to 8.
+Written 2026-11-14, **updated 2026-11-15** for the direct-provider rewire and the new nine-role board roster, by the
+`runnable` agent. No money was spent. The one-line answer is in section 0; the arithmetic is in sections 1 to 4; the
+proposal is in sections 5 to 8. State described: commit `b749e38` plus the uncommitted edits to `board.ts`, `triage.ts`,
+`events.ts`, `board/config.yaml` and `chat/README.md` (tested in a private worktree).
 
 **Labels.** `[measured]` comes from a recorded run in this repo. `[catalog]` is a price taken from the model catalog
 bundled in `@earendil-works/pi-ai` 1.5.2 (`engine/node_modules/.../providers/*.models.js`); it is a snapshot, not a live
@@ -15,20 +17,24 @@ Dollar amounts are US dollars per million tokens ("Mtok") unless said otherwise.
 |---|---|---|
 | One swarm run on the demo case, `claude-sonnet-5-5` | **$0.23** (200K-token cap, score 1.0) to **$0.38** (Exa on) | `[measured]` tokens, `[catalog]` prices (section 1) |
 | One single-agent run, same case | **$0.027** | `[measured]` + `[catalog]` |
-| One drug-board run, current config shape, 8 members, 3 rounds | **about $0.50** with prompt caching, **about $1.00** without; plausible $0.30 to $3.00 | `[estimate]`: no real board run has ever been recorded (section 3) |
-| Same, proposed tiers (section 5) | **about $0.40** (-19% cached, -25% uncached) | `[estimate]` |
-| Board run that is cheapest and still honest (section 7) | **about $0.30**, range **$0.13 to $0.95**, hard stop about $1.30 | `[estimate]` |
-| Effect of removing Jev (section 4) | first-pass checks cost **3x to 9x more per call**, but the total is **+$0.03 to +$0.10 per run** if the checker's hidden reasoning is off, and **+$0.20 to +$0.80 if it is on** | `[estimate]` |
-| Lead on Opus instead of Sonnet | **+$0.07 per run** (cached) to **+$0.11** (uncached), about 15% of a run (Sonnet lead $0.073 against Opus $0.146, cached) | `[estimate]` |
+| One board run, **current config** (9 roles, no tools, Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic), 3 rounds | **about $0.37 with prompt caching, $0.49 without**; low-to-high $0.25 to $0.74 cached, $0.33 to $1.17 uncached | `[estimate]`: no real board run has ever been recorded (section 3) |
+| Of that, the five "strong" roles | about **three quarters** ($0.277 of $0.373) | `[estimate]` |
+| Lead on Opus instead of Sonnet | **+$0.08** (cached) to **+$0.12** (uncached) per run | `[estimate]` |
+| Strong tier on Haiku instead of Sonnet | **$0.11** per run (**-70%**), quality effect unmeasured | `[estimate]` |
+| Effect of removing Jev | **under $0.01 per run today**: no member has a search tool, so there is no triage, and only claims about the brief are checked first-pass (section 4). If search comes back: +$0.03 to +$0.10 per run | `[estimate]` |
+| Cheapest honest board run (section 7) | **about $0.10**, range **$0.05 to $0.25** (4 roles, 2 rounds); **about $0.13** if the scout also searches | `[estimate]` |
 
-Two findings that change the plan:
+Three findings that change the plan:
 
-1. **Opus for the lead is not the money problem.** The lead makes 4 model calls and writes one memo, about 47K input
-   and 2K output tokens. At catalog prices (Opus $4/$20, Sonnet $2/$10) that is 21% (uncached) to 29% (cached) of a run. The money is in the
-   **four "strong" members**, which are about 60% of a run, cached or not.
-2. **The biggest swing is a setting, not a model.** Every candidate checker model in the catalog is marked
-   `reasoning: true`. Hidden reasoning tokens are billed as output. If the checker runs with default reasoning, the first-pass
-   checks cost about 6x to 7x more than with reasoning off (an estimate that assumes 1,000 hidden tokens a call). Turn it off and cap output tokens.
+1. **Opus for the lead is not the money problem.** The lead makes 3 to 4 model calls and writes one memo, about 45K input and
+   2K output tokens. It is 21 to 22% of a run. The money is in the **five "strong" roles** (proposer, experimenter, methods
+   auditor, reviser, reporter).
+2. **What a real board run produces today is narrow.** No board member has a tool (`tools: []` in every
+   `board/agents/*.md`, and the experimenter's own prompt says "You cannot run code on this board yet"). So a real run has no
+   retrieved evidence and no computation: literature claims come back `unsupported` ("source is not in the screened evidence
+   pool", no model call), computed claims are `unchecked`, and only claims about the brief's own tables can be `verified`. The
+   dollar cost is low *because* it does little research. See section 7.
+3. **The biggest swing in the checker is a setting, not a model**, and the rewire already handles it: see section 4.
 
 ## 1. What was measured
 
@@ -99,20 +105,19 @@ swarm; the present one has no real result.
 
 ### 1c. What the board runs recorded
 
-All 12 runs under `board/runs` are scripted (`usd: 0`, `mock: true` where the field exists). They have the structure of
-the scripted script, not of a real model, so they give **counts of calls**, never token counts or dollars. Per run
-(identical in all 12):
+All 12 older runs under `board/runs` are scripted (`usd: 0`) and used the earlier 8-member drug roster with search tools. I
+also ran one scripted run on the current nine-role roster (below). Scripted runs give **counts of calls**, never token counts
+or dollars.
 
-| Item | Count |
-|---|---|
-| Rounds (2 working + 1 final) | 3 |
-| Searches (7 of 9 agents have `exa_search`) | 7 |
-| Search results triaged | 28 (only **4 distinct URLs**; 3 kept, 1 dropped each time) |
-| Claims checked | 20 (**12** distinct member + text; 8 are repeats from round 1 in round 2) |
-| First-pass checks that reached Jev | 19 calls (one per member, round and source): 17 verdicts + 2 escalated to OpenAI |
-| Computed claims | 1, sent straight to the Claude Code checker |
-| Escalations used | 3 of the cap of 12 |
-| Verdicts (older runs) | verified 15, contradicted 1, unsupported 4 |
+| Item | Older 8-member roster (12 runs, identical) | Current 9-role roster (1 run, `b749e38` + edits) |
+|---|---|---|
+| Rounds (2 working + 1 final) | 3 | 3 |
+| Member replies | 24 | **27** |
+| Searches / results triaged | 7 / 28 (4 distinct URLs) | **0 / 0** (`tools: []`) |
+| Claims checked | 20 (12 distinct member+text; 8 repeats in round 2) | 19 (11 distinct; 8 repeats) |
+| Claim kinds | literature, brief, computed | **brief 17, computed 2**, literature 0 |
+| First-pass calls (one per member, round, source) | 19 | 11 member-round groups, fewer with carry-over (about 7) |
+| Escalations | 3 | 2 (scripted `openai`) |
 
 ## 2. Prices used
 
@@ -120,36 +125,37 @@ the scripted script, not of a real model, so they give **counts of calls**, neve
 
 | Model | Input | Output | Cache read | Cache write | Used for |
 |---|---|---|---|---|---|
-| `claude-opus-5-5` | 4 | 20 | 0.20 | 5 | lead (today's shipped intent) |
+| `claude-opus-5-5` | 4 | 20 | 0.20 | 5 | optional lead (comment in `board/config.yaml`) |
 | `claude-sonnet-5-5` | 2 | 10 | 0.10 | 2.50 | strong tier; swarm (measured) |
-| `claude-haiku-5-5` | 0.10 | 0.50 | 0.01 | 0.125 | cheap tier, checker |
+| `claude-haiku-5-5` | 0.10 | 0.50 | 0.01 | 0.125 | cheap tier (scout, pilot, finisher); first-pass checker for the critic's claims |
 | `gpt-5.5` | 5 | 30 | 0.50 | none | strong rival |
 | `gpt-5.4` | 2.5 | 15 | 0.25 | none | |
 | `gpt-5.4-mini` | 0.75 | 4.50 | 0.075 | none | rival |
-| `gpt-5-mini` | 0.25 | 2 | 0.025 | none | rival, escalation checker (config today) |
+| `gpt-5-mini` | 0.25 | 2 | 0.025 | none | rival tier (the critic); literature escalation checker |
+| `gpt-4o-mini` | 0.15 | 0.60 | 0.075 | none | first-pass checker for every other member's claims (no reasoning mode) |
+| `gpt-4o` | 2.5 | 10 | 1.25 | none | judge in the BixBench pilot; fallback first-pass model |
 | `gpt-5.4-nano` | 0.20 | 1.25 | 0.02 | none | checker |
 | `gpt-6-luna` (OpenAI classifier) | 0.10 | 0 | 0.01 | 0.125 | checker option |
-| Shipped aliases through OpenRouter | opus 4/20, sonnet 2/10, gemini-flash 0.75/3.75, gpt-mini 0.75/4.50 | | | | `board/config.yaml` at HEAD; OpenRouter is being removed |
 
-Not in the catalog and from `[memory]`: Exa search is about **$5 to $7 per 1,000 searches**, plus a fee for page contents.
-The skill under `.agents/skills/build-with-exa` gives no price. Check `exa.ai/pricing`. Claude Code (`claude -p`) cost per
+Exa: `board/config.yaml` now assumes **$0.007 per search** (`exa_usd_per_search`), with the comment "measured once, 2 live
+searches, $0.014": a sample of two. I could not check it. The skill under `.agents/skills/build-with-exa` gives no price. Claude Code (`claude -p`) cost per
 check is **unknown**; `checkers.ts` reads `total_cost_usd` from its JSON output when there is one.
 
 ## 3. Cost of one board run `[estimate]`
 
-No real board run exists, so this is a model, not a measurement. The model is in `/tmp/costmodel/model.py`; the logic is
-below so it can be redone by hand.
+No real board run exists, so this is a model, not a measurement. The model is in `/tmp/costmodel/model.py` and `run5.py`; the
+logic is below so it can be redone by hand.
 
-### Structure (read from `engine/src/board.ts`, `agents.ts`, `board/agents/*.md`)
+### Structure (read from `engine/src/board.ts`, `agents.ts`, `board/agents/*.md`, `board/config.yaml`)
 
-- 1 lead and 8 members. Tiers: lead 1 (`lead`), `strong` 4 (target biologist, medicinal chemist, toxicologist, moonshot),
-  `cheap` 3 (literature scout, ADMET, competitive IP), `rival` 1 (skeptic).
-- Instructions per agent are small: `1,195` tokens for the lead, `817` to `1,042` for members (4,000 characters / 4;
-  `[estimate]` for the token count, characters measured). Nine agents together: about 9,000 tokens.
-- Every round, the lead broadcasts; **all 8 members always reply**, and from round 2 each receives a **digest of all 8
-  replies with verdicts** (`peerDigest`). Each member keeps one conversation for the whole run, so context grows.
-- Members with `exa_search` call it 2 to 4 times in round 1 (scout prompt: "Two to four searches per round"); the engine sets
-  no `numResults`, so Exa returns its default **10 results** per search.
+- One lead and **nine members**, in the order `scout, proposer, pilot, experimenter, methods-auditor, critic, reviser,
+  finisher, reporter`. Tiers come from each agent's file: `strong` (Sonnet) is proposer, experimenter, methods auditor, reviser,
+  reporter (5); `cheap` (Haiku) is scout, pilot, finisher (3); `rival` (`gpt-5-mini`, OpenAI) is the critic (1); the lead is on
+  Sonnet. The vendor split holds: lead Anthropic, critic OpenAI.
+- **No member has a tool.** No search, no code. Every call is one reply from text; there are no tool results in the context.
+- Instructions: 1,700 tokens for the lead and 1,112 to 1,172 for each member (characters / 4; characters measured).
+- Each round the lead broadcasts; all nine reply; from round 2 each gets a **digest of all nine replies** (`peerDigest`).
+  A member keeps one conversation for the run, so context grows by the digest each round.
 
 ### Assumptions (three scenarios)
 
@@ -157,235 +163,233 @@ below so it can be redone by hand.
 |---|---|---|---|
 | Rounds (last is the final-positions round) | 3 | 3 | 4 |
 | Member reply, tokens | 400 | 700 | 1,000 |
-| Digest per member-reply (reply + verdict lines) | 475 | 775 | 1,100 |
-| Searches per searching member, round 1 / round 2 | 2 / 0 | 3 / 1 | 5 / 2 |
-| Tokens added to context per search (kept results) | 1,000 | 1,500 | 2,500 |
-| Lead memo, tokens | 1,200 | 1,200 | 1,200 |
+| Digest per member reply (reply + verdict lines) | 475 | 775 | 1,100 |
+| Final-round reply | 80 | 100 | 120 |
+| Lead memo | 1,200 | 1,200 | 1,200 |
 
-Cost of a call with caching: `prefix x cache-read + new tokens x cache-write (or input where there is none) + output x
-output price`. Without caching: `(prefix + new) x input + output x output price`. "Cached" assumes the 5-minute cache
-holds between a member's turns; the swarm showed 69-80% reads, but **the board's hit rate is unmeasured**.
+Cost of a call with caching: `prefix x cache-read + new tokens x cache-write (or input, where there is no write price) +
+output x output price`. Without caching: `(prefix + new) x input + output x output price`. "Cached" assumes the 5-minute cache
+holds between a member's turns. The swarm showed 69 to 80% cache reads, but **the board's hit rate is unmeasured**.
 
-### Result: tokens and dollars per run (shipped tier mapping, catalog prices)
+Worked example, mid scenario, one strong member on Sonnet (no tools, so one call per round). Digest = 9 x 775 = 6,975.
+
+| Round | Prefix (cache read $0.10) | New (cache write $2.50) | Out ($10) | Cost cached | Cost uncached |
+|---|---|---|---|---|---|
+| 1 | 0 | 1,300 (instructions 1,100 + lead message 200) | 700 | $0.0103 | $0.0096 |
+| 2 | 2,000 | 7,175 (digest + message) | 700 | $0.0251 | $0.0254 |
+| 3 (final) | 9,875 | 7,175 | 100 | $0.0199 | $0.0351 |
+| | | | | **$0.0553** | |
+
+Check, round 2: 2,000 x 0.10 + 7,175 x 2.50 + 700 x 10 = 200 + 17,938 + 7,000 = 25,138 micro-dollars = $0.0251. Five strong
+members make 5 x $0.0553 = **$0.277**. Note that in round 1 caching costs slightly more (a write premium) and from round 3 it
+pays.
+
+### Result (current tier mapping, catalog prices)
 
 | Scenario | Input tokens | Output tokens | Uncached | Cached |
 |---|---|---|---|---|
-| Low | 240K | 10.4K | $0.52 | $0.30 |
-| **Mid** | **530K** | **16.8K** | **$1.01** | **$0.50** |
-| High | 1,704K | 32.1K | $2.95 | $1.05 |
+| Low | 202K | 9.9K | $0.33 | $0.25 |
+| **Mid** | **299K** | **15.4K** | **$0.49** | **$0.37** |
+| High | 758K | 30.3K | $1.17 | $0.74 |
 
-Worked example, mid scenario, one strong member (target biologist on Sonnet, cached). Each row is one model call:
-`prefix` tokens are read from cache at $0.10, `new` tokens are written at $2.50, `out` tokens cost $10, all per Mtok.
+Mid, by tier:
 
-| Round | Call | Prefix | New | Out | Cost |
-|---|---|---|---|---|---|
-| 1 | search 1 | 0 | 1,200 | 100 | $0.0040 |
-| 1 | search 2 | 1,300 | 1,600 | 100 | $0.0051 |
-| 1 | search 3 | 3,000 | 1,600 | 100 | $0.0053 |
-| 1 | reply | 4,700 | 1,600 | 700 | $0.0115 |
-| 2 | search 1 | 7,000 | 6,400 | 100 | $0.0177 |
-| 2 | reply | 13,500 | 1,600 | 700 | $0.0123 |
-| 3 (final) | reply | 15,800 | 6,400 | 100 | $0.0186 |
-| | | | | | **$0.0745** |
+| Tier | Agents | Cached | Share |
+|---|---|---|---|
+| lead (Sonnet) | 1 | $0.080 | 21% |
+| strong (Sonnet) | 5 | $0.277 | **74%** |
+| cheap (Haiku) | 3 | $0.008 | 2% |
+| rival (`gpt-5-mini`) | 1 | $0.007 | 2% |
+| **Models total** | 10 | **$0.373** | |
 
-Check of one row: round 2, search 1 = 7,000 x 0.10 + 6,400 x 2.50 + 100 x 10 = 700 + 16,000 + 1,000 = 17,700 micro-dollars =
-$0.0177. Four strong members make 4 x $0.0745 = **$0.298**, the strong-tier figure below. The member read 65.7K input
-tokens (prefix + new, summed over calls) and wrote 1.9K.
+The critic is on `gpt-5-mini`, which cannot switch reasoning off; hidden reasoning there is a few thousand tokens at
+most over 3 calls (1,500 x 3 x $2 per Mtok = $0.009 if it used 1,500 a call).
 
-Share by tier, mid:
+On top of the models, mid scale:
 
-| Tier | Agents | Uncached | Cached | Share (cached) |
-|---|---|---|---|---|
-| lead (Opus) | 1 | $0.218 | $0.146 | 29% |
-| strong (Sonnet) | 4 | $0.602 | $0.298 | 60% |
-| cheap (Gemini Flash) | 3 | $0.169 | $0.034 | 7% |
-| rival (GPT mini) | 1 | $0.025 | $0.018 | 4% |
-| **Models total** | 9 | **$1.014** | **$0.496** | |
-
-On top, per run, outside the model rows above:
-
-| Cost | Mid `[estimate]` | Basis |
+| Cost | Value | Basis |
 |---|---|---|
-| Exa | 28 searches x $5 to $7 per 1,000 = **$0.14 to $0.20** | `[memory]` price; not counted by `max_usd` |
-| First-pass checks and triage | **$0.03 to $0.10** (section 4) | |
-| OpenAI escalations | under $0.01 | about 1.2K in, 200 out each |
-| Claude Code escalations | **$0.1 to $0.4** for 2 to 3 computed claims; worst case 12 x $0.03 to $0.15 = **$0.36 to $1.8** | cost per check unknown |
+| Exa | **$0** | dormant: no member has `exa_search` |
+| First-pass checks | **$0.002 to $0.007** | 7 to 27 calls at about 800 in and 200 out on `gpt-4o-mini` ($0.0004 a call) or Haiku |
+| OpenAI escalations | $0.001 each | 1,200 in, 300 out on `gpt-5-mini` |
+| Claude Code escalations | **$0** | computed claims are recorded `unchecked`, the checker is not called |
+| **Run total** | **about $0.38 cached, $0.50 uncached** | |
 
-Mid total with caching: about $0.50 + $0.17 + $0.07 + $0.25 = **$1.0**; plausible range $0.5 to $4. That is well under
-`max_usd: 5`.
-
-Sanity check against measurements: the swarm's demo run, a different workload with about the same input volume, cost $0.38
-to $0.23 on Sonnet. The board model's mid result on Sonnet-class prices, $0.40, is the same order. That supports the
-order of magnitude, not the precise number.
+That is far under `max_usd: 5`. Sanity check: the swarm's demo run, a different workload of similar token volume, cost
+$0.23 to $0.38 on Sonnet. Same order of magnitude; it supports the order, not the precise number.
 
 ## 4. What removing Jev does to the cost
 
-Jev was a classifier at about **$0.042 per Mtok of input and nothing for output** (`[catalog]` for `typesafe/jev-1.14`). The
-replacement is a language-model call per search result and per claim.
+Jev was a classifier at about $0.042 per Mtok of input and nothing for output (`[catalog]`, `typesafe/jev-1.14`). It is
+replaced (`engine/src/triage.ts`, `providers.ts`) by a cheap model that answers in strict JSON and must quote the source; code
+accepts "verified" only if the quote is in the source and contains the claim's numbers. The checker is always from the other
+vendor than the member: Haiku for the critic's claims, `gpt-4o-mini` for everyone else's.
 
-Calls per run: **triage** = searches x 10 results (Exa default); **claim check** = one per member, round and cited
-source (the old code already grouped the claims of one member that cite one source).
+**Today the effect is almost nothing**, for two reasons that follow from the roster:
 
-| Scale | Searches | Triage calls | Claim calls | Basis |
-|---|---|---|---|---|
-| Recorded (scripted) | 7 | 28 | 19 | `[measured]` from `board/runs` |
-| Low | 14 | 140 | 20 | `[estimate]` |
-| Mid | 28 | 280 | 50 | `[estimate]` |
-| High | 49 | 490 | 100 | `[estimate]` |
+- **Triage runs per search result. No member searches**, so there are 0 triage calls (the old roster made 28 in the scripted
+  runs, and would make 140 to 490 for real, at 10 Exa results a search).
+- **Claim checks run only for claims that cite a source in the pool.** With no search the pool is empty: a `[literature]`
+  claim costs nothing (it is recorded `unsupported`), a `[computed]` claim costs nothing (`unchecked`), and a `[brief]` claim
+  is checked against the brief's Candidates and Available Data (about 300 tokens of source). One call covers all the
+  claims of one member in one round.
 
-The recorded scale is far below real use, because the scripted model gets only 4 fixture results per search, not 10, and
-searches once.
-
-Per-call size `[estimate]`: triage about 600 tokens in, 60 out; claim check about 1,500 in, 120 out.
-
-| Checker | Recorded scale | Mid, reasoning off | Mid, +1,000 hidden reasoning tokens per call | Mid after the avoidances below |
-|---|---|---|---|---|
-| Jev (before), 0.042/M in | **$0.002** | about $0.01 | n/a | |
-| `claude-haiku-5-5` | $0.0065 | **$0.036** | $0.20 | $0.008 |
-| `gpt-5.4-nano` | | $0.077 | $0.49 | $0.017 |
-| `gpt-5-mini` | $0.019 | **$0.106** | **$0.77** | $0.024 |
-| `gpt-6-luna` (OpenAI classifier, no output cost) | $0.0045 | **$0.024** | $0.024 | $0.006 |
-
-Reading it:
-
-- Per call the replacement is **3x (Haiku) to 10x (`gpt-5-mini`) dearer** than Jev. In dollars that is **+$0.03 to +$0.10
-  per run**, small.
-- With reasoning on it is **+$0.2 to +$0.8 per run**, and then the checker costs more than the whole lead. All of these
-  models are `reasoning: true` in pi-ai. **Disable reasoning (or set the lowest effort) and cap output at about 200
-  tokens for every checker call.** I could not verify the exact option name without a call.
-- The OpenAI classifier `gpt-6-luna` has no output cost and, being a classifier, no reasoning tokens. It exists in pi-ai
-  as `getModelOfType("classifier", "openai", "gpt-6-luna")` (looked up offline: found), and it returns the same probability
-  answers the old Jev code consumed. Its calibration is **unverified**. Anthropic ships no classifier, so claims made by an
-  OpenAI member (the Skeptic) still need a Claude call for independence.
-
-### Avoidable calls, measured on the recording
-
-The recording is a scripted run, so the repeat rates overstate what a real model does; they show where the mechanism is.
-
-| Avoidance | Recording | Calls saved | Real-run expectation |
+| First-pass calls | Count | Cost on `gpt-4o-mini` | On Haiku |
 |---|---|---|---|
-| **Memoise triage by (URL, key question)** across members. `state.evidence` is already keyed by URL. | 28 triage calls, 4 distinct URLs | **24 of 28 (-86%)** | unknown; a real search returns 10 results with fewer repeats across members. Count it from the first real run: one line of logging. |
-| **Memoise claims across rounds.** The key `round:member:sha1(claim)` includes the round, so the same member repeating a claim in round 2 is checked again. Keep the per-round ledger row; skip the model call when `sha1(kind, text, source)` was already ruled. | 20 claims, 12 distinct; 8 of the 9 round-2 claims repeat | 19 first-pass calls become 11 (**-42%**) | Real members rephrase. Exact repeats will be fewer. Cheap to build. |
-| **Batch claims across members** that cite the same source in the same round, grouped by the claimant's vendor (so a batch never mixes vendors, which keeps independence). | 19 calls -> 8 | **-58%** | Real runs: members cite different papers more often. Likely less. |
-| Both of the last two | 19 -> about 5 | **-74%** | |
-| **Lexical pre-filter on triage:** drop a result with no word in common with the key question, candidate names and target, before any model call. | Not measurable: the scripted fixtures have one off-topic item in four | untested | Needs one live Exa search to measure (about $0.007). The model call it avoids costs $0.0001 to $0.0003, so this is only worth doing for latency and rate limits. |
-| **Skip triage for study-type** when the host is PubMed, PMC or a preprint server | untested | | Same remark. |
+| Scripted run, one per member-round | 11 | $0.0026 | $0.0020 |
+| Same, with carry-over of repeats (-42%) | about 7 | $0.0017 | $0.0013 |
+| 9 members x 2 rounds | 18 | $0.0043 | $0.0032 |
+| 9 members x 3 rounds (high) | 27 | $0.0065 | $0.0049 |
+| Jev, for comparison | | about $0.0002 | |
 
-At mid scale the model cost of the checker is $0.03 to $0.10 per run. Even a perfect avoidance saves less than $0.10. **The
-avoidances matter for rate limits and latency, not for dollars,** unless reasoning is left on.
+So the first pass costs about **$0.002 to $0.007 per run**, against about $0.0002 for Jev: ten to thirty times more per call,
+but under a cent in total.
 
-Rate limits: `jev.triage` is called with `Promise.all` over a search's results, from 7 members at once: up to about 70
-concurrent requests. Give the new triage a concurrency limit and a retry on HTTP 429.
+**If a member gets the search tool back** (the scout, say), the old numbers return. Triage is then a call per Exa result
+(10 per search) and claim checks run against retrieved sources. At the old roster's scale (7 searching members, 28 searches,
+280 triage calls and 50 claim calls) `[estimate]`:
 
-## 5. Proposed model tiers
+| Checker | Reasoning off | +1,000 hidden reasoning tokens a call | After memo and batching |
+|---|---|---|---|
+| Haiku | $0.036 | $0.20 | $0.008 |
+| `gpt-5-mini` | $0.106 | $0.77 | $0.024 |
+| `gpt-6-luna` (OpenAI classifier, no output cost) | $0.024 | $0.024 | $0.006 |
 
-`direct-providers` is choosing the ids; this is the cost view. The vendor split is kept: **the lead and the Skeptic stay on
-different vendors.** That is a correctness property, not a cost line, and it costs nothing (the Skeptic makes 3 calls).
+The rewire handles the dangerous setting: `quietReasoning` (`triage.ts`) reads each model's own catalog entry, asks for nothing
+where "off" is supported (Haiku), asks for `minimal` where it is not (`gpt-5-mini`), and the first-pass default `gpt-4o-mini`
+has no reasoning mode at all. **Unverified without a call:** that the providers honour it. `usage.reasoning` on the first real
+reply will show.
 
-Cost per tier is `[estimate]`, mid scenario, with caching, catalog prices.
+Avoidances, with what is already done and what the scripted runs show:
 
-| Tier | Agents | What it does | Proposed default | Cost / run | What is lost by going a tier down |
+| Avoidance | Status | Effect on the recordings |
+|---|---|---|
+| Memoise triage by URL | done (`board.ts` evidence pool) | old roster: 28 triage calls on 4 distinct URLs, so up to -86% if repeated results are as common in real searches (unknown) |
+| Do not re-check the same member's repeated claim in a later round | **done** (`carry` in `checkClaims`) | 8 of 19 claims in the current recording are repeats |
+| Batch claims across members that cite the same source, grouped by vendor | not done | old roster: 19 calls -> 8 (-58%); for the brief-only claims today, 11 -> about 4 |
+| Concurrency limit on the cheap model | **done** (`MAX_CONCURRENT = 4`) | removes the 70-way burst |
+| Lexical pre-filter before triage | not done | not measurable without a live search |
+
+None of these matters in dollars today: the whole first pass is under a cent.
+
+## 5. Model tiers
+
+The vendor split is kept as a correctness property, not a cost line: **the lead (Anthropic) and the critic (OpenAI) are on
+different vendors, and no claim is first-checked by its own claimant's vendor.** `board/config.yaml` says so in its comments.
+
+What the config does now, with cost per tier `[estimate]`, mid scenario, cached:
+
+| Tier | Agents | What it does | Model now | Cost / run | What is lost by going a tier down |
 |---|---|---|---|---|---|
-| lead | lead scientist | Frames the decision; tasks each member by name; reads the 8 replies with verdicts each round; pushes on disagreement; writes the memo (about 1.2K tokens). 4 calls. | **`claude-sonnet-5-5`** (was Opus) | $0.073 (Opus: $0.146) | Opus would synthesise 8 replies and spot weak agreement better. Unmeasured. The lead cannot change a verdict: verdicts are computed in `ledger.py` and `board.ts`. The risk is a worse memo, and a wrong summary of the ledger counts. **Saves $0.07 per run.** |
-| strong | target biologist, medicinal chemist, toxicologist, moonshot | The substantive domain work: searches, reads results, argues a position, makes the claims that get checked. 60% of cost. | **`claude-sonnet-5-5`** | $0.298 | Going to Haiku would cut the strong tier to about $0.016 (**-$0.28 per run**) but these members must follow the `CLAIMS` format (a claim without its line is "unsupported" by design), use the search tool well, and reason about SAR and safety. A weak member makes fewer or poorer claims, so the ledger has less to check. **Not measured; do not assume.** Test it once (section 7) before making it a default. |
-| cheap | literature scout, ADMET, competitive IP | Retrieval and summary of what sources say, with URLs. | **`claude-haiku-5-5`** | $0.012 (shipped Gemini Flash: $0.034) | Haiku already does the job of a retriever. A cheaper model would lose accurate quoting of numbers (the prompt says "quote the finding"); the checkers catch it, at a cost. |
-| rival | skeptic | Attacks the preferred answer. No search tool. 3 calls. | **`gpt-5.4-mini`** (OpenAI) | $0.018 | `gpt-5-mini` costs $0.007 instead of $0.018 and may argue less well; `gpt-5.5` costs about $0.2 for a stronger attacker. The difference is cents, so choose for quality. Keep it on the other vendor from the lead. Reasoning tokens apply here as well; cap them. |
-| first-pass checker (new) | for every claim and search result | Triage and a verdict, strict structured output | Haiku for the Skeptic's claims; an **OpenAI** model (`gpt-6-luna`, `gpt-5.4-nano` or `gpt-5-mini`) for claims by Anthropic members; **reasoning off** | $0.02 to $0.04 | Jev gave calibrated probabilities; an LLM's stated confidence is not calibrated. Route on a categorical verdict plus a quote that must appear in the source text (checkable by code), as `direct-providers` plans. |
-| escalation | contested literature claims | OpenAI `gpt-5-mini` reads the evidence | keep; for the Skeptic's claims use a Claude model instead | under $0.01 | |
-| escalation, computed | computed claims | `claude -p --restricted` | **do not escalate; mark `unchecked: computed claim not run`** unless a code runner exists | $0.1 to $0.4 | See section 6. |
+| lead | lead scientist | Frames the decision, tasks the roles, reads nine replies with verdicts each round, writes the memo. 4 calls. | `claude-sonnet-5-5` (comment shows how to raise it to Opus) | $0.080 (Opus $0.161) | Opus would synthesise nine replies and spot weak agreement better; unmeasured. The lead cannot change a verdict: code computes them. Risk: a worse memo, and a wrong summary of the ledger counts. **Going up costs +$0.08.** Going down to Haiku would save $0.07 but the memo is the product. |
+| strong | proposer, experimenter, methods auditor, reviser, reporter | The reasoning and writing: plan, claims, audit, revision, final draft. 74% of the cost. | `claude-sonnet-5-5` | $0.277 | Haiku for all five: **$0.014, -$0.26 per run (-70% of the run)**. These roles make the claims that get checked and must follow the `CLAIMS` format (a claim without its line counts as unsupported). A weaker model gives fewer or poorer claims. **Not measured.** Test it once (section 7). |
+| cheap | scout, pilot, finisher | Inventory, small test, completeness check. | `claude-haiku-5-5` | $0.008 | Already the cheapest Anthropic model. Nothing below it in the catalog worth using. |
+| rival | critic | Attacks the conclusions. 3 calls. | `gpt-5-mini` (comment: `gpt-5.5` is the stronger option) | $0.007 | `gpt-5.5` would cost $0.129 (+$0.12) for a stronger attacker. It is the role that supplies independence, so spend here before anywhere else. It must stay off the lead's vendor. |
+| first-pass checker | every claim about the brief; every search result if search returns | Strict JSON, quote must be in the source. | Haiku for the critic's claims, `gpt-4o-mini` for the rest, reasoning off | $0.002 to $0.007 | Jev gave calibrated probabilities; this gives a category and a quote. Verified means "a different vendor's model found a real passage with the claim's numbers". It does not prove the passage supports the claim (`triage.ts` says so). |
+| escalation | contested literature claims | OpenAI `gpt-5-mini` reads the evidence. | keep | $0.001 each | **Independence gap (read, `board.ts:580`):** the escalation always calls `openaiCheck`, whatever the claimant's vendor, so a claim by the OpenAI critic that the first pass cannot settle is escalated to an OpenAI model. The first pass is vendor-aware; the escalation is not. |
+| escalation, computed | computed claims | `claude -p --restricted` | **not called**: recorded `unchecked` | $0 | A computed claim is never verified by this board. |
 
-Totals, mid, with caching `[estimate]`:
+Alternatives, whole run, mid, `[estimate]`:
 
-| Mapping | Cached | Uncached | Change vs shipped |
-|---|---|---|---|
-| Shipped intent (Opus / Sonnet / Gemini Flash / GPT mini) | $0.496 | $1.014 | |
-| Opus lead, Sonnet strong, Haiku cheap, `gpt-5.4-mini` | $0.474 | $0.868 | -4% / -14% |
-| **Proposed: Sonnet lead and strong, Haiku cheap, `gpt-5.4-mini`** | **$0.401** | **$0.759** | **-19% / -25%** |
-| Cheap option: Sonnet lead, **Haiku strong and cheap**, `gpt-5-mini` | $0.107 | $0.171 | **-78% / -83%** |
-| All Haiku, `gpt-5-mini` | $0.038 | $0.067 | -92% / -93% |
-| High end: Opus lead and strong, Sonnet cheap, `gpt-5.5` | $1.086 | $2.042 | +119% / +101% |
+| Mapping | Cached | Uncached |
+|---|---|---|
+| **Current** (Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic) | **$0.373** | **$0.493** |
+| Opus lead | $0.453 | $0.615 |
+| Haiku strong, Sonnet lead | $0.110 | $0.160 |
+| Critic on `gpt-5.5` | $0.494 | $0.666 |
 
-So the proposal saves about 20%. The only large saving, 78%, is giving the strong tier to Haiku, and I cannot say what it
-costs in quality without running both. A plan: run the demo (section 7) once on the proposed mapping, once on the cheap
-option, compare the number and quality of checked claims. Cost: about $0.40 + $0.11.
+The current mapping is already the cheaper one the earlier plan proposed. The single large saving left, 70%, is Haiku for the
+strong tier, and I cannot say what it costs in quality without running both. Plan: run the demo once on the current mapping and
+once with `strong: claude-haiku-5-5`, and compare the number and quality of checked claims. Cost: about $0.10 + $0.04.
 
 ## 6. Biggest avoidable spend in the hot path
 
-Ranked by dollars at mid scale, `[estimate]` unless noted.
+Ranked by dollars, mid scale, `[estimate]` unless noted. The earlier hazards were fixed by the rewire; what remains is smaller.
 
-| # | What | Cost | How to cut | Saving |
+| # | What | Cost | Status / how to cut | Saving |
 |---|---|---|---|---|
-| 1 | **Claude Code on every computed claim.** `checkClaims` sends each `computed` claim straight to `claude -p --restricted` (`board.ts:264`), skipping the cheap check. Restricted mode cannot run code and the prompt says to answer `unsupported` when it cannot settle. One check costs an unknown amount (my guess $0.03 to $0.15) and runs for up to 180 s, **one after another**: 12 of them could hold a round for 36 minutes (config `max_minutes` is 15). Also, `ANTHROPIC_API_KEY` in its environment means API billing. `rdkit` is not installed here (`import rdkit` fails), so there is no free local alternative today. | $0.1 to $0.4 typical; $0.36 to $1.8 at the cap | Do not call a model that cannot compute. Record the claim as `unchecked` with the reason, or add a container with RDKit. At least lower `max_escalations` to 3 for a demo. | **$0.1 to $0.4** and up to 30 minutes |
-| 2 | **Exa is uncounted and uncapped.** `state.usd = models + jevUsd + checkerUsd` (`board.ts:480-487`): Exa spend is not in it, so `max_usd` and `daily_usd` do not bind it. The plan's `maxSearches` (4/12/30) is saved in `overrides.json` but `board.ts` ignores it at HEAD. | $0.14 to $0.20 at 28 searches `[memory]` | Count searches (and a price per search) in the run total; apply the plan cap; set `member_turns: 4` for a demo (at most 3 searches a member). | up to **$0.1** |
-| 3 | **A plan's limits are not applied** (section 3 of `readiness.md`): a "quick" plan runs the full roster for 3 rounds. | quick plan priced at $0.2, runs at about $0.4 to $1.0 | Make `board.ts` read `overrides.json` (it sets `RUN_OVERRIDES = true` when done). The 4-member, 2-round roster costs 3.4x less than the full one ($0.118 vs $0.401, same tiers, cached). | **up to 70%** of a quick run |
-| 4 | **The digest is resent to every member every round.** About 6.2K tokens x 8 members x 2 rounds is roughly 100K of the 530K input tokens (19%). | cheap when cached (about $0.01); about $0.2 uncached | Send a member only the other members' claims with verdicts, not their full replies; or shorten replies. | $0.01 to $0.10 |
-| 5 | **Checker reasoning on** (section 4) | +$0.2 to +$0.8 | Turn reasoning off, cap output. | **$0.2 to $0.8** |
-| 6 | Repeated claims across rounds; triage without memo; batching | $0.03 to $0.10 total | Section 4 table. | under $0.08 |
-| 7 | Escalation readiness. 3 of 19 first-pass checks escalated in the recording (16%) because Jev's probability fell in 0.3 to 0.7. An LLM checker with a categorical verdict has no such band: escalate only when the quote is missing from the source. The OpenAI escalation is under $0.01 anyway. | under $0.01 | | negligible |
-| 8 | Opus lead | $0.07 | Sonnet lead. | $0.07 |
+| 1 | **The strong tier's context.** Five roles, each resending a growing context; the digest of nine replies goes to nine members each round (about 63K tokens a round). | $0.277 of $0.373 | Send a member only the other roles' claims with verdicts, not their full replies; or shorten replies. Cheap while cached, $0.35 when not. | $0.03 to $0.10 |
+| 2 | **Strong tier on Sonnet at all.** | $0.277 | Haiku. Quality unmeasured. | up to $0.26 |
+| 3 | **Opus lead** (optional). | +$0.08 | Stay on Sonnet. | $0.08 |
+| 4 | **Rounds.** `max_rounds: 4`; a high run is 4 rounds and costs 2x the mid one ($0.74). | | The lead decides; the gate refuses a round whose estimated cost would pass `max_usd`. A demo caps at 2. | up to 50% |
+| 5 | **Claude Code on computed claims**: no longer a cost. Computed claims are `unchecked`. The old design would have paid $0.1 to $0.4 and up to 36 minutes. | $0 | done | |
+| 6 | **Exa uncounted**: fixed. Searches now count in `max_usd` and `daily_usd`; per-run cap 20; lifetime ledger with a $40 ceiling. Dormant today. | $0 today | done | |
+| 7 | **Checker reasoning**: handled by `quietReasoning`. | | done; verify with `usage.reasoning` | |
+| 8 | **Plan limits not applied**: now applied for members and limits (measured: a quick plan ran 2 members for 1 round). **Not applied: model tier and search cap**, as the plan's own warning says. | | partly done | |
+| 9 | **Repeated claims**, triage memo | under $0.003 | done | |
 
-Where Jev does **not** short-circuit today: the old design checked every claim and every search result; there was no
-skip rule. `computed` claims skipped Jev entirely (#1).
+Where the first pass does not short-circuit: it checks each claim about the brief once per member-round (carry-over aside).
+`[brief]` claims are the only ones it can verify, because the source is the brief's own table.
 
 ## 7. The cheapest run that still demonstrates the product honestly
 
-What "honest" means here: a **real** model run (`run.json` says `"mock": false`, `usd > 0`), real search, claims checked
-by a checker from the other vendor, a memo with verdicts that code computed, and a label that says what the inputs are.
+**First, what a real run demonstrates today.** With `tools: []` for every role the board is nine models reasoning about one
+brief. It shows: real deliberation across two vendors; the claim ledger; verdicts that code computes; an independent
+first-pass check with a quoted source; escalation and the spend gate; a memo. It does **not** show: retrieval of evidence (no
+search), any computation (no code tool), or verification of a literature claim (they are `unsupported`). "Verified" means a
+different vendor's model found the claim's numbers in the brief's own table. The brief's table is "illustrative
+placeholders", so the verified claims restate placeholders. That is a demonstration of the machinery and nothing about
+the drug. Say so when showing it.
 
-| Choice | Value | Why |
-|---|---|---|
-| Brief | `board/briefs/kras-g12c-hit-to-lead.md` | Exists, passes validation, and its title says **"illustrative data"**: the assay table is placeholders. Say so when showing the result. It demonstrates the machinery, not a drug decision. |
-| Roster | lead + literature scout + medicinal chemist + toxicologist + skeptic (edit `board:` in `config.yaml`; at HEAD a plan cannot do it) | One search-based retriever (evidence pool and literature claims), two domain members whose claims cite the brief and the literature, and the Skeptic on the other vendor. 3 members search. |
-| Tiers | lead and strong `claude-sonnet-5-5`, cheap `claude-haiku-5-5`, rival `gpt-5.4-mini` | Section 5. Keeps the vendor split. |
-| Caps | `max_rounds: 2` (one working round and the final-positions round), `max_usd: 1`, `max_escalations: 3`, `member_turns: 4`, `max_minutes` 10 | Bounds searches to 3 per member and escalations to 3. |
-| Checker | cheap tier, other vendor, reasoning off | Section 4. |
+### Demo A, as the board is today
 
-Expected cost `[estimate]`, each term from the model:
+| Choice | Value |
+|---|---|
+| Brief | `board/briefs/kras-g12c-hit-to-lead.md` (title says "illustrative data") |
+| Roster | scout, proposer, critic, reporter (edit `board:` in `config.yaml`, or accept a quick plan, which now applies its members) |
+| Models | the current tiers; keeps the vendor split (critic on OpenAI) |
+| Caps | `max_rounds: 2`, `max_usd: 1`, `max_escalations: 3`, `member_turns: 4` |
+| Keys | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. No Exa key needed |
 
 | Term | Low | Mid | High |
 |---|---|---|---|
-| Models, 5 agents, 2 rounds, cached (T1) | $0.080 | $0.118 | $0.193 |
-| (same, uncached) | $0.113 | $0.180 | $0.377 |
-| First-pass checks and triage (about 90 and 20 calls) | $0.01 | $0.02 | $0.05 |
-| Escalations: OpenAI, and Claude Code for 0 to 3 computed claims | $0 | $0.10 | $0.45 |
-| Exa, 6 to 9 searches `[memory]` | $0.04 | $0.05 | $0.08 |
-| **Total** | **$0.13** | **$0.30** | **$0.95** |
+| Models: lead + 4 roles, 2 rounds, cached | $0.062 | $0.082 | $0.103 |
+| (same, uncached) | $0.075 | $0.096 | $0.117 |
+| First-pass checks (about 4 to 8 calls) | $0.001 | $0.002 | $0.004 |
+| OpenAI escalations (0 to 3) | $0 | $0.002 | $0.003 |
+| Exa, Claude Code | $0 | $0 | $0 |
+| **Total** | **$0.06** | **$0.09** | **$0.13** |
 
-**Expected: about $0.30. Error bar: a factor of about 2.5 either way (range $0.13 to $0.95).** The error bar is wide
-because (a) no real board run has ever been recorded, so every token count above is modelled, (b) the board's cache hit rate
-is unmeasured, (c) the cost of a Claude Code check and of an Exa search are not known. The single largest uncertainty is the
-Claude Code line; if computed claims are recorded as `unchecked` (section 6, #1) the high end drops to about $0.50.
+I widen that to **about $0.10, range $0.05 to $0.25**: the token counts are modelled (no real board run exists), the cache hit
+rate is unmeasured, and real replies may be longer than 700 tokens (a reply of 2,000 tokens a role doubles the output cost).
 
-What the caps guarantee: `max_usd: 1` is tested **between rounds**, and only against models, Jev and checkers. A round in
-flight can add up to one round's cost (about $0.1 to $0.2 here) and Exa is not in the total. **Worst case about $1.30**,
-not $1.00.
+### Demo B, if the owner gives the scout the search tool
 
-For comparison, the cheapest *measured* honest run is the swarm on the demo case: **$0.23** (`budget2`, 200K tokens, score
-1.0) or $0.027 for the single agent. It has been done before and shows only that the swarm works on a toy case, so it is
-not the one to buy.
+This is the only way a real run shows the product's core promise, a claim checked against retrieved evidence. It needs
+`tools: [exa_search]` in `board/agents/scout.md` (not mine to edit) and `EXA_API_KEY`. The scout's prompt is written for a data
+case ("Lists the inputs, the sample mapping and the installed tools"), so its prompt would need a line telling it to search the
+literature for the brief's key questions. Cost on top of Demo A, with 3 searches: Exa 3 x $0.007 = $0.021, triage of 30
+results on Haiku about $0.003, first-pass checks against retrieved sources about $0.002. **About $0.13 in total, range $0.07
+to $0.30.** The Exa price is the rewire's assumption ($0.007, from two live searches).
 
-What to look at in the result: `board/runs/<id>/verification_ledger.json` (every claim with its checker and verdict),
-the `claim.checked` events with `checker` showing the vendor, `run.json` fields `usd`, `jevUsd`, `checkerUsd`, `costEstimated`
-(true means a price was missing and the $15 per Mtok fallback was used). After the run, **count the real searches, triage
-calls and claims** and replace the estimates in this file.
+### What the caps guarantee
 
-## 8. Cap and accounting notes for whoever sets the prices
+`max_usd` now counts models, first-pass, checkers and Exa. `gateRound` refuses a round when the **last round's cost would pass
+the cap**, and no paid call is made after the cap (`capReached`). Round 1 cannot be predicted, so it is the one round that can
+overshoot. At these prices that is a few cents; **the worst case is bounded by `max_usd` plus the cost of round 1**, about
+$1.15 for the cap of $1 in the demo.
 
-- `usdOf` (`board.ts:177`) charges `fallback_usd_per_mtok` (now 15) **only when a model reports tokens and a cost of 0**. For
-  catalog models the cost is non-zero, so it will not fire. If an id is left out of the catalog, Haiku would be over-counted
-  about 30x (15 vs 0.5), so the cap trips early: the safe direction. `costEstimated: true` in `run.json` marks that case.
-- Cache pricing is included in `cost.total` by pi-ai, so the cap follows real cache behaviour. That is also why a run that
-  caches well will report less than the uncached numbers here.
-- Daily cap (`daily_usd: 20`) counts an in-flight run at its full `max_usd`.
-- The checker's own spend must be added to `checkerUsd` or `jevUsd`; a new checker that forgets this makes `max_usd` blind to it.
-- Swarm: the engine's token cap is `GLHF_DAILY_TOKENS`, default 20,000,000, about $27 at the measured $1.34 per million.
+What to look at in the result: `board/runs/<id>/verification_ledger.json` (each claim, its checker, `checkedBy`, `quoteFound`,
+the quoted passage), `run.json` fields `usd`, `firstPassUsd`, `checkerUsd`, `costEstimated`. After the run, **replace the
+estimates in this file** with the real token counts, cache reads and searches.
+
+## 8. Cap and accounting notes
+
+- `usdOf` charges `fallback_usd_per_mtok` (15) only when a model reports tokens and a cost of 0. Catalog models have costs, so it
+  will not fire; if an id were missing from the catalog Haiku would be over-counted about 30x (15 / 0.5), so the cap trips early:
+  the safe direction. `costEstimated: true` marks it.
+- Cache pricing is inside `cost.total`, so the cap follows real cache behaviour.
+- The daily cap (`daily_usd: 20`) counts a run in flight at its full `max_usd`.
+- Swarm: the engine's daily token cap is `GLHF_DAILY_TOKENS`, default 20,000,000, about $27 at the measured $1.34 per million.
+- The README's swarm examples now use `--max-tokens 400000` (ceiling about $1.07), as measured here.
 
 ## 9. What could not be verified without spending
 
 - Any real board token count, cache hit rate or dollar figure (no real run exists).
-- That the catalog prices are the account's prices. OpenRouter's 5.5% credit fee is moot after the removal; Anthropic and OpenAI
-  prices must be checked against their pricing pages.
-- Exa's per-search price, and Claude Code's cost per check.
-- Whether the checker models accept a "reasoning off" setting through pi-ai, and the name of it.
-- Quality loss from any lower tier; nothing in this repo measures it. The BixBench pilot is 8 questions and cannot.
-- How often real members repeat a claim across rounds, and how many results real searches share across members.
+- That the catalog prices are the accounts' prices.
+- That the providers honour the reasoning setting (`usage.reasoning` on the first reply will show), and that `claude-haiku-5-5`,
+  `gpt-5-mini` and `gpt-4o-mini` are available to the keys. Only `claude-sonnet-5-5` and `gpt-4o` have been used for real.
+- That the board's members write the `CLAIMS` section on a real model as the scripted ones do. A real run that produces no
+  claims has nothing to check.
+- Exa's real price per search (the config's $0.007 is from two searches).
+- Quality loss from any lower tier; nothing in the repo measures it.

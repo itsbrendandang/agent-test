@@ -24,7 +24,7 @@ const { EventLog } = await import("../src/events.ts")
 const { exaSearch, MissingExaKey, reportedCost } = await import("../src/exa.ts")
 const { exaLedgerFile, exaTotal, ceilingMessage } = await import("../src/exaledger.ts")
 const { checkTierPrices } = await import("../src/models.ts")
-const { assertBoardKeys, boardModeLine, firstPassModel, MissingTierKey, missingKeys, parseModelId, VENDOR_KEY } = await import("../src/providers.ts")
+const { assertBoardKeys, boardModeLine, escalationModel, firstPassModel, MissingTierKey, missingKeys, parseModelId, VENDOR_KEY } = await import("../src/providers.ts")
 const { FirstPass, keepItem, MIN_QUOTE, quoteInSource, quietReasoning, readRulings, readTriage, route } = await import("../src/triage.ts")
 const { buildCatalog } = await import("../src/chat/catalog.ts")
 const { PaidCallsOff } = await import("../src/paid.ts")
@@ -184,6 +184,20 @@ test("independence: firstPassModel never returns the author's vendor when anothe
   assert.equal(same.independent, false)
   // ... and a same-vendor check can never verify: even a perfect quote escalates.
   assert.deepEqual(route({ verdict: "supports", quote: "Compound X inhibited KRAS G12C with an IC50 of 5.2 nM in H358 cells." }, "Compound X has an IC50 of 5.2 nM", SOURCE, false).verdict, "escalate")
+})
+
+test("escalation independence: a contested claim is never ruled on by the author's own vendor; with no other vendor it stays unchecked", () => {
+  const config = loadConfig()
+  const critic = loadRoster(config).find((a) => a.name === "critic")!
+  assert.equal(escalationModel(config, config.models[critic.model]).model.vendor, "anthropic", "the OpenAI critic's claim goes to a Claude model")
+  assert.equal(escalationModel(config, config.models.strong).model.vendor, "openai", "a Claude member's claim goes to OpenAI")
+  for (const member of [config.models.lead, config.models.cheap, config.models.rival]) {
+    const pick = escalationModel(config, member)
+    assert.ok(pick.independent && pick.model.vendor !== parseModelId(member).vendor, member)
+  }
+  assert.equal(escalationModel(config, undefined).independent, false)
+  const oneVendor = { ...config, models: { ...config.models, strong: "openai/gpt-5-mini" }, checkers: { ...config.checkers, openai_model: "gpt-5-mini" } }
+  assert.equal(escalationModel(oneVendor, "openai/gpt-5-mini").independent, false, "no Claude model configured: not independent, so the board records the claim unchecked")
 })
 
 test("malformed or out-of-range checker output is never verified: it escalates", async () => {
@@ -589,7 +603,7 @@ test("the practice run (default roster, the example brief) still shows every ver
   assert.ok(rows.every((r) => typeof r.source === "string"), "every row records the source it cited")
 })
 
-test("the practice run has an evidence step", { todo: "no board member holds exa_search (every `tools` is empty), so a run has no evidence.triaged event and no literature claim. Proposed smallest fix: `tools: [exa_search]` on board/agents/scout.md; the scripted turn in mock.ts already searches for any member that has the tool." }, async () => {
+test("the practice run has an evidence step (the scout searches)", async () => {
   const config = tempConfig({ max_minutes: 5 })
   const id = await startRun(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), { config, mock: true })
   await runBoard(id, undefined, { config, mock: true })

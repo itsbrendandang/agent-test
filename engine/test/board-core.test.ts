@@ -143,7 +143,11 @@ test("resume: a run does not continue past the daily cap, and takes no lock when
   const config = tempConfig()
   const dir = addRun(config, "paused", { usd: 1 })
   addRun(config, "spent", { usd: 19.5, finished: true })
-  await assert.rejects(runBoard("paused", undefined, { config, mock: false }), BudgetReached)
+  // A real run needs its tier keys before anything else (providers.ts); fake ones here, so the cap is what refuses it, also on a keyless CI machine.
+  const saved = { a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY, e: process.env.EXA_API_KEY }
+  process.env.ANTHROPIC_API_KEY = process.env.OPENAI_API_KEY = process.env.EXA_API_KEY = "fake-key-for-tests"
+  try { await assert.rejects(runBoard("paused", undefined, { config, mock: false }), BudgetReached) }
+  finally { for (const [name, v] of [["ANTHROPIC_API_KEY", saved.a], ["OPENAI_API_KEY", saved.o], ["EXA_API_KEY", saved.e]] as const) { if (v === undefined) delete process.env[name]; else process.env[name] = v } }
   assert.equal(existsSync(join(dir, "run.lock")), false)
   assert.equal(existsSync(join(dir, "session.sqlite")), false, "nothing was opened")
   addRun(config, "done", { finished: true })

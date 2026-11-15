@@ -12,7 +12,7 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 
 ```
 brief.md ──▶ Lead Scientist ──converse──▶ 9 board members (parallel, each its own durable conversation)
-                 ▲                            │ no member searches today (tools: [])
+                 ▲                            │ only the scout searches (exa_search)
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: cheap first pass ─(unsettled)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
@@ -53,7 +53,7 @@ With paid calls allowed, a live run needs the key of **every tier** in `board/co
 |---|---|---|
 | `ANTHROPIC_API_KEY` | `lead`, `strong`, `cheap` tiers (Claude Sonnet 5.5 lead and strong, Haiku 5.5 cheap) | yes |
 | `OPENAI_API_KEY` | `rival` tier (the Critic, GPT-5 mini), first-pass checker of Claude members' claims, literature checker | yes |
-| `EXA_API_KEY` | Search, for a member that has the `exa_search` tool (none has it today) | only then |
+| `EXA_API_KEY` | Search, for a member that has the `exa_search` tool (the scout) | yes while the scout can search |
 
 Claude Code (the checker for computed claims) uses your existing `claude` login. By default it runs with `--restricted` and **cannot run code**: it checks a claim by reasoning and answers "unsupported" when that is not enough. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools` (`Read Write`), and with a fixed list of environment variables, so other providers' keys are not passed (`engine/src/checkers.ts`). It is not in a container. The `--restricted` mode was not tested with a live call. Details: [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
@@ -96,7 +96,7 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
    - `unclear`, any reply that is not exactly the expected JSON (also truncated, repeated or out-of-range entries), a quote that is not in the source, or a missing number is **escalate**. Nothing malformed is ever verified.
    - **Independence:** the checker is never from the same vendor as the member who made the claim. The `cheap` tier (Anthropic) checks claims of OpenAI members; `checkers.first_pass.alt` (OpenAI) checks everyone else's. If both were on one vendor, the first pass could not verify anything.
    - Reasoning is switched off for these calls where the model allows it, and their output is capped.
-3. **Only unsettled claims go to a second checker**: literature claims go to OpenAI. Computed claims are **not sent to Claude Code at all** while it runs `--restricted` (it cannot run code): they are recorded `unchecked` with the reason "computed claim not re-executed". At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
+3. **Only unsettled claims go to a second checker**: literature claims go to a model from the other vendor than the claim's author (OpenAI for Claude members, the strong-tier Claude model for the OpenAI critic; with no such model the claim stays `unchecked`). Computed claims are **not sent to Claude Code at all** while it runs `--restricted` (it cannot run code): they are recorded `unchecked` with the reason "computed claim not re-executed". At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
    A claim that the same member repeats from the same source in a later round is not checked again: the earlier ruling is copied into the new round's ledger row.
 4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). It counts models, the first-pass checker, the second checkers and Exa. A round is not started when the last round's cost would take the run past `max_usd`, and no first-pass check, escalation or search is started once the cap is reached (the claim is recorded `unchecked`). Worst-case overshoot: the round in progress when the cap is crossed (every member's turns, up to `member_turns` each), plus the one final-positions round. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
 
@@ -108,9 +108,13 @@ With `memory.enabled: true`, each member's verified and contradicted claims are 
 
 All first-pass wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/triage.ts`. Which provider and key each tier needs: `engine/src/providers.ts`.
 
+## The paid switch (practice mode and real mode)
+
+Paid calls start off. The dashboard's switch (`POST /api/paid`) turns them on **for the running engine only**: it is kept in memory and a restart goes back to `.env`. It needs the session token, the exact text `I will be charged`, every key the board needs, and `PAID_SWITCH_LOCKED` not set to 1. Details and what it does when turned off: [configuration.md](configuration.md#paid-calls-no_paid_calls-and-the-runtime-switch). A run keeps the mode it started in: switching never relabels past runs, and a real run is not continued as scripted.
+
 ## What a real run checks, and what was lost
 
-- **Evidence.** No member has `exa_search` (their `tools` are empty), so the evidence pool stays empty. A `[literature]` claim cites a source that is not in the pool and is recorded `unsupported` with the note "source is not in the screened evidence pool", without any model call. Only `[brief]` claims, checked against the brief's Candidates and Available Data sections, can be verified. Search, the Exa caps (20 searches, counted in `max_usd`, a $40 lifetime ceiling in `board/runs/.exa-ledger.jsonl`) and triage are built and tested but have nothing to act on until a member is given the tool.
+- **Evidence.** Only the scout has `exa_search`; the other members have no tool. What the scout finds is screened by the cheap model and enters the evidence pool; a claim can be verified only against a source in that pool (or the brief). A `[literature]` claim that cites anything else (a URL from a model's memory, or a source another member read) is recorded `unsupported` ("source is not in the screened evidence pool"), without a model call. Search is capped at 20 per run, counted in `max_usd`, and limited by a $40 lifetime ceiling (`board/runs/.exa-ledger.jsonl`).
 - **Not calibrated any more.** The old checker (Jev) returned calibrated probabilities. A language model's own confidence is not calibrated, so there are no probability thresholds. In their place is a check that code can do: the quote must be in the source. Its weakness: a real quote does not prove that the passage supports the claim, and a web page can contain text written to be quoted. Treat `verified` as "a model from another vendor found a real passage that matches, with the same numbers".
 
 ## Durable over time (Pi Durable)

@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
 import { isLocalModel, localRefusal } from "./local.ts"
-import { paidCallsOff } from "./paid.ts"
+import { onPaidChange, paidCallsOff } from "./paid.ts"
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 
@@ -48,7 +48,13 @@ export const path = (config: BoardConfig, key: keyof BoardConfig["paths"], ...re
  * and so are the agents unless a local model is chosen (LOCAL below).
  */
 export const mockMode = (env: NodeJS.ProcessEnv = process.env): boolean => paidCallsOff(env) || env.DRUG_BOARD_MOCK === "1"
-export const MOCK = mockMode()
+/**
+ * The engine's mode NOW. A live binding: it is recomputed when the paid switch changes (paid.ts), so a module that reads
+ * MOCK at call time sees the current mode. A board run does NOT follow it once started: it keeps the mode it began with
+ * (run.json `mock`), so a real run is never turned scripted, and a scripted run never real, by flipping the switch.
+ */
+export let MOCK = mockMode()
+onPaidChange(() => { MOCK = mockMode() })
 
 /**
  * The local model the board's agents run on, as `ollama/<name>`, or undefined. Set DRUG_BOARD_LOCAL_MODEL to an id

@@ -39,6 +39,8 @@ env:
   # NO_PAID_CALLS (anything but "0") is the kill switch for every paid step.
   DRUG_BOARD_MOCK: "1"
   NO_PAID_CALLS: "1"
+  # The engine's runtime paid switch (POST /api/paid) is locked in CI.
+  PAID_SWITCH_LOCKED: "1"
   # Empty on purpose, so no step can inherit a key from anywhere.
   ANTHROPIC_API_KEY: ""
   OPENAI_API_KEY: ""
