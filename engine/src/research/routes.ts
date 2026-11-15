@@ -362,7 +362,10 @@ export function createResearch(deps: ResearchDeps) {
     }
     saveRecord(config, record) // the record first: a question that was accepted is on disk before anything else happens
     if (ahead.length) new ResearchLog(config, record.id).emit("queued", { type: "research.queued", after: record.after as string })
-    else working.add(record.id) // it takes its place now, so the next request in this same moment sees it
+    else {
+      working.add(record.id) // it takes its place now, so the next request in this same moment sees it
+      writeFileSync(eventsFile(config, record.id), "", { flag: "a" }) // its event log exists before the reply, so a stream opened at once gets 200, not 204
+    }
     launch(record.id)
     resume() // and anything an earlier process left: a real answer that was waiting for paid calls to be on again
     json(res, 202, { id: record.id, thread, mode: record.mode, ...(ahead.length ? { queued: true, after: record.after } : {}) })
