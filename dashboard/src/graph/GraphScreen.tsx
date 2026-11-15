@@ -60,10 +60,10 @@ export function GraphScreen() {
     return () => window.removeEventListener("hashchange", sync)
   }, [])
   // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
-  // With no run listed (none yet, or no engine), the built-in example is open: it needs no engine. While the lists load, nothing is open.
+  // With no run listed when they first load (none yet, or no engine), the built-in example is open, and stays open when runs appear later. While the lists load, nothing is open.
   const [auto, setAuto] = useState<RunRef>()
-  if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
   const offline = !list.runs && list.failed.length === 2
+  if (!auto && !picked && (list.runs || offline)) setAuto(list.runs?.[0] ?? EXAMPLE_REF)
   const waiting = !picked && !list.runs && !offline
   const current: Pick<RunRef, "kind" | "id"> = picked ?? auto ?? EXAMPLE_REF
   const example = isExample(current)

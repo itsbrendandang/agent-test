@@ -111,6 +111,34 @@ describe("Graph view: the built-in example", () => {
     await waitFor(() => expect(fake.calls).toContain("create"))
   })
 
+  it("keeps the example open when the engine comes back with a run, until the person picks it", async () => {
+    routes({ "GET /api/runs": [{ status: 500, body: {} }, { status: 200, body: [boardRun] }], "GET /api/glhf/runs": [{ status: 500, body: {} }, { status: 200, body: [] }], "GET /api/roster": { status: 200, body: ROSTER } })
+    render(<WorldsView />)
+    expect(await screen.findByText("The app's engine isn't running")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    const picker = screen.getByRole("combobox", { name: /run/i })
+    await waitFor(() => expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain("board:r1"))
+    expect(picker).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+    await pick("board:r1")
+    await streamBoard()
+    expect(screen.queryByTestId("example-banner")).not.toBeInTheDocument()
+  })
+
+  it("keeps the example open when a run appears at a later poll", async () => {
+    routes({ "GET /api/runs": [{ status: 200, body: [] }, { status: 200, body: [boardRun] }], "GET /api/glhf/runs": { status: 200, body: [] }, "GET /api/roster": { status: 200, body: ROSTER } })
+    render(<WorldsView />)
+    expect(await screen.findByText(/No runs yet/)).toBeInTheDocument()
+    const hide = (hidden: boolean) => { Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (hidden ? "hidden" : "visible") }); document.dispatchEvent(new Event("visibilitychange")) }
+    act(() => hide(true))
+    act(() => hide(false))
+    Reflect.deleteProperty(document, "visibilityState")
+    const picker = screen.getByRole("combobox", { name: /run/i })
+    await waitFor(() => expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain("board:r1"))
+    expect(picker).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+  })
+
   it("shows a retracted source's notice, what was wrong and a link to it, in the list and the panel", async () => {
     routes(lists)
     render(<WorldsView />)
