@@ -58,7 +58,9 @@ export interface RunState {
   ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }[]
   escalations: number
   checkerUsd: number
-  failed?: string // set when the run stopped because a model id or key was refused: the plain message. Cleared when the run is resumed.
+  failed?: string // set when the run stopped because a model id or key was refused, or the lead wrote no memo: the plain message. Cleared when the run is resumed.
+  /** How many times the lead ended without a memo and was asked again (MemoMissing). Each resume asks under a new request id. */
+  memoAsks?: number
   firstPassUsd?: number // first-pass checker spend, kept here because the checker's own counter restarts with the process
   jevUsd?: number // the same figure in runs recorded before Jev was removed; read as a fallback, never written
   /** Exa searches this run made, by tool call id: what came back and what it cost. A replayed call reads this and does not search (or pay) again. Scripted runs store nothing here. */
@@ -83,6 +85,13 @@ export const runDir = (config: BoardConfig, runId: string) => path(config, "runs
 export class BudgetReached extends Error {}
 
 export class RunBusy extends Error {}
+
+/** The lead ended its turn without calling write_memo, also when asked again. The run is failed, not finished. */
+export class MemoMissing extends Error {
+  constructor() { super("The lead ended without writing the memo (write_memo), also when asked again. The run is not finished; resume it to ask once more.") }
+}
+/** Sent to a lead that ended its turn with no memo. */
+export const MEMO_REMINDER = "You ended your turn without calling write_memo, so the board has no memo and the run is not finished. Call write_memo now, with the decision and the full memo written from the board's record. Do not start a new round."
 
 /**
  * Refuse to continue a run that was started with real models while paid calls are off. Continuing it would
@@ -542,7 +551,7 @@ export function newRunDir(config: BoardConfig, base: string): string {
  * Run or continue a board. Throws RunBusy if another process is on this run, BudgetReached past the daily
  * cap. `options` replace the config file and the mock switch (for tests).
  */
-export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean } = {}): Promise<void> {
+export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean; models?: typeof buildModels } = {}): Promise<void> {
   const config = options.config ?? loadConfig()
   const first = loadState(config, runId)
   if (first.finished) return
@@ -553,7 +562,7 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void, o
   if (!mock) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
   checkDailyBudget(config, new Date(), mock) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
-  try { await runLocked(config, runId, mock, onLog) } finally { release() }
+  try { await runLocked(config, runId, mock, onLog, options.models) } finally { release() }
 }
 
 /** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
@@ -578,7 +587,7 @@ export function applyOverrides(config: BoardConfig, runId: string): BoardConfig 
   }
 }
 
-async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?: (log: EventLog) => void): Promise<void> {
+async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?: (log: EventLog) => void, makeModels = buildModels): Promise<void> {
   const config = applyOverrides(base, runId)
   const state = loadState(config, runId) // read under the lock
   if (state.finished) return
@@ -596,7 +605,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
   let stopOnFatal!: (error: Error) => void
   const fatal = new Promise<never>((_, reject) => { stopOnFatal = reject })
   fatal.catch(() => {}) // no unhandled rejection when nothing is waiting on it
-  const models = buildModels([lead, ...roster], mock, undefined, undefined, mock ? undefined : (provider, modelId, message) => {
+  const models = makeModels([lead, ...roster], mock, undefined, undefined, mock ? undefined : (provider, modelId, message) => {
     if (message.stopReason === "error" && isFatalModelError(message.errorMessage)) stopOnFatal(new FatalModelError(describeModelFailure(config, provider, modelId, message.errorMessage)))
   })
   const firstPass = new FirstPass(models, config, mock)
@@ -818,6 +827,15 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     const kickoff = await leadConversation.submit({ type: "input", content: "Begin. Frame the decision in one paragraph, then run the board.", requestId: `${runId}:begin` }, ctx)
     const settled = await Promise.race([kickoff.wait(ctx), fatal])
     if (settled.status !== "done") throw new Error(`Lead stopped: ${settled.reason}`)
+    // A lead can end its turn in plain text without calling write_memo: that is not a finished run. Ask once more, under
+    // a request id of its own (a replay does not ask twice; a resume after MemoMissing asks under the next id).
+    const memoFile = `${runDir(config, runId)}/memo.md`
+    if (!existsSync(memoFile)) {
+      const ask = await leadConversation.submit({ type: "input", content: MEMO_REMINDER, requestId: `${runId}:memo:${state.memoAsks ?? 0}` }, ctx)
+      const again = await Promise.race([ask.wait(ctx), fatal])
+      if (again.status !== "done") throw new Error(`Lead stopped: ${again.reason}`)
+      if (!existsSync(memoFile)) { state.memoAsks = (state.memoAsks ?? 0) + 1; throw new MemoMissing() }
+    }
     // Spend, memory and the closing event are written before the run is marked finished. A crash in
     // between repeats these three steps on resume, and each is safe to repeat.
     const usd = await spend()
@@ -828,10 +846,10 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     save()
   } catch (error) {
     try { await spend(); save() } catch { /* keep the last saved spend */ }
-    // A failure caused by the setup (a refused model id or key) is recorded on the run, so it is listed as failed and not
-    // continued by itself at the next start; a person fixes the config and resumes it.
-    if (error instanceof FatalModelError) { state.failed = error.message; save() }
-    log.emit(`failed:${Date.now()}`, { type: "run.failed", error: error instanceof FatalModelError ? error.message : String(error) })
+    // A failure caused by the setup (a refused model id or key), or a lead that wrote no memo, is recorded on the run, so it
+    // is listed as failed and not continued by itself at the next start; a person fixes the cause and resumes it.
+    if (error instanceof FatalModelError || error instanceof MemoMissing) { state.failed = error.message; save() }
+    log.emit(`failed:${Date.now()}`, { type: "run.failed", error: error instanceof FatalModelError || error instanceof MemoMissing ? error.message : String(error) })
     throw error
   } finally {
     await harness.close(ctx)
