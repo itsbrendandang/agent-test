@@ -94,7 +94,7 @@ class ScriptedBoardLLM:
             elif self.lead_plan:
                 calls = [self.lead_plan.pop(0)]
             text = "The question is a mean; a supported answer is computed from values.csv."
-        elif member == "scout" and fresh:
+        elif member in ("scout", "evidence-verifier") and fresh:
             calls = [{"name": "list_dir", "input": {"path": "DATA_DIR"}}]
         elif member == "experimenter" and fresh:
             code = R_CELL if self.r_cell and "(full)" in messages[-1]["content"] else PY_CELL
@@ -103,6 +103,7 @@ class ScriptedBoardLLM:
         else:
             text = {
                 "scout": "values.csv: one column x, 4 rows, nothing missing.",
+                "evidence-verifier": "Scout's report: confirmed against values.csv.",
                 "experimenter": "selftest-q1: 2.5 (mean of x, computed).",
                 "proposer": "Claim selftest-q1: the mean of x in values.csv. Priority 1.",
                 "methods-auditor": "[selftest-q1] OK.",
@@ -135,7 +136,7 @@ def test_the_apps_board(tmp: Path) -> None:
 
     # 1. the app's board, each member on its tier
     assert start["members"] == ["lead-scientist", *(a.name for a in b.roster)], start["members"]
-    assert len(start["members"]) == 7 and start["members"][1] == "scout"
+    assert len(start["members"]) == 1 + len(b.roster) and start["members"][1] == "scout"
     assert start["member_models"]["critic"] == b.models["rival"]
     assert start["member_models"]["lead-scientist"] == b.models["lead"]
     assert start["member_models"]["scout"] == b.models[b.roster[0].tier]
@@ -144,7 +145,7 @@ def test_the_apps_board(tmp: Path) -> None:
     assert end["rounds"] == 3 and end["phases"] == ["round 1", "round 2", "round 3 (final)"], end
     starts = [e for e in ev if e["event"] == "round_start"]
     assert [s["modes"] for s in starts] == [{"experimenter": "pilot"}, {"experimenter": "full"}, {}]
-    print("test 1 OK: the app's 7 (lead + board: list), each on its tier; 3 rounds; submitted")
+    print(f"test 1 OK: the app's board ({len(start['members'])}: lead + board: list), each on its tier; 3 rounds; submitted")
 
     # 2. round rules
     for r in (1, 2, 3):
@@ -153,9 +154,15 @@ def test_the_apps_board(tmp: Path) -> None:
         assert inputs[0]["member"] == "scout", inputs[0]
         scout_done = next(e["t"] for e in replies if e["member"] == "scout")
         assert all(e["t"] >= scout_done for e in inputs if e["member"] != "scout"), "a member started before the scout's report"
-        assert len(replies) == 6, [e["member"] for e in replies]
+        assert len(replies) == len(b.roster), [e["member"] for e in replies]
         others = [e for e in inputs if e["member"] != "scout"]
         assert all("Scout (Data and Evidence)'s data report" in e["content"] for e in others), r
+        readers = [a.name for a in b.roster if a.name in board.DATA_READERS]
+        for prev, nxt in zip(readers, readers[1:], strict=False):  # readers in order, each after the one before
+            done = next(e["t"] for e in replies if e["member"] == prev)
+            assert next(e["t"] for e in inputs if e["member"] == nxt) >= done, (prev, nxt)
+        last = max(e["t"] for e in replies if e["member"] in readers)
+        assert all(e["t"] >= last for e in inputs if e["member"] not in readers), "a member started before the data reports"
         if r == 1:
             assert all("Work independently" in e["content"] for e in inputs)
         else:
@@ -163,13 +170,14 @@ def test_the_apps_board(tmp: Path) -> None:
     tools = [e for e in ev if e["event"] == "tool_call" and e["member"] != "lead-scientist"]
     assert {e["member"] for e in tools if e["name"] == "run_code"} == {"experimenter"}
     assert {e["name"] for e in tools if e["member"] == "scout"} == {"list_dir"}
+    assert not {e["name"] for e in tools} - {"run_code", "list_dir", "read_file"}, "a search tool was used"
     cells = [e for e in ev if e["event"] == "tool_result" and e["name"] == "run_code"]
     assert "2.5" in cells[0]["result"] and "WRITE_DENIED" in cells[0]["result"], cells[0]["result"]
     assert "KEY None" in cells[0]["result"] or "sk-selftest" not in cells[0]["result"]
     if _RSCRIPT:
         assert any("R mean 2.5" in c["result"] for c in cells), [c["result"] for c in cells]
     assert not (study.data_dir / "hack.txt").exists()
-    print("test 2 OK: scout first, round 1 blind, digest after, scout's report shared, "
+    print("test 2 OK: data readers first and in order, round 1 blind, digest after, reports shared, "
           f"only the experimenter runs code, data read-only{', R cell ran' if _RSCRIPT else ''}")
 
 

@@ -1,6 +1,6 @@
 # BixBench board: the app's board on the baseline's BixBench study
 
-This folder runs the app's board, the same 7 agents as a review in the app, on BixBench v1
+This folder runs the app's board, the same agents as a review in the app (today 8), on BixBench v1
 questions. It reuses the single-agent baseline harness (`bixbase/`), so the loader, sandbox,
 budget, logs and grader are the same for both solvers. Only `solve()` changes:
 
@@ -15,7 +15,8 @@ swarm (`glhf/bixbench/`, nine roles).
 The board is read at run time from the files the app uses:
 
 - **Who:** the Lead Scientist and the members of the `board:` list in `board/config.yaml`, in
-  its order: today `scout`, `proposer`, `experimenter`, `methods-auditor`, `critic`, `reporter`.
+  its order: today `scout`, `evidence-verifier`, `proposer`, `experimenter`, `methods-auditor`,
+  `critic`, `reporter`.
   A member added to that list joins the board here too.
 - **Prompts:** `board/agents/<name>.md`. The files are not changed. Their sha256 goes into each
   run's transcript.
@@ -24,7 +25,7 @@ The board is read at run time from the files the app uses:
   on OpenAI gpt-5-mini. `--model` is not used for the board.
 - **How a review runs:** as in the app (`engine/src/board/board.ts`). The Lead Scientist frames
   the question, then calls `converse`. Every member gets the message and replies; the scout
-  first, then the others at the same time. Round 1 is blind; from round 2 every member sees the
+  first, then the evidence verifier with the scout's report, then the others at the same time. Round 1 is blind; from round 2 every member sees the
   others' last replies. The lead names the experimenter's mode (`pilot`, `full`, `revise`).
   Each member keeps its own conversation. At most `meeting.max_rounds` rounds and
   `meeting.lead_turns` lead calls; past a limit (or 85% of any budget cap), only one round with
@@ -33,8 +34,9 @@ The board is read at run time from the files the app uses:
 What the benchmark changes. A BENCHMARK section is added to each prompt, and it overrides the
 file where they differ:
 
-- **The scout cannot search.** AGENTS.md forbids open search for benchmark agents: the answers
-  are in published papers. It inspects the study's data with `list_dir` and `read_file`.
+- **The scout and the evidence verifier cannot search.** AGENTS.md forbids open search for
+  benchmark agents: the answers are in published papers. The scout inspects the study's data with
+  `list_dir` and `read_file`; the evidence verifier checks the scout's report against the data.
 - **The experimenter runs code** (`run_code`, Python or R) and reads the data. In the app it
   cannot run code; on BixBench the answers come from the data. It is the only member that runs
   code.
@@ -117,7 +119,8 @@ capped at 10^9. Leave out `--budget-tokens` and `--budget-seconds`:
   `bixbase/cellrun.py`), so a file with very long lines cannot fill a prompt.
 
 Result (2026-11-15, uncapped, 20 studies x 3 repeats, gpt-4o judge): the optimized system, the
-app's board with its model tiers, R and code cells on Modal, scored **0.537** (132 of 246). The
+app's board as it was then (the lead and 6 members; the evidence verifier joined later) with its
+model tiers, R and code cells on Modal, scored **0.537** (132 of 246). The
 uncapped single-agent baseline (gpt-5.1, no R) scored 0.240 (59 of 246): a gain of 29.7 points.
 Details in `docs/status.md`.
 

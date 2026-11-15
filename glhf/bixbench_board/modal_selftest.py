@@ -211,7 +211,8 @@ def test_a_board_run_on_modal(tmp: Path) -> None:
     assert "2.5" in outs[0] and "WRITE_DENIED" in outs[0], outs[0]
     assert "KEY None" in outs[0], "an API key reached a code cell"
     assert events[-1]["phases"] == ["round 1", "round 2", "round 3 (final)"], events[-1]
-    assert len(events[0]["members"]) == 7 and events[0]["members"][0] == "lead-scientist"
+    assert len(events[0]["members"]) == 1 + len(board.load_board().roster)
+    assert events[0]["members"][0] == "lead-scientist"
     listed = [e for e in events if e["event"] == "tool_result" and e["name"] == "list_dir"]
     assert listed and "values.csv" in listed[0]["result"], listed  # the scout read the data on Modal
     assert (tmp / "t1" / "run" / "work" / "notes.txt").read_text() == "kept"  # copied back
@@ -219,7 +220,7 @@ def test_a_board_run_on_modal(tmp: Path) -> None:
     assert api.sandboxes[0].alive is False and not s._held and not s._live
     created = api.created[0]
     assert created["cpu"] == 2.0 and created["timeout"] == 600 + modal_sandbox.SETUP_SECONDS
-    print("test 1 OK: a run of the app's board (7) with its cells on Modal; data read-only, "
+    print("test 1 OK: a run of the app's board with its cells on Modal; data read-only, "
           "no key in cells, work folder copied back")
 
     # run.py's run_one, with the same fake session.

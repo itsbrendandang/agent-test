@@ -10,8 +10,9 @@ The board is the app's (engine/src/board/board.ts), read at run time:
   - each member's model is its tier in the `models:` of board/config.yaml (lead, strong, cheap,
     rival), as in the app;
   - the Lead Scientist runs the review. It frames the question, then calls `converse`: every
-    member gets the message and replies; the members that inspect the data (the scout) reply
-    first, and the others then reply in parallel. Round 1 is blind; from round 2, every member
+    member gets the message and replies; the members that inspect the data reply first, one
+    after another (the scout, then the evidence verifier, as in the app), and the others then
+    reply in parallel. Round 1 is blind; from round 2, every member
     sees the others' last replies. The lead names the experimenter's mode (pilot, full, revise).
     At most meeting.max_rounds rounds and meeting.lead_turns lead calls; past a limit, only one
     round with final=true may run;
@@ -19,8 +20,9 @@ The board is the app's (engine/src/board/board.ts), read at run time:
 
 What the benchmark changes, and why. The prompt files are not edited; a BENCHMARK section is
 added to each prompt, and it says that it overrides the file where they differ:
-  - the scout cannot search (AGENTS.md: no open search for benchmark agents; the answers are in
-    published papers). It inspects the study's data with list_dir and read_file;
+  - the scout and the evidence verifier cannot search (AGENTS.md: no open search for benchmark
+    agents; the answers are in published papers). The scout inspects the study's data with
+    list_dir and read_file; the evidence verifier checks the scout's report against the data;
   - the experimenter can run code (run_code, Python or R) and read the data. In the app it cannot
     run code; on BixBench the answers come from the data. It is the only member that runs code;
   - there are no claim checkers: in the app they check claims against web and literature
@@ -54,7 +56,9 @@ REPO = Path(__file__).resolve().parents[3]
 AGENTS_DIR = Path(os.environ.get("BOARD_AGENTS_DIR") or REPO / "board" / "agents")
 CONFIG_FILE = Path(os.environ.get("BOARD_CONFIG") or REPO / "board" / "config.yaml")
 LEAD = "lead-scientist"
-DATA_READERS = ("scout",)  # members that inspect the data; they reply first in every round
+# Members that inspect the data. They reply first in every round, one after another in the board's
+# order (the scout, then the evidence verifier, as in the app), each with the earlier reports in front of it.
+DATA_READERS = ("scout", "evidence-verifier")
 CODE_RUNNERS = ("experimenter",)  # the only members with run_code
 WRAP_UP_SHARE = 0.85  # past this share of any budget cap, only a final round may run
 MEMBER_TOOL_TURNS = 40  # model calls one member may make in one round (the budget is the real cap)
@@ -87,8 +91,8 @@ ANSWERS_PROP = {
 CONVERSE_SCHEMA = {
     "name": "converse",
     "description": (
-        "Address the whole board. Every member replies (the scout first, then the others in "
-        "parallel); you get their replies. Give each member its task by name. Use modes to name "
+        "Address the whole board. Every member replies (the scout first, then the evidence "
+        "verifier, then the others in parallel); you get their replies. Give each member its task by name. Use modes to name "
         "the role a member with modes plays this round, e.g. {\"experimenter\": \"pilot\"}."
     ),
     "input_schema": {
@@ -135,6 +139,11 @@ ROLE_NOTES = {
         "Use list_dir and read_file on DATA_DIR and report the files, their columns, the samples "
         "in each group, and anything missing or corrupted."
     ),
+    "evidence-verifier": (
+        "- You cannot search. Your job here: check the Scout's data report of this round against the "
+        "data itself, with list_dir and read_file. Mark each statement in it confirmed, wrong or not "
+        "checkable, and report what the Scout missed."
+    ),
     "experimenter": (
         "- You run the analysis with run_code, and can read files with list_dir and read_file. "
         "Report each question id with the value you computed."
@@ -144,7 +153,8 @@ ROLE_NOTES = {
 LEAD_BENCHMARK = """# BENCHMARK MODE (this section overrides the file above where they differ)
 The board is answering a BixBench data-analysis study: the questions are below, not a brief.
 - The Scout cannot search. It inspects the study data and reports what is there. It replies
-  first in every round.
+  first in every round; the Evidence Verifier (if on the board) then checks the Scout's report
+  against the data. Neither can search.
 - The Experimenter can run code (Python or R) and is the only member that can. A number it did
   not compute is not a result.
 - There are no checkers and no verdicts. Judge each answer by the computed results and the
@@ -465,10 +475,14 @@ class _Board:
         readers = [a for a in self.board.roster if a.name in DATA_READERS]
         others = [a for a in self.board.roster if a.name not in DATA_READERS]
         replies: dict[str, str] = {}
-        for agent in readers:  # the data readers first, as the app's searchers reply first
-            replies[agent.name] = turn(agent, "")[1]
-        pool = "\n\n".join(f"{a.title}'s data report this round:\n{replies[a.name][:DIGEST_CHARS]}"
-                           for a in readers)  # fmt: skip
+
+        def reports(agents: list[AgentDef]) -> str:
+            return "\n\n".join(f"{a.title}'s data report this round:\n{replies[a.name][:DIGEST_CHARS]}"
+                               for a in agents)  # fmt: skip
+
+        for i, agent in enumerate(readers):  # one after another, each with the earlier reports
+            replies[agent.name] = turn(agent, reports(readers[:i]))[1]
+        pool = reports(readers)
         with ThreadPoolExecutor(max_workers=max(1, len(others))) as pool_exec:
             for agent, reply in pool_exec.map(lambda a: turn(a, pool), others):
                 replies[agent.name] = reply

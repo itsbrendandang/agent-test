@@ -29,8 +29,8 @@ run bix-2/rep0: proposer, experimenter, ...  ──cells──▶  sandbox for b
   Modal, in the sandbox of its own run. One run has one sandbox. Other members never run on Modal.
 - With `--sandbox local` (the default) the cells run on the VM. Everything else is the same.
 - Inside one run, members also work at the same time. The board is the app's: the Lead Scientist
-  sends a message to the board (`converse`), the scout replies first, then the other members reply
-  at the same time. So one run can have five members active at once, and the experimenter can run
+  sends a message to the board (`converse`), the scout replies first, then the evidence verifier,
+  then the other members reply at the same time. So one run can have five members active at once, and the experimenter can run
   cells while others talk. The lead waits while a round runs.
 
 ## 2. What to draw
@@ -41,8 +41,8 @@ run bix-2/rep0: proposer, experimenter, ...  ──cells──▶  sandbox for b
   Draw the others of that run as present but idle.
 - **The Modal badge** belongs on the **experimenter** instance, and only while one of its cells
   runs on Modal (`where` is `modal`). Do not put other roles "on Modal".
-- **Who is on the board:** read `run_start.members`. Never hard-code 5, 7 or 8: the board is
-  changing from 5 to 7 members now, and a teammate may add an eighth. An unknown name gets the
+- **Who is on the board:** read `run_start.members`. Never hard-code a number: the board has
+  grown from 7 to 8 agents (the evidence verifier), and it may change again. An unknown name gets the
   neutral face (`agentIdentity` in `dashboard/src/lab/identity.ts`).
 - **Faces:** `agentIdentity(member, { mode })`. The experimenter's `mode` in the transcript is
   `full` or `revise`, and `identity.ts` already maps `revise` to the reviser's face.
@@ -54,8 +54,8 @@ run bix-2/rep0: proposer, experimenter, ...  ──cells──▶  sandbox for b
 
 - The Modal sandbox for board runs is on the branch `board-cell-timeout`, on top of PR #20. It is
   tested with a fake Modal only. **No run has used real Modal yet.**
-- The board is the app's 7 (on the branch `board-cell-timeout`). It is tested with a scripted
-  model only; no real-model run has used it yet.
+- The board is the app's (today 8 agents). One uncapped real run used it with 7, before the
+  evidence verifier joined (`docs/status.md`).
 - The engine reads nothing from board-harness runs, and the dashboard has no view for them
   (section 5).
 - So a demo today must be a **replay**: a recorded or scripted run played back, as
