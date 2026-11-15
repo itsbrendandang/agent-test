@@ -115,7 +115,7 @@ export interface Source {
 /** A source as the record keeps it: with the text every check was made against (an abstract or excerpts, never a full paper). */
 export interface StoredSource extends Source { text: string; studyType?: string; relevance?: number }
 
-export interface SearchLine { provider: Provider; query: string; ran: boolean; found: number; kept: number; reason?: string }
+export interface SearchLine { provider: Provider; query: string; ran: boolean; found: number; kept: number; reason?: string; /** The hypothesis the search was for. */ hypothesis?: string }
 
 /** What a step is. "prepare" is the one measured preparation phase (planning the queries). */
 export type StepKind = "prepare" | "hypothesize" | "search" | "evaluate" | "fetch" | "write" | "check" | "review" | "revise" | "save"
@@ -123,7 +123,16 @@ export type StepKind = "prepare" | "hypothesize" | "search" | "evaluate" | "fetc
 export type StepStatus = "completed" | "empty" | "failed" | "cancelled"
 /** A safe summary of what a step was given, for a details view. Never a key, a header, a token, a path or a prompt. */
 export type StepInput = Record<string, string | number | boolean>
-export interface StepStart { step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput; /** The hypothesis this search or screening is for. */ hypothesis?: string }
+export interface StepStart {
+  step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput
+  /** The hypothesis this step is for (its searches, their screening, the draft of its section). */
+  hypothesis?: string
+  /**
+   * Who does the step: "planner", "searcher", "writer", "checker", "critic", or "investigator-1", "investigator-2", ...
+   * (one investigator works on one hypothesis, at the same time as the others).
+   */
+  agent?: string
+}
 export interface StepEnd { step: string; status: StepStatus; ms: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
 /** A step as the record keeps it: "running" until its end is known. */
 export interface StepRecord extends StepStart { status: StepStatus | "running"; ms?: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
@@ -180,6 +189,13 @@ export interface Hypothesis {
   /** True when checked statements stand on both sides: shown as Insufficient evidence, "the sources disagree". */
   mixed?: boolean
   note?: string
+  /** The investigator that works on it: "investigator-1" for h1, and so on. */
+  agent?: string
+  /**
+   * What the mark rests on. Today always published sources. RESERVED, not produced yet: {kind: "swarm", run} for a
+   * hypothesis tested on data by a swarm run (the claims engine); `run` is that run's id.
+   */
+  testedBy?: { kind: "sources" } | { kind: "swarm"; run: string }
 }
 
 export interface Artifact { id: string; name: string; type: string; bytes: number; at: number }
@@ -207,6 +223,8 @@ export interface Statement {
   side?: "for" | "against"
   /** Final statements that passed their check and are filed under a hypothesis: which way a second model says they point. */
   stance?: Stance
+  /** In an answer that tests hypotheses: who wrote the sentence, "investigator-N" (its section's investigator) or "writer". */
+  agent?: string
 }
 
 export type Severity = "blocking" | "major" | "minor"
@@ -286,8 +304,8 @@ export type ResearchEvent =
   | { type: "research.resumed"; afterSeq: number }
   | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
   | { type: "opening"; text: string }
-  | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
-  | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note">)
+  | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin" | "agent">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
+  | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note" | "agent" | "testedBy">)
   | ({ type: "step.started" } & StepStart)
   | { type: "step.progress"; step: string; done: number; total?: number; note?: string }
   | ({ type: "step.finished" } & StepEnd)

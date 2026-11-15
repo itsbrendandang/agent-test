@@ -34,18 +34,16 @@ export const DEMO_HYPOTHESES = JSON.stringify({ needed: true, hypotheses: [
   { text: "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.", supportIf: "Studies of patients who progressed find no resistance mutations.", contradictIf: "Sequencing of patients who progressed finds resistance mutations.", origin: "planner", web: { query: "demo", objective: "demo" }, literature: "demo example" },
 ] })
 
-/** One sentence for H1, one against H2, and one filed for H2 that does not bear on it: the stance check sets that one aside. */
-export const DEMO_HYPOTHESES_DRAFT = `**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.** In the example sources there is a finding for H1 and a finding against H2.
-
-### H1: KRAS G12C inhibitors produce responses
+/** The sections the two demo investigators "draft": one sentence for H1; for H2 one against it, and one filed for it that does not bear on it (the stance check sets that one aside). */
+export const DEMO_SECTIONS: Record<string, string> = {
+  H1: `### H1: KRAS G12C inhibitors produce responses
 **For:** Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1].
-**Not found:** an example source that reports no responses.
-
-### H2: Tumours do not become resistant
+**Not found:** an example source that reports no responses.`,
+  H2: `### H2: Tumours do not become resistant
 **For:** Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2].
-**Against:** Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification [3].
-
-Switch to Real to ask your question for real.
+**Against:** Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification [3].`,
+}
+export const DEMO_COMPARISON = `**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.** In the example sources there is a finding for H1 and a finding against H2. Switch to Real to ask your question for real.
 
 NEXT STEPS`
 
@@ -61,7 +59,8 @@ export const demoBrain: Brain = {
   criticIndependent: true,
   worstCase: () => 0,
   plan: fixed(JSON.stringify({ key_question: "KRAS G12C inhibitors: response, hERG and resistance (demo)", medical: false, researchable: true, web: [{ query: "demo", objective: "demo" }], literature: ["demo example"] })),
-  write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_HYPOTHESES_DRAFT : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } },
+  write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_COMPARISON : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } },
+  section: async (system) => ({ text: DEMO_SECTIONS[/Yours is (H\d)\./.exec(system)?.[1] ?? "H1"] ?? "", usd: 0, truncated: false }),
   critique: async (system, user) => ({ text: tests(system, user) ? JSON.stringify({ notes: [] }) : DEMO_NOTES, usd: 0, truncated: false }),
   hypothesize: fixed(DEMO_HYPOTHESES),
   stance: fixed(DEMO_STANCES),

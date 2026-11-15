@@ -42,6 +42,7 @@ import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../exale
 import { PaidCallsOff } from "../paid.ts"
 import { describeModelFailure, FatalModelError, firstPassModel, isFatalModelError, type ModelId, parseModelId } from "../providers.ts"
 import { type FirstPass, type FirstPassRuling, parseJson, quietReasoning } from "../triage.ts"
+import { investigatorSystem, investigatorUser, leadSystem, leadUser } from "./prompts.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
@@ -76,7 +77,7 @@ export interface Brain {
   checkerIndependent: boolean
   criticIndependent: boolean
   /** Worst-case dollars of one call of each step, given the size of its input in characters. */
-  worstCase(step: "plan" | "hypothesize" | "write" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
+  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
   write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<Reply>
   critique(system: string, user: string, signal: AbortSignal): Promise<Reply>
@@ -85,6 +86,8 @@ export interface Brain {
   rejudge(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** Standard level: the hypotheses to test, set before any search (the planner's model). */
   hypothesize(system: string, user: string, signal: AbortSignal): Promise<Reply>
+  /** One investigator drafts the section of its hypothesis (the writer's model; its output is capped lower than a whole answer's). */
+  section(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** Which way each checked statement points for its hypothesis (the checker's model: another vendor than the writer). */
   stance(system: string, user: string, signal: AbortSignal): Promise<Reply>
 }
@@ -164,6 +167,11 @@ export const PLAN_TOKENS = 700, CRITIC_TOKENS = 2_500, REJUDGE_TOKENS = 1_200, H
 /** Characters per token assumed when a step's worst case is worked out. Real text is nearer 4, so this over-counts. */
 export const CHARS_PER_TOKEN = 3
 
+/** Output tokens of one investigator's section: a part of what a whole answer may use, so several sections cost no more than the limits allow. */
+export const sectionTokens = (level: Pick<Level, "maxOutputTokens">): number => Math.max(800, Math.floor(level.maxOutputTokens * 0.6))
+/** The investigator of a hypothesis: h1 -> investigator-1. */
+export const investigatorOf = (hypothesis: string): string => `investigator-${hypothesis.replace(/^h/, "")}`
+
 /** The critic's model: the rival tier when it is on another vendor than the writer, else the board's escalation choice. */
 export function criticModel(config: BoardConfig, writer: ModelId): { model: ModelId; independent: boolean } {
   const rival = parseModelId(config.models.rival, "board/config.yaml models.rival")
@@ -224,6 +232,7 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
       switch (step) {
         case "plan": return price(planner, inputChars, PLAN_TOKENS)
         case "write": case "revise": return price(writer, inputChars, level.maxOutputTokens)
+        case "section": return price(writer, inputChars, sectionTokens(level))
         case "critic": return price(critic.model, inputChars, CRITIC_TOKENS)
         case "rejudge": return price(critic.model, inputChars, REJUDGE_TOKENS)
         case "hypothesize": return price(planner, inputChars, HYPOTHESES_TOKENS)
@@ -237,6 +246,7 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     critique: (system, user, signal) => ask(critic.model, "the critic", system, user, CRITIC_TOKENS, "low", signal),
     revise: (system, user, signal) => ask(writer, "the writer (revision)", system, user, level.maxOutputTokens, "low", signal),
     rejudge: (system, user, signal) => ask(critic.model, "the critic (second look)", system, user, REJUDGE_TOKENS, "low", signal),
+    section: (system, user, signal) => ask(writer, "an investigator", system, user, sectionTokens(level), "low", signal),
     hypothesize: (system, user, signal) => ask(planner, "the planner (hypotheses)", system, user, HYPOTHESES_TOKENS, "quiet", signal),
     stance: (system, user, signal) => ask(checker.model, "the stance check", system, user, STANCE_TOKENS, "quiet", signal),
   }
@@ -850,7 +860,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     {
       const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0 })
       const user = plannerUser(record.question, thread)
-      begin({ step: "prepare", kind: "prepare", label: "Preparing the searches", input: { model: brain.names.planner, level: record.effort, webSearches: level.exaSearches, literatureQueries: level.queries, databaseLookups: databasesOn ? level.databaseLookups : 0 } })
+      begin({ step: "prepare", kind: "prepare", label: "Preparing the searches", agent: "planner", input: { model: brain.names.planner, level: record.effort, webSearches: level.exaSearches, literatureQueries: level.queries, databaseLookups: databasesOn ? level.databaseLookups : 0 } })
       const why = allow(brain.worstCase("plan", system.length + user.length), "plan", { system, user })
       if (why) { endFor("prepare", why); throw new Stop(why) }
       try {
@@ -877,7 +887,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     if (level.hypotheses > 0) {
       const fit = Math.min(level.hypotheses, level.exaSearches, level.queries, Math.floor(level.sourcesKept / 2))
       const system = hypothesesSystem({ max: MAX_HYPOTHESES, databases: databasesOn }), user = hypothesesUser(record.question, thread)
-      begin({ step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test", input: { model: brain.names.planner, atMost: fit } })
+      begin({ step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test", agent: "planner", input: { model: brain.names.planner, atMost: fit } })
       const why = allow(brain.worstCase("hypothesize", system.length + user.length), "hypotheses", { system, user })
       if (why) { endFor("hypotheses", why); throw new Stop(why) }
       let set: ReturnType<typeof readHypotheses> = { needed: false, reason: "The hypotheses could not be set up, so the question is answered without them.", items: [], cut: [] }
@@ -885,7 +895,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor("hypotheses", stop.reason); throw stop ?? error }
       }
       tested = set.items
-      record.hypotheses = tested.map(({ id, text, supportIf, contradictIf, origin }) => ({ id, text, supportIf, contradictIf, origin }))
+      record.hypotheses = tested.map(({ id, text, supportIf, contradictIf, origin }) => ({ id, text, supportIf, contradictIf, origin, agent: investigatorOf(id) }))
       const cutNote = set.cut.length ? `${plural(set.cut.length, "more hypothesis", "more hypotheses")} ${set.cut.length === 1 ? "was" : "were"} proposed and not tested, because ${set.cut[0].reason}.` : ""
       if (!tested.length || cutNote) record.hypothesesNote = [tested.length ? "" : set.reason ?? "No hypotheses were needed.", cutNote].filter(Boolean).join(" ")
       cut = set.cut
@@ -908,15 +918,16 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const fresh = found.filter((item) => !known.has(urlKey(item.url)))
       const order = (item: EvidenceItem) => place * 1_000 + found.indexOf(item)
       const hypothesis = tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}
+      const agent = tag?.hypothesis ? investigatorOf(tag.hypothesis.id) : "searcher"
       // For a hypothesis, results are screened against the hypothesis itself: does this help to test it.
       const question = tag?.hypothesis ? oneLine(`Is this so: ${tag.hypothesis.text} (Evidence for it or against it both count.)`, 600) : plan.keyQuestion
       let kept = found.length - fresh.length
       if (fresh.length) {
         const step = `evaluate:${provider}:${i}`
-        begin({ step, kind: "evaluate", label: `Screening ${plural(fresh.length, "result")}`, provider, input: { results: fresh.length, model: brain.names.planner, question }, ...hypothesis })
+        begin({ step, kind: "evaluate", label: `Screening ${plural(fresh.length, "result")}`, provider, agent, input: { results: fresh.length, model: brain.names.planner, question }, ...hypothesis })
         const screening = { items: fresh.map((f) => [f.url, f.title, f.text]), question }
         const why = allow(brain.worstCase("screen", fresh.reduce((n, it) => n + Math.min(1_500, it.text.length) + Math.min(200, it.title.length) + 30, 600 + question.length)), `screen:${provider}`, screening)
-        if (why) { endFor(step, why, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place }); throw new Stop(why) }
+        if (why) { endFor(step, why, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) }); throw new Stop(why) }
         try {
           let screened = await firstPassOnce(`screen:${provider}`, screening, (firstPass) => firstPass.triage(fresh, question))
           // A database record (a trial registration, a label) often "reports no results of its own": it is kept unless it is off the question, as the board keeps it.
@@ -928,13 +939,13 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           })
           end(step, "completed", { found: fresh.length, kept: screened.filter((s) => s.keep).length, summary: `${screened.filter((s) => s.keep).length} of ${fresh.length} kept.` })
         } catch (error) {
-          if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) { endFor(step, stop.reason, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place }) } throw stop ?? error }
+          if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) { endFor(step, stop.reason, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) }) } throw stop ?? error }
           for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); tag?.chain?.add(urlKey(item.url)); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
           notes.push(`The results of one ${providerName(provider)} search could not be screened for relevance and were kept as found.`)
           end(step, "failed", { found: fresh.length, kept: fresh.length, error: `The screening did not answer (${error.message}).`, consequence: "These results were kept without screening, so some may be off the question." })
         }
       }
-      line({ provider, query, ran: true, found: found.length, kept, slot: place })
+      line({ provider, query, ran: true, found: found.length, kept, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
     }
     /**
      * One search step, then the screening of what it found. `run` gives the results or throws; `refuse` is a reason not
@@ -947,7 +958,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       counter.set(provider, Math.max(counter.get(provider) ?? 0, i))
       const place = tag?.place ?? slotNumber++
       const step = `search:${provider}:${i}`
-      begin({ step, kind: "search", label: SEARCH_LABEL[provider] ?? `Searching ${providerName(provider)}`, provider, query, input: { provider: providerName(provider), query, ...input }, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
+      begin({ step, kind: "search", label: SEARCH_LABEL[provider] ?? `Searching ${providerName(provider)}`, provider, query, agent: tag?.hypothesis ? investigatorOf(tag.hypothesis.id) : "searcher", input: { provider: providerName(provider), query, ...input }, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
       const stop = allow(0, `search:${provider}`, { query, input })
       if (stop) { endFor(step, stop); throw new Stop(stop) }
       let result: { items: EvidenceItem[]; notices: string[] }
@@ -962,14 +973,14 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (!(error instanceof StepFailed)) { const halt = asStop(error); if (halt) endFor(step, halt.reason); throw halt ?? error }
         const why = /did not run|refused/.test(error.message) ? error.message : `${providerName(provider)} could not be used (${error.message}).`
         end(step, "failed", { error: why, consequence: NOT_SEARCHED[provider] ?? `${providerName(provider)} was not searched, so this answer rests on the other searches only.` })
-        return line({ provider, query, ran: false, found: 0, kept: 0, reason: scrub(why, env, 300), slot: place })
+        return line({ provider, query, ran: false, found: 0, kept: 0, reason: scrub(why, env, 300), slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
       }
       const found = usable(result.items, provider)
       result.items.forEach((item, at) => { if (item && safeUrl(item.url) && !found.some((f) => f.url === item.url)) notSelected.push({ title: oneLine(item.title, MAX_TITLE_CHARS) || item.url, url: item.url, provider, order: place * 1_000 + at, reason: "No text came back for it, so nothing could be checked against it." }) })
       const said = result.notices.map((n) => oneLine(n, 200)).filter(Boolean)[0]
       if (!found.length) {
         end(step, "empty", { found: 0, summary: said ?? "The search ran and found nothing." })
-        return line({ provider, query, ran: true, found: 0, kept: 0, slot: place })
+        return line({ provider, query, ran: true, found: 0, kept: 0, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
       }
       end(step, "completed", { found: found.length, summary: `${plural(found.length, "result")}.${said ? ` ${said}` : ""}` })
       await evaluate(provider, i, place, query, found, known, tag)
@@ -1039,7 +1050,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const rescreening = { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }
       if (again.length && !allow(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)), "screen:earlier", rescreening)) {
         const place = slotNumber++
-        begin({ step: "evaluate:earlier", kind: "evaluate", label: `Screening ${plural(again.length, "source")} of the earlier answer`, input: { results: again.length, from: last!.id } })
+        begin({ step: "evaluate:earlier", kind: "evaluate", agent: "searcher", label: `Screening ${plural(again.length, "source")} of the earlier answer`, input: { results: again.length, from: last!.id } })
         try {
           const screened = await firstPassOnce("screen:earlier", rescreening, (firstPass) => firstPass.triage(items, plan.keyQuestion))
           let kept = 0
@@ -1078,8 +1089,42 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     } else {
       // ── write ──────────────────────────────────────────────────────────────────────────────────
       const testing = record.hypotheses ?? []
-      const system = writerSystem(level.words, testing.length > 0), user = writerUser({ question: record.question, thread, searches: record.searches, sources, hypotheses: testing })
-      begin({ step: "write", kind: "write", label: `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
+      const urls = sources.map((s) => s.url)
+      // ── hypotheses: one investigator per hypothesis drafts its own section, all at the same time ──────
+      // An investigator is given its own hypothesis and the sources its searches found, under their numbers in the
+      // answer's list. Only its section is passed on: the checker and the critic get its sentences and the sources.
+      let sectionsText = ""
+      if (testing.length) {
+        const share = Math.max(70, Math.floor(level.words / (testing.length + 1)))
+        const drafted = await Promise.allSettled(testing.map(async (h): Promise<string> => {
+          const label = h.id.toUpperCase(), heading = `### ${label}: ${clip(h.text.replace(/^demo hypothesis:\s*/i, ""), 90).replace(/\.$/, "")}`
+          const own = sources.filter((src) => src.hypotheses?.includes(h.id))
+          if (!own.length) return `${heading}\n**Not found:** no source that passed screening was found for this hypothesis.` // written by code: there is nothing to draft from
+          const step = `write:${h.id}`, agent = investigatorOf(h.id)
+          const iSystem = investigatorSystem(share, label), iUser = investigatorUser({ question: record.question, hypothesis: h, searches: record.searches.filter((line) => line.hypothesis === h.id), sources })
+          begin({ step, kind: "write", label: `Drafting the section for ${label} from ${plural(own.length, "source")}`, hypothesis: h.id, agent, input: { model: brain.names.writer, sources: own.length, maxOutputTokens: sectionTokens(level), words: share } })
+          const why = allow(brain.worstCase("section", iSystem.length + iUser.length), step, { iSystem, iUser })
+          if (why) { endFor(step, why, "No answer was written. The sources that were found are listed."); throw new Stop(why) }
+          let text: string
+          try { text = splitBlocks((await model(step, { iSystem, iUser }, () => brain.section(iSystem, iUser, signal))).text).markdown } catch (error) {
+            if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor(step, stop.reason); else if (!(error instanceof Interrupted)) end(step, "failed", { error: "The investigator's key or model name was refused by its vendor." }); throw stop ?? error }
+            notes.push(`The section for ${label} could not be drafted (${error.message}).`)
+            end(step, "failed", { error: `The investigator did not answer (${error.message}).`, consequence: `${label} has no drafted section, so nothing is filed for or against it.` })
+            return `${heading}\n**Not found:** the section for this hypothesis could not be drafted.`
+          }
+          // Code makes the section what it must be: this hypothesis's heading and no other, and only markers of sources this investigator was given.
+          const allowed = new Set(own.map((src) => src.n))
+          const body = cleanAnswer(text, sources.length, urls).markdown.split("\n").filter((l) => !/^\s*#{1,6}\s/.test(l) && !/not medical advice/i.test(l)).join("\n")
+            .replace(/[ \t]*\[(\d{1,2})\]/g, (whole, n: string) => (allowed.has(Number(n)) ? whole : "")).trim()
+          end(step, "completed", { summary: `${plural(citedSentences(`${heading}\n${body}`).length, "cited sentence")}.` })
+          return `${heading}\n${body || "**Not found:** the investigator wrote nothing for this hypothesis."}`
+        }))
+        const failures = drafted.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason as unknown)
+        if (failures.length) throw failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
+        sectionsText = drafted.map((r) => (r as PromiseFulfilledResult<string>).value).join("\n\n")
+      }
+      const system = testing.length ? leadSystem(level.words) : writerSystem(level.words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
+      begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
       const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
@@ -1100,7 +1145,6 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         throw stop ?? (error instanceof StepFailed ? new Error(`the writer did not answer (${error.message})`) : error)
       }
       flush(true)
-      const urls = sources.map((s) => s.url)
       const finishText = (raw: string, truncated: boolean) => {
         let text = truncated ? raw.slice(0, Math.max(raw.lastIndexOf(". ") + 1, raw.lastIndexOf(".\n") + 1) || raw.length) : raw
         const tidy = withoutRepeats(cleanAnswer(text, sources.length, urls).markdown)
@@ -1111,7 +1155,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         return medical && !demo ? withAdviceLine(text) : text
       }
       const first = splitBlocks(reply.text)
-      const draft = finishText(first.markdown, reply.truncated && !first.nextSteps.length)
+      // In an answer that tests hypotheses the writer's part is the first paragraph; the investigators' sections follow it.
+      const opening = testing.length ? first.markdown.split(/\n(?=\s*#{1,6}\s)/)[0].split("\n").filter((l) => !/not medical advice/i.test(l)).join("\n").trim() || "The sections below give what the sources found report for and against each hypothesis." : first.markdown
+      const draft = finishText(testing.length ? `${opening}\n\n${sectionsText}` : opening, reply.truncated && !first.nextSteps.length)
       if (!draft.replace(ADVICE_LINE, "").trim()) { end("write", "failed", { error: "The writer returned no text.", consequence: "No answer was written." }); throw new Error("the writer returned no text") }
       proposed = first.nextSteps
       const cited = citedSentences(draft)
@@ -1126,7 +1172,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       /** Check sentences against every source each cites: one call per source, all its sentences in it. One step. */
       const checkAll = async (step: string, stage: Statement["stage"], items: { index: number; sentence: Sentence }[]): Promise<Statement[]> => {
         if (!items.length) return []
-        begin({ step, kind: "check", label: `Checking ${plural(items.length, stage === "final" ? "changed statement" : "statement")} against ${items.length === 1 ? "its source" : "their sources"}`, input: { statements: items.length, checker: brain.names.checker, rule: "the checker must quote a passage; a program must find it in the source, with the statement's numbers" } })
+        begin({ step, kind: "check", agent: "checker", label: `Checking ${plural(items.length, stage === "final" ? "changed statement" : "statement")} against ${items.length === 1 ? "its source" : "their sources"}`, input: { statements: items.length, checker: brain.names.checker, rule: "the checker must quote a passage; a program must find it in the source, with the statement's numbers" } })
         if (stage === "draft") emit("review.started:checker", { type: "review.started", reviewer: "checker", model: brain.names.checker, step })
         const rulings = new Map<number, SourceRuling[]>(items.map((i) => [i.index, []]))
         const settled = new Map<number, Statement>()
@@ -1136,7 +1182,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           all.push(r)
           if (settled.has(index) || all.length < it.sentence.sources.length) return
           all.sort((a, b) => it.sentence.sources.indexOf(a.n) - it.sentence.sources.indexOf(b.n)) // the order the sentence cites them in, not the order the replies came in
-          const statement = { ...verdictOf(stage, index, it.sentence, all, brain.names.checker), ...(stage === "final" ? { carried: false } : {}) }
+          const statement = { ...verdictOf(stage, index, it.sentence, all, brain.names.checker), ...(stage === "final" ? { carried: false } : {}), ...(testing.length ? { agent: stage === "draft" && it.sentence.hypothesis ? investigatorOf(it.sentence.hypothesis) : "writer" } : {}) }
           settled.set(index, statement)
           emit(`statement:${stage}:${index}`, { type: "statement.checked", ...statement })
           emit(`step.progress:${step}:${settled.size}`, { type: "step.progress", step, done: settled.size, total: items.length })
@@ -1176,7 +1222,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         return out
       }
       const critique = async (): Promise<ReviewNote[]> => {
-        begin({ step: "review", kind: "review", label: "Reviewing the whole draft", input: { model: brain.names.critic, looksFor: "overreach, missing caveats, weight on preprints or reviews, sources that disagree, parts of the question that were skipped" } })
+        begin({ step: "review", kind: "review", agent: "critic", label: "Reviewing the whole draft", input: { model: brain.names.critic, looksFor: "overreach, missing caveats, weight on preprints or reviews, sources that disagree, parts of the question that were skipped" } })
         emit("review.started:critic", { type: "review.started", reviewer: "critic", model: brain.names.critic, step: "review" })
         const unreviewed = "The draft was not reviewed as a whole. The statement checks still apply."
         if (!brain.criticIndependent) { notes.push("The critic did not run: no model from another vendor than the writer is configured."); end("review", "failed", { error: "No model from another vendor than the writer is configured for the critic.", consequence: unreviewed }); return [] }
@@ -1217,7 +1263,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         const rSystem = reviserSystem(level.words, testing.length > 0)
         const rUser = reviserUser({ question: record.question, thread, searches: record.searches, sources, draft, statements: draftStatements, notes: reviewNotes, hypotheses: testing })
         const unrevised = "The first draft is shown, with the marks of its review."
-        begin({ step: "revise", kind: "revise", label: "Revising the answer once", input: { model: brain.names.writer, failedStatements: failed.length, criticNotes: reviewNotes.length } })
+        begin({ step: "revise", kind: "revise", agent: "writer", label: "Revising the answer once", input: { model: brain.names.writer, failedStatements: failed.length, criticNotes: reviewNotes.length } })
         const why = allow(brain.worstCase("revise", rSystem.length + rUser.length), "revise", { rSystem, rUser })
         if (why) { endFor("revise", why, unrevised); throw new Stop(why) }
         let revision: { text: string; truncated: boolean } | undefined
@@ -1279,7 +1325,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           const rejudge = async (): Promise<void> => {
             if (!reviewNotes.length || !brain.criticIndependent) return
             const jSystem = rejudgeSystem(config), jUser = rejudgeUser({ question: record.question, notes: reviewNotes, revised: final })
-            begin({ step: "review:2", kind: "review", label: `Reading the revision against ${plural(reviewNotes.length, "note")} of the reviewer`, input: { model: brain.names.critic, notes: reviewNotes.length } })
+            begin({ step: "review:2", kind: "review", agent: "critic", label: `Reading the revision against ${plural(reviewNotes.length, "note")} of the reviewer`, input: { model: brain.names.critic, notes: reviewNotes.length } })
             const unjudged = "Whether the revision resolved the reviewer's notes was not judged by the reviewer; the record says what code and the writer's own report show."
             const why = allow(brain.worstCase("rejudge", jSystem.length + jUser.length), "rejudge", { jSystem, jUser }) ?? (storedBefore.has(keyOf("rejudge", { jSystem, jUser })) ? undefined : ending)
             if (why) { soft(why); return endFor("review:2", why, unjudged) }
@@ -1319,7 +1365,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (judged.length) {
         const sUser = stanceUser(testing, judged.map((st) => ({ hypothesis: st.hypothesis as string, text: st.text })))
         const unjudged = "A hypothesis whose statements could not be judged is marked Not checked."
-        begin({ step: "check:stance", kind: "check", label: `Checking which way ${plural(judged.length, "statement")} ${judged.length === 1 ? "points" : "point"}`, input: { statements: judged.length, hypotheses: testing.length, checker: brain.names.checker, rule: "a statement counts for or against a hypothesis only when this model, not told the writer's choice, says it points that way" } })
+        begin({ step: "check:stance", kind: "check", agent: "checker", label: `Checking which way ${plural(judged.length, "statement")} ${judged.length === 1 ? "points" : "point"}`, input: { statements: judged.length, hypotheses: testing.length, checker: brain.names.checker, rule: "a statement counts for or against a hypothesis only when this model, not told the writer's choice, says it points that way" } })
         if (!brain.checkerIndependent) end("check:stance", "failed", { error: "No model from another vendor than the writer is configured.", consequence: unjudged })
         else {
           const why = allow(brain.worstCase("stance", STANCE.length + sUser.length), "stance", { sUser })
@@ -1395,9 +1441,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     record.hypotheses = record.hypotheses.map((h) => {
       const mark = markOf(h.id, record.statements)
       // An answer that ended before the checks cannot say "no evidence": it says the hypothesis was not checked.
-      return stopped && mark.verdict === "unsupported" && !mark.mixed ? { ...h, ...mark, verdict: "unchecked" as const, note: `Not checked: ${STOP_WORDS[stopped]}.` } : { ...h, ...mark }
+      const testedBy = { kind: "sources" as const } // published sources; a swarm run on data would be {kind: "swarm", run} (not built)
+      return stopped && mark.verdict === "unsupported" && !mark.mixed ? { ...h, ...mark, verdict: "unchecked" as const, note: `Not checked: ${STOP_WORDS[stopped]}.`, testedBy } : { ...h, ...mark, testedBy }
     })
-    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.note ? { note: h.note } : {}) })
+    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.note ? { note: h.note } : {}), ...(h.agent ? { agent: h.agent } : {}), testedBy: h.testedBy })
   }
 
   // ── what was used, what to do next, and the files ────────────────────────────────────────────────

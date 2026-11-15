@@ -13,11 +13,15 @@ export interface Statement {
   quote?: string; quoteFound: boolean; quoteSource?: number; checker: string; note?: string; carried?: boolean
   /** The hypothesis this sentence was filed under, on which side, and which way a second model says it points. */
   hypothesis?: string; side?: "for" | "against"; stance?: "supports" | "contradicts" | "neither" | "unchecked"
+  /** Who wrote the sentence: an investigator ("investigator-1") or the writer. */
+  agent?: string
 }
 /** One hypothesis the answer tests against published sources. `result` exists only once the engine reported `hypothesis.checked`. */
 export interface Hypothesis {
   id: string; text: string; supportIf: string; contradictIf: string; origin?: "planner" | "user"
-  result?: { verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; note?: string }
+  /** The investigator that works on this hypothesis ("investigator-1"). */
+  agent?: string
+  result?: { /** What it was tested with: "sources" today; a kind this page does not know is shown as text. */ testedBy?: { kind: string; run?: string }; verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; note?: string }
 }
 export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string
   /** Who says so: the critic re-reading the revision ("reviewer"), the engine's code ("code"), or only the writer's own report ("writer"). */
@@ -26,8 +30,10 @@ export interface Searched { provider: Provider; query: string; ran?: boolean; fo
 /** One step of the work, as the engine reports it: started, maybe progress, then finished with how it ended. */
 export interface Step {
   step: string; kind: string; label: string; provider?: Provider; query?: string
-  /** The hypothesis this search or screening belongs to, when it belongs to one. */
+  /** The hypothesis this search, screening or section draft belongs to, when it belongs to one. */
   hypothesis?: string
+  /** Who does the step: "planner", "investigator-1", "searcher", "writer", "checker", "critic". */
+  agent?: string
   /** A safe summary of what the step was given (never a key or a prompt), for a details view. */
   input?: Record<string, string | number | boolean>
   status: "running" | "completed" | "empty" | "failed" | "cancelled"
@@ -93,7 +99,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       case "research.queued": s.status = "queued"; s.queuedAfter = str(e.after); break
       case "step.started":
-        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), hypothesis: str(e.hypothesis), status: "running",
+        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), hypothesis: str(e.hypothesis), agent: str(e.agent), status: "running",
           input: e.input && typeof e.input === "object" ? Object.fromEntries(Object.entries(e.input as object).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v))) as Step["input"] : undefined })
         break
       case "step.progress": { const st = s.steps.find((x) => x.step === e.step); if (st) { st.done = num(e.done); st.total = num(e.total) } break }
@@ -146,14 +152,15 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         if (Array.isArray(e.notes)) for (const n of e.notes as Record<string, unknown>[]) { const hit = s.notes.find((x) => x.index === n?.index); if (hit) { hit.resolved = n.resolved === true; hit.how = str(n.how); hit.by = by(n.by); judged.add(hit.index) } }
         break
       case "hypotheses":
-        s.hypotheses = (Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []).flatMap((h) => (str(h?.id) && str(h.text) ? [{ id: str(h.id)!, text: str(h.text)!, supportIf: str(h.supportIf) ?? "", contradictIf: str(h.contradictIf) ?? "", origin: h.origin === "user" ? "user" as const : h.origin === "planner" ? "planner" as const : undefined, result: results.get(str(h.id)!) }] : []))
+        s.hypotheses = (Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []).flatMap((h) => (str(h?.id) && str(h.text) ? [{ id: str(h.id)!, text: str(h.text)!, supportIf: str(h.supportIf) ?? "", contradictIf: str(h.contradictIf) ?? "", origin: h.origin === "user" ? "user" as const : h.origin === "planner" ? "planner" as const : undefined, agent: str(h.agent), result: results.get(str(h.id)!) }] : []))
         s.hypothesesNote = e.needed === false ? str(e.reason) ?? "This question needed no hypotheses." : undefined
         s.hypothesesCut = (Array.isArray(e.cut) ? (e.cut as Record<string, unknown>[]) : []).flatMap((c) => (str(c?.text) ? [{ text: str(c.text)!, reason: str(c.reason) ?? "" }] : []))
         break
       // The result of testing one hypothesis, computed by the engine's code from the checked statements. The only place a hypothesis's mark comes from.
       case "hypothesis.checked": {
         if (!str(e.id) || !VERDICTS.includes(e.verdict as string)) break
-        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, note: str(e.note) }
+        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, note: str(e.note),
+          testedBy: ((t) => (t && str(t.kind) ? { kind: str(t.kind)!.slice(0, 40), run: str(t.run) && /^[\w.-]{1,120}$/.test(str(t.run)!) ? str(t.run) : undefined } : undefined))(e.testedBy as Record<string, unknown> | undefined) }
         results.set(str(e.id)!, result)
         const hit = s.hypotheses.find((h) => h.id === e.id); if (hit) hit.result = result
         break
@@ -164,7 +171,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         const st: Statement = {
           stage: e.stage === "final" ? "final" : "draft", index: num(e.index)!, text: str(e.text)!, sources: Array.isArray(e.sources) ? (e.sources as unknown[]).filter((n): n is number => typeof n === "number") : [],
           verdict: e.verdict as Verdict, quote: str(e.quote), quoteFound: e.quoteFound === true, quoteSource: num(e.quoteSource), checker: str(e.checker) ?? "", note: str(e.note), carried: e.carried === true ? true : e.carried === false ? false : undefined,
-          hypothesis: str(e.hypothesis), side: e.side === "for" || e.side === "against" ? e.side : undefined,
+          agent: str(e.agent), hypothesis: str(e.hypothesis), side: e.side === "for" || e.side === "against" ? e.side : undefined,
           stance: e.stance === "supports" || e.stance === "contradicts" || e.stance === "neither" || e.stance === "unchecked" ? e.stance : undefined,
         }
         const list = st.stage === "final" ? final : draft
@@ -293,9 +300,28 @@ export function hypothesisDoing(s: AnswerState, id: string): string | undefined 
   if (s.status !== "running") return undefined
   const mine = s.steps.filter((x) => x.hypothesis === id)
   if (mine.some((x) => x.status === "running" && x.kind === "search")) return "Searching"
+  if (mine.some((x) => x.status === "running" && x.kind === "write")) return "Drafting its section"
   if (mine.some((x) => x.status === "running")) return "Screening results"
   if (mine.length > 0 && s.steps.some((x) => x.status === "running" && x.kind === "check")) return "Checking"
   return undefined
+}
+
+/**
+ * What one hypothesis's investigator has done so far, counted from the finished steps that carry the hypothesis's
+ * tag: "2 searches, 9 results screened, section drafted". Empty when no step reported anything.
+ */
+export function hypothesisWork(s: AnswerState, id: string): string {
+  const mine = s.steps.filter((x) => x.hypothesis === id && x.status !== "running")
+  const searches = mine.filter((x) => x.kind === "search")
+  const failed = searches.filter((x) => x.status === "failed").length
+  const screened = mine.filter((x) => x.kind === "evaluate" && x.status === "completed")
+  const kept = screened.reduce((n, x) => n + (x.kept ?? 0), 0)
+  const drafted = mine.find((x) => x.kind === "write")
+  return [
+    searches.length ? `${searches.length} search${searches.length === 1 ? "" : "es"}${failed ? ` (${failed} failed)` : ""}` : "",
+    screened.length ? `${kept} result${kept === 1 ? "" : "s"} kept after screening` : "",
+    drafted ? (drafted.status === "completed" ? "section drafted" : `section draft ${drafted.status}`) : "",
+  ].filter(Boolean).join(", ")
 }
 
 /** How a critic's note ended, in words. Only a check (the critic re-reading, or the engine's code) makes it "dealt with"; the writer saying so is only a report. */

@@ -43,6 +43,9 @@ test("a standard answer, start to end: the web search opens it, the other search
       assert.ok(s.label.length > 5 && !/[{}<>]/.test(s.label))
     }
     assert.deepEqual(started.find((s) => s.step === "prepare")?.kind, "prepare")
+    // Who does each step, in an answer without hypotheses: one of each, no investigators.
+    assert.deepEqual(Object.fromEntries(started.map((s) => [s.step, s.agent])), { prepare: "planner", hypotheses: "planner", "search:exa:1": "searcher", "evaluate:exa:1": "searcher", "search:europepmc:1": "searcher", "evaluate:europepmc:1": "searcher", "search:europepmc:2": "searcher", "evaluate:europepmc:2": "searcher", write: "writer", check: "checker", review: "critic", revise: "writer", "review:2": "critic", save: undefined })
+    assert.ok(record.statements.every((s) => s.agent === undefined && s.hypothesis === undefined))
     assert.deepEqual(started.map((s) => s.kind).filter((k, i, a) => a.indexOf(k) === i).sort(), ["check", "evaluate", "hypothesize", "prepare", "review", "revise", "save", "search", "write"])
     // Standard asks whether hypotheses are needed; here the planner says no, and the answer runs as a plain one.
     assert.deepEqual(of(events, "hypotheses").map((h) => [h.items, h.needed, h.reason]), [[[], false, "This is a plain question with one answer to look up."]])

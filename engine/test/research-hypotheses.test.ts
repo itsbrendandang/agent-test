@@ -37,21 +37,18 @@ const PAPERS: Record<string, unknown[]> = {
 }
 const topic = (query: string) => (/MET/.test(query) ? "MET" : /exposure|pharmacokinetic/i.test(query) ? "exposure" : "secondary")
 const first = (text: string) => (/^(.{20,400}?[.!?])(?:\s|$)/.exec(text)?.[1] ?? text).trim().replace(/[.!?]$/, "")
-/** The fake writer: one section for each hypothesis in its prompt, from the sources found for it. H2 gets a finding on each side; H3 has nothing. */
-const sections = (call: { user: string }) => {
-  const sources = sourcesIn(call.user)
-  const found = Object.fromEntries([...(/Which search found each source[^\n]*\n(.*)/.exec(call.user)?.[1] ?? "").matchAll(/\[(\d+)\] ([^;]*)/g)].map((m) => [Number(m[1]), m[2].split(",").map((x) => x.trim().toLowerCase())]))
-  const by = (id: string) => sources.filter((s) => (found[s.n] ?? []).includes(id))
-  const [a, b] = [by("h1"), by("h2")]
-  const met = b.find((s) => /In 30 of 38/.test(s.text)) ?? b[0]
-  return [
-    "The sources found report findings for H1 and on both sides of H2, and nothing that bears on H3.", "",
-    "### H1: secondary KRAS mutations", `**For:** ${a.map((s) => `${first(s.text)} [${s.n}].`).join(" ")}`, "**Not found:** a study that sequenced relapsed tumours and found no new KRAS mutation.", "",
-    "### H2: MET bypass", `**For:** MET amplification was found in 2 of 38 patients at relapse [${met.n}].`, `**Against:** In 30 of 38 patients no MET change was detected at relapse [${met.n}]. ${a[0] ? `${first(a[0].text)} [${a[0].n}].` : ""}`, "",
-    "### H3: low drug exposure", "**Not found:** measured drug levels in patients who relapsed; the closest source gives only the approved dose.", "",
-    "This is a research summary, not medical advice.", "", "NEXT STEPS",
-  ].join("\n")
+/** The fake investigators: each drafts its own section from the sources it was given. H1's files a sentence from each of its sources; H2's files one on each side, one that does not bear on it, and tries to cite a source it was never given; H3's finds nothing to file. */
+const section = (call: { system: string; user: string }) => {
+  const label = /Yours is (H\d)\./.exec(call.system)![1], own = sourcesIn(call.user)
+  if (label === "H1") return [`### H1: secondary KRAS mutations`, `**For:** ${own.map((s) => `${first(s.text)} [${s.n}].`).join(" ")}`, "**Not found:** a study that sequenced relapsed tumours and found no new KRAS mutation."].join("\n")
+  if (label === "H2") {
+    const met = own.find((s) => /In 30 of 38/.test(s.text))!, record = own.find((s) => /ClinicalTrials\.gov record/.test(s.text))!
+    return ["### H9: a heading that is not this investigator's", `**For:** MET amplification was found in 2 of 38 patients at relapse [${met.n}]. Secondary KRAS mutations were seen in 7 patients [1].`, `**Against:** In 30 of 38 patients no MET change was detected at relapse [${met.n}]. ClinicalTrials.gov record NCT00000001 [${record.n}].`, "", "NEXT STEPS", "{\"label\":\"Recommended next step\"}"].join("\n")
+  }
+  return ["### H3: low drug exposure", "**Not found:** measured drug levels in patients who relapsed; the closest source gives only the approved dose."].join("\n")
 }
+/** The fake writer of the comparison: the first paragraph only. */
+const comparison = () => "The sources found report findings for H1 and on both sides of H2, and nothing that bears on H3.\n\n### H1: a section the writer must not write\n**For:** A sentence that is not the writer's to file [1].\n\nNEXT STEPS"
 /** The fake stance check: agrees with a sentence about what its hypothesis names, and says "neither" for the sentence filed against H2 that is about KRAS mutations. */
 const stances = (call: { user: string }) => JSON.stringify({ stances: [...call.user.matchAll(/<statement i="(\d+)" hypothesis="(H\d)">([^<]*)<\/statement>/g)].map((m) => {
   const text = m[3], h = m[2]
@@ -60,7 +57,7 @@ const stances = (call: { user: string }) => JSON.stringify({ stances: [...call.u
 }) })
 /** The fake screening: everything is on the question and reports findings. */
 const keepAll = (call: { user: string }) => JSON.stringify({ items: [...call.user.matchAll(/<passage i="(\d+)">/g)].map((m) => ({ i: Number(m[1]), answers_question: "yes", reports_results: "yes", study_type: "clinical" })) })
-const script = { hypothesize: () => JSON.stringify({ needed: true, hypotheses: PROPOSED }), screen: keepAll, write: sections, stance: stances, critic: () => JSON.stringify({ notes: [] }) }
+const script = { hypothesize: () => JSON.stringify({ needed: true, hypotheses: PROPOSED }), screen: keepAll, section, write: comparison, stance: stances, critic: () => JSON.stringify({ notes: [] }) }
 async function tested(options: Parameters<typeof engine>[0] = {}) {
   const e = await engine({ script, deps: { database: async () => ({ items: [{ url: "https://clinicaltrials.gov/study/NCT00000001", title: "A KRAS G12C inhibitor with a MET inhibitor (NCT00000001)", text: "ClinicalTrials.gov record NCT00000001. Status: Recruiting. Phase: Phase 1. Intervention: a KRAS G12C inhibitor with a MET inhibitor in patients with MET amplification at relapse." }], notices: [] }) }, ...options })
   e.net.exa = [(body) => jsonResponse({ results: PAGES[topic(String(body.query))], costDollars: { total: 0.006 } })]
@@ -156,14 +153,14 @@ test("numbered sources: every hypothesis gets its turn, a source two searches fo
   ])
 })
 
-test("a Standard answer with hypotheses: set before any search, each searched at the same time inside the level's limits, marked by code; the fourth proposal is set aside and said", async () => {
+test("a Standard answer with hypotheses: set before any search, one investigator for each working at the same time inside the level's limits, marked by code; the fourth proposal is set aside and said", async () => {
   const e = await tested()
   try {
     const { record, events } = await paidAllowed(() => e.answer({ question: Q, effort: "standard" }))
     assert.equal(record.status, "done")
     // The hypotheses are set, with what would support and contradict each, before the first search starts.
     const set = of(events, "hypotheses")[0]
-    assert.deepEqual(set.items.map((h) => [h.id, h.text, h.supportIf, h.contradictIf, h.origin]), PROPOSED.slice(0, 3).map((p, i) => [`h${i + 1}`, p.text, p.supportIf, p.contradictIf, "planner"]))
+    assert.deepEqual(set.items.map((h) => [h.id, h.text, h.supportIf, h.contradictIf, h.origin, h.agent]), PROPOSED.slice(0, 3).map((p, i) => [`h${i + 1}`, p.text, p.supportIf, p.contradictIf, "planner", `investigator-${i + 1}`]))
     assert.deepEqual([set.needed, set.cut?.map((c) => c.text)], [true, [PROPOSED[3].text]])
     const steps = of(events, "step.started")
     assert.ok(set.seq < Math.min(...steps.filter((s) => s.kind === "search").map((s) => s.seq)), "before any search")
@@ -183,23 +180,55 @@ test("a Standard answer with hypotheses: set before any search, each searched at
     // Sources say which hypothesis they serve.
     assert.deepEqual(record.sources.map((s) => [s.n, s.provider, s.hypotheses]), [[1, "exa", ["h1"]], [2, "exa", ["h2"]], [3, "exa", ["h3"]], [4, "europepmc", ["h1"]], [5, "europepmc", ["h2"]], [6, "clinicaltrials", ["h2"]]])
     assert.deepEqual(of(events, "sources")[0].items.map((s) => s.hypotheses), record.sources.map((s) => s.hypotheses))
-    // The writer was given the hypotheses and which search found each source; the stance checker was not told the sides.
+    // WHO DID WHAT. Every step names its agent: the planner, one investigator for each hypothesis, the writer, the shared checker and critic.
+    const agentsOf = (kind: string) => [...new Set(steps.filter((x) => x.kind === kind).map((x) => x.agent))].sort()
+    assert.deepEqual([agentsOf("prepare"), agentsOf("hypothesize"), agentsOf("search"), agentsOf("evaluate"), agentsOf("check"), agentsOf("review")], [["planner"], ["planner"], ["investigator-1", "investigator-2", "investigator-3"], ["investigator-1", "investigator-2", "investigator-3"], ["checker"], ["critic"]])
+    assert.ok(steps.filter((x) => x.hypothesis).every((x) => x.agent === `investigator-${x.hypothesis!.slice(1)}`), "an investigator works on its own hypothesis and on no other")
+    assert.deepEqual(steps.filter((x) => x.kind === "write").map((x) => [x.step, x.agent, x.hypothesis, x.label]), [
+      ["write:h1", "investigator-1", "h1", "Drafting the section for H1 from 2 sources"], ["write:h2", "investigator-2", "h2", "Drafting the section for H2 from 3 sources"], ["write:h3", "investigator-3", "h3", "Drafting the section for H3 from 1 source"],
+      ["write", "writer", undefined, "Comparing the hypotheses"],
+    ])
+    const drafts = of(events, "step.finished").filter((x) => x.step.startsWith("write:h")).map((x) => x.seq)
+    assert.ok(steps.filter((x) => x.step.startsWith("write:h")).every((x) => x.seq < Math.min(...drafts)), "the three investigators draft at the same time")
+    assert.ok(steps.find((x) => x.step === "write")!.seq > Math.max(...drafts), "the writer compares once the sections are there")
+    // Each investigator is given its own hypothesis and its own sources, under their numbers in the answer's list, and nothing of the others.
+    const investigators = e.calls.filter((c) => c.role === "section")
+    assert.deepEqual(investigators.map((c) => [/Yours is (H\d)\./.exec(c.system)![1], sourcesIn(c.user).map((x) => x.n), c.provider, c.model]).sort(), [["H1", [1, 4], "anthropic", "claude-sonnet-5-5"], ["H2", [2, 5, 6], "anthropic", "claude-sonnet-5-5"], ["H3", [3], "anthropic", "claude-sonnet-5-5"]])
+    for (const c of investigators) {
+      const label = /Yours is (H\d)\./.exec(c.system)![1], at = Number(label[1]) - 1
+      assert.ok(c.user.includes(PROPOSED[at].text) && PROPOSED.every((p, i) => i === at || !c.user.includes(p.text)), `${label}: its own hypothesis only`)
+      assert.ok(record.searches.filter((x) => x.hypothesis !== `h${at + 1}`).every((x) => !c.user.includes(`query "${x.query}"`)), `${label}: its own searches only`)
+      assert.ok((c.options.maxTokens ?? 0) < 3000, "a section may use less output than a whole answer")
+    }
+    // The writer of the comparison is given the sections; the checker and the critic get the investigators' sentences and the sources, and nothing else of theirs.
     const writer = e.calls.find((c) => c.role === "write")!
     assert.match(writer.user, /Hypotheses \(data; written before anything was searched\):\n<hypotheses>\nH1: Relapse on KRAS G12C inhibitors is caused by secondary KRAS mutations/)
-    assert.match(writer.user, /Which search found each source \(written by the program\):\n\[1\] H1; \[2\] H2; \[3\] H3; \[4\] H1; \[5\] H2; \[6\] H2/)
-    assert.ok(writer.system.includes("# This answer tests hypotheses"))
+    assert.match(writer.user, /Sections \(data; drafted by the investigators\):\n<sections>\n### H1: Relapse on KRAS G12C inhibitors is caused by secondary KRAS mutations/)
+    assert.ok(writer.system.includes("# You write the comparison") && !writer.user.includes("<evidence>"))
+    for (const c of e.calls.filter((x) => ["check", "critic", "stance"].includes(x.role))) {
+      assert.equal(c.provider, "openai", `${c.role}: on the other vendor than the writer and the investigators`)
+      assert.ok(!c.system.includes("investigator") && !c.user.includes("Yours is") && !c.user.includes("# You are the investigator"), `${c.role}: no investigator's instructions or working`)
+    }
+    // Code makes each section what it must be: its own heading, no other; no marker of a source the investigator was not given; no block a program reads.
+    const text = record.answer!.markdown
+    assert.deepEqual(text.split("\n").filter((l) => l.startsWith("#")), ["### H1: Relapse on KRAS G12C inhibitors is caused by secondary KRAS mutations in the…", "### H2: Relapse on KRAS G12C inhibitors is caused by bypass signalling through MET amplification", "### H3: Relapse on KRAS G12C inhibitors is caused by drug exposure that is too low"])
+    assert.ok(text.includes("Secondary KRAS mutations were seen in 7 patients.") && !/Secondary KRAS mutations were seen in 7 patients \[1\]/.test(text), "investigator-2 was never given source 1: its marker is removed and the sentence is not a cited one")
+    assert.ok(!/NEXT STEPS|not the writer's to file|H9/.test(text))
+    assert.ok(text.startsWith("The sources found report findings for H1 and on both sides of H2, and nothing that bears on H3.\n\n### H1:"))
     const stance = e.calls.filter((c) => c.role === "stance")
     assert.deepEqual([stance.length, stance[0].provider, stance[0].model], [1, "openai", "gpt-4o-mini"], "one call, to a model of another vendor than the writer")
     assert.ok(!/filed|\*\*For|\*\*Against/.test(stance[0].user))
     // Statements carry their hypothesis, the side they were filed under, and which way the second model says they point.
-    assert.deepEqual(record.statements.map((s) => [s.hypothesis, s.side, s.verdict, s.stance, s.sources]), [
-      ["h1", "for", "verified", "supports", [1]], ["h1", "for", "verified", "supports", [4]],
-      ["h2", "for", "verified", "supports", [2]], ["h2", "against", "verified", "contradicts", [2]], ["h2", "against", "verified", "neither", [1]],
+    assert.deepEqual(record.statements.map((s) => [s.hypothesis, s.side, s.verdict, s.stance, s.sources, s.agent]), [
+      ["h1", "for", "verified", "supports", [1], "investigator-1"], ["h1", "for", "verified", "supports", [4], "investigator-1"],
+      ["h2", "for", "verified", "supports", [2], "investigator-2"], ["h2", "against", "verified", "contradicts", [2], "investigator-2"], ["h2", "against", "verified", "neither", [6], "investigator-2"],
     ])
     // The marks, by code: H1 has two checked statements for it; H2 has one on each side; H3 has none.
     const marks = of(events, "hypothesis.checked")
     assert.deepEqual(marks.map((m) => [m.id, m.verdict, m.for, m.against, m.forStatements, m.againstStatements, m.mixed]), [["h1", "verified", [1, 4], [], [0, 1], [], undefined], ["h2", "unsupported", [2], [2], [2], [3], true], ["h3", "unsupported", [], [], [], [], undefined]])
     assert.equal(marks[0].note, "2 checked statements from 2 sources for it; none against it.")
+    assert.deepEqual(marks.map((m) => [m.agent, m.testedBy]), [1, 2, 3].map((n) => [`investigator-${n}`, { kind: "sources" }]), "the mark rests on published sources; a later swarm run on data would be named here")
+    assert.deepEqual(record.hypotheses?.map((h) => [h.agent, h.testedBy]), [1, 2, 3].map((n) => [`investigator-${n}`, { kind: "sources" }]))
     assert.match(marks[1].note ?? "", /^The sources disagree: 1 checked statement from 1 source for it, 1 checked statement from 1 source against it\. 1 statement filed under it is not counted/)
     assert.deepEqual(record.hypotheses?.map((h) => [h.id, h.verdict, h.mixed, h.for]), [["h1", "verified", undefined, [1, 4]], ["h2", "unsupported", true, [2]], ["h3", "unsupported", undefined, []]])
     assert.ok(marks[2].seq < of(events, "sources.cited")[0].seq && marks[0].seq > of(events, "step.finished").find((s) => s.step === "check:stance")!.seq)
@@ -210,7 +239,6 @@ test("a Standard answer with hypotheses: set before any search, each searched at
       `A hypothesis that was proposed and not tested, because the Standard level has 3 web searches and 3 literature queries for hypotheses, one of each for a hypothesis: "${PROPOSED[3].text}"`,
     ])
     assert.match(record.hypothesesNote ?? "", /^1 more hypothesis was proposed and not tested/)
-    assert.ok(record.answer!.markdown.includes("### H1: secondary KRAS mutations\n**For:**"))
     assert.ok(!/\[\d\]/.test(record.answer!.markdown.split("\n").filter((l) => l.startsWith("**Not found:**")).join(" ")), "no marker in a Not found line")
     assert.equal(containsKey(JSON.stringify(events)), false)
     if (process.env.WRITE_RESEARCH_STREAMS === "1") writeFileSync(join(DIR, "stream-hypotheses.jsonl"), events.map((x) => JSON.stringify(x)).join("\n") + "\n")
@@ -229,6 +257,7 @@ test("hypotheses and honesty: a statement the quote check rejects never counts; 
     assert.equal(strict.count("stance"), 0, "nothing passed the quote check, so there is nothing to ask the second model")
     assert.equal(of(events, "step.started").some((s) => s.step === "check:stance"), false)
     assert.match(record.hypotheses![0].note ?? "", /^No checked statement for or against it\. 2 statements filed under it are not counted/)
+    assert.equal(strict.count("section"), 3)
   } finally { await strict.close() }
   // The second model's reply cannot be read: the statements passed the quote check, but no hypothesis is marked as supported.
   const mute = await tested({ script: { ...script, stance: () => "I think they all support it." } })
@@ -246,6 +275,16 @@ test("hypotheses and honesty: a statement the quote check rejects never counts; 
     assert.deepEqual(of(events, "hypothesis.checked").map((m) => [m.verdict, m.note]), [1, 2, 3].map(() => ["unchecked", "Not checked: the spending cap for this answer was reached."]))
     assert.ok(record.missing?.some((m) => m.startsWith("H1 was not checked:")))
   } finally { await dear.close() }
+  // A hypothesis whose searches found nothing has no investigator's draft: code writes its section, and no model is asked.
+  const bare = await tested()
+  bare.net.exa = [(body) => jsonResponse({ results: /exposure/.test(String(body.query)) ? [] : PAGES[topic(String(body.query))], costDollars: { total: 0.006 } })]
+  try {
+    const { record, events } = await paidAllowed(() => bare.answer({ question: Q, effort: "standard" }))
+    assert.deepEqual([bare.count("section"), of(events, "step.started").some((x) => x.step === "write:h3")], [2, false])
+    assert.match(record.answer!.markdown, /### H3: [^\n]*\n\*\*Not found:\*\* no source that passed screening was found for this hypothesis\./)
+    assert.deepEqual(record.hypotheses?.map((h) => h.verdict), ["verified", "unsupported", "unsupported"])
+    assert.equal(record.sources.some((x) => x.hypotheses?.includes("h3")), false)
+  } finally { await bare.close() }
   // Quick: the stage does not exist.
   const quick = await tested()
   try {
@@ -279,7 +318,7 @@ test("an answer with hypotheses is durable too: killed while the hypotheses' sea
         await e.research.idle()
         const record = await e.record(id), events = e.events(id)
         assert.equal(e.count("hypothesize"), plans, `killed at ${point}: the hypotheses are not asked for again`)
-        assert.ok(e.exaRequests().length <= 3 + 1 && e.count("write") === 1 && e.count("stance") === 1, `killed at ${point}`)
+        assert.ok(e.exaRequests().length <= 3 + 1 && e.count("write") === 1 && e.count("section") === 3 && e.count("stance") === 1, `killed at ${point}`)
         assert.deepEqual(record.hypotheses, reference.record.hypotheses, `killed at ${point}: the same hypotheses with the same marks`)
         assert.deepEqual(record.sources.map((s) => [s.n, s.url, s.hypotheses]), reference.record.sources.map((s) => [s.n, s.url, s.hypotheses]), `killed at ${point}: the same numbered sources`)
         assert.deepEqual(record.statements, reference.record.statements)
@@ -296,10 +335,11 @@ test("Demo at the Standard level shows the same shapes from fixtures: two exampl
     const { record, events } = await e.answer({ question: "Do KRAS G12C inhibitors work, and does resistance occur?", effort: "standard" })
     assert.deepEqual([e.net.requests.length, e.calls.length, record.mode, record.usd], [0, 0, "demo", 0])
     assert.deepEqual(of(events, "hypotheses")[0].items.map((h) => [h.id, h.text.startsWith("Demo hypothesis:"), h.origin]), [["h1", true, "planner"], ["h2", true, "planner"]])
-    assert.deepEqual(of(events, "step.started").filter((s) => s.kind === "search").map((s) => [s.step, s.provider, s.hypothesis]).sort(), [["search:fixture:1", "fixture", "h1"], ["search:fixture:2", "fixture", "h2"]])
+    assert.deepEqual(of(events, "step.started").filter((s) => s.kind === "search").map((s) => [s.step, s.provider, s.hypothesis, s.agent]).sort(), [["search:fixture:1", "fixture", "h1", "investigator-1"], ["search:fixture:2", "fixture", "h2", "investigator-2"]])
+    assert.deepEqual(of(events, "step.started").filter((s) => s.kind === "write").map((s) => [s.step, s.agent]), [["write:h1", "investigator-1"], ["write:h2", "investigator-2"], ["write", "writer"]])
     assert.deepEqual(record.sources.map((s) => [s.n, s.provider, s.hypotheses]), [[1, "fixture", ["h1", "h2"]], [2, "fixture", ["h1", "h2"]], [3, "fixture", ["h1", "h2"]]])
     assert.deepEqual(record.statements.map((s) => [s.hypothesis, s.side, s.verdict, s.stance, s.checker]), [["h1", "for", "verified", "supports", "scripted"], ["h2", "for", "verified", "neither", "scripted"], ["h2", "against", "verified", "contradicts", "scripted"]])
-    assert.deepEqual(of(events, "hypothesis.checked").map((m) => [m.id, m.verdict, m.for, m.against]), [["h1", "verified", [1], []], ["h2", "contradicted", [], [3]]])
+    assert.deepEqual(of(events, "hypothesis.checked").map((m) => [m.id, m.verdict, m.for, m.against, m.agent, m.testedBy]), [["h1", "verified", [1], [], "investigator-1", { kind: "sources" }], ["h2", "contradicted", [], [3], "investigator-2", { kind: "sources" }]])
     assert.match(record.answer!.markdown, /^\*\*Demo answer\. This is fixed example text, not research\./)
     assert.equal(record.review.revised, false)
     if (process.env.WRITE_RESEARCH_STREAMS === "1") writeFileSync(join(DIR, "stream-hypotheses-demo.jsonl"), events.map((x) => JSON.stringify(x)).join("\n") + "\n")

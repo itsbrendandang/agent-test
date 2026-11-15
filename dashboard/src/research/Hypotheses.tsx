@@ -4,8 +4,8 @@
 // `hypothesis.checked` (computed by the engine's code from checked statements). The page never works out a mark.
 // "Tested" means checked against published sources; nothing here is an experiment, and the map says so.
 import { MARK_GLYPH, MARK_WORD, markOf } from "./marks"
-import { HYPOTHESES_NOTE, sidesLine } from "./hypothesisWords"
-import { hypothesisDoing, type AnswerState, type Hypothesis } from "./model"
+import { agentName, HYPOTHESES_NOTE, sidesLine, testedWith } from "./hypothesisWords"
+import { hypothesisDoing, hypothesisWork, type AnswerState, type Hypothesis } from "./model"
 
 /** The mark of a tested hypothesis: glyph and word. In a practice run it is an example and carries no check glyph. */
 export function HypothesisMark({ hypothesis: h, demo }: { hypothesis: Hypothesis; demo: boolean }) {
@@ -44,14 +44,19 @@ export function Hypotheses({ state: s, onSource }: { state: AnswerState; onSourc
       <ol className="hyp-cards">
         {s.hypotheses.map((h, i) => {
           const doing = hypothesisDoing(s, h.id)
+          const work = hypothesisWork(s, h.id)
+          const who = agentName(h.agent)
           return (
             <li key={h.id} className="hyp-card" data-mark={h.result && !demo ? markOf(h.result.verdict) : undefined}>
               <span className="story-eyebrow">Hypothesis {i + 1}{h.origin === "user" && " · as you stated it"}</span>
               <p className="hyp-text">{h.text}</p>
+              {/* who works on it, and what that investigator has finished: from the steps tagged with this hypothesis */}
+              {(who || work) && <p className="muted small hyp-work">{who && <b>{who}</b>}{who && work && ": "}{work}{who && !work && (ended ? ": no step was recorded" : ": not started")}</p>}
               {h.result ? (
                 <>
                   <p className="hyp-result"><HypothesisMark hypothesis={h} demo={demo} /> <span className="muted small">{sidesLine(h.result)}</span></p>
                   {h.result.note && <p className="muted small">{h.result.note}</p>}
+                  {h.result.testedBy && h.result.testedBy.kind !== "sources" && <p className="muted small" data-tested={h.result.testedBy.kind}>{testedWith(h.result.testedBy)}</p>}
                   <div className="hyp-sides">
                     <Chips label="For" numbers={h.result.for} known={known} onSource={onSource} />
                     <Chips label="Against" numbers={h.result.against} known={known} onSource={onSource} />
@@ -86,7 +91,7 @@ export function HypothesesTable({ state: s }: { state: AnswerState }) {
       <p className="muted small">{demo ? "Examples of a practice run, not real results. " : ""}{HYPOTHESES_NOTE}</p>
       <div className="hyp-tablewrap" tabIndex={0} role="group" aria-label="Hypotheses table, scrolls sideways">
         <table className="hyp-table">
-          <thead><tr><th scope="col">Hypothesis</th><th scope="col">What would support it</th><th scope="col">What would contradict it</th><th scope="col">Result</th><th scope="col">Sources for</th><th scope="col">Sources against</th></tr></thead>
+          <thead><tr><th scope="col">Hypothesis</th><th scope="col">What would support it</th><th scope="col">What would contradict it</th><th scope="col">Result</th><th scope="col">Sources for</th><th scope="col">Sources against</th><th scope="col">Worked on by</th></tr></thead>
           <tbody>
             {s.hypotheses.map((h, i) => (
               <tr key={h.id}>
@@ -96,6 +101,7 @@ export function HypothesesTable({ state: s }: { state: AnswerState }) {
                 <td>{h.result ? <><HypothesisMark hypothesis={h} demo={demo} />{h.result.note && <span className="muted small hyp-tablenote">{h.result.note}</span>}</> : <span className="muted small">{hypothesisDoing(s, h.id) ?? "No result recorded"}</span>}</td>
                 <td className="mono">{h.result ? h.result.for.join(", ") || "none" : "–"}</td>
                 <td className="mono">{h.result ? h.result.against.join(", ") || "none" : "–"}</td>
+                <td>{agentName(h.agent) ?? "not recorded"}{hypothesisWork(s, h.id) && <span className="muted small hyp-tablenote">{hypothesisWork(s, h.id)}</span>}{h.result?.testedBy && <span className="muted small hyp-tablenote">{testedWith(h.result.testedBy)}</span>}</td>
               </tr>
             ))}
           </tbody>

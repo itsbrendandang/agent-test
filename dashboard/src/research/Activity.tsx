@@ -1,6 +1,7 @@
 // What the engine did for one answer, as it reported it: one quiet line, and a list to open ("View activity").
 // Every row is a step the engine started; its duration is the engine's own measurement; a failed step stays
 // failed and an empty search stays empty. Nothing here is invented, timed or animated by the page.
+import { agentName } from "./hypothesisWords"
 import { useLayoutEffect, useRef, useState } from "react"
 import { Loader } from "@/components/ai-elements/loader"
 import { providerPlace, seconds, type Step } from "./model"
@@ -60,6 +61,7 @@ export function Activity({ steps, working, totalSeconds, defaultOpen = false }: 
                   <span className="activity-icon" aria-hidden="true">{st.status === "running" ? <Loader size={12} /> : ICON[st.status]}</span>
                   <span className="activity-label">{st.label}<span className="sr-only">: {STATUS_WORD[st.status]}</span></span>
                   {st.status !== "completed" && st.status !== "running" && <span className="activity-status">{STATUS_WORD[st.status]}</span>}
+                  {agentName(st.agent) && <span className="muted small activity-agent">{agentName(st.agent)}</span>}
                   {st.provider && <span className="muted small activity-place">{providerPlace(st.provider)}</span>}
                   <span className="mono activity-ms">{st.status === "running" ? (st.total ? `${st.done ?? 0}/${st.total}` : "…") : seconds(st.ms)}</span>
                 </button>

@@ -365,3 +365,7 @@
 .hyp-table thead th { border-top: 0; font-size: 11px; font-weight: 600; color: var(--text-muted, #6b675f); white-space: nowrap; }
 .hyp-table tbody th { font-weight: 500; min-width: 180px; }
 .hyp-tablenote { display: block; margin-top: 4px; }
+.hyp-work b { font-weight: 600; color: var(--text, #1d1c19); }
+.activity-agent { white-space: nowrap; }
+@media (max-width: 560px) { .activity-row .activity-place { display: none; } }
+.hyp-table { min-width: 1000px; }

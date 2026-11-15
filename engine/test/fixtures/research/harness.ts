@@ -54,7 +54,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
 
 // ── The fake models ──────────────────────────────────────────────────────────────────────────────
 
-export type Role = "plan" | "hypothesize" | "screen" | "check" | "stance" | "write" | "critic" | "revise" | "rejudge"
+export type Role = "plan" | "hypothesize" | "screen" | "check" | "stance" | "write" | "section" | "critic" | "revise" | "rejudge"
 export interface Call { role: Role; provider: string; model: string; system: string; user: string; options: { maxTokens?: number; reasoning?: string; signal?: AbortSignal } }
 /** What a fake model answers: text, or `{error}` for a call the vendor fails (the text is the vendor's message). */
 export type Reply = string | { error: string }
@@ -68,7 +68,8 @@ const roleOf = (system: string): Role =>
       : system.startsWith("You check claims against one piece of source text") ? "check"
         : system.includes("# Your task now") ? "rejudge"
           : system.includes("# Your task here") ? "critic"
-          : system.includes("# The revision") ? "revise" : "write"
+          : system.includes("# The revision") ? "revise"
+            : system.includes("# You are the investigator of one hypothesis") ? "section" : "write"
 
 const unescape = (text: string) => text.replaceAll("&lt;", "<")
 /** The numbered sources a writer, reviser or critic was given, read back from the evidence block of its prompt. */
@@ -86,6 +87,11 @@ export const DEFAULTS: { [R in Role]: (call: Call, n: number) => string } = {
     web: [{ query: "semaglutide cardiovascular outcomes in adults with overweight or obesity without diabetes, randomized trial results", objective: "Reports of the trial rank first; leave out market news. Pull the event rates and the hazard ratio." }],
     literature: ["semaglutide cardiovascular outcomes obesity without diabetes", "semaglutide major adverse cardiovascular events trial"],
   }),
+  // An investigator's section: one sentence copied from each source it was given, filed for its hypothesis.
+  section: (call) => {
+    const label = /Yours is (H\d)\./.exec(call.system)?.[1] ?? "H1"
+    return [`### ${label}: section`, `**For:** ${sourcesIn(call.user).map((s) => `${firstSentence(s.text).replace(/[.!?]$/, "")} [${s.n}].`).join(" ")}`].join("\n")
+  },
   // No hypotheses unless a test asks for them: the question is treated as a plain one.
   hypothesize: () => JSON.stringify({ needed: false, reason: "This is a plain question with one answer to look up." }),
   // Every statement points the way it was filed, unless a test says otherwise.

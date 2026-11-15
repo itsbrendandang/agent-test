@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from "vitest"
 import F_DEMO from "@/test/research/stream-hypotheses-demo.jsonl?raw"
 import F_REAL from "@/test/research/stream-hypotheses.jsonl?raw"
 import { Hypotheses, HypothesesTable } from "./Hypotheses"
-import { HYPOTHESES_NOTE } from "./hypothesisWords"
+import { agentName, HYPOTHESES_NOTE, testedWith } from "./hypothesisWords"
 import { Inspector } from "./Inspector"
 import { tabsOf } from "./inspectorState"
-import { foldAnswer, fromRecord, hypothesisDoing, withMarks, type ResearchEvent } from "./model"
+import { foldAnswer, fromRecord, hypothesisDoing, hypothesisWork, withMarks, type ResearchEvent } from "./model"
 
 let seq = 0
 const ev = (type: string, rest: object = {}): ResearchEvent => ({ seq: ++seq, at: seq, run: "a-1", type, ...rest } as ResearchEvent)
@@ -121,10 +121,10 @@ describe("the inspector's Hypotheses tab", () => {
     render(<Inspector id="a-1" state={s} events={events} tab="hypotheses" onTab={() => {}} />)
     expect(screen.getByRole("tab", { name: "Hypotheses" })).toHaveAttribute("aria-selected", "true")
     const table = within(screen.getByRole("table"))
-    expect(table.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hypothesis", "What would support it", "What would contradict it", "Result", "Sources for", "Sources against"])
+    expect(table.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hypothesis", "What would support it", "What would contradict it", "Result", "Sources for", "Sources against", "Worked on by"])
     const rows = table.getAllByRole("row").slice(1)
     expect(rows[0]).toHaveTextContent("A randomised trial shows fewer events."); expect(rows[0]).toHaveTextContent("A randomised trial shows no difference.")
-    expect(within(rows[0]).getAllByRole("cell").slice(-2).map((c) => c.textContent)).toEqual(["1, 2", "none"])
+    expect(within(rows[0]).getAllByRole("cell").slice(-3, -1).map((c) => c.textContent)).toEqual(["1, 2", "none"])
     expect(rows[1]).toHaveTextContent("Insufficient evidence: the sources disagree")
     expect(screen.getByRole("region", { name: "Hypotheses" })).toHaveTextContent(HYPOTHESES_NOTE)
   })
@@ -184,5 +184,53 @@ describe("the engine's hypothesis streams", () => {
     expect(s.sources.some((x) => x.hypotheses?.includes("h1"))).toBe(true)
     expect(s.statements.filter((x) => x.hypothesis).every((x) => ["h1", "h2", "h3"].includes(x.hypothesis!))).toBe(true)
     expect(s.statements.some((x) => x.side === "against")).toBe(true)
+  })
+})
+
+// The addendum: each hypothesis has its own investigator, working side by side with the others.
+describe("the investigators", () => {
+  const items = H.map((h, i) => ({ ...h, agent: `investigator-${i + 1}` }))
+  const base = () => [START()[0], ev("hypotheses", { items, needed: true })]
+  const step = (id: string, kind: string, hyp: string, agent: string, done?: object) => [ev("step.started", { step: id, kind, label: id, hypothesis: hyp, agent }), ...(done ? [ev("step.finished", { step: id, status: "completed", ms: 5, ...done })] : [])]
+  it("names who does a step from the engine's id, and shows an id it does not know as it is", () => {
+    expect([agentName("planner"), agentName("investigator-2"), agentName("checker"), agentName("critic"), agentName("writer"), agentName("searcher"), agentName("someone-new"), agentName(undefined)])
+      .toEqual(["Planner", "Investigator 2", "Checker", "Critic", "Writer", "Searcher", "someone-new", undefined])
+  })
+  it("each card names its investigator and what it has finished, from the steps tagged with that hypothesis only", () => {
+    const events = [...base(), ...step("search:exa:1", "search", "h1", "investigator-1", { found: 8 }), ...step("search:europepmc:1", "search", "h1", "investigator-1", { found: 5 }),
+      ...step("evaluate:exa:1", "evaluate", "h1", "investigator-1", { found: 8, kept: 3 }), ...step("write:h1", "write", "h1", "investigator-1"), ...step("search:exa:2", "search", "h2", "investigator-2")]
+    const s = foldAnswer(events)
+    expect(hypothesisWork(s, "h1")).toBe("2 searches, 3 results kept after screening"); expect(hypothesisDoing(s, "h1")).toBe("Drafting its section")
+    expect(hypothesisWork(s, "h2")).toBe(""); expect(hypothesisDoing(s, "h2")).toBe("Searching")
+    render(<Hypotheses state={s} />)
+    expect(cards()[0]).toHaveTextContent("Investigator 1: 2 searches, 3 results kept after screening"); expect(cards()[0]).toHaveTextContent("Drafting its section…")
+    expect(cards()[1]).toHaveTextContent("Investigator 2: not started"); expect(cards()[1]).toHaveTextContent("Searching…")
+  })
+  it("says what a hypothesis was tested with, and shows a kind it does not know as text instead of failing", () => {
+    expect(testedWith({ kind: "sources" })).toBe("Tested against published sources")
+    expect(testedWith({ kind: "swarm", run: "glhf-12" })).toBe("Tested on data by a team run (glhf-12)")
+    expect(testedWith({ kind: "wet-lab" })).toBe("Tested by: wet-lab")
+    const s = foldAnswer([...base(), ev("hypothesis.checked", { id: "h1", verdict: "verified", for: [1], against: [], agent: "investigator-1", testedBy: { kind: "wet-lab", run: "../../etc" } }), DONE])
+    expect(s.hypotheses[0].result?.testedBy).toEqual({ kind: "wet-lab", run: undefined }) // a run id that is not an id is dropped
+    render(<Hypotheses state={s} />)
+    expect(cards()[0]).toHaveTextContent("Tested by: wet-lab"); expect(cards()[0]).toHaveTextContent("✓ Supported")
+  })
+})
+
+describe("the engine's investigators, as streamed", () => {
+  const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
+  it("every card names its own investigator and that investigator's finished work; the steps name who did them", () => {
+    const s = foldAnswer(lines(F_REAL))
+    expect(s.hypotheses.map((h) => h.agent)).toEqual(["investigator-1", "investigator-2", "investigator-3"])
+    render(<Hypotheses state={s} />)
+    cards().forEach((card, i) => expect(card).toHaveTextContent(new RegExp(`Investigator ${i + 1}: \\d+ search`)))
+    expect(cards()[0]).toHaveTextContent("section drafted")
+    for (const st of s.steps.filter((x) => x.hypothesis)) expect(st.agent).toBe(`investigator-${st.hypothesis!.slice(1)}`) // a hypothesis's steps are its own investigator's
+    expect(new Set(s.steps.map((x) => agentName(x.agent)))).toEqual(new Set(["Planner", "Investigator 1", "Investigator 2", "Investigator 3", "Writer", "Checker", "Critic", undefined]))
+    expect(s.hypotheses.every((h) => h.result?.testedBy?.kind === "sources")).toBe(true)
+  })
+  it("says Drafting its section while an investigator's own draft step runs", () => {
+    const real = lines(F_REAL); const at = real.findIndex((e) => e.type === "step.started" && e.step === "write:h1")
+    expect(hypothesisDoing(foldAnswer(real.slice(0, at + 1)), "h1")).toBe("Drafting its section")
   })
 })

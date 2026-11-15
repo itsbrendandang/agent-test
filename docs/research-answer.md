@@ -79,14 +79,22 @@ answer and the app say so.
    words (`origin: "user"`). For each one it writes, before anything is searched: the statement, what a source
    would report if it holds (`supportIf`), and what a source would report if it does not (`contradictIf`). For a
    plain factual question it may answer "no hypotheses needed"; then the answer runs as described above.
-2. **Each hypothesis has its own searches,** run at the same time for all of them: its web search (Exa) first,
-   then its literature search (Europe PMC), and a database lookup when it planned one and the level has room.
-   Results are screened against the hypothesis itself. **No limit is raised for this.** Each hypothesis uses one
+2. **Each hypothesis has its own investigator.** The investigators work at the same time. Investigator 1 works
+   on H1, investigator 2 on H2, and so on. An investigator does its hypothesis's searches (its web search with
+   Exa first, then its literature search with Europe PMC, and a database lookup when it planned one and the
+   level has room), the screening of what they find (against the hypothesis itself), and then the draft of its
+   own section. It is given only its own hypothesis and the sources its own searches found. Every step in the
+   event log names who did it (`agent`: `planner`, `investigator-1`, `writer`, `checker`, `critic`). **No limit is raised for this.** Each hypothesis uses one
    web search and one literature query of the level, so with today's limits (3 and 3) at most 3 are tested. A
    proposal that does not fit is set aside and named under "What is missing". The numbered sources (12) are
    shared: the hypotheses take turns, so each one has its share.
-3. **The answer** starts with a paragraph that compares the hypotheses, then has one section for each:
-   `### H1: ...` with lines `**For:**`, `**Against:**` and `**Not found:**`. The writer gives no mark.
+3. **The answer** has one section for each hypothesis, drafted by its investigator: `### H1: ...` with lines
+   `**For:**`, `**Against:**` and `**Not found:**`. Code sets each section's heading and removes a marker of a
+   source that investigator was not given. A hypothesis whose searches found nothing gets a section written by
+   code, and no model is asked. Then the writer adds the first paragraph, which compares the hypotheses from
+   the sections. Nobody writes a mark. The **checker and the critic are shared** and run on the other vendor:
+   they are given the investigators' sentences and the sources, and nothing else of an investigator's work.
+   The one revision is done by the writer.
 4. **The mark is given by code** (`markOf` in `engine/src/research/pipeline.ts`), never by a model's say-so. A
    sentence counts for or against a hypothesis only when all three hold:
    - the writer filed it under that hypothesis's `For:` or `Against:` line;
@@ -111,7 +119,11 @@ these sources report. It does not say the hypothesis is true.
 In the events: `hypotheses` (id, text, supportIf, contradictIf, origin; `cut` for what was set aside), a
 `hypothesis` tag on each search and screening step, `hypotheses` on each source, `hypothesis` and `side` on each
 statement, and one `hypothesis.checked` per hypothesis (the mark, the source numbers for and against, the
-statement indexes). The record holds the same under `hypotheses`.
+statement indexes, the investigator, and `testedBy`). The record holds the same under `hypotheses`.
+
+`testedBy` says what a mark rests on. Today it is always `{kind: "sources"}`: published sources. The field
+leaves room for a later `{kind: "swarm", run: "<id>"}`: a hypothesis tested on data by a swarm run. That link is
+not built.
 
 ## The marks, and what they do not prove
 
@@ -198,8 +210,10 @@ its 3,000-character cut, every output at its token limit, and 3 characters a tok
 | Hypotheses set up (Haiku) and stance check (GPT-4o mini), Standard only | | | $0.0008 | $0.0034 |
 | **Total** | **about $0.05** | **$0.12** | **about $0.07** | **$0.21** |
 
-A Standard answer that tests **3 hypotheses** uses all three web searches ($0.021) and a longer answer with one
-section for each: expected **about $0.10**, worst case $0.21, limit $0.60.
+A Standard answer that tests **3 hypotheses** uses all three web searches ($0.021), three investigators that
+each draft a section ($0.044 together) and one comparison ($0.011), then the shared review and the revision
+($0.035): expected **about $0.12**, worst case $0.29, limit $0.60. The investigators cost about $0.02 more than
+one writer would, because each one reads the writing rules again.
 
 So both levels fit their limits with the review, the revision and the second look included. Measured once:
 the first real `quick` answer cost $0.074 and took 30.9 seconds (before the second look was added). That is
