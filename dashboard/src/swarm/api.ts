@@ -1,6 +1,7 @@
 // Client for the GLHF run tracker routes of the engine (/api/glhf/*). Polling, no SSE.
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
+import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
 
 // "queued": waits for another run (`after`) or for the runner. "cancelled": stopped on request; settled, but not a result.
@@ -51,7 +52,7 @@ export interface ScoreRow {
 
 // Mirrors Ledger.to_json in glhf/bixbench/src/bixbench3/inspect_harness/swarm/ledger.py
 export type ClaimVerdict = "supported" | "refuted" | "insufficient" | "untested"
-/** `registered` false: a result that goes against the claim, recorded without registration. Absent on older ledgers. */
+/** `registered` false: a result that goes against the statement, recorded without registration. Absent on older ledgers. */
 export interface LedgerTest { name: string; p_value: number; contradicts: boolean; note: string; by: string; e_value: number; registered?: boolean }
 /** A test written down before any result of its claim exists: its name, and what will be run and what would contradict the claim. */
 export interface LedgerRegistration { name: string; method: string; by: string }
@@ -79,8 +80,7 @@ export interface Ledger {
 }
 export interface RunDetail { run: GlhfRun; ledger: Ledger | null; findings: string | null; methods: string | null }
 
-const get = <T,>(path: string): Promise<T> =>
-  fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+const get = readEngine
 
 /**
  * POST /api/glhf/runs body for a local run on the demo case. Mirrors StartBody in engine/src/glhf/types.ts. `solvers`
@@ -135,6 +135,7 @@ export function useSwarm(selected: string | undefined, nudge: number, choose?: (
   const [detail, setDetail] = useState<RunDetail>()
   const [board, setBoard] = useState<ScoreRow[] | null>() // undefined: not loaded yet; null: the engine has no scoreboard
   const [offline, setOffline] = useState(false)
+  const [problem, setProblem] = useState<Problem>({}) // why the last read failed: not reachable, or the engine's own error
 
   useEffect(() => {
     let stopped = false
@@ -147,7 +148,7 @@ export function useSwarm(selected: string | undefined, nudge: number, choose?: (
           get<ScoreRow[]>("/api/glhf/scoreboard").catch(() => null), // an older engine has no scoreboard route
         ])
         if (stopped) return
-        setStatus(s); setRuns(list); setBoard(rows); setOffline(false)
+        setStatus(s); setRuns(list); setBoard(rows); setOffline(false); setProblem({})
         live = list.some(isLive)
         const id = selected ?? (choose ? choose(list) : list[0]?.id)
         if (id) {
@@ -155,9 +156,9 @@ export function useSwarm(selected: string | undefined, nudge: number, choose?: (
           if (stopped) return
           setDetail(d)
         } else setDetail(undefined)
-      } catch {
+      } catch (error) {
         if (stopped) return
-        setOffline(true)
+        setOffline(true); setProblem(problemOf(error))
       }
       timer = setTimeout(tick, live ? 2000 : 15000)
     }
@@ -165,5 +166,5 @@ export function useSwarm(selected: string | undefined, nudge: number, choose?: (
     return () => { stopped = true; if (timer) clearTimeout(timer) }
   }, [selected, nudge, choose])
 
-  return { status, runs, detail, offline, scoreboard: board }
+  return { status, runs, detail, offline, problem, scoreboard: board }
 }

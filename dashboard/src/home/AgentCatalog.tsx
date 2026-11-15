@@ -1,18 +1,13 @@
-// The research agents and skills the Home chat can plan with, as cards in the Agents view (from GET /api/chat/catalog).
-import { useEffect, useState } from "react"
-import { getCatalog, type Catalog, type CatalogAgent } from "./api"
+// The board members, specialists and skills the Home chat can plan with, as cards in the Agents view. The Agents
+// view reads the catalog (GET /api/chat/catalog) and owns the filter; this only draws what matches.
+import { hasWords } from "@/lib/format"
+import type { Catalog, CatalogAgent } from "./api"
+import { agentText, skillText } from "./chat"
 
-export function AgentCatalog() {
-  const [catalog, setCatalog] = useState<Catalog | null>()
-  useEffect(() => {
-    let stale = false
-    getCatalog().then((c) => { if (!stale) setCatalog(c) }, () => { if (!stale) setCatalog(null) })
-    return () => { stale = true }
-  }, [])
-  if (!catalog) return null // loading, or an engine without the chat catalog: the rest of the Agents view is unaffected
+export function AgentCatalog({ catalog, filter }: { catalog: Catalog; filter: string }) {
   const group = (title: string, about: string, agents: CatalogAgent[]) => agents.length > 0 && (
     <>
-      <header className="section-head"><div><h2>{title}</h2><p className="muted small">{about}</p></div></header>
+      <header className="section-head"><div><h2>{title} <span className="muted small">({agents.length})</span></h2><p className="muted small">{about}</p></div></header>
       <section className="cast">
         {agents.map((a) => (
           <article key={a.name} className="cast-card card-surface team-card">
@@ -28,15 +23,17 @@ export function AgentCatalog() {
       </section>
     </>
   )
+  const agents = catalog.agents.filter((a) => hasWords(agentText(a), filter))
+  const skills = catalog.skills.filter((s) => hasWords(skillText(s), filter))
   return (
     <>
-      {group("Board members", "The board that reviews a drug candidate brief. The Home chat picks from them for a plan.", catalog.agents.filter((a) => a.source === "board"))}
-      {group("Specialists", "Called in when a question needs them. Each has a trigger.", catalog.agents.filter((a) => a.source === "specialist"))}
-      {catalog.skills.length > 0 && (
+      {group("Board members", "The board that reviews a brief. The Home chat picks from them for a plan.", agents.filter((a) => a.source === "board"))}
+      {group("Specialists", "Listed for planning. Each has a trigger that says when it is called in.", agents.filter((a) => a.source === "specialist"))}
+      {skills.length > 0 && (
         <>
-          <header className="section-head"><div><h2>Skills</h2><p className="muted small">Instructions an agent can load. A skill marked "index only" is known by name and description but is not installed on this machine.</p></div></header>
+          <header className="section-head"><div><h2>Skills <span className="muted small">({skills.length})</span></h2><p className="muted small">Instructions an agent can load. A skill marked "index only" is known by name and description but is not installed on this machine.</p></div></header>
           <ul className="catalog-skills">
-            {catalog.skills.map((s) => (
+            {skills.map((s) => (
               <li key={s.name} className="card-surface">
                 <b>{s.name}</b>
                 {!s.installed && <span className="pill" data-kind="waiting">index only, not installed</span>}

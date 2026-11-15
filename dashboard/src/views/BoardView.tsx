@@ -4,7 +4,13 @@ import { takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
-import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Shared"
+import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
+import { Loading } from "@/components/Crew"
+import { EngineOffline, ModeLabel, PageHead, StatusPill, Verdict as VerdictChip } from "@/components/Shared"
+import { CheckedStatement, TeamMessage } from "@/components/Thread"
+import { verdictCount } from "@/lib/words"
+import { boardScriptedWhy } from "@/home/chat"
+import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
 import { fmtDuration } from "@/lib/format"
 import "@/board/board.css"
@@ -23,27 +29,41 @@ function sections(md: string): Record<string, string> {
 }
 const bullets = (s = "") => s.split("\n").map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim()).filter(Boolean)
 const plain = (s = "") => s.replace(/[*_`]+/g, "").trim()
-const ABOUT = "A board of AI specialists reviews a drug candidate brief, checks each claim against evidence, and writes a decision memo."
+const ABOUT = "A team of AI agents discusses a research brief. A separate check tests each statement they make against sources, and the lead writes the decision."
+
+// The cheap model's ruling settled the claim ("jev" is the same thing in runs made before the checker changed).
+const firstPass = (c: { checker?: string }) => c.checker === "first-pass" || c.checker === "jev"
+
+const VERDICT_DETAIL: Record<string, string> = { verified: "held up", contradicted: "proven wrong", unsupported: "no supporting source", unchecked: "not checked" }
+/** "Scout (Data Inspector)" -> the name and the plain job. */
+const nameAndJob = (title: string) => { const m = /^(.*?)\s*\((.+)\)\s*$/.exec(title); return m ? { name: m[1], job: m[2] } : { name: title, job: undefined } }
+/** Who ruled on a statement, in plain words. The model id, when the run recorded one, is kept. */
+const checkerName = (c: { checker?: string; checkedBy?: string }) => {
+  const what = firstPass(c) ? "the quick first check" : c.checker === "openai" || c.checker === "claude-code" ? "the second, careful check" : c.checker
+  return c.checkedBy && c.checkedBy !== "scripted" ? `${what} (${c.checkedBy})` : c.checkedBy === "scripted" ? `${what} (practice: no model)` : what
+}
 
 export function BoardView() {
   const [status, setStatus] = useState<Status>()
-  const [offline, setOffline] = useState(false)
+  const [problem, setProblem] = useState<Problem>() // set when the board could not be loaded
   const [roster, setRoster] = useState<RosterMember[]>([])
   const [briefs, setBriefs] = useState<string[]>([])
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [brief, setBrief] = useState("")
-  const [runId, setRunId] = useState<string | undefined>(() => takeOpen("board"))
+  const [opened] = useState(() => takeOpen("board")) // a review another view asked to open ("See what they found")
+  const [runId, setRunId] = useState<string | undefined>(opened)
   const [error, setError] = useState("")
   const [memoOf, setMemoOf] = useState<{ runId: string; text: string }>()
-  const [details, setDetails] = useState(() => localStorage.getItem("board.details") === "1")
+  // Someone who asked to see a review wants the discussion: it is open on arrival. Otherwise the last choice is kept.
+  const [details, setDetails] = useState(() => opened !== undefined || localStorage.getItem("board.details") === "1")
   const events = useRunEvents(runId)
 
   useEffect(() => localStorage.setItem("board.details", details ? "1" : "0"), [details])
   const refresh = () => get<RunSummary[]>("/api/runs").then((r) => { setRuns(r); setRunId((id) => id ?? r[0]?.id) })
   const load = () => {
     Promise.all([get<Status>("/api/status"), get<RosterMember[]>("/api/roster"), get<string[]>("/api/briefs")])
-      .then(([s, r, b]) => { setOffline(false); setStatus(s); setRoster(r); setBriefs(b); setBrief((old) => old || (b[0] ?? "")); return refresh() })
-      .catch(() => setOffline(true))
+      .then(([s, r, b]) => { setProblem(undefined); setStatus(s); setRoster(r); setBriefs(b); setBrief((old) => old || (b[0] ?? "")); return refresh() })
+      .catch((error: unknown) => setProblem(problemOf(error)))
   }
   useEffect(load, [])
 
@@ -85,8 +105,7 @@ export function BoardView() {
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const startedAs = events.find((e): e is Of<"run.started"> => e.type === "run.started")?.mock
   const scripted = startedAs ?? status?.mock ?? false
-  const nextWhy = status?.paidCalls === false ? "Paid calls are off, so a new review runs with scripted models."
-    : "The engine has no OPENROUTER_API_KEY, so a new review runs with scripted models."
+  const nextWhy = `${boardScriptedWhy(status) ?? "The engine is in practice mode: board reviews are practice runs only"}.`
   const resume = async () => {
     if (!runId) return
     setError("")
@@ -96,23 +115,26 @@ export function BoardView() {
   const memo = sections(memoText)
   const maxRounds = status?.meeting.max_rounds ?? 4
 
-  if (offline) return (
+  if (problem) return (
     <div className="page board">
       <PageHead title="Board review" about={ABOUT} />
-      <EngineOffline needs="The board runs in the engine. Without API keys it uses scripted models, which are free." onRetry={load} />
+      <EngineOffline needs="Reviews run in the engine." said={problem.said} onRetry={load} />
     </div>
   )
 
-  // One plain sentence about where the run is.
+  // One plain sentence about where the run is, and when it is over, what happened in it.
+  const spoke = new Set(events.flatMap((e) => (e.type === "member.replied" ? [e.member] : []))).size
+  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}: ${verdictCount("holds", count("verified"))}, ${verdictCount("fails", count("contradicted"))}, ${verdictCount("unknown", count("unsupported") + count("unchecked"))}.`
+  const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
-  const headline = !status ? "Loading the board…"
-    : !runId ? "No reviews yet. Pick a brief and press Convene board. Without API keys the board uses scripted models, which are free."
+  const headline = !status ? "Loading the review…"
+    : !runId ? "No reviews yet. Pick a brief and press Start a review. While paid calls are off this is a practice run: fixed text, free, not real research."
     : runs.length > 0 && !known && events.length === 0 ? `Run ${runId} was not found. Pick another run from the list.`
     : failed ? "The run stopped with an error."
-    : done ? "The board has decided."
-    : memoWritten ? "Writing the memo…"
-    : current ? `Round ${rounds.at(-1)![0]} of up to ${maxRounds}: ${current.replies.length} of ${members.length} members have replied.`
-    : "Convening the board…"
+    : done ? `The team has decided. ${said}`
+    : memoWritten ? "Writing the decision…"
+    : current ? `The team is discussing: round ${rounds.at(-1)![0]} of ${Math.max(maxRounds, rounds.at(-1)![0])} · ${current.replies.length} of ${members.length} have replied.`
+    : "Starting the review…"
   const progress = done ? 1 : Math.min(0.95, ((rounds.length - 1) + (current ? current.replies.length / Math.max(1, members.length) : 0)) / maxRounds)
 
   return (
@@ -132,11 +154,11 @@ export function BoardView() {
         <select aria-label="Brief for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
           {briefs.map((b) => <option key={b} value={b}>{b.replace(/\.md$/, "").replace(/-/g, " ")}</option>)}
         </select>
-        <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Board in session" : "Convene board"}</button>
+        <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Review in progress" : "Start a review"}</button>
         </span>
         <label className="toggle">
           <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
-          <span>Show details</span>
+          <span>Show the full discussion</span>
         </label>
       </div>
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
@@ -145,13 +167,15 @@ export function BoardView() {
         {runId && members.length > 0 && (
           <ol className="board-steps" aria-label="Board members in this round">
             {members.map((m) => {
-              const step = !live ? (finished ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
-              return <li key={m.name} data-step={step}><span>{m.title}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : "○ not started"}</span></li>
+              // From the run's own events: a member who never replied did not take part, also when the roster lists them.
+              const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
+              const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
+              return <li key={m.name} data-step={step} title={nameAndJob(m.title).job}><span>{nameAndJob(m.title).name}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></li>
             })}
           </ol>
         )}
         <p className="headline" role="status">{headline}</p>
-        {runId && startedAs !== undefined && <p className="board-scripted" data-testid="run-mode"><ModeLabel scripted={startedAs} /> <span className="muted small">{startedAs ? "This review ran with scripted models. It cost nothing." : "This review ran with real models."}</span></p>}
+        {runId && startedAs !== undefined && <p className="board-scripted" data-testid="run-mode"><ModeLabel scripted={startedAs} /> <span className="muted small">{startedAs ? "This review used fixed text instead of models. It cost nothing and is not research." : "This review ran with real models."}</span></p>}
         {status?.mock && <p className="muted small board-scripted" data-testid="next-mode">{nextWhy}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
@@ -159,17 +183,16 @@ export function BoardView() {
 
       {memoText && (
         <section className="card-surface decision" aria-label="Decision">
-          <p className="board-resulthead"><span className="eyebrow">Recommendation</span><ModeLabel scripted={startedAs} /></p>
+          <p className="board-resulthead"><span className="eyebrow">What the team recommends</span><ModeLabel scripted={startedAs} /></p>
           <h2 className="decision-text">{plain(bullets(memo["decision"])[0]) || "See memo"}</h2>
           {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
           <p className="trust">
-            <span className="pill v-verified">{count("verified")} verified</span>
-            {count("contradicted") > 0 && <span className="pill v-contradicted">{count("contradicted")} contradicted</span>}
-            {count("unsupported") > 0 && <span className="pill v-unsupported">{count("unsupported")} unsupported</span>}
-            {count("unchecked") > 0 && <span className="pill v-unchecked">{count("unchecked")} unchecked</span>}
-            <span className="muted small">of {claims.length} claims checked against {uniqueEvidence.length} sources</span>
+            <VerdictChip verdict="verified" count={count("verified")} />
+            <VerdictChip verdict="contradicted" count={count("contradicted")} />
+            <VerdictChip verdict="unsupported" count={count("unsupported") + count("unchecked")} />
+            <span className="muted small">of {claims.length} statements checked against {uniqueEvidence.length} sources</span>
           </p>
-          <p className="muted small">Verified: a source supports the claim. Contradicted: a source goes against it. Unsupported: no source was found. Unchecked: no checker ruled on it. A checker decides each one; the board does not.</p>
+          <p className="muted small">Holds up: a source supports the statement. Proven wrong: a source goes against it. Not enough evidence: no source was found, or nothing checked it. A separate checker decides each one; the team does not grade itself.</p>
           <div className="decision-lists">
             {memo["unresolved tensions"] && <div><h3>Open questions</h3><ul>{bullets(memo["unresolved tensions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
             {memo["next actions"] && <div><h3>Next steps</h3><ul>{bullets(memo["next actions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
@@ -179,69 +202,69 @@ export function BoardView() {
       )}
 
       {!details && runId && (
-        <button type="button" className="link-btn" onClick={() => setDetails(true)}>See the full discussion, evidence and checks →</button>
+        <button type="button" className="link-btn" onClick={() => setDetails(true)}>See who said what, the sources and every check →</button>
       )}
 
       {details && (
         <div className="board-grid">
-          <section className="card-surface" aria-label="Deliberation">
+          <section className="card-surface" aria-label="Discussion">
             <h2>Discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
-            {rounds.length === 0 && <p className="muted small">{runId ? "No replies yet." : "Nothing to show until the board is convened."}</p>}
-            {rounds.map(([n, r]) => (
-              <div key={n}>
-                <div className="round-head">
-                  Round {n}{r.head?.final ? " · final positions" : ""}
-                  <p>{r.head?.message}</p>
-                </div>
-                {r.replies.map((reply) => (
-                  <div key={reply.key} className="reply">
-                    <div>
-                      <b>{title(reply.member)}</b>
-                      <p>{reply.text}</p>
-                      <ul className="verdicts">
-                        {r.claims.filter((c) => c.member === reply.member).map((c) => (
-                          <li key={c.key} title={c.note}>
-                            <span className={`pill v-${c.verdict}`}>{c.verdict}</span>
-                            <span className="muted">{c.checker}{c.p !== undefined ? ` ${c.p.toFixed(2)}` : ""}</span>
-                            <span>{c.claim}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+            <p className="muted small">Who said what, round by round. Under each reply: what a separate check found about each statement in it.</p>
+            {rounds.length === 0 && <p className="muted small">{runId ? "No replies yet." : "Nothing to show until a review is started."}</p>}
+            <Conversation className="thread-inline" aria-label="Discussion, round by round">
+              <ConversationContent className="thread-list">
+                {rounds.map(([n, r]) => (
+                  <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
+                    <h3 className="round-head">Round {n}{r.head?.final ? " · final positions" : ""}</h3>
+                    {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job="Leads the review and writes the decision" text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
+                    {r.replies.map((reply) => {
+                      const who = nameAndJob(title(reply.member))
+                      const said = r.claims.filter((c) => c.member === reply.member)
+                      return (
+                        <TeamMessage key={reply.key} name={who.name} job={who.job} text={reply.text}>
+                          {said.length > 0 && (
+                            <ul className="thread-checks" aria-label={`What the checks found about ${who.name}'s statements`}>
+                              {said.map((c) => <CheckedStatement key={c.key} verdict={c.verdict} claim={c.claim} note={c.note} source={c.source} by={checkerName(c)} />)}
+                            </ul>
+                          )}
+                        </TeamMessage>
+                      )
+                    })}
                   </div>
                 ))}
-              </div>
-            ))}
+                {live && <Loading>{headline}</Loading>}
+              </ConversationContent>
+            </Conversation>
             {events.filter((e): e is Of<"constraint"> => e.type === "constraint").map((c) => (
               <p key={c.key} className="pill" data-kind="warning">Wrap up: {c.detail}</p>
             ))}
           </section>
 
-          <section className="card-surface" aria-label="Verification and memo">
-            <h2>Verification ledger</h2>
+          <section className="card-surface" aria-label="Checks, sources and the written decision">
+            <h2>What the checks found</h2>
             <div className="ledger-stats">
-              {VERDICTS.map((v) => <div key={v}><strong>{count(v)}</strong><span>{v}</span></div>)}
+              {VERDICTS.map((v) => <div key={v} title={`The check's own word: ${v}`}><strong>{count(v)}</strong><span>{VERDICT_DETAIL[v]}</span><span className="muted small">{v}</span></div>)}
             </div>
             <p className="muted small">
-              Jev settled {claims.filter((c) => c.checker === "jev").length} of {claims.length} claims;
-              {" "}{claims.filter((c) => c.checker !== "jev").length} escalated to OpenAI / Claude Code.
+              A quick first check settled {claims.filter(firstPass).length} of {claims.length} statements;
+              {" "}{claims.filter((c) => !firstPass(c)).length} went to a second, more careful check.
             </p>
-            <h2>Evidence pool</h2>
-            <p className="muted small">{uniqueEvidence.length} sources kept · {dropped} dropped by Jev triage</p>
+            <h2>Sources</h2>
+            <p className="muted small">{uniqueEvidence.length} sources kept · {dropped} dropped as off-topic</p>
             <ul className="evidence">
               {uniqueEvidence.map((i) => <li key={i.url}><a href={i.url} target="_blank" rel="noreferrer">{i.title}</a> <span className="muted">{i.studyType}</span></li>)}
             </ul>
-            <h2>Full memo</h2>
-            {memoText ? <div className="memo"><Streamdown>{memoText}</Streamdown></div> : <p className="muted small">Written when the board finishes.</p>}
+            <h2>The written decision (memo)</h2>
+            {memoText ? <div className="memo"><Streamdown>{memoText}</Streamdown></div> : <p className="muted small">Written when the review finishes.</p>}
           </section>
           <details className="card-surface board-more">
-            <summary>The board: who took part, and the limits</summary>
+            <summary>The team: who took part, and the limits</summary>
             {roster.map((m) => (
               <div key={m.name} className="member" title={m.deliverable}>
                 <div>
                   <strong>{m.title}</strong>
-                  <span>{m.role === "lead" ? "Runs the board, writes the memo" : m.deliverable}</span>
-                  <code title={scripted ? `A real run would use ${m.modelId}` : m.modelId}>{scripted ? "scripted model" : m.modelId}</code>
+                  <span>{m.role === "lead" ? "Leads the review and writes the decision" : m.deliverable}</span>
+                  <code title={scripted ? `A real run would use ${m.modelId}` : m.modelId}>{scripted ? "practice: no model" : m.modelId}</code>
                 </div>
               </div>
             ))}

@@ -4,20 +4,20 @@ import { HOW_TO_TURN_ON } from "@/lib/paid"
 import type { RunSummary } from "@/board/api"
 import { fmtDuration } from "@/lib/format"
 import type { ScoreRow } from "@/swarm/api"
-import type { Catalog, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
+import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
 export const MODE_LABEL: Record<ChatMode, string> = {
   ai: "AI answer",
   keyword: "Keyword search, not an AI answer",
-  scripted: "Scripted: fixed text, not research",
+  scripted: "Practice: fixed text, not research",
 }
 export const MODE_KIND: Record<ChatMode, string> = { ai: "success", keyword: "warning", scripted: "neutral" }
 
 export const EXAMPLES = [
   "Should we advance a KRAS G12C hit that has a hERG liability?",
   "What did past board reviews decide about hERG risk?",
-  "Which runs had a rejected claim, and what was wrong with it?",
+  "Which runs had a statement that was proven wrong, and what was wrong with it?",
   "Plan a review of a covalent kinase inhibitor with poor solubility.",
 ]
 
@@ -159,10 +159,10 @@ export const latestReview = (runs: unknown): RunSummary | undefined => {
 
 
 // ---- can a board review use real models?
-const KEY_FOR: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" }
-const KEY_NAME: Record<string, string> = { ANTHROPIC_API_KEY: "Anthropic", OPENAI_API_KEY: "OpenAI", OPENROUTER_API_KEY: "OpenRouter" }
-/** The key a board model id needs. Ids that start with "~" go through OpenRouter. */
-export const keyOfModel = (id: string): string | undefined => (id.startsWith("~") ? KEY_FOR.openrouter : KEY_FOR[id.split("/")[0]])
+const KEY_FOR: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" }
+const KEY_NAME: Record<string, string> = { ANTHROPIC_API_KEY: "Anthropic", OPENAI_API_KEY: "OpenAI" }
+/** The key a board model id needs: the provider is the part before the slash. Undefined for a provider that needs none. */
+export const keyOfModel = (id: string): string | undefined => KEY_FOR[id.split("/")[0]]
 
 /**
  * Why a board review can only run with scripted models, in one plain sentence, or undefined when it can use real
@@ -173,10 +173,13 @@ export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; 
   providers: { id: string; keyPresent: boolean }[] = []): string | undefined {
   const needed = new Set(Object.values(status?.models ?? {}).flatMap((id) => (typeof id === "string" ? [keyOfModel(id)] : [])).filter((k): k is string => !!k))
   const missing = [...needed].filter((key) => status?.keys?.[key] === false || providers.some((p) => KEY_FOR[p.id] === key && !p.keyPresent))
-  // A provider the catalog lists without a key, when the engine did not say which models the board uses.
-  if (!needed.size) for (const p of providers) if (p.id === "openrouter" && !p.keyPresent) missing.push(KEY_FOR.openrouter)
-  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board runs are scripted only`
-  if (status?.paidCalls === false) return "Paid calls are off: board runs are scripted only"
-  if (status?.mock === true) return "The engine is in scripted mode: board runs are scripted only"
+  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board reviews are practice runs only`
+  if (status?.paidCalls === false) return "Paid calls are off: board reviews are practice runs only"
+  if (status?.mock === true) return "The engine is in practice mode: board reviews are practice runs only"
   return undefined
 }
+
+// ---- the words the Agents view filter looks in
+export const agentText = (a: CatalogAgent) => [a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" ")].join(" ")
+export const skillText = (s: CatalogSkill) => `${s.name} ${s.description} ${s.installed ? "installed" : "index only not installed"}`
+

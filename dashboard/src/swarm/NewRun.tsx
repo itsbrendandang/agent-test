@@ -118,7 +118,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               <label htmlFor={choice === OTHER ? `${uid}-model-pick` : `${uid}-model`}>Model</label>
               <select id={choice === OTHER ? `${uid}-model-pick` : `${uid}-model`} value={choice} onChange={(e) => set("choice", e.target.value)}
                 aria-invalid={choice !== OTHER && !!errors.model} aria-describedby={described("model")}>
-                {models.map((m) => <option key={m} value={m}>{m === "mock" ? "mock (scripted, free, no real analysis)" : `${m} (paid)`}</option>)}
+                {models.map((m) => <option key={m} value={m}>{m === "mock" ? "practice (fixed steps, free, no real analysis)" : `${m} (paid)`}</option>)}
                 <option value={OTHER} disabled={off}>Another model…{off ? " (paid calls are off)" : ""}</option>
               </select>
               {choice === OTHER && (
@@ -131,7 +131,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
                   Paid calls are off, so only the scripted model can run and no other model id can be typed. To change this, a person sets NO_PAID_CALLS=0 in the .env file and restarts the engine. The dashboard cannot turn it on.
                 </p>
               )}
-              {!off && models.length === 1 && <p className="muted small">The engine has no model API key, so only the scripted model is listed. Add a key to .env and restart the engine to run a real model.</p>}
+              {!off && models.length === 1 && <p className="muted small">The engine has no model API key, so only the practice option is listed. Add a key to .env and restart the engine to run a real model.</p>}
               {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the token budget. You will be asked to confirm.</p>}
               {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail. Add the key to .env and restart the engine.</p>}
             </div>

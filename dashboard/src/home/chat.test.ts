@@ -14,7 +14,7 @@ const turns: Turn[] = [
 
 describe("mode labels", () => {
   it("say plainly whether a model wrote the reply", () => {
-    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Keyword search, not an AI answer", scripted: "Scripted: fixed text, not research" })
+    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Keyword search, not an AI answer", scripted: "Practice: fixed text, not research" })
   })
 })
 
@@ -93,9 +93,9 @@ describe("starting a plan", () => {
     expect(startRequest(PLAN, editsOf(PLAN))).toEqual({ errors: {}, request: { confirm: true } })
   })
   it("sends lowered limits and a shorter list of agents", () => {
-    const { errors, request } = startRequest(PLAN, { maxUsd: "2.5", maxMinutes: "10", maxRounds: "4", agents: ["toxicologist"] }, "standard")
+    const { errors, request } = startRequest(PLAN, { maxUsd: "2.5", maxMinutes: "10", maxRounds: "4", agents: ["critic"] }, "standard")
     expect(errors).toEqual({})
-    expect(request).toEqual({ confirm: true, effort: "standard", limits: { maxUsd: 2.5, maxMinutes: 10, maxRounds: 4 }, agents: ["toxicologist"] })
+    expect(request).toEqual({ confirm: true, effort: "standard", limits: { maxUsd: 2.5, maxMinutes: 10, maxRounds: 4 }, agents: ["critic"] })
   })
   it("refuses to raise a limit, and wrong numbers", () => {
     expect(startRequest(PLAN, { ...editsOf(PLAN), maxUsd: "50" }).errors.maxUsd).toMatch(/can be lowered, not raised above 5/)
@@ -105,7 +105,7 @@ describe("starting a plan", () => {
   })
   it("refuses a plan with no agent, and ignores names the plan does not have", () => {
     expect(startRequest(PLAN, { ...editsOf(PLAN), agents: [] }).errors.agents).toBe("Keep at least one agent.")
-    expect(startRequest(PLAN, { ...editsOf(PLAN), agents: ["toxicologist", "intruder"] }).request.agents).toEqual(["toxicologist"])
+    expect(startRequest(PLAN, { ...editsOf(PLAN), agents: ["critic", "intruder"] }).request.agents).toEqual(["critic"])
   })
   it("a paid plan needs the tick", () => {
     expect(startBlock(PLAN, true, false)).toMatch(/Tick the box/)
@@ -195,26 +195,17 @@ describe("can a board review use real models?", () => {
   it("names the key a board model needs", () => {
     expect(keyOfModel("anthropic/claude-sonnet-5-5")).toBe("ANTHROPIC_API_KEY")
     expect(keyOfModel("openai/gpt-5-mini")).toBe("OPENAI_API_KEY")
-    expect(keyOfModel("~anthropic/claude-opus-latest")).toBe("OPENROUTER_API_KEY") // routed through OpenRouter
+    expect(keyOfModel("~anthropic/claude-opus-latest")).toBeUndefined() // no aliases any more
     expect(keyOfModel("ollama/qwen2.5:14b")).toBeUndefined()
   })
-  it("says the OpenRouter key is missing when the board routes its models through OpenRouter", () => {
-    const viaOpenRouter = { mock: true, paidCalls: true, keys: { OPENROUTER_API_KEY: false, ANTHROPIC_API_KEY: true }, models: { lead: "~anthropic/claude-opus-latest", cheap: "~google/gemini-flash-latest" } }
-    expect(boardScriptedWhy(viaOpenRouter)).toBe("OpenRouter key missing: board runs are scripted only")
-    // also when only the catalog says so
-    expect(boardScriptedWhy(undefined, [{ id: "anthropic", keyPresent: true }, { id: "openrouter", keyPresent: false }])).toBe("OpenRouter key missing: board runs are scripted only")
-  })
   it("a missing key comes before the paid switch: turning paid calls on would not be enough", () => {
-    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board runs are scripted only")
+    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board reviews are practice runs only")
   })
   it("says paid calls are off when every key is there", () => {
-    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Paid calls are off: board runs are scripted only")
-  })
-  it("does not blame OpenRouter when the board does not use it", () => {
-    expect(boardScriptedWhy({ ...live, keys: { ...live.keys, OPENROUTER_API_KEY: false } })).toBe("Paid calls are off: board runs are scripted only")
+    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Paid calls are off: board reviews are practice runs only")
   })
   it("says nothing when the board can use real models", () => {
     expect(boardScriptedWhy({ ...live, mock: false, paidCalls: true })).toBeUndefined()
-    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in scripted mode: board runs are scripted only")
+    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in practice mode: board reviews are practice runs only")
   })
 })

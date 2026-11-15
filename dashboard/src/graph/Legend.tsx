@@ -1,9 +1,11 @@
-import { KIND_COLOUR, KIND_SHAPE, VERDICT_COLOUR, VERDICT_SHAPE, type Shape } from "./style"
-import { GLYPH, KIND_LABEL, NODE_KINDS, VERDICT_CLASSES, VERDICT_WORD, type NodeKind } from "./types"
+import { KIND_SHAPE, palette, VERDICT_SHAPE, type Shape } from "./style"
+import { GLYPH, NODE_KINDS, VERDICT_CLASSES, type NodeKind, type RunKind } from "./types"
+import { VERDICT_WORD } from "@/lib/words"
+import { KIND_TECH, KIND_WHAT, kindLabel, LEGEND_SENTENCES } from "./words"
 
 /** A small drawing of a node shape, in the node's colour. Decorative: the text next to it carries the meaning. */
 export function ShapeIcon({ shape, colour, size = 16 }: { shape: Shape; colour: string; size?: number }) {
-  const common = { fill: colour, stroke: "#14130f", strokeWidth: 1 }
+  const common = { fill: colour, stroke: "#1b1a17", strokeWidth: 1 }
   const body = {
     sphere: <circle cx="8" cy="8" r="6" {...common} />,
     cube: <rect x="2.5" y="2.5" width="11" height="11" {...common} />,
@@ -19,35 +21,49 @@ export function ShapeIcon({ shape, colour, size = 16 }: { shape: Shape; colour: 
   return <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" focusable="false">{body}</svg>
 }
 
-const WHAT: Record<NodeKind, string> = {
-  run: "the run itself", agent: "a team member or model group", checker: "who ruled on a claim", phase: "a board round or a swarm phase",
-  claim: "something an agent asserted", source: "a source an agent kept", test: "a test written down to disprove a claim",
-  issue: "a problem a reviewer raised", artifact: "an output file or the decision memo",
+const KEY_KINDS: readonly NodeKind[] = ["agent", "claim", "checker", "test", "source"]
+
+/** Three or four words you can read the picture with. The full key is one click away. */
+export function Key({ kinds, runKind, open, onToggle }: { kinds: ReadonlySet<NodeKind>; runKind: RunKind; open: boolean; onToggle: () => void }) {
+  const { kind: KIND_COLOUR, verdict: VERDICT_COLOUR } = palette()
+  const shown = KEY_KINDS.filter((k) => kinds.has(k))
+  return (
+    <div className="graph-key" role="group" aria-label="Key">
+      {shown.map((k) => (
+        <span key={k} title={`${KIND_WHAT[k]} (technical term: ${KIND_TECH[k]})`}><ShapeIcon shape={KIND_SHAPE[k]} colour={k === "claim" ? VERDICT_COLOUR.holds : KIND_COLOUR[k]} size={14} />{kindLabel(k, runKind)}</span>
+      ))}
+      <span title="A claim's shape and glyph show whether it held up"><span aria-hidden="true">{GLYPH.holds} {GLYPH.fails} {GLYPH.unknown}</span> holds up · proven wrong · not enough evidence</span>
+      <button type="button" className="graph-linkbtn" aria-expanded={open} aria-controls="graph-full-key" onClick={onToggle}>{open ? "Hide the full key" : "Full key"}</button>
+    </div>
+  )
 }
 
-export function Legend({ kinds }: { kinds: ReadonlySet<NodeKind> }) {
+export function FullKey({ kinds, runKind }: { kinds: ReadonlySet<NodeKind>; runKind: RunKind }) {
+  const { kind: KIND_COLOUR, verdict: VERDICT_COLOUR } = palette()
   return (
-    <section className="graph-legend" aria-label="Legend">
+    <section className="graph-legend" id="graph-full-key" aria-label="Full key">
       <div>
-        <h3>Verdicts (claims and tests)</h3>
+        <h3>Statements and tests</h3>
         <ul>
           {VERDICT_CLASSES.map((v) => (
             <li key={v}><ShapeIcon shape={VERDICT_SHAPE[v]} colour={VERDICT_COLOUR[v]} /><b aria-hidden="true">{GLYPH[v]}</b> {VERDICT_WORD[v]}</li>
           ))}
         </ul>
-        <p className="muted small">Shape and glyph carry the verdict, not just colour. Refuted and contested things are drawn larger and always labelled.</p>
+        <p className="muted small">{LEGEND_SENTENCES[runKind]}</p>
+        <p className="muted small">Shape and glyph carry the verdict, not just colour. Statements proven wrong are drawn larger, with a halo, and always labelled.</p>
       </div>
       <div>
         <h3>Nodes</h3>
         <ul>
           {NODE_KINDS.filter((k) => kinds.has(k)).map((k) => (
-            <li key={k}><ShapeIcon shape={KIND_SHAPE[k]} colour={KIND_COLOUR[k]} />{KIND_LABEL[k]}: <span className="muted">{WHAT[k]}</span></li>
+            <li key={k}><ShapeIcon shape={KIND_SHAPE[k]} colour={KIND_COLOUR[k]} /><span><b>{kindLabel(k, runKind)}</b>: {KIND_WHAT[k]} <span className="muted" title="the technical term">({KIND_TECH[k]})</span></span></li>
           ))}
         </ul>
       </div>
       <div>
-        <h3>Lines</h3>
-        <p className="muted small">Each line is something the run recorded. An arrow points from the one that acted to the one it acted on (an agent made a claim, a checker ruled on it).</p>
+        <h3>Lines and size</h3>
+        <p className="muted small">Each line is something the run recorded. An arrow points from the one that acted to the one it acted on: a member wrote down a claim, a checker ruled on it. A node is bigger the more lines it has.</p>
+        <p className="muted small">Zoom in on a node and its label fades in. Hover to light up what it is connected to.</p>
       </div>
     </section>
   )

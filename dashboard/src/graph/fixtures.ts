@@ -5,34 +5,35 @@ import type { LedgerIssue, RunDetail } from "@/swarm/api"
 export const EVIL = `<img src=x onerror="window.__pwned=1">`
 
 export const ROSTER: RosterMember[] = [
-  { name: "lead", title: "Board Lead", role: "lead", model: "m", modelId: "x/lead", tools: [] },
-  { name: "toxicologist", title: "Toxicologist", role: "member", model: "m", modelId: "x/tox", tools: [] },
-  { name: "skeptic", title: "Skeptic", role: "member", model: "m", modelId: "x/skeptic", tools: [] },
-  { name: "medicinal-chemist", title: "Medicinal Chemist", role: "member", model: "m", modelId: "x/mc", tools: [] },
+  { name: "lead-scientist", title: "Lead Scientist", role: "lead", model: "lead", modelId: "x/lead", tools: [] },
+  { name: "scout", title: "Scout (Data Inspector)", role: "member", model: "cheap", modelId: "x/scout", tools: [] },
+  { name: "proposer", title: "Proposer (Research Planner)", role: "member", model: "strong", modelId: "x/proposer", tools: [] },
+  { name: "critic", title: "Critic", role: "member", model: "strong", modelId: "x/critic", tools: [] },
 ]
 
 const T = 1_700_000_000_000
+const SRC = "https://example.org/a"
 export const BOARD_EVENTS: BoardEvent[] = [
   { type: "run.started", runId: "r1", brief: "kras", title: "KRAS G12C hit-to-lead", mock: true, key: "run", at: T },
-  { type: "lead.framed", text: "Decide between two compounds.", key: "lead", at: T + 10 } as BoardEvent,
-  { type: "round.started", round: 1, message: "Round 1. Deliver your cards.", final: false, key: "round:1", at: T + 20 },
-  { type: "evidence.triaged", member: "toxicologist", query: "hERG liability", kept: 2, dropped: 1, key: "ev:1", at: T + 30,
+  { type: "lead.framed", text: "Decide between two compounds. Then more.", key: "lead", at: T + 10 } as BoardEvent,
+  { type: "round.started", round: 1, message: "Round 1. Scout: inspect the data. Critic: give your first check.", final: false, key: "round:1", at: T + 20 },
+  { type: "evidence.triaged", member: "scout", query: "hERG liability", kept: 2, dropped: 1, key: "ev:1", at: T + 30,
     items: [
-      { url: "https://example.org/a", title: "hERG of acrylamides", studyType: "in vitro" },
-      { url: `javascript:alert(1)`, title: EVIL, studyType: "clinical" },
-    ] } as BoardEvent,
-  { type: "evidence.triaged", member: "skeptic", query: "resistance", kept: 1, dropped: 0, key: "ev:2", at: T + 31,
-    items: [{ url: "https://example.org/a", title: "hERG of acrylamides" }] } as BoardEvent,
-  { type: "member.replied", round: 1, member: "toxicologist", text: `hERG IC50 is 6 uM ${EVIL}`, key: "reply:1:toxicologist", at: T + 40 },
-  { type: "member.replied", round: 1, member: "skeptic", text: "No differentiation.", key: "reply:1:skeptic", at: T + 41 },
-  { type: "claim.checked", round: 1, member: "toxicologist", claim: `Piperazine quinazolines show no hERG ${EVIL}`, kind: "literature", verdict: "contradicted", checker: "jev", p: 0.9, key: "claim:1:tox:a", at: T + 50 },
-  { type: "claim.checked", round: 1, member: "toxicologist", claim: "CMP-0517 hERG IC50 is 6 uM", kind: "brief", verdict: "verified", checker: "jev", p: 0.95, key: "claim:1:tox:b", at: T + 51 },
-  { type: "claim.checked", round: 1, member: "skeptic", claim: "Neither candidate has resistance data", kind: "brief", verdict: "unsupported", checker: "jev", p: 0, key: "claim:1:sk:a", at: T + 52 },
-  { type: "claim.checked", round: 1, member: "medicinal-chemist", claim: "CMP-0423 TPSA is about 49", kind: "computed", verdict: "verified", checker: "claude-code", note: "mock: RDKit recomputation matches", key: "claim:1:mc:a", at: T + 53 },
-  { type: "claim.checked", round: 1, member: "skeptic", claim: "MET amplification drives resistance", kind: "literature", verdict: "unchecked", checker: "openai", note: "escalation budget used up", key: "claim:1:sk:b", at: T + 54 },
+      { url: SRC, title: "hERG of acrylamides", studyType: "in vitro", text: "t" },
+      { url: `javascript:alert(1)`, title: EVIL, studyType: "clinical", text: "t" },
+    ] } as unknown as BoardEvent,
+  { type: "evidence.triaged", member: "critic", query: "resistance", kept: 1, dropped: 0, key: "ev:2", at: T + 31,
+    items: [{ url: SRC, title: "hERG of acrylamides", text: "t" }] } as unknown as BoardEvent,
+  { type: "member.replied", round: 1, member: "scout", text: `The brief has one assay table. ${EVIL} More words follow here.`, key: "reply:1:scout", at: T + 40 },
+  { type: "member.replied", round: 1, member: "critic", text: "Rejected: no resistance data. Supported: the hERG margin fails.", key: "reply:1:critic", at: T + 41 },
+  { type: "claim.checked", round: 1, member: "scout", claim: `Piperazine quinazolines show no hERG ${EVIL}`, kind: "literature", verdict: "contradicted", checker: "jev", p: 0.9, source: SRC, key: "claim:1:scout:a", at: T + 50 } as BoardEvent,
+  { type: "claim.checked", round: 1, member: "scout", claim: "CMP-0517 hERG IC50 is 6 uM", kind: "brief", verdict: "verified", checker: "first-pass", source: "brief", checkedBy: "scripted", key: "claim:1:scout:b", at: T + 51 } as BoardEvent,
+  { type: "claim.checked", round: 1, member: "critic", claim: "Neither candidate has resistance data", kind: "brief", verdict: "unsupported", checker: "first-pass", key: "claim:1:critic:a", at: T + 52 },
+  { type: "claim.checked", round: 1, member: "proposer", claim: "CMP-0423 TPSA is about 49", kind: "computed", verdict: "verified", checker: "claude-code", note: "mock: RDKit recomputation matches", source: "TPSA from the SMILES with RDKit", key: "claim:1:proposer:a", at: T + 53 } as BoardEvent,
+  { type: "claim.checked", round: 1, member: "critic", claim: "MET amplification drives resistance", kind: "literature", verdict: "unchecked", checker: "openai", note: "escalation budget used up", source: "https://not-in-the-pool.example/x", key: "claim:1:critic:b", at: T + 54 } as BoardEvent,
   { type: "round.started", round: 2, message: "Round 2. Reply to the others.", final: true, key: "round:2", at: T + 60 },
-  { type: "member.replied", round: 2, member: "toxicologist", text: "Still 6 uM.", key: "reply:2:toxicologist", at: T + 70 },
-  { type: "claim.checked", round: 2, member: "toxicologist", claim: "CMP-0517 hERG IC50 is 6 uM", kind: "brief", verdict: "verified", checker: "jev", p: 0.95, key: "claim:2:tox:b", at: T + 71 },
+  { type: "member.replied", round: 2, member: "scout", text: "Still 6 uM.", key: "reply:2:scout", at: T + 70 },
+  { type: "claim.checked", round: 2, member: "scout", claim: "CMP-0517 hERG IC50 is 6 uM", kind: "brief", verdict: "verified", checker: "first-pass", note: "[ruling carried over from round 1; not checked again]", source: "brief", key: "claim:2:scout:b", at: T + 71 } as BoardEvent,
   { type: "constraint", reason: "rounds", detail: "Out of rounds.", key: "constraint", at: T + 80 },
   { type: "memo.written", path: "/Users/someone/board/runs/r1/memo.md", decision: "Go with conditions", key: "memo", at: T + 90 },
   { type: "run.finished", usd: 0, minutes: 0.14, key: "finished", at: T + 100 },
@@ -93,3 +94,132 @@ export const SINGLE_DETAIL: RunDetail = {
   run: { id: "s2", mode: "local", task: "demo", solver: "single", model: "mock", roleModels: {}, phase: "done", startedAt: T, score: 1, artifacts: [{ artifact_id: "gene_counts", score: 1 }] },
   ledger: null, findings: null, methods: null,
 }
+
+/** A practice (scripted) board run from the current engine, as recorded: two members spoke and four rulings were made. */
+export const PRACTICE_EVENTS = [
+ {
+  "type": "run.started",
+  "runId": "practice",
+  "brief": "chat-should-we-advance-a-kras-g12c-hit-that-h-1060e203",
+  "title": "Should we advance a KRAS G12C hit that has a hERG liability?",
+  "mock": true,
+  "key": "run",
+  "at": 1700000000000
+ },
+ {
+  "type": "round.started",
+  "round": 1,
+  "message": "Round 1. Scout: inspect the data. Proposer: plan the analysis and name the claims to test. Pilot and Experimenter: say what you would run. Everyone else: give your first check. Work independently.",
+  "final": false,
+  "key": "round:1",
+  "at": 1700000000258
+ },
+ {
+  "type": "member.replied",
+  "round": 1,
+  "member": "scout",
+  "text": "The brief has one assay table for two candidates. No raw data files came with it, so no file could be checked for damage.",
+  "usd": 0,
+  "key": "reply:1:scout",
+  "at": 1700000000433
+ },
+ {
+  "type": "claim.checked",
+  "round": 1,
+  "member": "scout",
+  "claim": "The brief gives six assays for each of CMP-0423 and CMP-0517",
+  "kind": "brief",
+  "verdict": "unsupported",
+  "checker": "first-pass",
+  "checkedBy": "scripted",
+  "key": "claim:1:scout:bbbff6d4a4e86888",
+  "at": 1700000000435
+ },
+ {
+  "type": "member.replied",
+  "round": 1,
+  "member": "critic",
+  "text": "Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.",
+  "usd": 0,
+  "key": "reply:1:critic",
+  "at": 1700000000435
+ },
+ {
+  "type": "claim.checked",
+  "round": 1,
+  "member": "critic",
+  "claim": "CMP-0423 hERG IC50 is 18 uM",
+  "kind": "brief",
+  "verdict": "unsupported",
+  "checker": "first-pass",
+  "checkedBy": "scripted",
+  "key": "claim:1:critic:ec6ee27908fef7ea",
+  "at": 1700000000435
+ },
+ {
+  "type": "round.started",
+  "round": 2,
+  "message": "Round 2. Methods Auditor and Critic: the hERG margin and solubility of CMP-0517 both miss the criteria. Reviser: fix what they flagged. Finisher: list the outputs that are still missing. Reporter: draft the supported findings and the rejected claims.",
+  "final": false,
+  "key": "round:2",
+  "at": 1700000000647
+ },
+ {
+  "type": "member.replied",
+  "round": 2,
+  "member": "scout",
+  "text": "The brief has one assay table for two candidates. No raw data files came with it, so no file could be checked for damage.",
+  "usd": 0,
+  "key": "reply:2:scout",
+  "at": 1700000000824
+ },
+ {
+  "type": "claim.checked",
+  "round": 2,
+  "member": "scout",
+  "claim": "The brief gives six assays for each of CMP-0423 and CMP-0517",
+  "kind": "brief",
+  "verdict": "unsupported",
+  "checker": "first-pass",
+  "note": "[ruling carried over from round 1; not checked again]",
+  "checkedBy": "scripted",
+  "key": "claim:2:scout:bbbff6d4a4e86888",
+  "at": 1700000000824
+ },
+ {
+  "type": "member.replied",
+  "round": 2,
+  "member": "critic",
+  "text": "Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.",
+  "usd": 0,
+  "key": "reply:2:critic",
+  "at": 1700000000824
+ },
+ {
+  "type": "claim.checked",
+  "round": 2,
+  "member": "critic",
+  "claim": "CMP-0423 hERG IC50 is 18 uM",
+  "kind": "brief",
+  "verdict": "unsupported",
+  "checker": "first-pass",
+  "note": "[ruling carried over from round 1; not checked again]",
+  "checkedBy": "scripted",
+  "key": "claim:2:critic:ec6ee27908fef7ea",
+  "at": 1700000000824
+ },
+ {
+  "type": "memo.written",
+  "path": "/runs/practice/memo.md",
+  "decision": "Go with conditions",
+  "key": "memo",
+  "at": 1700000001819
+ },
+ {
+  "type": "run.finished",
+  "usd": 0,
+  "minutes": 0.030366666666666667,
+  "key": "finished",
+  "at": 1700000001822
+ }
+] as unknown as BoardEvent[]

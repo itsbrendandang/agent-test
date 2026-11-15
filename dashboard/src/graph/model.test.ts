@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, ROSTER, SINGLE_DETAIL, SWARM_DETAIL } from "./fixtures"
 import { buildBoardGraph, buildSwarmGraph, safeUrl } from "./model"
 import { NODE_KINDS, type GraphModel, type LinkKind, type NodeKind } from "./types"
@@ -24,10 +25,12 @@ function invariants(g: GraphModel) {
   expect(g.steps.length).toBeGreaterThanOrEqual(g.maxOrder)
 }
 
+const claimWith = (g: GraphModel, text: string) => g.nodes.find((n) => n.kind === "claim" && n.label.includes(text))!
+
 describe("board graph", () => {
   const g = board()
   it("has no duplicate ids and no edge to a missing node", () => invariants(g))
-  it("has the run, agents, checkers, rounds, claims, sources and the memo", () => {
+  it("has the run, members, checkers, rounds, claims, sources and the memo", () => {
     for (const k of ["run", "agent", "checker", "phase", "claim", "source", "artifact"] as NodeKind[]) expect(kinds(g).has(k), k).toBe(true)
     expect(kinds(g).has("test")).toBe(false)
     expect(kinds(g).has("issue")).toBe(false)
@@ -35,67 +38,96 @@ describe("board graph", () => {
   it("draws exactly the edges the events record", () => {
     expect([...linkKinds(g)].sort()).toEqual(["cites", "framed", "in-phase", "involves", "made", "next", "produced", "replied", "retrieved", "ruled"].sort())
     const has = (k: LinkKind, s: string, t: string) => g.links.some((l) => l.kind === k && l.source === s && l.target === t)
-    expect(has("made", "agent:toxicologist", "claim:claim:1:tox:a")).toBe(true)
-    expect(has("ruled", "checker:jev", "claim:claim:1:tox:a")).toBe(true)
-    expect(has("ruled", "checker:claude-code", "claim:claim:1:mc:a")).toBe(true)
-    expect(has("replied", "agent:skeptic", "phase:1")).toBe(true)
-    expect(has("retrieved", "agent:toxicologist", "source:https://example.org/a")).toBe(true)
+    const x = claimWith(g, "Piperazine").id
+    expect(has("made", "agent:scout", x)).toBe(true)
+    expect(has("ruled", "checker:first-pass", x)).toBe(true)
+    expect(has("ruled", "checker:claude-code", claimWith(g, "TPSA").id)).toBe(true)
+    expect(has("replied", "agent:critic", "phase:1")).toBe(true)
+    expect(has("retrieved", "agent:scout", "source:https://example.org/a")).toBe(true)
     expect(has("next", "phase:1", "phase:2")).toBe(true)
     expect(has("next", "run", "phase:1")).toBe(true)
     expect(has("framed", "agent:lead", "run")).toBe(true)
     expect(has("produced", "run", "artifact:memo")).toBe(true)
   })
-  it("never links a claim to a source the data does not name", () => {
-    // claim.checked has no source field: only claims of kind "brief" cite something (the brief)
-    const cites = g.links.filter((l) => l.kind === "cites")
-    expect(new Set(cites.map((l) => l.target))).toEqual(new Set(["source:brief"]))
-    expect(cites.map((l) => l.source).sort()).toEqual(["claim:claim:1:sk:a", "claim:claim:1:tox:b", "claim:claim:2:tox:b"].sort())
-    for (const l of g.links) if (l.kind === "retrieved") expect(l.source.startsWith("agent:")).toBe(true)
-    expect(g.notes.join(" ")).toMatch(/does not record which source a claim cites/)
+  it("uses the words of the shared glossary for lines", () => {
+    expect(g.links.find((l) => l.kind === "made")!.label).toBe("said")
+    expect(g.links.find((l) => l.kind === "ruled")!.label).toBe("checked")
+    expect(g.links.find((l) => l.kind === "retrieved")!.label).toBe("used")
+    expect(g.links.find((l) => l.kind === "cites")!.label).toBe("cites")
   })
-  it("keeps each ruling as its own claim node and maps verdicts to classes and attention", () => {
-    expect(g.nodes.filter((n) => n.kind === "claim")).toHaveLength(6)
-    const contradicted = find(g, "claim:claim:1:tox:a")
-    expect(contradicted.verdict).toEqual({ cls: "fail", raw: "contradicted" })
-    expect(contradicted.attention).toBe(2)
-    expect(find(g, "claim:claim:1:tox:b").verdict).toEqual({ cls: "pass", raw: "verified" })
-    expect(find(g, "claim:claim:1:sk:a").verdict?.cls).toBe("unknown")
-    expect(find(g, "claim:claim:1:sk:b").verdict).toEqual({ cls: "unknown", raw: "unchecked" })
-    expect(find(g, "claim:claim:1:sk:b").attention).toBe(1)
+  it("links a claim to a source only when the data names it, and in no other case", () => {
+    const cites = g.links.filter((l) => l.kind === "cites")
+    // brief claims cite the brief; a claim whose `source` is the address of a kept source cites that source
+    expect(cites.map((l) => `${l.source}>${l.target}`).sort()).toEqual([
+      `${claimWith(g, "Neither").id}>source:brief`, `${claimWith(g, "CMP-0517").id}>source:brief`, `${claimWith(g, "Piperazine").id}>source:https://example.org/a`,
+    ].sort())
+    // a source that is not among the kept ones, and a free-text one, are never turned into a node or a line
+    expect(g.nodes.some((n) => n.id.includes("not-in-the-pool"))).toBe(false)
+    expect(g.links.some((l) => l.source === claimWith(g, "MET").id && l.kind === "cites")).toBe(false)
+    expect(g.links.some((l) => l.source === claimWith(g, "TPSA").id && l.kind === "cites")).toBe(false)
+    expect(claimWith(g, "MET").facts).toContainEqual({ label: "Cited source", value: "https://not-in-the-pool.example/x" })
+    expect(claimWith(g, "TPSA").facts).toContainEqual({ label: "What was computed", value: "TPSA from the SMILES with RDKit" })
+    expect(g.notes.join(" ")).toMatch(/linked to a source only when/)
+  })
+  it("says a claim has no source when the run predates the source field", () => {
+    const old = buildBoardGraph({ runId: "r1", events: BOARD_EVENTS.map((e) => { const { source: _s, ...rest } = e as BoardEvent & { source?: string }; return rest as BoardEvent }), roster: ROSTER })
+    invariants(old)
+    expect(old.links.filter((l) => l.kind === "cites").every((l) => l.target === "source:brief")).toBe(true)
+    expect(old.notes.join(" ")).toMatch(/does not record which source a statement cites/)
+  })
+  it("merges a claim that comes back in a later round, and keeps the latest ruling", () => {
+    expect(g.nodes.filter((n) => n.kind === "claim")).toHaveLength(5)
+    const y = claimWith(g, "CMP-0517")
+    expect(y.facts).toContainEqual({ label: "Rounds", value: "1, 2" })
+    expect(y.activity).toHaveLength(2)
+    expect(g.links.filter((l) => l.kind === "in-phase" && l.source === y.id).map((l) => l.target).sort()).toEqual(["phase:1", "phase:2"])
+    const changed = BOARD_EVENTS.map((e) => (e.key === "claim:2:scout:b" ? ({ ...e, verdict: "contradicted" } as BoardEvent) : e))
+    const h = buildBoardGraph({ runId: "r1", events: changed, roster: ROSTER })
+    const y2 = claimWith(h, "CMP-0517")
+    expect(y2.verdict?.raw).toBe("contradicted")
+    expect(y2.facts.find((f) => f.label === "Verdict changed")?.value).toBe("round 1: verified; round 2: contradicted")
+  })
+  it("treats the old checker name jev as the first-pass checker", () => {
+    expect(g.nodes.filter((n) => n.kind === "checker").map((n) => n.id).sort()).toEqual(["checker:claude-code", "checker:first-pass", "checker:openai"])
+  })
+  it("maps verdicts to classes and attention", () => {
+    const x = claimWith(g, "Piperazine")
+    expect(x.verdict).toEqual({ cls: "fails", raw: "contradicted" })
+    expect(x.attention).toBe(2)
+    expect(claimWith(g, "TPSA").verdict).toEqual({ cls: "holds", raw: "verified" })
+    expect(claimWith(g, "Neither").verdict?.cls).toBe("unknown")
+    expect(claimWith(g, "MET").verdict).toEqual({ cls: "unknown", raw: "unchecked" })
+    expect(claimWith(g, "MET").attention).toBe(1)
   })
   it("orders nodes by when the events happened", () => {
     expect(find(g, "run").order).toBe(0)
     expect(find(g, "phase:1").order).toBeLessThan(find(g, "phase:2").order)
-    expect(find(g, "claim:claim:1:tox:a").order).toBeLessThan(find(g, "claim:claim:2:tox:b").order)
     expect(g.marks.map((m) => m.label)).toEqual(["Round 1", "Round 2"])
     expect(g.maxOrder).toBe(BOARD_EVENTS.length)
   })
   it("orders by timestamp even when the events arrive shuffled", () => {
-    const shuffled = [...BOARD_EVENTS].reverse()
-    const h = buildBoardGraph({ runId: "r1", events: shuffled, roster: ROSTER })
+    const h = buildBoardGraph({ runId: "r1", events: [...BOARD_EVENTS].reverse(), roster: ROSTER })
     expect(h.nodes.map((n) => [n.id, n.order]).sort()).toEqual(g.nodes.map((n) => [n.id, n.order]).sort())
   })
   it("reads the scripted flag from the run's own run.started event", () => {
     expect(g.scripted).toBe(true)
-    expect(find(g, "run").facts.find((f) => f.label === "Models")?.value).toMatch(/scripted/)
+    expect(find(g, "run").facts.find((f) => f.label === "Made with")?.value).toMatch(/Practice run/)
     const real = BOARD_EVENTS.map((e) => (e.type === "run.started" ? { ...e, mock: false } : e))
     expect(buildBoardGraph({ runId: "r1", events: real }).scripted).toBe(false)
     const none = buildBoardGraph({ runId: "r1", events: BOARD_EVENTS.filter((e) => e.type !== "run.started") })
     expect(none.scripted).toBeUndefined()
     expect(none.notes.join(" ")).toMatch(/does not say whether/)
   })
-  it("uses roster titles only for display and summarises what an agent did", () => {
-    const tox = find(g, "agent:toxicologist")
-    expect(tox.label).toBe("Toxicologist")
-    expect(tox.facts.find((f) => f.label === "Replies")?.value).toBe("2")
-    expect(tox.facts.find((f) => f.label === "Claims made")?.value).toContain("3: 2 verified, 1 contradicted")
-    expect(tox.activity.length).toBeGreaterThan(3)
-    expect(find(g, "agent:skeptic").label).toBe("Skeptic")
-    expect(buildBoardGraph({ runId: "r1", events: BOARD_EVENTS }).nodes.find((n) => n.id === "agent:skeptic")!.label).toBe("skeptic")
+  it("uses roster titles only for display and summarises what a member did", () => {
+    const scout = find(g, "agent:scout")
+    expect(scout.label).toBe("Scout (Data Inspector)")
+    expect(scout.facts.find((f) => f.label === "Replies")?.value).toBe("2")
+    expect(scout.facts.find((f) => f.label === "Statements")?.value).toBe("2: 1 held up, 1 proven wrong, 0 had too little evidence")
+    expect(scout.activity.length).toBeGreaterThanOrEqual(3)
+    expect(buildBoardGraph({ runId: "r1", events: BOARD_EVENTS }).nodes.find((n) => n.id === "agent:critic")!.label).toBe("critic")
   })
   it("keeps untrusted text as text and links only http(s) addresses", () => {
-    const claim = find(g, "claim:claim:1:tox:a")
-    expect(claim.text).toContain(EVIL)
+    expect(claimWith(g, "Piperazine").text).toContain(EVIL)
     const bad = g.nodes.find((n) => n.id === "source:javascript:alert(1)")!
     expect(bad.label).toContain("<img")
     expect(bad.url).toBeUndefined()
@@ -105,10 +137,13 @@ describe("board graph", () => {
   })
   it("records how the run ended", () => {
     expect(g.status).toBe("done")
-    expect(find(g, "run").facts.map((f) => f.label)).toEqual(expect.arrayContaining(["Cost", "Took", "Wrap-up", "Claims checked"]))
+    expect(find(g, "run").facts.map((f) => f.label)).toEqual(expect.arrayContaining(["Cost", "Took", "Wrap-up"]))
     expect(find(g, "artifact:memo").facts.find((f) => f.label === "File")?.value).toBe("memo.md") // not the absolute path
     const failed = buildBoardGraph({ runId: "r1", events: [...BOARD_EVENTS.slice(0, 5), { type: "run.failed", error: "boom", key: "f", at: 1 }] })
     expect(failed.status).toBe("failed")
+  })
+  it("counts the run for its headline before any size cap", () => {
+    expect(g.totals).toMatchObject({ members: 4, claims: 5, rounds: 2, byVerdict: { verified: 2, contradicted: 1, unsupported: 1, unchecked: 1 } })
   })
   it("handles a run in progress and an empty run", () => {
     const live = buildBoardGraph({ runId: "r1", events: BOARD_EVENTS.slice(0, 8) })
@@ -123,7 +158,7 @@ describe("board graph", () => {
     const odd = [{ type: "evidence.triaged", member: "x", query: "q", kept: 0, dropped: 0, key: "k", at: 1 }, { type: "claim.checked", round: 1, member: "x", claim: "c", kind: "literature", verdict: "mystery", checker: "jev", key: "c", at: 2 }] as never
     const h = buildBoardGraph({ runId: "r", events: odd })
     invariants(h)
-    expect(find(h, "claim:c").verdict).toEqual({ cls: "unknown", raw: "mystery" }) // an unknown word is never treated as a pass
+    expect(h.nodes.find((n) => n.kind === "claim")!.verdict).toEqual({ cls: "unknown", raw: "mystery" }) // an unknown word is never treated as a hold
   })
 })
 
@@ -158,18 +193,18 @@ describe("swarm graph", () => {
       if (l.kind === "against") expect(l.target.startsWith("artifact:")).toBe(true)
     }
     expect(g.links.some((l) => l.source.startsWith("issue:") && l.target.startsWith("claim:"))).toBe(false)
-    expect(g.notes.join(" ")).toMatch(/does not record which role wrote an artefact/)
-    expect(g.notes.join(" ")).toMatch(/does not say which claim an issue is about/)
+    expect(g.notes.join(" ")).toMatch(/does not record which role wrote an output/)
+    expect(g.notes.join(" ")).toMatch(/does not say which statement a problem is about/)
   })
   it("maps the ledger's verdicts and tests", () => {
-    expect(find(g, "claim:C1").verdict).toEqual({ cls: "pass", raw: "supported" })
-    expect(find(g, "claim:C2").verdict).toEqual({ cls: "fail", raw: "refuted" })
+    expect(find(g, "claim:C1").verdict).toEqual({ cls: "holds", raw: "supported" })
+    expect(find(g, "claim:C2").verdict).toEqual({ cls: "fails", raw: "refuted" })
     expect(find(g, "claim:C2").attention).toBe(2)
     expect(find(g, "claim:C3").verdict).toEqual({ cls: "unknown", raw: "insufficient" })
     // the registered name "Row Count" and the result "row count" are one test
     expect(g.nodes.filter((n) => n.kind === "test")).toHaveLength(3)
-    expect(find(g, "test:C2:row count").verdict?.cls).toBe("fail")
-    expect(find(g, "test:C3:pca").verdict).toEqual({ cls: "unknown", raw: "no result" })
+    expect(find(g, "test:C2:row count").verdict?.cls).toBe("fails")
+    expect(find(g, "test:C3:pca").verdict).toEqual({ cls: "unknown", raw: "no result yet" })
     expect(find(g, "test:C1:label permutation").verdict).toBeUndefined()
     expect(find(g, "issue:I2").attention).toBe(1)
     expect(find(g, "issue:I1").attention).toBe(0)
@@ -179,8 +214,8 @@ describe("swarm graph", () => {
     expect(find(g, "phase:propose").order).toBeLessThan(find(g, "phase:critique 1").order)
     expect(find(g, "agent:planner").order).toBe(3)
     expect(find(g, "artifact:gene_counts").order).toBeGreaterThanOrEqual(find(g, "claim:C1").order)
-    expect(g.marks.map((m) => m.label)).toEqual(["Proposer", "Pilot (skipped)", "Critic 1", "Reviser 1"])
-    expect(find(g, "phase:pilot").label).toBe("Pilot (skipped)")
+    expect(g.marks.map((m) => m.label)).toEqual(["Proposer", "Pilot (did not run)", "Critic · review round 1", "Reviser · review round 1"])
+    expect(find(g, "phase:pilot").label).toBe("Pilot (did not run)")
     expect(g.steps).toHaveLength(g.maxOrder)
   })
   it("labels scripted and demo runs from the run's own fields", () => {
@@ -199,7 +234,7 @@ describe("swarm graph", () => {
     const s = buildSwarmGraph(SINGLE_DETAIL)
     invariants(s)
     expect(s.nodes.map((n) => n.id).sort()).toEqual(["artifact:gene_counts", "run"])
-    expect(s.notes.join(" ")).toMatch(/single agent keeps no ledger/i)
+    expect(s.notes.join(" ")).toMatch(/single agent keeps no shared record/i)
   })
   it("handles a run with no events and a run in progress", () => {
     const none = buildSwarmGraph({ ...SWARM_DETAIL, ledger: { ...SWARM_DETAIL.ledger!, claims: [], issues: [], events: [] }, run: { ...SWARM_DETAIL.run, artifacts: [] } })

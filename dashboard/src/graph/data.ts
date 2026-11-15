@@ -5,7 +5,7 @@ import { ENGINE, get, type BoardEvent, type RosterMember, type RunSummary } from
 import { settled, type GlhfRun, type RunDetail } from "@/swarm/api"
 import type { RunKind } from "./types"
 
-export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string }
+export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string; /** A swarm run, or one agent working alone. */ solver?: "glhf" | "single" }
 
 const subscribeVisible = (cb: () => void) => { document.addEventListener("visibilitychange", cb); return () => document.removeEventListener("visibilitychange", cb) }
 /** false while the tab is in the background. */
@@ -15,7 +15,7 @@ export const useVisible = () => useSyncExternalStore(subscribeVisible, () => doc
 export function mergeRuns(board: RunSummary[] | undefined, swarm: GlhfRun[] | undefined): RunRef[] {
   return [
     ...(board ?? []).map((r): RunRef => ({ kind: "board", id: r.id, startedAt: r.startedAt, state: r.status })),
-    ...(swarm ?? []).map((r): RunRef => ({ kind: "swarm", id: r.id, startedAt: r.startedAt, state: r.phase })),
+    ...(swarm ?? []).map((r): RunRef => ({ kind: "swarm", id: r.id, startedAt: r.startedAt, state: r.phase, solver: r.solver })),
   ].sort((a, b) => b.startedAt - a.startedAt || a.id.localeCompare(b.id))
 }
 

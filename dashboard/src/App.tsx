@@ -2,10 +2,13 @@
 import { lazy, Suspense, useEffect, useState } from "react"
 import { FlaskConical, GitCompareArrows, Home, ListChecks, Settings, Share2, Users } from "lucide-react"
 import { Mark } from "./components/Buddy"
+import { Loading } from "./components/Crew"
 import { SideCrew } from "./components/SideCrew"
+import { Splash } from "./components/Splash"
 import { StatusLine } from "./components/StatusLine"
 import { TokenPrompt } from "./components/TokenPrompt"
 import { ViewBoundary } from "./components/ViewBoundary"
+import { getCatalog } from "./home/api"
 import { useShell } from "./lib/shell"
 import { initialView, viewOfHash, VIEWS, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
@@ -30,9 +33,13 @@ export default function App() {
   }, [])
   const go = (next: View) => { setView(next); window.location.hash = next }
   const shell = useShell()
+  // The loading screen stays until the engine's status and catalog have both answered (or failed); see Splash for the limits.
+  const [catalogAnswered, setCatalogAnswered] = useState(false)
+  useEffect(() => { const done = () => setCatalogAnswered(true); getCatalog().then(done, done) }, [])
 
   return (
     <div className="app">
+      <Splash ready={shell.engine !== "unknown" && catalogAnswered} offline={shell.engine === "offline"} />
       <TokenPrompt />
       <StatusLine shell={shell} onOpenSettings={() => go("Settings")} />
       <nav className="rail" aria-label="Views">
@@ -55,7 +62,7 @@ export default function App() {
           {view === "Compare" && <SwarmView />}
           {view === "Board" && <BoardView />}
           {view === "Agents" && <AgentsView />}
-          {view === "Graph" && <Suspense fallback={<div className="page"><p className="muted" role="status">Loading the graph…</p></div>}><WorldsView /></Suspense>}
+          {view === "Graph" && <Suspense fallback={<div className="page"><Loading className="loading-block">Loading the graph…</Loading></div>}><WorldsView /></Suspense>}
           {view === "Settings" && <SettingsView />}
         </ViewBoundary>
       </main>

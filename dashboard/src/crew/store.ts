@@ -1,72 +1,33 @@
-import { useEffect, useState } from "react"
-import type { Species } from "@/components/Buddy"
+// The app's three characters: Momo, Ember and Fuji. They are decoration: the friendly face of the app on the
+// loading screen, on Home and wherever something is loading. They are never the agents that did the work (those
+// are named in the conversation and the steppers) and never the only sign of anything: the status is always in
+// text beside them. A person can turn them off in Settings ("Show characters"); the choice is remembered.
+import { useSyncExternalStore } from "react"
+import type { Species } from "@/components/species"
 
-export interface CrewMember {
-  id: string
-  name: string
-  role: string
-  species: Species
-  image?: string // uploaded character art (data URL); replaces the built-in look
-  skill?: string // contents of this agent's SKILL.md
-}
-
-const KEY = "simlab.crew.v1"
-
-/**
- * The demo characters (Momo, Ember and Fuji, or whatever a browser saved in their place) are hidden unless the app
- * is built or served with VITE_DEMO_CREW=1. With the flag off useCrew() gives an empty crew, also to a browser that
- * has characters saved, so no view shows them. Their saved data and the character art are left alone.
- */
-export const demoCrew = (): boolean => import.meta.env.VITE_DEMO_CREW === "1"
-
-export const DEFAULT_CREW: CrewMember[] = [
-  { id: "researcher", name: "Momo", role: "Researcher", species: "bunny" },
-  { id: "builder", name: "Ember", role: "Builder", species: "flame" },
-  { id: "reviewer", name: "Fuji", role: "Reviewer", species: "mountain" },
+export interface Mascot { id: string; name: string; species: Species }
+export const MASCOTS: Mascot[] = [
+  { id: "momo", name: "Momo", species: "bunny" },
+  { id: "ember", name: "Ember", species: "flame" },
+  { id: "fuji", name: "Fuji", species: "mountain" },
 ]
 
-function load(): CrewMember[] {
-  if (!demoCrew()) return []
-  try {
-    const raw = localStorage.getItem(KEY)
-    const parsed = raw ? (JSON.parse(raw) as CrewMember[]) : null
-    return Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_CREW
-  } catch {
-    return DEFAULT_CREW
-  }
-}
+const KEY = "app.characters" // "0" = hidden; anything else, or nothing, = shown
+const CHANGED = "app.characters.changed"
 
-// Shared between the dashboard and the desktop overlay window through localStorage.
-export function useCrew() {
-  const [crew, setCrew] = useState(load)
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => { if (e.key === KEY) setCrew(load()) }
-    window.addEventListener("storage", onStorage)
-    return () => window.removeEventListener("storage", onStorage)
-  }, [])
-  const save = (next: CrewMember[]) => {
-    setCrew(next)
-    localStorage.setItem(KEY, JSON.stringify(next))
-  }
-  const update = (id: string, patch: Partial<CrewMember>) => save(crew.map((m) => (m.id === id ? { ...m, ...patch } : m)))
-  return { crew, update, save }
+export const charactersShown = (): boolean => {
+  try { return localStorage.getItem(KEY) !== "0" } catch { return true }
 }
+export const setCharactersShown = (on: boolean) => {
+  try { localStorage.setItem(KEY, on ? "1" : "0") } catch { /* private mode: the choice lasts for this page only */ }
+  window.dispatchEvent(new Event(CHANGED))
+}
+const subscribe = (fn: () => void) => {
+  window.addEventListener(CHANGED, fn); window.addEventListener("storage", fn)
+  return () => { window.removeEventListener(CHANGED, fn); window.removeEventListener("storage", fn) }
+}
+/** Whether the characters are shown. Follows the Settings toggle at once, also from another tab. */
+export const useCharacters = (): boolean => useSyncExternalStore(subscribe, charactersShown, () => true)
 
-// Shrinks an uploaded picture so it fits comfortably in localStorage.
-export function readCharacterImage(file: File, max = 256): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      const scale = Math.min(1, max / Math.max(img.width, img.height))
-      const c = document.createElement("canvas")
-      c.width = Math.round(img.width * scale)
-      c.height = Math.round(img.height * scale)
-      c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height)
-      URL.revokeObjectURL(url)
-      resolve(c.toDataURL("image/png"))
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that image")) }
-    img.src = url
-  })
-}
+/** True when the person asked the system for less motion. The characters are then drawn still. */
+export const reducedMotion = (): boolean => typeof window.matchMedia === "function" && !!window.matchMedia("(prefers-reduced-motion: reduce)")?.matches

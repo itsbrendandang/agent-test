@@ -4,6 +4,11 @@ import type { Scripted } from "@/lib/scripted"
 import { STATE_KIND, type RunState } from "@/lib/status"
 
 /** Page title with one sentence that says what the view is for. Controls go in `children`. */
+import type { Verdict as BoardVerdict } from "@/board/api"
+import { outcomeOf } from "@/lib/verdict"
+import { PRACTICE, VERDICT_WORD, verdictCount } from "@/lib/words"
+import type { ClaimVerdict } from "@/swarm/api"
+
 export function PageHead({ title, about, children }: { title: string; about: ReactNode; children?: ReactNode }) {
   return (
     <header className="page-head">
@@ -25,12 +30,25 @@ export function RunId({ id }: { id: string }) {
   return <code className="run-id" title={id} aria-label={id}>{id}</code>
 }
 
-/** Shown by every view that needs the engine when it cannot be reached. */
-export function EngineOffline({ needs, onRetry }: { needs: string; onRetry?: () => void }) {
+/**
+ * Shown by every view that needs the engine and did not get what it asked for. Two cases, never mixed up:
+ * the engine cannot be reached ("Engine not running"), or it answered with an error (`said`, its own words, as text).
+ */
+export function EngineOffline({ needs, said, onRetry }: { needs: string; said?: string; onRetry?: () => void }) {
   return (
     <div className="engine-offline card-surface" role="alert">
-      <h2>Engine not running</h2>
-      <p className="muted">{needs} Start the engine from the repo root with <code>npm run engine</code>.</p>
+      {said ? (
+        <>
+          <h2>The engine answered with an error</h2>
+          <p className="engine-said">{said}</p>
+          <p className="muted">The engine is running; this is an error inside it, not a connection problem. {needs}</p>
+        </>
+      ) : (
+        <>
+          <h2>Engine not running</h2>
+          <p className="muted">{needs} Start the engine from the repo root with <code>npm run engine</code>.</p>
+        </>
+      )}
       {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
     </div>
   )
@@ -44,7 +62,22 @@ export function ModeLabel({ scripted, demo }: { scripted: Scripted; demo?: boole
   if (scripted === undefined && !demo) return null
   return (
     <span className="pill" data-kind={scripted ? "neutral" : scripted === false ? "info" : "warning"} data-mode={scripted ? "scripted" : scripted === false ? "real" : "demo"}>
-      {scripted ? "scripted: fixed text, not research" : scripted === false ? "real model" : ""}{demo ? `${scripted === undefined ? "" : " · "}demo case` : ""}
+      {scripted ? PRACTICE : scripted === false ? "real model" : ""}{demo ? `${scripted === undefined ? "" : " · "}demo case` : ""}
+    </span>
+  )
+}
+
+/**
+ * What a check found, in plain words with its glyph: "✓ Holds up", "✕ Proven wrong", "? Not enough evidence".
+ * The checker's own word (verified, refuted, untested…) is the tooltip and, with `technical`, a small second line.
+ */
+export function Verdict({ verdict, count, technical }: { verdict: BoardVerdict | ClaimVerdict; count?: number; technical?: boolean }) {
+  const outcome = outcomeOf(verdict)
+  const cls = verdict === "verified" || verdict === "contradicted" || verdict === "unsupported" || verdict === "unchecked" ? `v-${verdict}` : `sv-${verdict}`
+  return (
+    <span className={`pill ${cls}`} data-outcome={outcome} title={`The check's own word: ${verdict}`}>
+      {count === undefined ? VERDICT_WORD[outcome] : verdictCount(outcome, count)}
+      {technical && <span className="pill-tech">{verdict}</span>}
     </span>
   )
 }

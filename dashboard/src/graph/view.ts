@@ -1,11 +1,11 @@
 // Pure helpers over a GraphModel: what is visible at a step and under the filters, neighbours, search, the size cap
 // and the list of connections used by the non-visual view.
-import { LINK_LABEL, MAX_NODES, type GraphLink, type GraphModel, type GraphNode, type LinkKind, type NodeKind, type VerdictClass } from "./types"
+import { MAX_NODES, type GraphLink, type GraphModel, type GraphNode, type LinkKind, type NodeKind, type Outcome } from "./types"
 
 export interface ViewState {
   hiddenKinds: ReadonlySet<NodeKind>
   /** Verdict classes to hide. Only nodes that carry a verdict are affected. */
-  hiddenVerdicts: ReadonlySet<VerdictClass>
+  hiddenVerdicts: ReadonlySet<Outcome>
   /** Kinds of line not to draw. Nodes stay, and the lists and panels still name these connections. */
   hiddenLinks: ReadonlySet<LinkKind>
   /** Show what happened up to and including this step. null: everything. */
@@ -39,6 +39,18 @@ export function applyView(model: Pick<GraphModel, "nodes" | "links">, state: Vie
   return { nodes, links: connections.filter((l) => !state.hiddenLinks.has(l.kind)), connections }
 }
 
+/**
+ * The nodes and lines the 3D layout works on: everything that passes the filters, whatever the step. The scrubber only
+ * reveals or hides them (see `reveal`), so the nodes keep their places while a run is played back.
+ */
+export const layoutView = (model: Pick<GraphModel, "nodes" | "links">, state: ViewState): Visible => applyView(model, { ...state, step: null })
+
+/** Ids of the nodes and lines that have happened by `step`; null means all of them. */
+export function reveal(layout: Visible, step: number | null): { nodes: Set<string> | null; links: Set<string> | null } {
+  if (step === null) return { nodes: null, links: null }
+  return { nodes: new Set(layout.nodes.filter((n) => n.order <= step).map((n) => n.id)), links: new Set(layout.links.filter((l) => l.order <= step).map((l) => l.id)) }
+}
+
 export function neighbourMap(links: readonly GraphLink[]): Map<string, Set<string>> {
   const m = new Map<string, Set<string>>()
   const add = (a: string, b: string) => { (m.get(a) ?? m.set(a, new Set()).get(a)!).add(b) }
@@ -58,7 +70,7 @@ export function connectionsOf(id: string, nodes: readonly GraphNode[], links: re
     const other = byId.get(outgoing ? link.target : link.source)
     if (!other) continue
     const [a, b] = outgoing ? [self, other] : [other, self]
-    out.push({ link, other, outgoing, sentence: `${a.label} ${LINK_LABEL[link.kind]} ${b.label}` })
+    out.push({ link, other, outgoing, sentence: `${a.label} ${link.label} ${b.label}` })
   }
   return out
 }
@@ -95,8 +107,8 @@ export function capGraph(model: GraphModel, max = MAX_NODES): GraphModel {
   }
 }
 
-export function countVerdicts(nodes: readonly GraphNode[]): Record<VerdictClass, number> {
-  const c: Record<VerdictClass, number> = { pass: 0, fail: 0, unknown: 0 }
+export function countVerdicts(nodes: readonly GraphNode[]): Record<Outcome, number> {
+  const c: Record<Outcome, number> = { holds: 0, fails: 0, unknown: 0 }
   for (const n of nodes) if (n.kind === "claim" && n.verdict) c[n.verdict.cls]++
   return c
 }

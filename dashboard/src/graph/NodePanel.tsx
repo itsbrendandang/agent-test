@@ -1,7 +1,9 @@
 import { useMemo } from "react"
 import { safeUrl } from "./model"
 import { connectionsOf } from "./view"
-import { GLYPH, KIND_LABEL, type GraphLink, type GraphModel, type GraphNode } from "./types"
+import type { GraphLink, GraphModel, GraphNode } from "./types"
+import { VerdictPill } from "./VerdictPill"
+import { KIND_TECH, KIND_WHAT, kindLabel } from "./words"
 
 /** Details of the selected node. All run text is rendered as text. */
 export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onClose }: {
@@ -12,12 +14,13 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
   const href = node.url ? safeUrl(node.url) : undefined
   const where = model.kind === "swarm" ? "Compare" : "Board"
   return (
-    <aside className="graph-panel" aria-label="Selected node" data-testid="node-panel">
+    <aside className="graph-panel graph-sheet" aria-label="Selected node" data-testid="node-panel">
+      <span className="graph-sheet-handle" aria-hidden="true" />
       <header>
-        <span className="graph-eyebrow">{KIND_LABEL[node.kind]}</span>
+        <span className="graph-eyebrow" title={`${KIND_WHAT[node.kind]} (technical term: ${KIND_TECH[node.kind]})`}>{kindLabel(node.kind, model.kind)} <span className="muted">· {KIND_TECH[node.kind]}</span></span>
         <button type="button" className="btn" onClick={onClose} aria-label="Clear selection">Clear</button>
       </header>
-      <h2>{node.verdict && (node.kind === "claim" || node.kind === "test") && <span className={`graph-v graph-v-${node.verdict.cls}`}><span aria-hidden="true">{GLYPH[node.verdict.cls]}</span> {node.verdict.raw}</span>}{" "}{node.label}</h2>
+      <h2>{node.verdict && (node.kind === "claim" || node.kind === "test") && <VerdictPill verdict={node.verdict} />}{" "}{node.label}</h2>
       {node.text && node.text !== node.label && <p className="graph-text">{node.text}</p>}
       {href && <p className="small"><a href={href} target="_blank" rel="noreferrer noopener">Open the source</a> <span className="muted">({href})</span></p>}
       {node.facts.length > 0 && (

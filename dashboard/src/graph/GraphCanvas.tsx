@@ -4,11 +4,16 @@
 import { useEffect, useRef, useState } from "react"
 import { webglAvailable, useReducedMotion } from "./env"
 import type { Renderer, Style } from "./renderer"
-import { GLYPH, KIND_LABEL, type GraphLink, type GraphNode } from "./types"
+import { GLYPH, type GraphLink, type GraphNode } from "./types"
+import { kindLabel } from "./words"
 
 export interface CanvasProps {
   nodes: readonly GraphNode[]
   links: readonly GraphLink[]
+  /** What has happened by the current step of a replay (ids); null shows everything. The nodes keep their places either way. */
+  revealed: { nodes: ReadonlySet<string> | null; links: ReadonlySet<string> | null }
+  /** Board or swarm, for the words in the hover label. */
+  runKind: "board" | "swarm"
   style: Style
   /** Changes when a different run is loaded: the camera fits the new graph. */
   fitKey: string
@@ -81,6 +86,7 @@ export function GraphCanvas(p: CanvasProps) {
   }, [])
 
   useEffect(() => { if (ready) renderer.current?.setData(p.nodes, p.links) }, [ready, p.nodes, p.links])
+  useEffect(() => { if (ready) renderer.current?.setReveal(p.revealed.nodes, p.revealed.links) }, [ready, p.revealed, p.nodes, p.links])
   useEffect(() => { if (ready) renderer.current?.setStyle(p.style) }, [ready, p.style])
   useEffect(() => { if (ready) renderer.current?.fit() }, [ready, p.fitKey])
   useEffect(() => { if (ready && p.focus) renderer.current?.fly(p.focus.id) }, [ready, p.focus])
@@ -102,7 +108,7 @@ export function GraphCanvas(p: CanvasProps) {
         Escape clears it. The same information is in the list view.
       </p>
       <div ref={tip} className="graph-tip" hidden={!hover} aria-hidden="true">
-        {hover && <><b>{hover.verdict && (hover.kind === "claim" || hover.kind === "test") ? `${GLYPH[hover.verdict.cls]} ` : ""}{hover.label}</b><span>{KIND_LABEL[hover.kind]}{hover.verdict ? ` · ${hover.verdict.raw}` : ""}</span></>}
+        {hover && <><b>{hover.verdict && (hover.kind === "claim" || hover.kind === "test") ? `${GLYPH[hover.verdict.cls]} ` : ""}{hover.label}</b><span>{kindLabel(hover.kind, p.runKind)}{hover.verdict ? ` · ${hover.verdict.raw}` : ""}</span></>}
       </div>
     </div>
   )

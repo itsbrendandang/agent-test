@@ -2,7 +2,12 @@
 // rejected. "Show details" opens the timeline, every claim with its tests, the critic's issues and the reports.
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
-import { EngineOffline, ModeLabel, PageHead, RunId, StatusPill } from "@/components/Shared"
+import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
+import { Loading } from "@/components/Crew"
+import { EngineOffline, ModeLabel, PageHead, RunId, StatusPill, Verdict } from "@/components/Shared"
+import { TeamMessage } from "@/components/Thread"
+import { outcomeOf } from "@/lib/verdict"
+import { VERDICT_WORD, verdictCount } from "@/lib/words"
 import { swarmScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
 import { fmtDuration, fmtScore, fmtTokens } from "@/lib/format"
@@ -32,6 +37,17 @@ function phases(ledger: Ledger | null) {
   return { started, current }
 }
 
+/** The run's recorded events, grouped into one entry per role and round, in the order the roles worked. */
+function activity(ledger: Ledger) {
+  const entries: { phase: string; role?: (typeof ROLES)[number]; round?: string; lines: string[] }[] = []
+  for (const e of ledger.events) {
+    if (e.kind === "phase.started") { const phase = e.phase ?? ""; entries.push({ phase, role: ROLES.find((r) => r.key === roleOf(phase)), round: round(phase), lines: [] }); continue }
+    const line = describe(e)
+    if (line && entries.length) entries.at(-1)!.lines.push(line)
+  }
+  return entries
+}
+
 function headline(run: GlhfRun | undefined, current: string | undefined, missing?: string): string {
   if (!run && missing) return `Run ${missing} was not found. Pick another run from the list.`
   if (!run) return "No runs yet. Press New run to watch the team work on a small practice case. The default is free."
@@ -49,24 +65,26 @@ function headline(run: GlhfRun | undefined, current: string | undefined, missing
     case "pilot": return "The Pilot is proving the whole pipeline on a small sample."
     case "audit": return `The Auditor is checking the scripts against the stated methods${n ? ` (review round ${n})` : ""}.`
     case "finish": return "The Finisher is rescuing outputs that were still missing."
-    case "propose": return "The Proposer is planning the analysis and writing down claims to test."
+    case "propose": return "The Proposer is planning the analysis and writing down statements to test."
     case "experiment": return "The Experimenter is running the analysis and writing the outputs."
-    case "critique": return `The Critic is checking the work and trying to disprove each claim${n ? ` (review round ${n})` : ""}.`
+    case "critique": return `The Critic is checking the work and trying to disprove each statement${n ? ` (review round ${n})` : ""}.`
     case "revise": return `The Reviser is fixing the problems the reviewers found${n ? ` (round ${n})` : ""}.`
     case "report": return "The Reporter is writing up what was actually done."
     default: return "The swarm is working…"
   }
 }
 
+const plainVerdict = (v: unknown) => (v === "supported" || v === "refuted" || v === "insufficient" || v === "untested" ? `${VERDICT_WORD[outcomeOf(v)].toLowerCase()} (${v})` : text(v))
+
 function describe(e: LedgerEvent): string | undefined {
   switch (e.kind) {
-    case "claim.added": return `Claim ${text(e.claim)} written down: ${text(e.text)}`
+    case "claim.added": return `Wrote down statement ${text(e.claim)}: ${text(e.text)}`
     case "test.recorded":
-      return `Test on ${text(e.claim)} (${text(e.name)}): p = ${num(Number(e.p))}${e.contradicts ? ", goes against the claim" : ""}. Claim is now ${text(e.verdict)}.`
-    case "test.registered": return `Test planned for ${text(e.claim)} (${text(e.name)}), before any result: ${text(e.method)}`
+      return `Tested ${text(e.claim)} (${text(e.name)}): p = ${num(Number(e.p))}${e.contradicts ? ", goes against the statement" : ""}. The statement now: ${plainVerdict(e.verdict)}.`
+    case "test.registered": return `Planned a test of ${text(e.claim)} (${text(e.name)}) before seeing any result: ${text(e.method)}`
     case "replication.failed": return `${text(e.claim)} could not be reproduced independently: ${text(e.note)}`
-    case "issue.raised": return `Problem ${text(e.issue)} raised (${text(e.severity)}): ${text(e.problem)}`
-    case "issue.resolved": return `Problem ${text(e.issue)} ${e.status === "fixed" ? "fixed" : "closed without a fix"}`
+    case "issue.raised": return `Found a problem, ${text(e.issue)} (${text(e.severity)}): ${text(e.problem)}`
+    case "issue.resolved": return `${e.status === "fixed" ? "Fixed" : "Closed without a fix:"} problem ${text(e.issue)}`
     case "review.converged": return `Review round ${text(e.round)} found nothing left to fix, so review ended.`
     case "review.skipped": return `Review round ${text(e.round)} skipped: out of time.`
     case "phase.finished": return e.limit_hit ? "This step ran out of its time budget." : undefined
@@ -102,7 +120,7 @@ export function SwarmView() {
   const [cancelling, setCancelling] = useState<string>()
   const [details, setDetails] = useState(() => localStorage.getItem("swarm.details") === "1")
   useEffect(() => localStorage.setItem("swarm.details", details ? "1" : "0"), [details])
-  const { status, runs, detail, offline, scoreboard } = useSwarm(picked, nudge)
+  const { status, runs, detail, offline, problem, scoreboard } = useSwarm(picked, nudge)
   const page = useRef<HTMLDivElement>(null)
   const runCard = useRef<HTMLElement>(null)
   // The run a scoreboard cell opens is shown below the scoreboard, so bring it into view.
@@ -111,7 +129,7 @@ export function SwarmView() {
   if (offline && !runs) return (
     <div className="page swarm">
       <PageHead title="Swarm vs single agent" about={ABOUT} />
-      <EngineOffline needs="Runs and the scoreboard come from the engine. The demo also needs Docker, but no API keys." onRetry={() => setNudge((n) => n + 1)} />
+      <EngineOffline needs="Runs and the scoreboard come from the engine. The demo also needs Docker, but no API keys." said={problem.said} onRetry={() => setNudge((n) => n + 1)} />
     </div>
   )
 
@@ -151,8 +169,8 @@ export function SwarmView() {
   return (
     <div className="page swarm" ref={page}>
       <PageHead title="Swarm vs single agent" about={ABOUT}>
-        {noKeys && <span className="pill" data-kind="warning" title="The engine has no model API keys. Only the scripted mock model can run.">Demo mode</span>}
-        {offline && <span className="pill" data-kind="danger" title="Showing the last data received. Retrying every 15 seconds.">Engine offline</span>}
+        {noKeys && <span className="pill" data-kind="warning" title="The engine has no model API keys. Only practice runs (fixed steps, no model) can run.">Demo mode</span>}
+        {offline && <span className="pill" data-kind="danger" title={`${problem.said ?? "The engine cannot be reached."} Showing the last data received. Retrying every 15 seconds.`}>{problem.said ? "Engine error" : "Engine offline"}</span>}
         <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>
       </PageHead>
       <NewRun open={creating} status={status} onClose={() => setCreating(false)}
@@ -177,7 +195,7 @@ export function SwarmView() {
             </tr></thead>
             <tbody>
               {scoreboard.map((row) => {
-                const label = [row.task === "demo" && "demo case", row.model === "mock" && "scripted model"].filter(Boolean).join(", ")
+                const label = [row.task === "demo" && "demo case", row.model === "mock" && "practice run"].filter(Boolean).join(", ")
                 return (
                   <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
                     <td>
@@ -242,7 +260,7 @@ export function SwarmView() {
           {isDemo(run) && (
             <p className="swarm-note swarm-notbench">
               This is not a benchmark result.{run.task === "demo" && " The demo case is a toy dataset built to test the plumbing."}
-              {run.model === "mock" && " The scripted model replays fixed steps and does no real analysis."}
+              {run.model === "mock" && " A practice run replays fixed steps and does no real analysis."}
             </p>
           )}
           <div className="swarm-score" data-demo={isDemo(run) || undefined}>
@@ -256,13 +274,13 @@ export function SwarmView() {
           )}
           {run.solver === "glhf" && ledger && (
             <p className="swarm-counts">
-              <span className="pill sv-supported">{count.supported} supported</span>
-              <span className="pill sv-refuted">{count.refuted} refuted</span>
-              <span className="pill sv-untested">{count.open} not established</span>
-              <span className="muted small">of {claims.length} claim{claims.length === 1 ? "" : "s"} · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
+              <Verdict verdict="supported" count={count.supported} />
+              <Verdict verdict="refuted" count={count.refuted} />
+              <Verdict verdict="untested" count={count.open} />
+              <span className="muted small">of {claims.length} statement{claims.length === 1 ? "" : "s"} the team tested · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
             </p>
           )}
-          {run.solver === "single" && <p className="swarm-note">A single agent has no critic, so there are no checked claims or rejections to show.</p>}
+          {run.solver === "single" && <p className="swarm-note">A single agent has no critic, so there are no tested statements or rejections to show.</p>}
         </div>
         )}
         <ol className="swarm-steps" aria-label="Roles, in the order they run">
@@ -287,8 +305,8 @@ export function SwarmView() {
             <p className="swarm-note">
               {run.phase === "queued" ? "Nothing has run yet."
                 : run.solver === "glhf"
-                ? <>So far: {claims.length} claim{claims.length === 1 ? "" : "s"} written down, {count.supported} supported, {count.refuted} refuted, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
-                : "A single agent keeps no list of claims, so there is nothing to count until it finishes."}
+                ? <>So far: {claims.length} statement{claims.length === 1 ? "" : "s"} written down, {verdictCount("holds", count.supported)}, {verdictCount("fails", count.refuted)}, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
+                : "A single agent keeps no list of statements, so there is nothing to count until it finishes."}
             </p>
           </div>
         )}
@@ -313,13 +331,13 @@ export function SwarmView() {
 
 
       {!details && run && (
-        <button type="button" className="link-btn swarm-more-link" onClick={() => setDetails(true)}>See every claim, test and problem, and the reports →</button>
+        <button type="button" className="link-btn swarm-more-link" onClick={() => setDetails(true)}>See every statement, how it was tested, the problems found, and the reports →</button>
       )}
 
       {details && run && (
         <div className="swarm-grid">
           <section className="card-surface" aria-label="Claims and problems">
-            <h2>Claims ({claims.length})</h2>
+            <h2>Statements the team tested ({claims.length})</h2>
             {ledger && (
               <p className="swarm-note">
                 A claim counts as a finding only if it survives attempts to disprove it. Each test gives a p-value, which code turns into
@@ -332,10 +350,10 @@ export function SwarmView() {
                 {" "}No model decides a verdict.
               </p>
             )}
-            {claims.length === 0 && <p className="muted small">{run.solver === "single" ? "A single agent registers no claims." : "No claims yet."}</p>}
+            {claims.length === 0 && <p className="muted small">{run.solver === "single" ? "A single agent writes down no statements to test." : "None yet."}</p>}
             {claims.map((c) => (
               <article key={c.id} className="swarm-claim">
-                <header><span className={`pill sv-${c.verdict}`}>{c.verdict}</span><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
+                <header><Verdict verdict={c.verdict} technical /><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
                 <p>{c.text}</p>
                 <p className="swarm-note">If the claim were false: {c.null_hypothesis}</p>
                 <p className="swarm-note">
@@ -368,22 +386,24 @@ export function SwarmView() {
             {current?.methods ? <div className="swarm-doc"><Streamdown>{current.methods}</Streamdown></div>
               : <p className="muted small">Not written yet.</p>}
           </section>
-          <details className="card-surface swarm-more">
-            <summary>Timeline, run settings and tokens</summary>
-            <h2>Timeline</h2>
-            {!ledger ? <p className="muted small">{run.solver === "single" ? "A single-agent run keeps no shared ledger." : "No ledger yet."}</p> : (
-              <ol className="swarm-timeline">
-                {ledger.events.map((e, i) => {
-                  if (e.kind === "phase.started") {
-                    const role = ROLES.find((r) => r.key === roleOf(e.phase))
-                    const n = round(e.phase ?? "")
-                    return <li key={i} data-kind="phase"><span>●</span><span>{role?.name ?? e.phase}{n ? ` · round ${n}` : ""}</span></li>
-                  }
-                  const line = describe(e)
-                  return line ? <li key={i}><span>·</span><span>{line}</span></li> : null
-                })}
-              </ol>
+          <section className="card-surface" aria-label="What each role did">
+            <h2>What each role did</h2>
+            <p className="muted small">One entry per role, in the order they worked, from the run's shared record. The lines are written by code from recorded events, not by a model.</p>
+            {!ledger ? <p className="muted small">{run.solver === "single" ? "A single agent works alone and keeps no shared record, so there is nothing to list." : "Nothing recorded yet."}</p> : (
+              <Conversation className="thread-inline" aria-label="What each role did, in order">
+                <ConversationContent className="thread-list">
+                  {activity(ledger).map((entry) => (
+                    <TeamMessage key={entry.phase} name={`${entry.role?.name ?? entry.phase}${entry.round ? ` · round ${entry.round}` : ""}`} job={entry.role?.does}
+                      short={entry.lines.at(-1) ?? "Did its step. It wrote nothing into the shared record."} text={entry.lines.join("\n")} fullLabel={`Everything this role recorded (${entry.lines.length})`}
+                      state={entry.phase === activePhase && live ? <span className="pill" data-kind="info">working now</span> : undefined} />
+                  ))}
+                  {live && <Loading>{headline(run, activePhase, runId)}</Loading>}
+                </ConversationContent>
+              </Conversation>
             )}
+          </section>
+          <details className="card-surface swarm-more">
+            <summary>Run settings and tokens</summary>
             <h2>Run settings</h2>
             <dl className="swarm-settings">
               <dt>Run</dt><dd><RunId id={run.id} /></dd>
@@ -424,7 +444,7 @@ export function SwarmView() {
   )
 }
 
-const demoLabel = (r: GlhfRun) => [r.task === "demo" && "demo case", r.model === "mock" && "scripted model"].filter(Boolean).join(", ")
+const demoLabel = (r: GlhfRun) => [r.task === "demo" && "demo case", r.model === "mock" && "practice run"].filter(Boolean).join(", ")
 
 /** Shows a duration that keeps counting, without reading the clock during render. */
 function Elapsed({ since }: { since: number }) {
@@ -467,7 +487,7 @@ function ClaimTests({ claim: c }: { claim: LedgerClaim }) {
         {c.tests.map((t, i) => (
           <li key={`r${i}`}>
             <b>{t.name}</b> · p = {num(t.p_value)} · e = {num(t.e_value)}
-            {t.contradicts && <> · <span className="pill sv-refuted">goes against the claim</span></>}
+            {t.contradicts && <> · <span className="pill sv-refuted">goes against the statement</span></>}
             {t.registered === false && <> · <span className="pill sv-minor" title="A result that goes against a claim is always accepted, planned or not.">not planned beforehand</span></>}
             <span className="muted"> · by {t.by}</span>
             {plan(t.name) && <div className="muted">Planned: {plan(t.name)!.method}</div>}

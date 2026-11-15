@@ -3,7 +3,8 @@ import { EngineOffline } from "@/components/Shared"
 import { HOW_TO_TURN_ON, PAID_LABEL } from "@/lib/paid"
 import type { Catalog, CatalogAgent, ProviderId } from "./api"
 
-const PROVIDER_NAME: Record<ProviderId, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI", openrouter: "OpenRouter" }
+const PROVIDER_NAME: Record<ProviderId, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI" }
+const usd = (n: number) => `$${n.toFixed(2).replace(/\.00$/, "")}`
 
 /** A key that is present is only usable while paid calls are on: then green. With paid calls off it is neutral and says so. */
 function Key({ present, usable }: { present: boolean; usable: boolean }) {
@@ -70,7 +71,12 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                   {p.models.length > 0 && <span className="muted small home-models">{p.models.join(", ")}</span>}
                 </li>
               ))}
-              <li><span>Exa search</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} /></li>
+              <li>
+                <span>Exa search</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} />
+                {typeof catalog.search.exa.usedUsd === "number" && typeof catalog.search.exa.ceilingUsd === "number" && (
+                  <span className="muted small home-models">{usd(catalog.search.exa.usedUsd)} of {usd(catalog.search.exa.ceilingUsd)} used</span>
+                )}
+              </li>
             </ul>
             <p className="muted small">Keys live in the engine's .env file. This page never shows or asks for one.</p>
           </section>

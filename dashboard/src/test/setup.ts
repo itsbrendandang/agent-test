@@ -17,3 +17,8 @@ if (!HTMLDialogElement.prototype.showModal) {
 if (!HTMLDialogElement.prototype.close) {
   HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); this.dispatchEvent(new Event("close")) }
 }
+
+// jsdom has no ResizeObserver; the conversation's stick-to-bottom scroll asks for one.
+if (!("ResizeObserver" in globalThis)) {
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
+}

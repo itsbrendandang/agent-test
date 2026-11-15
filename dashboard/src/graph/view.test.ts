@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { BOARD_EVENTS, ROSTER, SWARM_DETAIL } from "./fixtures"
 import { buildBoardGraph, buildSwarmGraph } from "./model"
 import { MAX_NODES, type GraphModel, type GraphNode } from "./types"
-import { ALL, applyView, byAttention, capGraph, connectionsOf, countVerdicts, neighbourMap, searchNodes } from "./view"
+import { ALL, applyView, byAttention, capGraph, connectionsOf, countVerdicts, layoutView, neighbourMap, reveal, searchNodes } from "./view"
 
 const board = () => buildBoardGraph({ runId: "r1", events: BOARD_EVENTS, roster: ROSTER })
 const swarm = () => buildSwarmGraph(SWARM_DETAIL)
@@ -56,16 +56,16 @@ describe("applyView: filters", () => {
     expect(ids(applyView(g, { ...ALL, hiddenKinds: new Set(["run"]) }))).toContain("run")
   })
   it("filters claims by verdict class and leaves other nodes alone", () => {
-    const only = applyView(g, { ...ALL, hiddenVerdicts: new Set(["pass", "unknown"]) })
+    const only = applyView(g, { ...ALL, hiddenVerdicts: new Set(["holds", "unknown"]) })
     const claims = only.nodes.filter((n) => n.kind === "claim")
     expect(claims.length).toBe(1)
-    expect(claims[0].verdict?.cls).toBe("fail")
+    expect(claims[0].verdict?.cls).toBe("fails")
     expect(only.nodes.some((n) => n.kind === "agent")).toBe(true)
     consistent(only)
   })
   it("filters swarm tests by verdict too", () => {
     const s = swarm()
-    const v = applyView(s, { ...ALL, hiddenVerdicts: new Set(["fail"]) })
+    const v = applyView(s, { ...ALL, hiddenVerdicts: new Set(["fails"]) })
     expect(ids(v)).not.toContain("claim:C2")
     expect(ids(v)).not.toContain("test:C2:row count")
     expect(ids(v)).toContain("claim:C1")
@@ -92,34 +92,58 @@ describe("applyView: lines", () => {
 
 describe("neighbours, connections, search", () => {
   const g = board()
+  const claim = (text: string) => g.nodes.find((n) => n.kind === "claim" && n.label.includes(text))!
+  const X = claim("Piperazine").id
   it("lists neighbours both ways", () => {
     const m = neighbourMap(g.links)
-    expect(m.get("claim:claim:1:tox:a")).toEqual(new Set(["agent:toxicologist", "checker:jev", "phase:1"]))
-    expect(m.get("agent:toxicologist")!.has("claim:claim:1:tox:a")).toBe(true)
+    expect(m.get(X)).toEqual(new Set(["agent:scout", "checker:first-pass", "phase:1", "source:https://example.org/a"]))
+    expect(m.get("agent:scout")!.has(X)).toBe(true)
   })
-  it("describes a connection as a sentence from the actor's side", () => {
-    const c = connectionsOf("claim:claim:1:tox:a", g.nodes, g.links)
-    expect(c.map((x) => x.sentence)).toEqual(expect.arrayContaining(["Toxicologist made Piperazine quinazolines show no hERG <img src=x onerror=\"window.__pwned=1\">", expect.stringContaining("jev ruled on Piperazine")]))
-    expect(c.every((x) => !x.outgoing || x.link.source === "claim:claim:1:tox:a")).toBe(true)
+  it("describes a connection as a sentence from the actor's side, with the shared verbs", () => {
+    const c = connectionsOf(X, g.nodes, g.links)
+    const sentences = c.map((x) => x.sentence)
+    expect(sentences).toContain("Scout (Data Inspector) said " + claim("Piperazine").label)
+    expect(sentences.some((t) => t.startsWith("First check checked Piperazine"))).toBe(true)
+    expect(sentences.some((t) => t.endsWith("cites hERG of acrylamides"))).toBe(true)
+    expect(c.every((x) => !x.outgoing || x.link.source === X)).toBe(true)
     expect(connectionsOf("nope", g.nodes, g.links)).toEqual([])
   })
-  it("finds nodes by any word and puts refuted ones first", () => {
+  it("finds nodes by any word and puts contradicted ones first", () => {
     const hits = searchNodes(g.nodes, "hERG")
     expect(hits.length).toBeGreaterThan(2)
-    expect(hits[0].verdict?.cls).toBe("fail")
+    expect(hits[0].verdict?.cls).toBe("fails")
     expect(searchNodes(g.nodes, "herg 6 uM").every((n) => /herg/i.test(JSON.stringify(n)))).toBe(true)
     expect(searchNodes(g.nodes, "")).toEqual([])
     expect(searchNodes(g.nodes, "zzzz-nothing")).toEqual([])
-    expect(searchNodes(g.nodes, "contradicted")[0].id).toBe("claim:claim:1:tox:a")
+    expect(searchNodes(g.nodes, "contradicted")[0].id).toBe(X)
   })
-  it("sorts refuted and contested before the rest", () => {
+  it("sorts contradicted and refuted before the rest", () => {
     const sorted = [...g.nodes].sort(byAttention)
     expect(sorted[0].attention).toBe(2)
     const att = sorted.map((n) => n.attention)
     expect(att).toEqual([...att].sort((a, b) => b - a))
   })
   it("counts verdicts of claims only", () => {
-    expect(countVerdicts(g.nodes)).toEqual({ pass: 3, fail: 1, unknown: 2 })
+    expect(countVerdicts(g.nodes)).toEqual({ holds: 2, fails: 1, unknown: 2 })
+  })
+})
+
+describe("layoutView and reveal: a replay keeps nodes where they are", () => {
+  const g = board()
+  it("lays out everything that passes the filters, whatever the step", () => {
+    const l = layoutView(g, { ...ALL, step: 3 })
+    expect(l.nodes).toHaveLength(g.nodes.length)
+  })
+  it("reveals only what has happened by the step", () => {
+    const l = layoutView(g, ALL)
+    expect(reveal(l, null)).toEqual({ nodes: null, links: null })
+    const r = reveal(l, g.marks[1].order - 1)
+    expect(r.nodes!.has("phase:2")).toBe(false)
+    expect(r.nodes!.has("phase:1")).toBe(true)
+    const all = reveal(l, g.maxOrder)
+    expect(all.nodes!.size).toBe(l.nodes.length)
+    expect(all.links!.size).toBe(l.links.length)
+    for (const id of r.links!) { const link = l.links.find((x) => x.id === id)!; expect(r.nodes!.has(link.source) && r.nodes!.has(link.target)).toBe(true) }
   })
 })
 
@@ -128,7 +152,7 @@ describe("capGraph", () => {
     const base = board()
     const claims: GraphNode[] = Array.from({ length: n }, (_, i) => ({
       id: `claim:big${i}`, kind: "claim", label: `claim ${i}`, order: i + 1, attention: i === n - 1 ? 2 : 0,
-      verdict: { cls: i === n - 1 ? "fail" : "pass", raw: "x" }, facts: [], activity: [],
+      verdict: { cls: i === n - 1 ? "fails" : "holds", raw: "x" }, facts: [], activity: [],
     }))
     const sources: GraphNode[] = Array.from({ length: n }, (_, i) => ({ id: `source:big${i}`, kind: "source", label: `s${i}`, order: i + 1, attention: 0, facts: [], activity: [] }))
     const nodes = [...base.nodes, ...claims, ...sources]

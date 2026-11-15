@@ -1,12 +1,14 @@
 // The same graph as a table, for people who cannot use the 3D canvas: keyboard, screen reader, no WebGL. It shows
 // the nodes that are visible under the current filters and step, in the same order, and marks the selected one.
 import { useMemo } from "react"
-import { GLYPH, KIND_LABEL, LINK_LABEL, type GraphLink, type GraphNode } from "./types"
+import type { GraphLink, GraphNode, RunKind } from "./types"
+import { VerdictPill } from "./VerdictPill"
+import { kindLabel } from "./words"
 
 const cut = (s: string, n = 70) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
-export function GraphList({ nodes, links, selected, onSelect, order }: {
-  nodes: readonly GraphNode[]; links: readonly GraphLink[]; selected: string | null; onSelect: (id: string) => void; order: readonly GraphNode[]
+export function GraphList({ nodes, links, selected, onSelect, order, runKind }: {
+  runKind: RunKind; nodes: readonly GraphNode[]; links: readonly GraphLink[]; selected: string | null; onSelect: (id: string) => void; order: readonly GraphNode[]
 }) {
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
   const around = useMemo(() => {
@@ -15,8 +17,8 @@ export function GraphList({ nodes, links, selected, onSelect, order }: {
     for (const l of links) {
       const a = byId.get(l.source), b = byId.get(l.target)
       if (!a || !b) continue
-      add(a.id, b, `${LINK_LABEL[l.kind]} ${cut(b.label, 40)}`)
-      add(b.id, a, `${cut(a.label, 40)} ${LINK_LABEL[l.kind]} this`)
+      add(a.id, b, `${l.label} ${cut(b.label, 40)}`)
+      add(b.id, a, `${cut(a.label, 40)} ${l.label} this`)
     }
     return m
   }, [links, byId])
@@ -31,8 +33,8 @@ export function GraphList({ nodes, links, selected, onSelect, order }: {
             const conns = around.get(n.id) ?? []
             return (
               <tr key={n.id} data-selected={n.id === selected || undefined} data-attention={n.attention || undefined}>
-                <td>{KIND_LABEL[n.kind]}</td>
-                <td>{n.verdict && (n.kind === "claim" || n.kind === "test") ? <span className={`graph-v graph-v-${n.verdict.cls}`}><span aria-hidden="true">{GLYPH[n.verdict.cls]}</span> {n.verdict.raw}</span> : <span className="muted">–</span>}</td>
+                <td>{kindLabel(n.kind, runKind)}</td>
+                <td>{n.verdict && (n.kind === "claim" || n.kind === "test") ? <VerdictPill verdict={n.verdict} technical={false} /> : <span className="muted">–</span>}</td>
                 <th scope="row">
                   <button type="button" className="graph-linkbtn" aria-pressed={n.id === selected} onClick={() => onSelect(n.id)}>{cut(n.label, 110)}</button>
                 </th>

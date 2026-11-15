@@ -5,7 +5,7 @@
 export type PaidState = "off" | "on" | "unknown"
 
 export const PAID_LABEL: Record<PaidState, string> = {
-  off: "Paid calls off: scripted runs only",
+  off: "Paid calls off: practice runs only",
   on: "Paid calls on",
   unknown: "Paid calls: not known",
 }

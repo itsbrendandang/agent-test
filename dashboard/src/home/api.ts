@@ -4,7 +4,7 @@
 import { ENGINE } from "@/board/api"
 import { engineFetch } from "@/lib/token"
 
-export type ProviderId = "anthropic" | "openai" | "openrouter"
+export type ProviderId = "anthropic" | "openai"
 export interface Provider { id: ProviderId; keyPresent: boolean; models: string[] }
 export interface CatalogAgent { name: string; title: string; source: "board" | "specialist"; role: string; tools: string[]; trigger?: string; deliverable?: string }
 export interface CatalogSkill { name: string; description: string; installed: boolean }
@@ -18,7 +18,8 @@ export interface Effort {
 export interface Catalog {
   paidCalls: boolean
   providers: Provider[]
-  search: { exa: { keyPresent: boolean } }
+  /** usedUsd / ceilingUsd: what the engine has recorded as spent on Exa, and the lifetime ceiling it enforces. */
+  search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
   /** Absent on an engine without effort levels: then no selector is shown and no effort is sent. */

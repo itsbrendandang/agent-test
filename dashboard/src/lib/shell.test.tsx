@@ -7,7 +7,7 @@ import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
 describe("StatusLine", () => {
   it.each([
-    [{ engine: "online", paid: "off" }, "AI Scientist Bot · Engine online · Paid calls off: scripted runs only"],
+    [{ engine: "online", paid: "off" }, "AI Scientist Bot · Engine online · Paid calls off: practice runs only"],
     [{ engine: "online", paid: "on" }, "AI Scientist Bot · Engine online · Paid calls on"],
     [{ engine: "offline", paid: "unknown" }, "AI Scientist Bot · Engine offline · Paid calls: not known"],
     [{ engine: "unknown", paid: "unknown" }, "AI Scientist Bot · Engine: checking · Paid calls: not known"],
@@ -18,7 +18,7 @@ describe("StatusLine", () => {
   it("says how a person turns paid calls on, and links to Settings", async () => {
     const onOpenSettings = vi.fn()
     render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={onOpenSettings} />)
-    expect(screen.getByText("Paid calls off: scripted runs only")).toHaveAttribute("title", expect.stringContaining("NO_PAID_CALLS=0"))
+    expect(screen.getByText("Paid calls off: practice runs only")).toHaveAttribute("title", expect.stringContaining("NO_PAID_CALLS=0"))
     await userEvent.setup().click(screen.getByRole("button", { name: "Settings" }))
     expect(onOpenSettings).toHaveBeenCalled()
   })

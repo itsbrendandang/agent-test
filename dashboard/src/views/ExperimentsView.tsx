@@ -4,6 +4,7 @@ import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Sha
 import { swarmScripted, useBoardScripted } from "@/lib/scripted"
 import type { GlhfRun } from "@/swarm/api"
 import { runState } from "@/lib/status"
+import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { fmtScore } from "@/lib/format"
 import { viewOfKind } from "@/lib/open"
 
@@ -20,16 +21,15 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
   useEffect(() => sessionStorage.removeItem("experiments.q"), [])
   const [kind, setKind] = useState<Kind>("all")
   const [hits, setHits] = useState<Hit[]>()
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<Problem>()
   const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     const stop = new AbortController()
     const timer = window.setTimeout(() => {
-      fetch(`${ENGINE}/api/search?q=${encodeURIComponent(query)}`, { signal: stop.signal })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-        .then((h: unknown) => { if (!Array.isArray(h)) throw new Error("not a list"); setHits(h as Hit[]); setError(false) })
-        .catch((e) => { if (e.name !== "AbortError") setError(true) })
+      readEngine<unknown>(`/api/search?q=${encodeURIComponent(query)}`, { signal: stop.signal })
+        .then((h: unknown) => { if (!Array.isArray(h)) throw new Error("not a list"); setHits(h as Hit[]); setError(undefined) })
+        .catch((e: unknown) => { if ((e as Error)?.name !== "AbortError") setError(problemOf(e)) })
     }, 200)
     return () => { window.clearTimeout(timer); stop.abort() }
   }, [query, retry])
@@ -61,7 +61,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
 
   return (
     <div className="page">
-      <PageHead title="Runs" about="Every past run of both kinds. Search by task, model, status, or any text in the claims, problems, reports and memos. To ask a question in plain words, use Home." />
+      <PageHead title="Runs" about="Every past run of both kinds. Search by task, model, status, or any text in the statements, problems, reports and decisions. To ask a question in plain words, use Home." />
       <div className="exp-bar">
         <input type="search" name="experiment-search" aria-label="Search experiments by keyword" autoComplete="off" value={query}
           placeholder="Try: demo, single agent, refuted, hERG, header rows…" onChange={(e) => setQuery(e.currentTarget.value)} />
@@ -73,7 +73,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
           ))}
         </div>
       </div>
-      {error && <EngineOffline needs="Search and Ask read the runs through the engine." onRetry={() => { setError(false); setRetry((n) => n + 1) }} />}
+      {error && <EngineOffline needs="The list of runs comes from the engine." said={error.said} onRetry={() => { setError(undefined); setRetry((n) => n + 1) }} />}
       {!hits && !error && <p className="muted small" role="status">Loading experiments…</p>}
       {hits && <p className="muted small">{shown.length} {shown.length === 1 ? "experiment" : "experiments"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>}
       <ul className="exp-list" aria-label="Experiments">

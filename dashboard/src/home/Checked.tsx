@@ -2,7 +2,7 @@
 // latest like-for-like score row, each labelled scripted or real from the run itself, each opening that run in its view.
 import { useEffect, useState } from "react"
 import { ENGINE, useRunEvents, type RunSummary } from "@/board/api"
-import { ModeLabel } from "@/components/Shared"
+import { ModeLabel, Verdict } from "@/components/Shared"
 import { fmtScore } from "@/lib/format"
 import { boardFacts } from "@/lib/verdict"
 import type { ScoreRow } from "@/swarm/api"
@@ -34,10 +34,10 @@ export function Checked({ onOpen }: { onOpen: (kind: "swarm" | "board", id: stri
           <span className="home-checked-what">Latest board review <ModeLabel scripted={f.scripted} /></span>
           {events.length === 0 ? <span className="muted small">reading its checks…</span> : (
             <span className="trust">
-              <span className="pill v-verified">{f.verified} verified</span>
-              <span className="pill v-contradicted">{f.contradicted} contradicted</span>
-              <span className="pill v-unsupported">{f.unsupported + f.unchecked} unsupported</span>
-              <span className="muted small">of {f.claims.length} claims</span>
+              <Verdict verdict="verified" count={f.verified} />
+              <Verdict verdict="contradicted" count={f.contradicted} />
+              <Verdict verdict="unsupported" count={f.unsupported + f.unchecked} />
+              <span className="muted small">of {f.claims.length} statements checked</span>
             </span>
           )}
         </button>
@@ -52,7 +52,7 @@ export function Checked({ onOpen }: { onOpen: (kind: "swarm" | "board", id: stri
           </span>
         </button>
       )}
-      <p className="muted small">Verdicts are computed by code from registered tests or ruled by a checker. No model decides its own verdict.</p>
+      <p className="muted small">Every statement is checked by code or by a separate checker. No model grades its own work.</p>
     </section>
   )
 }

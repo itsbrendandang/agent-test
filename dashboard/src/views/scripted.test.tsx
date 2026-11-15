@@ -32,10 +32,10 @@ describe("Board view", () => {
     await emit(started(false))
     const mode = within(await screen.findByTestId("run-mode"))
     expect(mode.getByText("real model")).toBeInTheDocument()
-    expect(mode.queryByText(/scripted/)).toBeNull()
+    expect(mode.queryByText(/[Pp]ractice|scripted/)).toBeNull()
     expect(screen.getByTestId("run-mode")).toHaveTextContent("This review ran with real models.")
     // what a NEW review would use is said separately, and is about new reviews only
-    expect(screen.getByTestId("next-mode")).toHaveTextContent("Paid calls are off, so a new review runs with scripted models.")
+    expect(screen.getByTestId("next-mode")).toHaveTextContent("Paid calls are off: board reviews are practice runs only.")
   })
   it("a scripted review shown while paid calls are on is labelled scripted, not real", async () => {
     board(true)
@@ -43,7 +43,7 @@ describe("Board view", () => {
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit(started(true))
     const mode = within(await screen.findByTestId("run-mode"))
-    expect(mode.getByText("scripted: fixed text, not research")).toBeInTheDocument()
+    expect(mode.getByText("Practice run: fixed text, not real research")).toBeInTheDocument()
     expect(mode.queryByText("real model")).toBeNull()
     expect(screen.queryByTestId("next-mode")).toBeNull() // the engine would run real models now; that says nothing about this run
   })
@@ -80,12 +80,12 @@ describe("Runs list", () => {
 
   it.each([[false, "paid calls off"], [true, "paid calls on"]])("labels each run from the run itself (%s: %s)", async (paidCalls) => {
     list(paidCalls)
-    await waitFor(async () => expect(await card("s-mock")).toHaveTextContent("scripted: fixed text, not research · demo case"))
+    await waitFor(async () => expect(await card("s-mock")).toHaveTextContent("Practice run: fixed text, not real research · demo case"))
     expect(await card("s-real")).toHaveTextContent("real model")
-    expect(await card("s-real")).not.toHaveTextContent("scripted")
+    expect(await card("s-real")).not.toHaveTextContent("Practice run")
     await waitFor(async () => expect(await card("b-real")).toHaveTextContent("real model"))
-    expect(await card("b-real")).not.toHaveTextContent("scripted")
-    await waitFor(async () => expect(await card("b-mock")).toHaveTextContent("scripted: fixed text, not research"))
+    expect(await card("b-real")).not.toHaveTextContent("Practice run")
+    await waitFor(async () => expect(await card("b-mock")).toHaveTextContent("Practice run: fixed text, not real research"))
     expect(await card("b-mock")).not.toHaveTextContent("real model")
   })
   it("does not move the keyboard focus to the keyword box", async () => {
@@ -110,7 +110,7 @@ describe("one place for each input", () => {
     const { container } = render(<SettingsView />)
     expect(await screen.findByText("ANTHROPIC_API_KEY")).toBeInTheDocument()
     expect(screen.queryByText("Desktop app API keys")).toBeNull()
-    expect(container.querySelectorAll("input")).toHaveLength(0)
+    expect(container.querySelectorAll("input:not([type=checkbox])")).toHaveLength(0) // the only control is the "Show characters" tick
     for (const gone of ["xAI", "Google Gemini"]) expect(screen.queryByText(gone)).toBeNull()
   })
 })

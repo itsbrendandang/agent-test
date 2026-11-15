@@ -50,7 +50,12 @@ The Graph view loads only when it is opened.
 | New run dialog and cancel | `src/swarm/NewRun.tsx`, `src/swarm/CancelRun.tsx`; rules in `src/swarm/runForm.ts` |
 | The 3D run graph | `src/graph/` (its own styles in `src/graph/graph.css`) |
 | Styles used by one area only | `src/swarm/swarm.css`, `src/board/board.css`, `src/graph/graph.css` |
-| Shared pieces: page header, status pill, scripted or real label, run id, offline card | `src/components/Shared.tsx` |
+| Shared pieces: page header, status pill, practice-or-real label (`ModeLabel`), verdict chip (`Verdict`), run id, the engine error/offline card | `src/components/Shared.tsx` |
+| The app's words (practice run, verdict words, the first sentence of a reply, which URLs may be links) | `src/lib/words.ts` |
+| Who said what: one message per team member, with its checks | `src/components/Thread.tsx` (on `src/components/ai-elements/`) |
+| Reading from the engine; telling "not running" from "answered with an error" | `src/lib/engine.ts` |
+| The loading screen | `src/components/Splash.tsx` |
+| The one loading look (`Loading`) and the decorative characters (`Mascots`) | `src/components/Crew.tsx` |
 | The session-token prompt | `src/components/TokenPrompt.tsx`, `src/lib/token.ts` |
 | Number, time and cost formats | `src/lib/format.ts` |
 | Status words and colours; verdict words, glyphs and order | `src/lib/status.ts`, `src/lib/verdict.ts` |
@@ -58,7 +63,8 @@ The Graph view loads only when it is opened.
 | Paid-calls wording | `src/lib/paid.ts` |
 | Opening a run in another view | `src/lib/open.ts` |
 | Calls to the engine | `src/swarm/api.ts`, `src/board/api.ts`, `src/home/api.ts` |
-| Characters (Momo, Ember, Fuji) | `src/crew/`, `src/components/Buddy.tsx`, `src/components/SideCrew.tsx`. Off unless the app is built or served with `VITE_DEMO_CREW=1` (`src/crew/store.ts`) |
+| Characters (Momo, Ember, Fuji) | `src/crew/store.ts` (who they are, the "Show characters" setting), `src/components/Buddy.tsx` (the drawings), `src/components/SideCrew.tsx` (the rail). On by default; Settings turns them off |
+| AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
 | Tests and their stand-in engine | `src/**/*.test.ts(x)`, `src/test/` |
 | The desktop window (size, title, icons) | `src-tauri/tauri.conf.json`, `src-tauri/icons/` |
 
@@ -71,24 +77,72 @@ The Graph view loads only when it is opened.
   `pill v-unchecked` (board) and `pill sv-supported`, `pill sv-refuted`, `pill sv-insufficient`,
   `pill sv-untested` (swarm).
 - **One type scale**: 12, 13, 16, 20 and 28 px. Nothing under 12.
-- **One place for each input**: questions are asked on Home; keyword search is on Runs.
+- **One place for each input**: questions are asked on Home; keyword search is on Runs; Agents has a filter box.
+- **One loading look**: `<Loading>text</Loading>` from `src/components/Crew.tsx`. The text is the status; the
+  characters beside it are decoration.
+- **One conversation look**: the Home chat, the Board discussion and "What each role did" on Compare all use the
+  AI Elements `Conversation` and `Message` through `src/components/Thread.tsx`.
+- **One design system**: AI Elements reads the app's own colours (the token block at the end of `src/index.css`),
+  and its visible buttons carry the app's `.btn` classes. Do not add a second theme or button style.
 
 ## Removed
 
 The template the dashboard started from is gone: the Overview, Simulations and Analytics views, the placeholder
-"Worlds" view (now Graph), the splash screen, the parade, the avatar in the rail, the `.toon-btn` buttons,
-`src/sim/`, `src/agent/`, `src/runs/`, `src/system/UsageBars.tsx`, `src/components/ui/` and
-`src/components/ai-elements/`. Markdown from a run is rendered with `streamdown` directly. Settings shows the
-desktop key form only inside the desktop app.
+"Worlds" view (now Graph), the parade, the avatar in the rail, the `.toon-btn` buttons, `src/sim/`, `src/agent/`,
+`src/runs/`, `src/system/UsageBars.tsx`, the chart component, and the "Your crew" editor in Agents (it gave the
+characters roles and skills, which made decoration look like agents). Settings shows the desktop key form only
+inside the desktop app.
+
+Brought back from git history (commit `e071754^`), by the owner's decision: the loading screen
+(`Splash.tsx`), and AI Elements with the shadcn pieces it needs. `message.tsx` differs from history in one way:
+its Markdown renderer moved to `ai-elements/message-response.tsx`, which nothing imports, so its code-highlight,
+maths and diagram plugins (about 740 kB) stay out of the first load. `sources.tsx`, `loader.tsx` and
+`ui/collapsible.tsx` were added from the public registries with the shadcn CLI.
+
+## The characters
+
+Momo, Ember and Fuji are the app's face, not its workers.
+
+- Where: the loading screen, the empty Home, every waiting state (`Loading`), next to "See what they found", and
+  the rail on wide screens.
+- Always `aria-hidden`, always with the real status in text beside them, never the only sign of anything.
+- Never shown as the agents that did the work. The team members that ran are named in the conversation and the
+  steppers. Next to a practice run the label still says "Practice run".
+- Still under `prefers-reduced-motion`. Off with Settings, "Show characters" (localStorage `app.characters`).
+- The loading screen shows until the engine's status and catalog have answered: at least 0.7 s, at most 2.5 s,
+  gone at once when the engine cannot be reached, and skipped by a click or any key.
+
+## Words
+
+Plain words first; the expert term is a tooltip or a small second line. The strings live in `src/lib/words.ts`.
+
+| Say | Not | Where the expert term stays |
+|---|---|---|
+| Practice run: fixed text, not real research | scripted, mock | `data-mode="scripted"` |
+| ✓ Holds up · ✕ Proven wrong · ? Not enough evidence | verified/supported · contradicted/refuted · unsupported/unchecked/insufficient/untested | tooltip on every chip; second line with `technical` |
+| statement | claim | ids such as C2 |
+| check, test | falsification test | the "how to read this" text |
+| the run's shared record | ledger | |
+| output | artefact | |
+| step, role | phase | |
+| a second, more careful check | escalation | |
+| review, decision | board run, memo | "memo" in the heading of the full text |
+| team member | specialist, portfolio | |
 
 ## Rules that the design must keep
 
-- Every result says whether it came from a real model or a scripted one. That comes from the run itself
+- Every result says whether it came from a real model or was a practice run (fixed text, no model). That comes from the run itself
   (`src/lib/scripted.ts`), never from the engine's state now. Paid-calls state is in the status line on every view.
 - Verdicts must be readable without colour alone: ✓ verified or supported, ✕ contradicted or refuted, ? unsupported,
   unchecked, insufficient or untested.
 - A paid action needs a confirm step with the cost; nothing starts from a single click.
-- Model and search text is untrusted: render it as text or through the Markdown component, never as HTML.
+- Model and search text is untrusted. Replies in a conversation are plain text: no Markdown, no HTML, no image,
+  and a link only for an `http(s)` source (`safeUrl`). Run documents (memo, findings, methods) go through
+  `streamdown`. Do not use `MessageResponse` for model text without restricting it first.
+- The page never calls a model. The `ai` package is installed for AI Elements' types only; replies come from the
+  engine's `/api/chat`.
+- When the engine answers with an error, show its own text (`EngineOffline said=…`). "Engine not running" is only
+  for an engine that cannot be reached.
 - Never show or store an API key in the page.
 
 ## Check before you push
