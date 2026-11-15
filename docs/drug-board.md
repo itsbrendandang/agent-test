@@ -114,9 +114,10 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
 Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
 What a run records about its cost and its code, in `run.json`: `usd` (the total the caps count), `firstPassUsd`,
-`checkerUsd`, `costEstimated`, and `usage`: per model (`provider/id`), the tokens behind the total as the harness counts
-them (input, output, cache reads, cache writes, total, and the cost of each part). `usage` is written with each update of
-the total. `manifest` is written when the run is created: the commit (`commit`, `dirty`), hashes of `board/config.yaml`,
+`checkerUsd`, `costEstimated`, and `usage`: per model (`provider/id`), the tokens of the harness models (the lead and
+the members) as the harness counts them (input, output, cache reads, cache writes, total, and the cost of each part).
+The first-pass checker and the escalation checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`), with no
+token counts, so `usage` does not add up to `usd`. `usage` is written with each update of the total. `manifest` is written when the run is created: the commit (`commit`, `dirty`), hashes of `board/config.yaml`,
 the agent files and the research prompts, and the versions of Node, pi-ai and pi-durable (`engine/src/manifest.ts`).
 Runs created before these fields have neither.
 

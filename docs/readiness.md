@@ -23,7 +23,8 @@ The shared tree changes while others work. Where something is only in the workin
 > 5 literature searches, 204 statements checked (71 supported, 28 without enough evidence, 105 not checked, none
 > contradicted), $1.31, 8 minutes. At that commit `board/config.yaml` already had this six-member roster. It is one run.
 > Its run folder and its tokens per model are not in the repo. A run's `run.json` now keeps tokens and cost per model
-> (`usage`, `engine/src/board/board.ts`).
+> (`usage`, `engine/src/board/board.ts`) for the lead and the members. The checkers are kept as dollars only
+> (`firstPassUsd`, `checkerUsd`).
 
 Labels: **measured** = I ran it and saw it. **read** = from the code, not run. **unverified** = needs a paid call or a login.
 
@@ -203,7 +204,8 @@ that costs nothing (no inference):
 - That real models write the `CLAIMS` section reliably. Shown once: the real run in `README.md` checked 204 statements.
 - Real token counts and cache hits of a board run, and its cost split by model. The one real run cost $1.31 in total
   (`README.md`) but kept no tokens per model. `docs/cost.md` is a model of the old 9-role roster. A run's `run.json` now
-  records tokens and cost per model (`usage`), so the next real run will show them.
+  records tokens and cost per model (`usage`) for the lead and the members, so the next real run will show them. The
+  checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`).
 - Exa's real price per search (the config's $0.007 comes from 2 live searches).
 - That the structured JSON reply is accepted by each provider.
 - The dashboard in a browser; the Python suite and dashboard `tsc` at pass 2.

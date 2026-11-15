@@ -20,7 +20,8 @@ proposal is in sections 5 to 8. State described: commit `b749e38` plus the uncom
 >   so it cannot be split by model or by step. It is the only real figure for a team review; the old $0.37 has no
 >   searches, no screening of search results and no checks against retrieved sources.
 > - A team review's `run.json` now has a `usage` field: tokens (input, output, cache reads, cache writes) and cost for
->   each model (`state.usage` in `engine/src/board/board.ts`, added on this branch). It is per model, not per member: in
+>   each harness model, the lead and the members (`state.usage` in `engine/src/board/board.ts`, added on this branch).
+>   The first-pass and escalation checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`), with no tokens. It is per model, not per member: in
 >   a real run the lead and the four strong members share `claude-sonnet-5-5` (`modelFor` in `engine/src/models.ts`).
 >   From now on a real run keeps the counts that can replace the estimate.
 > - The swarm numbers in sections 1a and 1b are measurements. The roster change does not touch them.
@@ -416,7 +417,7 @@ $1.15 for the cap of $1 in the demo.
 
 What to look at in the result: `board/runs/<id>/verification_ledger.json` (each claim, its checker, `checkedBy`, `quoteFound`,
 the quoted passage), `run.json` fields `usd`, `firstPassUsd`, `checkerUsd`, `costEstimated`, and `usage` (tokens and cost
-for each model). After the run, **replace the estimates in this file** with the real token counts, cache reads and
+for each harness model: the lead and the members; the checkers are in dollars only). After the run, **replace the estimates in this file** with the real token counts, cache reads and
 searches.
 
 ## 8. Cap and accounting notes

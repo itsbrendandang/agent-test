@@ -75,7 +75,7 @@ export interface RunState {
   day?: string // the local day (YYYY-MM-DD) the run last worked on, and what it had spent before that day,
   dayBase?: number // so the daily cap counts only today's part of a run that started on an earlier day
   costEstimated?: boolean // true once a model reported tokens with no cost and the fallback price was used
-  /** Tokens and cost per model ("provider/id"), as the harness counts them: input, output, cache reads and writes. Written with each spend. */
+  /** Tokens and cost per harness model ("provider/id"; the lead and the members): input, output, cache reads and writes. The checkers are in firstPassUsd and checkerUsd as dollars only. Written with each spend. */
   usage?: Record<string, unknown>
   /** What produced the run: commit, prompt and config hashes, library versions (manifest.ts). Absent in older runs. */
   manifest?: Manifest
