@@ -66,15 +66,23 @@ export function useBoardRun(id: string | undefined): Loaded<{ events: BoardEvent
     if (!id || !visible || ended) return
     if (typeof EventSource === "undefined") return
     const source = new EventSource(`${ENGINE}/api/runs/${encodeURIComponent(id)}/events`)
+    // A review that failed can be resumed (engine/src/board/board.ts runLocked): it goes on writing to the same log. So
+    // the stream stays open after run.failed, and a later event (the resumed run) is read too. Only run.finished closes it.
+    let failedLast = false
     source.onmessage = (m) => {
       let e: BoardEvent
       try { e = JSON.parse(m.data) as BoardEvent } catch { return }
       setError(false)
-      const done = e.type === "run.finished" || e.type === "run.failed"
+      failedLast = e.type === "run.failed"
+      const done = e.type === "run.finished"
       setGot((old) => ({ id, ended: done || (old?.id === id && old.ended), events: [...(old?.id === id ? old.events : []).filter((x) => x.key !== e.key), e] }))
       if (done) source.close()
     }
-    source.onerror = () => { if (source.readyState === 2) setError(true) }
+    source.onerror = () => {
+      // The run had failed and the stream broke: nothing new is coming, so no retry (a retry would replay the whole log).
+      if (failedLast) { source.close(); setGot((old) => (old?.id === id ? { ...old, ended: true } : old)); return }
+      if (source.readyState === 2) setError(true)
+    }
     return () => source.close()
   }, [id, visible, ended, nudge])
   const mine = got?.id === id ? got : undefined
