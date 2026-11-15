@@ -1218,7 +1218,7 @@ def glhf_swarm(
                 if entry.script_sha256 and entry.relevance is not None and entry.run is None
             ]
             for position, (claim_id, entry) in enumerate(todo):
-                share = review_left() * EXECUTE_SHARE / (len(todo) - position)
+                share = clock.left() * EXECUTE_SHARE / (len(todo) - position)
                 seconds = int(min(TEST_SECONDS, share))
                 if seconds < MIN_TEST_SECONDS:
                     ledger.log(

@@ -78,7 +78,10 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                   <span className="muted small home-models">{usd(catalog.search.exa.usedUsd)} of {usd(catalog.search.exa.ceilingUsd)} used</span>
                 )}
               </li>
+              {catalog.search.literature?.available && <li><span>Literature search (Europe PMC)</span><span className="pill" data-kind="success">free, no key needed</span></li>}
             </ul>
+            {catalog.search.provider === "exa" && <p className="muted small" data-testid="search-credit">Search powered by Exa</p>}
+            {catalog.search.provider === "fixture" && <p className="muted small">In Demo mode a run uses example sources, not a live web search.</p>}
             <p className="muted small">Keys live in the engine's .env file. This page never shows or asks for one.</p>
           </section>
           <section aria-label="Agents">

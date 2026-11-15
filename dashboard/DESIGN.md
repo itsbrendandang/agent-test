@@ -179,15 +179,20 @@ A first-time visitor gets from opening the app to a finished result, and underst
 
 ## Demo and Real
 
-The status line always shows "Demo mode: practice runs only" or "Real mode: runs cost money", and pressing it
-opens the switch (`src/components/PaidSwitch.tsx`, engine calls in `src/lib/paidSwitch.ts`; also in Settings).
+The status line has one control on every view: a radio group "Demo | Real" that always shows the engine's state,
+with plain words beside it (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in
+`src/lib/paidSwitch.ts`; the same control is in Settings).
 
-- To Real: two steps. First what it means and the spending limits; then the person types the engine's sentence
-  ("I will be charged") themselves. It is never pre-filled and never sent silently. The session token is asked for.
-- To Demo: one click, with what stops said beside it.
-- The state is read from the engine every time. The page does not remember it.
-- A locked switch or a missing key is said plainly, and no control to turn it on is offered. No key is typed here.
-- A run keeps the label it started with. Switching never relabels a past run.
+- Demo: "Practice runs. Fixed example answers. Free." Real: "Real AI models and web search. Costs money."
+- Choosing Real never flips anything. It opens a dialog: what changes, the limits (per run, per day, searches),
+  what was spent today, a tick box "I understand this costs money", and the session-token prompt if none is held.
+  Only the ticked box lets the engine's confirm sentence be sent. Escape or "Stay in Demo" changes nothing.
+- Choosing Demo is one click, no dialog.
+- Missing keys: the dialog says which, and offers no button and no key field. Locked: the control is disabled
+  and says "Locked by the person running the engine".
+- The state comes from the engine on load and on a 10-second poll (`useShell`), and again right after a switch.
+  Nothing about it is stored in the browser. It goes back to Demo when the engine restarts.
+- A run keeps the label it started with. The per-run cost and confirm stay as they are while Real is on.
 - Tests stub the engine. Never send `{on: true}` to a real engine from a test or a script.
 
 ## Rules that the design must keep

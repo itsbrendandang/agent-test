@@ -42,7 +42,7 @@ describe("first visit", () => {
   })
   it("does not say Demo when the engine can use real models", async () => {
     home(CATALOG_ON)
-    await screen.findByText("Real: costs money")
+    await screen.findAllByText("Real: costs money")
     expect(screen.queryByText(/You're in Demo mode/)).toBeNull()
   })
   it("keeps effort and the model list out of the way, under More options", async () => {

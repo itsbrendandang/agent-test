@@ -110,6 +110,30 @@ describe("the board's discussion", () => {
 })
 
 describe("the message line", () => {
+  it("uses the engine's own summary of a reply when the run recorded one, and credits the search only when it was Exa", async () => {
+    board()
+    render(<BoardView />)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    await emit({ type: "run.started", runId: "run-1", brief: "kras", title: "KRAS", mock: false })
+    await emit({ type: "round.started", round: 1, message: "Go.", final: false })
+    await emit({ type: "member.replied", round: 1, member: "scout", summary: "The data is complete.", text: "In short: The data is complete.\n\nTwelve samples, none missing." })
+    const scout = screen.getByRole("article", { name: "Scout" })
+    expect(within(scout).getByText("The data is complete.")).toHaveClass("thread-short")
+    expect(within(scout).getByText("Show full reply").closest("details")).toHaveTextContent("Twelve samples, none missing.")
+    expect(within(scout).getByText("Show full reply").closest("details")).not.toHaveTextContent("In short")
+    await userEvent.setup().click(screen.getByRole("button", { name: "See how each statement was checked" }))
+    expect(screen.queryByTestId("search-credit")).toBeNull() // no search recorded: nothing is claimed
+    await emit({ type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "exa", items: [{ url: "https://example.org/a", title: "A", provider: "exa" }] })
+    expect(screen.getByTestId("search-credit")).toHaveTextContent("Search powered by Exa")
+  })
+  it("does not credit Exa for a practice run's example sources", async () => {
+    board(); localStorage.setItem("board.details", "1")
+    render(<BoardView />)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    await emit({ type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "fixture", items: [{ url: "https://example.org/a", title: "A", provider: "fixture" }] })
+    expect(screen.getByTestId("search-credit")).toHaveTextContent("example sources that come with a practice run. No live search was made.")
+    expect(screen.getByTestId("search-credit")).not.toHaveTextContent("Exa")
+  })
   it("is the reply's own \"In short\" sentence when it has one, and the rest is the full reply", () => {
     expect(splitReply("In short: hold CMP-0517 until the heart-safety margin is fixed.\n\nThe hERG IC50 is 6 uM. That is too close.")).toEqual({
       short: "hold CMP-0517 until the heart-safety margin is fixed.", rest: "The hERG IC50 is 6 uM. That is too close.", marked: true })

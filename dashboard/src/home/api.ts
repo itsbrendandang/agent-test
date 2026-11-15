@@ -19,7 +19,7 @@ export interface Catalog {
   paidCalls: boolean
   providers: Provider[]
   /** usedUsd / ceilingUsd: what the engine has recorded as spent on Exa, and the lifetime ceiling it enforces. */
-  search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number } }
+  search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number }; /** What a run started now would search with. */ provider?: "exa" | "fixture"; literature?: { provider: string; free: boolean; keyNeeded: boolean; available: boolean } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
   /** Absent on an engine without effort levels: then no selector is shown and no effort is sent. */

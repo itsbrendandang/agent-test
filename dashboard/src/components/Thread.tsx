@@ -29,7 +29,8 @@ export function TeamMessage({ name, job, text, short, state, fullLabel = "Show f
 }) {
   const reply = splitReply(text)
   const brief = short ?? reply.short
-  const rest = short === undefined ? reply.rest : text.trim() === short.trim() ? "" : text.trim()
+  // A line given from outside (the engine's own summary of the reply) is used as it is. The full reply never repeats it.
+  const rest = short === undefined || reply.marked ? reply.rest : text.trim() === short.trim() ? "" : text.trim()
   const wrong = checks.filter((c) => outcomeOf(c.verdict) === "fails").length
   const [open, setOpen] = useState<string>()
   const uid = useId()

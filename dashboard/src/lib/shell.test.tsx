@@ -7,18 +7,20 @@ import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
 describe("StatusLine", () => {
   it.each([
-    [{ engine: "online", paid: "off" }, "AI Scientist Bot · Engine online · Demo: practice runs only"],
-    [{ engine: "online", paid: "on" }, "AI Scientist Bot · Engine online · Real: costs money"],
-    [{ engine: "offline", paid: "unknown" }, "AI Scientist Bot · Engine not running · Demo or Real: not known"],
-    [{ engine: "unknown", paid: "unknown" }, "AI Scientist Bot · Engine: checking · Demo or Real: not known"],
-  ] as const)("says in plain words what the engine can do: %j", (shell, text) => {
+    [{ engine: "online", paid: "off" }, "Engine online", "Practice runs. Fixed example answers. Free."],
+    [{ engine: "online", paid: "on" }, "Engine online", "Real AI models and web search. Costs money."],
+    [{ engine: "offline", paid: "unknown" }, "Engine not running", "Not known: the engine did not say."],
+    [{ engine: "unknown", paid: "unknown" }, "Engine: checking", "Not known: the engine did not say."],
+  ] as const)("says in plain words what the engine can do: %j", (shell, engine, mode) => {
     render(<StatusLine shell={shell as Shell} onOpenSettings={() => {}} />)
-    expect(screen.getByRole("status", { name: "Status" })).toHaveTextContent(text)
+    const line = screen.getByRole("group", { name: "Status" })
+    expect(line).toHaveTextContent("AI Scientist Bot")
+    expect(line).toHaveTextContent(engine)
+    expect(line).toHaveTextContent(mode)
   })
-  it("says how a person turns paid calls on, and links to Settings", async () => {
+  it("links to Settings", async () => {
     const onOpenSettings = vi.fn()
     render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={onOpenSettings} />)
-    expect(screen.getByText("Demo: practice runs only")).toHaveAttribute("title", expect.stringContaining("Real mode"))
     await userEvent.setup().click(screen.getByRole("button", { name: "Settings" }))
     expect(onOpenSettings).toHaveBeenCalled()
   })

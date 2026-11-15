@@ -98,6 +98,9 @@ export function BoardView() {
   const evidence = events.filter((e): e is Of<"evidence.triaged"> => e.type === "evidence.triaged")
   const uniqueEvidence = [...new Map(evidence.flatMap((e) => e.items).map((i) => [i.url, i])).values()]
   const dropped = evidence.reduce((n, e) => n + e.dropped, 0)
+  // Who found the sources, as the run recorded it. Old runs do not say; then nothing is claimed.
+  const providers = new Set(evidence.flatMap((e) => [e.provider, ...e.items.map((i) => i.provider)]).filter(Boolean))
+  const searchedWith = providers.has("exa") ? "exa" : providers.has("fixture") ? "fixture" : undefined
   const current = rounds.at(-1)?.[1]
   const members = roster.filter((m) => m.role === "member")
   const live = !finished && events.length > 0
@@ -159,7 +162,7 @@ export function BoardView() {
             {runs.map((r) => <option key={r.id} value={r.id}>{plainTitle(r.brief)} · {plainWhen(r.startedAt)} · {runState(r.status)}</option>)}
           </select>
         </label>
-        {runRow?.status === "paused" && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
+        {(runRow?.status === "paused" || runRow?.status === "failed") && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
         <span className="board-new">
           <select aria-label="Question for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
             {briefs.map((b) => <option key={b} value={b}>{plainTitle(b)}</option>)}
@@ -192,7 +195,7 @@ export function BoardView() {
         )}
         <p className="story-headline" role="status">{headline}</p>
         {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was proven wrong." : `${wrong} statements were proven wrong.`} Look for the marked messages below.</p>}
-        {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
+        {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {memoText && (
           <div className="story-decision" role="group" aria-label="Decision">
@@ -231,7 +234,7 @@ export function BoardView() {
               <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
                 <h3 className="round-head">Round {n}{r.head?.final ? ": final positions" : ""}</h3>
                 {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
-                {r.replies.map((reply) => <TeamMessage key={reply.key} {...who(reply.member)} text={reply.text} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
+                {r.replies.map((reply) => <TeamMessage key={reply.key} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
               </div>
             ))}
             {live && <Loading>{headline}</Loading>}
@@ -265,6 +268,8 @@ export function BoardView() {
             </p>
             <h2>Sources</h2>
             <p className="muted small">{uniqueEvidence.length === 0 ? "This review looked up no outside sources." : `${uniqueEvidence.length} sources kept`}{dropped > 0 && ` · ${dropped} left out as off-topic`}</p>
+            {searchedWith === "exa" && <p className="muted small" data-testid="search-credit">Search powered by Exa</p>}
+            {searchedWith === "fixture" && <p className="muted small" data-testid="search-credit">These are example sources that come with a practice run. No live search was made.</p>}
             <ul className="evidence">
               {uniqueEvidence.map((i) => <li key={i.url}><a href={i.url} target="_blank" rel="noreferrer">{i.title}</a> <span className="muted">{i.studyType}</span></li>)}
             </ul>
