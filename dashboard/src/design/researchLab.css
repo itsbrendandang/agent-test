@@ -37,6 +37,13 @@
   .research-live[data-lab="open"] .research-lab-body .lab-panel { max-height: none; overflow: visible; }
 }
 
+/* The lab above the conversation: a narrow scene (data-tags, set by LabScene's compact map) has no room for the names
+   on the plates, so each plate keeps only its dot. Beside the conversation the names always show. */
+@container (width < 1040px) {
+  .research-lab-body .lab-scene[data-tags="hidden"] .lab-plate { padding: 1px 5px; gap: 0; }
+  .research-lab-body .lab-scene[data-tags="hidden"] .lab-plate-name { display: none; }
+}
+
 @media (max-width: 1000px) {
   /* The page scrolls as a whole here, as the conversation does. */
   .research-live, .research-live-grid { flex: none; }

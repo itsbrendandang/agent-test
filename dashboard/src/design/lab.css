@@ -35,8 +35,6 @@
 
 /* The name plate under a teammate's place: 2.0's name tag, fixed here, and the control that selects the teammate. */
 .lab-plate { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 5px; max-width: calc(var(--u) * 190); min-height: 20px; padding: 1px 9px 1px 7px; border: 1px solid var(--dark-edge, #e2dccb); border-radius: 10px; background: var(--dark-surface, #fffdf6); color: var(--dark-text, #1b1a17); font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 8; -webkit-tap-highlight-color: transparent; }
-.lab-scene[data-tags="hidden"] .lab-plate { padding: 1px 5px; gap: 0; }
-.lab-scene[data-tags="hidden"] .lab-plate-name { display: none; }
 .lab-plate i { width: 7.5px; height: 7.5px; border-radius: 50%; background: var(--dark-subtle, #6a6457); flex: none; }
 .lab-plate[data-state="working"] i { background: var(--dark-info-bg, #2b6cb0); }
 .lab-plate[data-state="fetching"] i, .lab-plate[data-state="handing-off"] i { background: var(--dark-warning-bg, #c26a00); }

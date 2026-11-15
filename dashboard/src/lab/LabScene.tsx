@@ -88,7 +88,7 @@ const textWidth = (text: string) => text.length * 7 + 16
 
 interface Nodes { walker: HTMLElement | null; art: HTMLElement | null; flip: HTMLElement | null; held: HTMLElement | null; chip: HTMLElement | null }
 
-/** Below this width the compact map has no room for the teammates' names on their plates: each plate keeps its dot and its label for a screen reader. */
+/** Below this width the compact map says it has no room for the teammates' names (data-tags); the page that holds it decides whether to hide them (researchLab.css). */
 export const COMPACT_TAGS_MIN = 480
 
 export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, layout: wanted = "auto", footer, className = "" }: LabSceneProps) {
