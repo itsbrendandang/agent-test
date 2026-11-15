@@ -10,8 +10,12 @@ Sources (all free, no API key):
                       app itself uses (engine/src/literature.ts).
   * OpenAlex        - open scholarly catalog across ~all disciplines.
   * Crossref        - the official DOI registry (every publisher).
-  * Semantic Scholar- broad corpus with abstracts (AI2).
+  * Semantic Scholar- broad corpus with abstracts (AI2). Set S2_API_KEY to avoid
+                      rate limits (free key from semanticscholar.org).
   * ClinicalTrials  - clinicaltrials.gov trial records (NIH .gov).
+  * bioRxiv/medRxiv - biology/medicine preprints (via Crossref, prefix 10.1101).
+  * DOAJ            - Directory of Open Access Journals (peer-reviewed OA articles).
+  * DataCite        - research datasets & software (so you can cite the data itself).
   * arXiv           - preprints (physics / CS / quant bio).
 
 For each query it saves one Markdown file with the merged top results (title,
@@ -31,6 +35,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import ssl
 import urllib.error
@@ -68,13 +73,14 @@ def _ssl_ctx() -> ssl.SSLContext:
         return ctx
 
 
-def _get(url: str, timeout: int = 25, retries: int = 3) -> bytes:
+def _get(url: str, timeout: int = 25, retries: int = 3, headers: dict | None = None) -> bytes:
     global _SSL
     if _SSL is None:
         _SSL = _ssl_ctx()
+    hdrs = {**UA, **(headers or {})}
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
+            with urllib.request.urlopen(urllib.request.Request(url, headers=hdrs),
                                         timeout=timeout, context=_SSL) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
@@ -215,7 +221,8 @@ def src_semanticscholar(query: str, n: int) -> list[dict]:
     fields = "title,authors,year,venue,abstract,externalIds,url"
     params = {"query": query, "limit": str(n), "fields": fields}
     url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urllib.parse.urlencode(params)
-    body = json.loads(_get(url))
+    key = os.environ.get("S2_API_KEY") or os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+    body = json.loads(_get(url, headers={"x-api-key": key} if key else None))
     out = []
     for p in body.get("data", []) or []:
         doi = _clean_doi((p.get("externalIds") or {}).get("DOI"))
@@ -257,12 +264,95 @@ def src_clinicaltrials(query: str, n: int) -> list[dict]:
     return out
 
 
+# --- source: bioRxiv / medRxiv preprints (via Crossref, prefix 10.1101) -------
+def src_biorxiv(query: str, n: int) -> list[dict]:
+    # bioRxiv and medRxiv DOIs are registered by Cold Spring Harbor Lab under 10.1101.
+    params = {"query": query, "rows": str(n), "filter": "prefix:10.1101"}
+    url = "https://api.crossref.org/works?" + urllib.parse.urlencode(params)
+    body = json.loads(_get(url))
+    out = []
+    for it in body.get("message", {}).get("items", []):
+        authors = ", ".join(f"{a.get('given','')} {a.get('family','')}".strip()
+                            for a in it.get("author", [])[:8])
+        parts = (it.get("issued") or {}).get("date-parts") or [[]]
+        year = str(parts[0][0]) if parts and parts[0] else ""
+        server = _tags(" ".join(it.get("group-title", []) or []) or "bioRxiv/medRxiv")
+        out.append({
+            "title": _tags(" ".join(it.get("title", [])) or ""),
+            "authors": authors,
+            "venue": server + " preprint",
+            "year": year,
+            "doi": _clean_doi(it.get("DOI")),
+            "url": it.get("URL", ""),
+            "abstract": _tags(it.get("abstract", "")),
+            "source": "bioRxiv/medRxiv",
+        })
+    return out
+
+
+# --- source: DOAJ (Directory of Open Access Journals) -------------------------
+def src_doaj(query: str, n: int) -> list[dict]:
+    url = ("https://doaj.org/api/v2/search/articles/"
+           + urllib.parse.quote(query, safe="") + "?pageSize=" + str(n))
+    body = json.loads(_get(url))
+    out = []
+    for r in body.get("results", []):
+        bj = r.get("bibjson", {})
+        doi = ""
+        link = ""
+        for ident in bj.get("identifier", []):
+            if ident.get("type") == "doi":
+                doi = _clean_doi(ident.get("id"))
+        for lk in bj.get("link", []):
+            if lk.get("url"):
+                link = lk["url"]
+                break
+        out.append({
+            "title": _tags(bj.get("title") or ""),
+            "authors": ", ".join(a.get("name", "") for a in bj.get("author", [])[:8]),
+            "venue": _tags((bj.get("journal") or {}).get("title", "")),
+            "year": str(bj.get("year") or (bj.get("journal") or {}).get("year", "")),
+            "doi": doi,
+            "url": ("https://doi.org/" + doi) if doi else link,
+            "abstract": _tags(bj.get("abstract") or "")[:MAX_ABSTRACT_CHARS],
+            "source": "DOAJ",
+        })
+    return out
+
+
+# --- source: DataCite (datasets & software DOIs) -----------------------------
+def src_datacite(query: str, n: int) -> list[dict]:
+    params = {"query": query, "page[size]": str(n)}
+    url = "https://api.datacite.org/dois?" + urllib.parse.urlencode(params)
+    body = json.loads(_get(url))
+    out = []
+    for d in body.get("data", []):
+        a = d.get("attributes", {})
+        titles = a.get("titles") or [{}]
+        descs = a.get("descriptions") or [{}]
+        doi = _clean_doi(a.get("doi"))
+        out.append({
+            "title": _tags(titles[0].get("title", "")),
+            "authors": ", ".join(c.get("name", "") for c in a.get("creators", [])[:8]),
+            "venue": _tags(str(a.get("publisher", "")) or "dataset"),
+            "year": str(a.get("publicationYear", "")),
+            "doi": doi,
+            "url": a.get("url") or (("https://doi.org/" + doi) if doi else ""),
+            "abstract": _tags(descs[0].get("description", ""))[:MAX_ABSTRACT_CHARS],
+            "source": "DataCite",
+        })
+    return out
+
+
 SOURCES = {
     "europepmc": src_europepmc,
     "openalex": src_openalex,
     "crossref": src_crossref,
     "semanticscholar": src_semanticscholar,
     "clinicaltrials": src_clinicaltrials,
+    "biorxiv": src_biorxiv,
+    "doaj": src_doaj,
+    "datacite": src_datacite,
     "arxiv": src_arxiv,
 }
 
