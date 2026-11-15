@@ -91,7 +91,7 @@ def p_needed(threshold: float, kappa: float = KAPPA) -> float | None:
     must reach to support a claim on its own. None when no p-value can (e is capped at P_FLOOR's)."""
     if p_to_e(P_FLOOR, kappa) < threshold:
         return None
-    p = min(1.0, (kappa / threshold) ** (1 / (1 - kappa)))
+    p = min(1.0, float((kappa / threshold) ** (1 / (1 - kappa))))
     while p > P_FLOOR and p_to_e(p, kappa) < threshold:  # floating-point rounding
         p = math.nextafter(p, 0.0)
     return p
