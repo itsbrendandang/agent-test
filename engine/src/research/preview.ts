@@ -1,7 +1,7 @@
 // THE PREVIEW SWITCH of the direct answer (the Research screen, POST /api/research). In Real mode a paid answer is
 // refused with 503 {preview: false} unless the engine was started with RESEARCH_PREVIEW=1, and the dashboard then
 // asks for a team-review plan instead. Demo answers need no switch. This file only reads the switch and says what it
-// means, so the start-up lines, GET /api/status and the chat catalog can show it without loading the pipeline.
+// means, so the start-up lines and GET /api/status can show it without loading the pipeline.
 // It does not change the default: off unless the value is exactly 1.
 
 export const previewOn = (env: NodeJS.ProcessEnv = process.env): boolean => (env.RESEARCH_PREVIEW ?? "").trim() === "1"

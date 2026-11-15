@@ -49,30 +49,32 @@ function packageVersion(name: string): string | null {
   } catch { return null }
 }
 
-// The commit and versions are read once, when this module loads at engine start: they do not change while the
-// process runs (an edit or a git pull does not reload the code). The hashes are read on each call, because the files
-// are read again at each run.
-function readFixed(): Pick<Manifest, "commit" | "dirty" | "versions"> {
+// The commit, the versions and the research prompts are read once, when this module loads at engine start: they do not
+// change while the process runs (an edit or a git pull does not reload the code; research/prompts.ts reads its prompts
+// once). The board's agent files are hashed on each call, because a board run reads them again.
+function readFixed(): Pick<Manifest, "commit" | "dirty" | "versions"> & { researchPrompts: string | null } {
   const commit = git(["rev-parse", "HEAD"])
   const status = commit ? git(["status", "--porcelain", "--untracked-files=no"]) : null
   return {
     commit: commit && /^[0-9a-f]{40}$/.test(commit) ? commit : null,
     dirty: status === null ? null : status.length > 0,
     versions: { node: process.versions.node, piAi: packageVersion("@earendil-works/pi-ai"), piDurable: packageVersion("@earendil-works/pi-durable") },
+    researchPrompts: folderHash(resolve(ROOT, "engine/src/research/prompts")),
   }
 }
-const fixed = readFixed()
+const { researchPrompts, ...fixed } = readFixed()
 
-/** The manifest now. `config`: the config in use, for its agent folder (paths.agents); default board/agents. */
-export function runManifest(config?: BoardConfig): Manifest {
-  const agentsDir = config ? path(config, "agents") : resolve(ROOT, "board/agents")
+/** The hash of board/config.yaml as it is on disk now. A caller that keeps a config loaded earlier hashes it when it loads it. */
+export function configHash(): string | null {
   const configFile = resolve(ROOT, "board/config.yaml")
-  return {
-    ...fixed,
-    hashes: {
-      config: existsSync(configFile) ? fileHash(configFile) : null,
-      boardAgents: folderHash(agentsDir),
-      researchPrompts: folderHash(resolve(ROOT, "engine/src/research/prompts")),
-    },
-  }
+  return existsSync(configFile) ? fileHash(configFile) : null
+}
+
+/**
+ * The manifest now. `config`: the config in use, for its agent folder (paths.agents); default board/agents.
+ * `configAt`: the hash of board/config.yaml when that config was loaded; default the file on disk now.
+ */
+export function runManifest(config?: BoardConfig, configAt: string | null = configHash()): Manifest {
+  const agentsDir = config ? path(config, "agents") : resolve(ROOT, "board/agents")
+  return { ...fixed, hashes: { config: configAt, boardAgents: folderHash(agentsDir), researchPrompts } }
 }

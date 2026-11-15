@@ -41,7 +41,6 @@ import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
 import { directAnswers, previewOn } from "./research/preview.ts"
-import { runManifest } from "./manifest.ts"
 import { search } from "./search/search.ts"
 import { createTrending } from "./search/trending.ts"
 import { exampleBoards, exampleHits, handleExample } from "./examples.ts"
@@ -204,7 +203,7 @@ export function createApp(options: AppOptions = {}) {
         meeting: config.meeting, models: config.models,
         // Direct answers on the Research screen: in Real mode only with RESEARCH_PREVIEW=1 (research/preview.ts).
         researchPreview: previewOn(env), directAnswers: directAnswers(mockNow(), env),
-        manifest: runManifest(config), // what this engine runs: commit, hashes, versions (npm start compares the commit)
+        manifest: research.manifest(), // what this engine runs: commit, hashes, versions (npm start compares the commit)
       })
       if (url.pathname === "/api/trending" && req.method === "GET") return json(res, 200, await trending.get())
       if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? ""), ...exampleHits(url.searchParams.get("q") ?? "", env)].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")

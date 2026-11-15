@@ -1,7 +1,7 @@
 // What a run record says about how it was made and what it used, and what the engine says about its own mode:
 // the manifest (commit, hashes, versions) in board run.json, research record.json and GET /api/status; the board's
-// token usage per model in run.json; the RESEARCH_PREVIEW state in GET /api/status, the chat catalog and the start-up
-// line; and what `npm start` prints about the engine it uses (startinfo.ts).
+// token usage per model in run.json; the RESEARCH_PREVIEW state in GET /api/status and the start-up line; and what
+// `npm start` prints about the engine it uses (startinfo.ts).
 // Scripted models only, paid calls off. No request leaves 127.0.0.1.
 import assert from "node:assert/strict"
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
