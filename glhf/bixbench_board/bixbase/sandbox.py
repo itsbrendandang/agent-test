@@ -21,6 +21,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,6 +106,8 @@ class Sandbox:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.python = python or sys.executable
         self._cell = 0
+        # Members can run code at the same time (parallel rounds): each cell gets its own number.
+        self._cell_lock = threading.Lock()
         self._profile_path: Path | None = None
 
         self.use_sandbox_exec = enforce_readonly and _SANDBOX_EXEC is not None
@@ -150,8 +153,9 @@ class Sandbox:
             interpreter, ext = _RSCRIPT, "R"
         else:
             interpreter, ext = self.python, "py"
-        idx = self._cell
-        self._cell += 1
+        with self._cell_lock:
+            idx = self._cell
+            self._cell += 1
         cell_path = self.work_dir / f"cell_{idx:03d}.{ext}"
         cell_path.write_text(code)
 

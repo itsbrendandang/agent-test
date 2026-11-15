@@ -8,7 +8,7 @@ inside these tests only (NO_PAID_CALLS=0), as AGENTS.md allows for fakes.
 
   1. a whole board run (five members) with its cells on the fake Modal; and run.py's run_one.
      In it: the data is read-only, no key reaches a cell, the work folder comes back
-  3. a cell whose time is up is killed with its children
+  3. a cell whose time is up is killed with its children; cells at the same time get their own numbers
   4. list_dir and read_file answer as the local sandbox does; paths outside are refused
   5. the runs of one study upload its data once
   6. a sandbox whose packages differ from the pins is refused and terminated
@@ -280,6 +280,26 @@ def test_timeout_kills_the_cell_and_its_children(tmp: Path) -> None:
     print(f"test 3 OK: a cell over its time is killed with its child ({took:.1f} s)")
 
 
+def test_cells_at_the_same_time_on_modal(tmp: Path) -> None:
+    s, _ = session(tmp / "t3b")
+    study = make_study(tmp / "t3b")
+    box = s.open(study.data_dir, tmp / "t3b" / "work", name="t3b", seconds=60)
+    results: list[Any] = []
+    try:
+        threads = [threading.Thread(target=lambda k=k: results.append(box.run_code(
+            f"import time; time.sleep(0.5); print('cell', {k})", timeout_s=30)))
+            for k in range(6)]  # fmt: skip
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        box.close()
+    assert len({r.cell_index for r in results}) == 6, [r.cell_index for r in results]
+    assert sorted(r.stdout.strip() for r in results) == [f"cell {k}" for k in range(6)]
+    print("test 3 OK: 6 cells at once in one sandbox, 6 numbers, 6 outputs")
+
+
 def test_list_and_read_answer_as_the_local_sandbox(tmp: Path) -> None:
     s, _ = session(tmp / "t4")
     study = make_study(tmp / "t4")
@@ -414,6 +434,7 @@ if __name__ == "__main__":
     tmp = Path(tempfile.mkdtemp(prefix="modal-selftest-"))
     test_a_board_run_on_modal(tmp)
     test_timeout_kills_the_cell_and_its_children(tmp)
+    test_cells_at_the_same_time_on_modal(tmp)
     test_list_and_read_answer_as_the_local_sandbox(tmp)
     test_the_runs_of_one_study_upload_its_data_once(tmp)
     test_other_packages_are_refused(tmp)

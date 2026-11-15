@@ -5,6 +5,7 @@
   2. a cell that ends but leaves a child holding its output open: it returns at once (not
      after its whole timeout) and the child is stopped
   3. an ordinary cell: output, exit code and new files as before
+  4. cells run at the same time (parallel members) each get their own number
 
 Each check runs with and without the read-only wrapper (bubblewrap on Linux, sandbox-exec on
 macOS) when that wrapper is installed.
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -89,9 +91,27 @@ def test_an_ordinary_cell_is_unchanged(tmp: Path) -> None:
         print(f"test 3 OK ({label}): output, exit codes and new files as before")
 
 
+def test_cells_at_the_same_time_get_their_own_numbers(tmp: Path) -> None:
+    """Board members can run code in parallel: no two cells may share a number (a file)."""
+    for label, box in _boxes(tmp):
+        results: list = []
+        threads = [threading.Thread(target=lambda k=k, box=box, results=results: results.append(box.run_code(
+            f"import time; time.sleep(0.5); print('cell', {k})", timeout_s=30)))
+            for k in range(6)]  # fmt: skip
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        numbers = sorted(r.cell_index for r in results)
+        assert len(set(numbers)) == 6, f"{label}: cell numbers {numbers}"
+        assert sorted(r.stdout.strip() for r in results) == [f"cell {k}" for k in range(6)]
+        print(f"test 4 OK ({label}): 6 cells at once, 6 numbers, 6 outputs")
+
+
 if __name__ == "__main__":
     tmp = Path(tempfile.mkdtemp(prefix="sandbox-selftest-"))
     test_timeout_kills_the_cell_and_its_children(tmp)
     test_a_finished_cell_returns_at_once_and_its_children_stop(tmp)
     test_an_ordinary_cell_is_unchanged(tmp)
+    test_cells_at_the_same_time_get_their_own_numbers(tmp)
     print("\nall sandbox self-tests passed")

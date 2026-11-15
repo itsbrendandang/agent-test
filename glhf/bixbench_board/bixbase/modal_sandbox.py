@@ -453,6 +453,7 @@ class ModalSandbox:
         self.environment: dict[str, Any] | None = None
         self.environment_check = "not run"
         self._cell = 0
+        self._cell_lock = threading.Lock()  # members can run code at the same time
         self._closed = False
 
     # Start ---------------------------------------------------------------------------------------
@@ -524,8 +525,9 @@ class ModalSandbox:
             interpreter, ext = self.layout.rscript, "R"
         else:
             interpreter, ext = self.layout.python, "py"
-        idx = self._cell
-        self._cell += 1
+        with self._cell_lock:
+            idx = self._cell
+            self._cell += 1
         cell_name = f"cell_{idx:03d}.{ext}"
         (self.work_dir / cell_name).write_text(code)  # a local copy, as the local sandbox keeps
         spec = {
