@@ -157,3 +157,26 @@ export const latestReview = (runs: unknown): RunSummary | undefined => {
   return list.find((r) => r.status === "done") ?? list[0]
 }
 
+
+// ---- can a board review use real models?
+const KEY_FOR: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" }
+const KEY_NAME: Record<string, string> = { ANTHROPIC_API_KEY: "Anthropic", OPENAI_API_KEY: "OpenAI", OPENROUTER_API_KEY: "OpenRouter" }
+/** The key a board model id needs. Ids that start with "~" go through OpenRouter. */
+export const keyOfModel = (id: string): string | undefined => (id.startsWith("~") ? KEY_FOR.openrouter : KEY_FOR[id.split("/")[0]])
+
+/**
+ * Why a board review can only run with scripted models, in one plain sentence, or undefined when it can use real
+ * ones. From the engine's own facts (GET /api/status: the board's model ids, which keys are set, the paid switch,
+ * and whether it is in scripted mode), plus the catalog's provider list.
+ */
+export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; keys?: Record<string, unknown>; models?: Record<string, unknown> } | undefined,
+  providers: { id: string; keyPresent: boolean }[] = []): string | undefined {
+  const needed = new Set(Object.values(status?.models ?? {}).flatMap((id) => (typeof id === "string" ? [keyOfModel(id)] : [])).filter((k): k is string => !!k))
+  const missing = [...needed].filter((key) => status?.keys?.[key] === false || providers.some((p) => KEY_FOR[p.id] === key && !p.keyPresent))
+  // A provider the catalog lists without a key, when the engine did not say which models the board uses.
+  if (!needed.size) for (const p of providers) if (p.id === "openrouter" && !p.keyPresent) missing.push(KEY_FOR.openrouter)
+  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board runs are scripted only`
+  if (status?.paidCalls === false) return "Paid calls are off: board runs are scripted only"
+  if (status?.mock === true) return "The engine is in scripted mode: board runs are scripted only"
+  return undefined
+}

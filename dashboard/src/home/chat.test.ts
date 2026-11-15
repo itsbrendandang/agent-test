@@ -3,7 +3,7 @@ import { CATALOG_ON, EFFORTS, PLAN, reply, SCRIPTED_PLAN } from "@/test/home"
 import { routes } from "@/test/engine"
 import { ChatRefused, getCatalog, sendChat, startPlan } from "./api"
 import {
-  chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
+  boardScriptedWhy, keyOfModel, chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
   MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, type Turn,
 } from "./chat"
 
@@ -187,5 +187,34 @@ describe("client", () => {
   it("refuses a catalog it cannot read", async () => {
     routes({ "GET /api/chat/catalog": { status: 200, body: { paidCalls: "no" } } })
     await expect(getCatalog()).rejects.toMatchObject({ message: "The engine sent a catalog this page cannot read." })
+  })
+})
+
+describe("can a board review use real models?", () => {
+  const live = { mock: true, paidCalls: false, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } }
+  it("names the key a board model needs", () => {
+    expect(keyOfModel("anthropic/claude-sonnet-5-5")).toBe("ANTHROPIC_API_KEY")
+    expect(keyOfModel("openai/gpt-5-mini")).toBe("OPENAI_API_KEY")
+    expect(keyOfModel("~anthropic/claude-opus-latest")).toBe("OPENROUTER_API_KEY") // routed through OpenRouter
+    expect(keyOfModel("ollama/qwen2.5:14b")).toBeUndefined()
+  })
+  it("says the OpenRouter key is missing when the board routes its models through OpenRouter", () => {
+    const viaOpenRouter = { mock: true, paidCalls: true, keys: { OPENROUTER_API_KEY: false, ANTHROPIC_API_KEY: true }, models: { lead: "~anthropic/claude-opus-latest", cheap: "~google/gemini-flash-latest" } }
+    expect(boardScriptedWhy(viaOpenRouter)).toBe("OpenRouter key missing: board runs are scripted only")
+    // also when only the catalog says so
+    expect(boardScriptedWhy(undefined, [{ id: "anthropic", keyPresent: true }, { id: "openrouter", keyPresent: false }])).toBe("OpenRouter key missing: board runs are scripted only")
+  })
+  it("a missing key comes before the paid switch: turning paid calls on would not be enough", () => {
+    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board runs are scripted only")
+  })
+  it("says paid calls are off when every key is there", () => {
+    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Paid calls are off: board runs are scripted only")
+  })
+  it("does not blame OpenRouter when the board does not use it", () => {
+    expect(boardScriptedWhy({ ...live, keys: { ...live.keys, OPENROUTER_API_KEY: false } })).toBe("Paid calls are off: board runs are scripted only")
+  })
+  it("says nothing when the board can use real models", () => {
+    expect(boardScriptedWhy({ ...live, mock: false, paidCalls: true })).toBeUndefined()
+    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in scripted mode: board runs are scripted only")
   })
 })

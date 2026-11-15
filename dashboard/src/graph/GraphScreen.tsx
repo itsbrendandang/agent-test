@@ -24,7 +24,10 @@ export function GraphScreen() {
     const swarm = takeOpen("swarm"), board = takeOpen("board")
     return swarm ? { kind: "swarm", id: swarm } : board ? { kind: "board", id: board } : undefined
   })
-  const current = picked ?? list.runs?.[0]
+  // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
+  const [auto, setAuto] = useState<RunRef>()
+  if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
+  const current = picked ?? auto
   const board = useBoardRun(current?.kind === "board" ? current.id : undefined)
   const swarm = useSwarmRun(current?.kind === "swarm" ? current.id : undefined)
   const source = current?.kind === "board" ? board : swarm

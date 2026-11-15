@@ -3,7 +3,6 @@
 import { takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
-import { Buddy, type Mood } from "@/components/Buddy"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
 import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Shared"
 import { runState } from "@/lib/status"
@@ -83,11 +82,6 @@ export function BoardView() {
   const done = events.find((e): e is Of<"run.finished"> => e.type === "run.finished")
   const failed = events.find((e): e is Of<"run.failed"> => e.type === "run.failed")
   const title = (name: string) => roster.find((m) => m.name === name)?.title ?? name
-  const mood = (m: RosterMember): Mood => {
-    if (!live) return finished ? "happy" : "sleeping"
-    if (m.role === "lead") return "alert"
-    return current?.replies.some((r) => r.member === m.name) ? "happy" : "working"
-  }
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const startedAs = events.find((e): e is Of<"run.started"> => e.type === "run.started")?.mock
   const scripted = startedAs ?? status?.mock ?? false
@@ -148,9 +142,14 @@ export function BoardView() {
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
       <section className="card-surface summary" aria-label="Status">
-        <div className="crew">
-          {roster.map((m) => <span key={m.name} title={m.title}><Buddy seed={m.name} mood={mood(m)} size={m.role === "lead" ? 44 : 34} /></span>)}
-        </div>
+        {runId && members.length > 0 && (
+          <ol className="board-steps" aria-label="Board members in this round">
+            {members.map((m) => {
+              const step = !live ? (finished ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
+              return <li key={m.name} data-step={step}><span>{m.title}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : "○ not started"}</span></li>
+            })}
+          </ol>
+        )}
         <p className="headline" role="status">{headline}</p>
         {runId && startedAs !== undefined && <p className="board-scripted" data-testid="run-mode"><ModeLabel scripted={startedAs} /> <span className="muted small">{startedAs ? "This review ran with scripted models. It cost nothing." : "This review ran with real models."}</span></p>}
         {status?.mock && <p className="muted small board-scripted" data-testid="next-mode">{nextWhy}</p>}
@@ -196,7 +195,6 @@ export function BoardView() {
                 </div>
                 {r.replies.map((reply) => (
                   <div key={reply.key} className="reply">
-                    <Buddy seed={reply.member} mood="happy" size={28} />
                     <div>
                       <b>{title(reply.member)}</b>
                       <p>{reply.text}</p>
@@ -240,7 +238,6 @@ export function BoardView() {
             <summary>The board: who took part, and the limits</summary>
             {roster.map((m) => (
               <div key={m.name} className="member" title={m.deliverable}>
-                <Buddy seed={m.name} mood={mood(m)} size={40} />
                 <div>
                   <strong>{m.title}</strong>
                   <span>{m.role === "lead" ? "Runs the board, writes the memo" : m.deliverable}</span>

@@ -501,6 +501,17 @@ describe("what this can use", () => {
     expect(within(claude).getByText("key present · off")).toHaveAttribute("data-kind", "neutral")
     expect(panel.getByText("OpenAI").closest("li")).toHaveTextContent("key missing")
   })
+  it("says plainly when board runs can only be scripted, and why", async () => {
+    home(CATALOG_ON, { "GET /api/status": { status: 200, body: { mock: true, paidCalls: true, keys: { OPENROUTER_API_KEY: false }, models: { lead: "~anthropic/claude-opus-latest" } } } })
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    expect(await panel.findByRole("note")).toHaveTextContent("OpenRouter key missing: board runs are scripted only.")
+  })
+  it("says nothing of the kind when the board can use real models", async () => {
+    home(CATALOG_ON, { "GET /api/status": { status: 200, body: { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } } } })
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    await panel.findByText("Paid calls on")
+    expect(panel.queryByRole("note")).toBeNull()
+  })
   it("groups agents as Board and Specialists, with triggers", async () => {
     home(CATALOG_ON)
     const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))

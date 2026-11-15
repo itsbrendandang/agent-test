@@ -2,10 +2,11 @@
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
+import { ENGINE } from "@/board/api"
 import { PageHead } from "@/components/Shared"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type ProviderId } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
-import { chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
+import { boardScriptedWhy, chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
 import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
@@ -25,6 +26,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [again, setAgain] = useState(0)
   const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
   const [chosenEffort, setChosenEffort] = useState(loadEffort)
+  const [boardStatus, setBoardStatus] = useState<Parameters<typeof boardScriptedWhy>[0]>() // GET /api/status: what the board would run on
   const box = useRef<HTMLTextAreaElement>(null)
   const end = useRef<HTMLDivElement>(null)
   const asking = useRef<AbortController | undefined>(undefined)
@@ -33,6 +35,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
     let stale = false
     getCatalog().then((c) => { if (!stale) { setCatalog(c); setWhyNone(undefined) } },
       (error: unknown) => { if (!stale) { setCatalog(null); setWhyNone(error instanceof ChatRefused && error.status !== 0 ? error.message : undefined) } })
+    return () => { stale = true }
+  }, [again])
+  useEffect(() => {
+    let stale = false
+    fetch(`${ENGINE}/api/status`).then((r) => (r.ok ? r.json() : undefined), () => undefined).then((status) => { if (!stale) setBoardStatus(status) })
     return () => { stale = true }
   }, [again])
   useEffect(() => saveTurns(turns), [turns])
@@ -177,7 +184,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
         </section>
         <div className="home-side">
           <Checked onOpen={openRun} />
-          <CatalogPanel catalog={catalog} why={whyNone} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
+          <CatalogPanel catalog={catalog} why={whyNone} boardWhy={catalog ? boardScriptedWhy(boardStatus, catalog.providers) : undefined} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
         </div>
       </div>
     </div>

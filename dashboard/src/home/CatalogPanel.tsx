@@ -40,10 +40,12 @@ interface Props {
   catalog: Catalog | null | undefined
   /** Why there is no catalog, when the engine is running but could not give one. */
   why?: string
+  /** Why board runs can only be scripted (boardScriptedWhy), or undefined when they can use real models. */
+  boardWhy?: string
   onRetry: () => void
 }
 
-export function CatalogPanel({ catalog, why, onRetry }: Props) {
+export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
   return (
     <aside className="home-catalog card-surface" aria-labelledby="home-catalog-title">
       <h2 id="home-catalog-title">What this can use</h2>
@@ -60,6 +62,7 @@ export function CatalogPanel({ catalog, why, onRetry }: Props) {
           </section>
           <section aria-label="Models and search">
             <h3>Models and search</h3>
+            {boardWhy && <p className="home-paidoff" role="note">{boardWhy}.</p>}
             <ul className="home-keys">
               {catalog.providers.map((p) => (
                 <li key={p.id}>

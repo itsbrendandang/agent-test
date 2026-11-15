@@ -20,6 +20,7 @@ export function mergeRuns(board: RunSummary[] | undefined, swarm: GlhfRun[] | un
 }
 
 export interface RunList { runs: RunRef[] | undefined; /** Which lists failed to load. */ failed: RunKind[]; reload: () => void }
+/** Both run lists, read again every 15 seconds while the tab is visible, so a run started elsewhere shows up in the picker. */
 export function useRunList(): RunList {
   const [state, setState] = useState<{ runs?: RunRef[]; failed: RunKind[] }>({ failed: [] })
   const [nudge, setNudge] = useState(0)
@@ -27,12 +28,14 @@ export function useRunList(): RunList {
   useEffect(() => {
     if (!visible) return
     let stop = false
-    void Promise.allSettled([get<RunSummary[]>("/api/runs"), get<GlhfRun[]>("/api/glhf/runs")]).then(([b, s]) => {
+    const read = () => void Promise.allSettled([get<RunSummary[]>("/api/runs"), get<GlhfRun[]>("/api/glhf/runs")]).then(([b, s]) => {
       if (stop) return
       const failed: RunKind[] = [b.status === "rejected" && "board", s.status === "rejected" && "swarm"].filter(Boolean) as RunKind[]
       setState({ runs: failed.length === 2 ? undefined : mergeRuns(b.status === "fulfilled" ? b.value : undefined, s.status === "fulfilled" ? s.value : undefined), failed })
     })
-    return () => { stop = true }
+    read()
+    const timer = window.setInterval(read, 15_000)
+    return () => { stop = true; window.clearInterval(timer) }
   }, [nudge, visible])
   return { runs: state.runs, failed: state.failed, reload: useCallback(() => setNudge((n) => n + 1), []) }
 }

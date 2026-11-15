@@ -2,7 +2,6 @@
 // rejected. "Show details" opens the timeline, every claim with its tests, the critic's issues and the reports.
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
-import { Buddy, type Mood } from "@/components/Buddy"
 import { EngineOffline, ModeLabel, PageHead, RunId, StatusPill } from "@/components/Shared"
 import { swarmScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
@@ -148,8 +147,6 @@ export function SwarmView() {
 
   /** Where a role stands in the selected run, in words: this must not rest on the character's mood alone. */
   const step = (key: RoleKey): "now" | "done" | "todo" => (activeRole === key ? "now" : run && seen.has(key) ? "done" : "todo")
-  const mood = (key: RoleKey): Mood =>
-    !run ? "sleeping" : activeRole === key ? "working" : seen.has(key) || run.phase === "done" ? "happy" : "sleeping"
 
   return (
     <div className="page swarm" ref={page}>
@@ -268,22 +265,19 @@ export function SwarmView() {
           {run.solver === "single" && <p className="swarm-note">A single agent has no critic, so there are no checked claims or rejections to show.</p>}
         </div>
         )}
-        <div className="swarm-roles">
+        <ol className="swarm-steps" aria-label="Roles, in the order they run">
           {run?.solver === "single" ? (
-            <div className="swarm-role" data-active={(live && run.phase !== "queued") || undefined} data-done={!live || undefined}>
-              <span className="swarm-face"><Buddy seed="single-agent" mood={run.phase === "queued" || run.phase === "cancelled" ? "sleeping" : live ? "working" : run.phase === "done" ? "happy" : "alert"} size={56} /></span>
+            <li data-step={live ? (run.phase === "queued" ? "todo" : "now") : run.phase === "done" ? "done" : "todo"}>
               <span>Single agent</span>
-              <span className="swarm-step" data-step={live ? (run.phase === "queued" ? "todo" : "now") : run.phase === "done" ? "done" : "todo"}>{live ? (run.phase === "queued" ? STEP_TEXT.todo : STEP_TEXT.now) : run.phase === "done" ? STEP_TEXT.done : `○ ${run.phase}`}</span>
-            </div>
+              <span className="swarm-step">{live ? (run.phase === "queued" ? "○ waiting" : STEP_TEXT.now) : run.phase === "done" ? STEP_TEXT.done : `○ ${run.phase}`}</span>
+            </li>
           ) : ROLES.map((r, i) => (
-            <div key={r.key} className="swarm-role" title={r.does}
-              data-active={activeRole === r.key || undefined} data-done={mood(r.key) === "happy" || undefined}>
-              <span className="swarm-face"><Buddy species={r.species} mood={mood(r.key)} size={activeRole === r.key ? 56 : 44} /></span>
-              <span>{i + 1}. {r.name}</span>
-              <span className="swarm-step" data-step={step(r.key)}>{STEP_TEXT[step(r.key)]}</span>
-            </div>
+            <li key={r.key} data-step={step(r.key)} title={r.does} aria-current={step(r.key) === "now" ? "step" : undefined}>
+              <span>{i + 1} {r.name}</span>
+              <span className="swarm-step">{run ? STEP_TEXT[step(r.key)] : "○ no run yet"}</span>
+            </li>
           ))}
-        </div>
+        </ol>
         <p className="swarm-headline" role="status">{headline(run, activePhase, runId)}</p>
         {!run && list.length === 0 && <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>}
         {run && live && (
