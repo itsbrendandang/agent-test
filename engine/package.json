@@ -1,5 +1,5 @@
 {
-  "name": "@drug-board/engine",
+  "name": "@ai-scientist-bot/engine",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -7,7 +7,7 @@
     "board": "node src/cli.ts",
     "serve": "node src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"test/*.test.ts\""
+    "test": "PAID_SWITCH_LOCKED=1 node --test \"test/*.test.ts\""
   },
   "dependencies": {
     "@earendil-works/chord": "^1.5.2",

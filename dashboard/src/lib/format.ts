@@ -14,3 +14,9 @@ export function fmtDuration(ms: number | undefined): string {
   const ss = String(s).padStart(2, "0")
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`
 }
+
+/** Does this text have every word of the filter? Case does not matter. An empty filter matches everything. */
+export const hasWords = (text: string, filter: string): boolean => {
+  const hay = text.toLowerCase()
+  return filter.toLowerCase().split(/\s+/).filter(Boolean).every((word) => hay.includes(word))
+}

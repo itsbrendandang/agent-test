@@ -51,13 +51,13 @@ POLICY = NetworkAccessPolicy(answer_source_urls=[ANSWER_URL])
 NOTES: dict[str, tuple[str, str, str]] = {
     "author-prod": (
         "HIGH",
-        "solver.py gives search_docs the DOI only and the case record has no authors, so the author check never runs",
-        "add authors to the case record and pass them in solver.py where search_docs is built",
+        "the BixBench3 metadata has no authors (paper_id and doi only), so in benchmark runs the author check has nothing to compare; solver.py passes them when a case record has them (solver.study_names)",
+        "needs the authors in the benchmark's case metadata; nothing more to do in this package",
     ),
     "title-prod": (
         "HIGH",
-        "solver.py gives search_docs the DOI only and the case record has no title, so the title check never runs",
-        "add the title to the case record and pass it in solver.py where search_docs is built",
+        "the BixBench3 metadata has no title (paper_id and doi only), so in benchmark runs the title check has nothing to compare; solver.py passes it when a case record has one (solver.study_names)",
+        "needs the title in the benchmark's case metadata; nothing more to do in this package",
     ),
     "id-separator": (
         "HIGH",
@@ -282,7 +282,8 @@ def _cases(rows: list[tuple[Any, ...]], leak: bool = False) -> list[Any]:
 
 
 def _refusal(text: str, mode: str) -> str | None:
-    """ "prod": as solver.py calls the guard today (DOI only). "full": with title and authors."""
+    """ "prod": what a benchmark run has (the DOI; the metadata has no title or authors).
+    "full": with title and authors, as for a case record that has them."""
     if mode == "full":
         return tools.query_refusal(text, DOI, [TITLE], AUTHORS)
     return tools.query_refusal(text, DOI)
@@ -291,7 +292,7 @@ def _refusal(text: str, mode: str) -> str | None:
 # ================================================================================================
 # (a) Search queries that name the study, its data or its paper
 # ================================================================================================
-# 120 queries that name the study and are refused. (category, mode, text)
+# 350 queries that name the study and are refused (120 before the fixes of 2026-11-14). (category, mode, text)
 QUERY_BLOCKED: list[tuple[Any, ...]] = [
     ("plain-id", "prod", "GSE123456 count matrix"),
     ("plain-id", "prod", "gse123456"),
@@ -417,10 +418,6 @@ QUERY_BLOCKED: list[tuple[Any, ...]] = [
     ("title-ok", "full", "neuronal genes drives glioblastoma"),
     ("title-variant", "full", "REST repression of neural genes drives GBM stem-cell upkeep"),
     ("title-variant", "full", "gliobl\u0430stoma stem cell maintenance"),
-]
-
-# 327 queries that name the study and are NOT refused. (category, mode, text)
-QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("id-separator", "prod", "GSE/123456"),
     ("id-separator", "prod", "GSE=123456"),
     ("id-separator", "prod", "GSE(123456)"),
@@ -518,18 +515,6 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("id-lookalike", "prod", "PRJN\u0410123456"),
     ("id-lookalike", "prod", "\u0395-MTAB-1234"),
     ("id-lookalike", "prod", "PM\u0421 7654321"),
-    ("id-leet", "prod", "G5E123456"),
-    ("id-leet", "prod", "GS3123456"),
-    ("id-leet", "prod", "6SE123456"),
-    ("id-leet", "prod", "GSEl23456"),
-    ("id-leet", "prod", "GSEI23456"),
-    ("id-leet", "prod", "GSEO23456"),
-    ("id-leet", "prod", "GSE12E456"),
-    ("id-leet", "prod", "5RR1234567"),
-    ("id-leet", "prod", "SRR12E4567"),
-    ("id-leet", "prod", "PM1D 31234567"),
-    ("id-leet", "prod", "PRJNAl23456"),
-    ("id-leet", "prod", "E-MT4B-1234"),
     ("id-split", "prod", "G S E 123456"),
     ("id-split", "prod", "G-S-E-123456"),
     ("id-split", "prod", "G.S.E. 123456"),
@@ -537,8 +522,6 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("id-split", "prod", "GSE1 2 3 4 5 6"),
     ("id-split", "prod", "GSE12-34-56"),
     ("id-split", "prod", "GSE 12 34 56"),
-    ("id-split", "prod", "GS E123456"),
-    ("id-split", "prod", "G SE123456"),
     ("id-split", "prod", "S R R 1234567"),
     ("id-split", "prod", "SRR12 34567"),
     ("id-split", "prod", "SRR 1 234 567"),
@@ -547,15 +530,7 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("id-split", "prod", "P M I D 31234567"),
     ("id-split", "prod", "PMC 7 654 321"),
     ("id-split", "prod", "PXD 12 345"),
-    ("id-spelled", "prod", "GSE one two three four five six"),
-    ("id-spelled", "prod", "GSE one hundred twenty-three thousand four hundred fifty-six"),
     ("id-spelled", "prod", "geo series one two three four five six"),
-    ("id-spelled", "prod", "G S E one-two-three-four-five-six"),
-    ("id-spelled", "prod", "SRR one two three four five six seven"),
-    ("id-spelled", "prod", "PMID three one two three four five six seven"),
-    ("id-spelled", "prod", "E-MTAB-one-two-three-four"),
-    ("id-spelled", "prod", "GSE uno dos tres cuatro cinco seis"),
-    ("id-spelled", "prod", "GSE CXXIII CDLVI"),
     ("id-encoded", "prod", "GSE%31%32%33%34%35%36"),
     ("id-encoded", "prod", "%47%53%45123456"),
     ("id-encoded", "prod", "GSE%20123456"),
@@ -563,20 +538,6 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("id-encoded", "prod", "GSE&#49;23456"),
     ("id-encoded", "prod", "GSE&#x31;23456"),
     ("id-encoded", "prod", "GSE\\u003123456"),
-    ("id-encoded", "prod", "R1NFMTIzNDU2"),
-    ("id-encoded", "prod", "654321ESG"),
-    ("id-encoded", "prod", "TFR123456 rot13"),
-    ("id-encoded", "prod", "47 53 45 31 32 33 34 35 36"),
-    ("id-encoded", "prod", "474553313233343536"),
-    ("id-short", "prod", "GSE12 expression"),
-    ("id-short", "prod", "GSE99"),
-    ("id-short", "prod", "GDS12"),
-    ("id-short", "prod", "SRR123"),
-    ("id-short", "prod", "SRP12"),
-    ("id-short", "prod", "PMID 1234"),
-    ("id-short", "prod", "PMC123"),
-    ("id-short", "prod", "PXD123"),
-    ("id-short", "prod", "syn123"),
     ("id-other-repository", "prod", "PRJEA12345"),
     ("id-other-repository", "prod", "PRJDA12345"),
     ("id-other-repository", "prod", "PRJCA001234"),
@@ -641,31 +602,23 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("doi-fragment", "prod", "prefix 5555 suffix glhf.2021.04217"),
     ("doi-fragment", "prod", "glhf.2021.04217 supplementary table"),
     ("doi-fragment", "prod", "71240.1202.fhlg/5555.01"),
-    ("doi-fragment", "prod", "MTAuNTU1NS9nbGhmLjIwMjEuMDQyMTc="),
     ("doi-fragment", "prod", "s41586-020-2077-3"),
     ("doi-fragment", "prod", "nature.com/articles/s41586-020-2077-3"),
     ("doi-fragment", "prod", "j.cell.2020.01.021"),
     ("doi-fragment", "prod", "PII S0092-8674(20)30001-1"),
     ("doi-fragment", "prod", "S0092867420300011"),
-    ("doi-fragment", "prod", "eLife 2021;10:e61234"),
     ("doi-fragment", "prod", "elife.61234"),
     ("doi-fragment", "prod", "2020.01.01.123456v1"),
-    ("doi-fragment", "prod", "Nature 589:123-128 2021"),
-    ("doi-fragment", "prod", "Cell 184(3):612-628"),
-    ("doi-fragment", "prod", "gkab123 nucleic acids research"),
     ("host-word", "prod", "bio rxiv preprint REST glioblastoma"),
     ("host-word", "prod", "bioarxiv preprint REST glioblastoma"),
-    ("host-word", "prod", "b10rxiv REST glioblastoma"),
     ("host-word", "prod", "bio-rxiv"),
     ("host-word", "prod", "bioR\u03c7iv REST glioblastoma"),
     ("host-word", "prod", "med rxiv glioblastoma"),
-    ("host-word", "prod", "zen0do REST glioblastoma"),
     ("host-word", "prod", "z e n o d o"),
     ("host-word", "prod", "zen\u043edo"),
     ("host-word", "prod", "fig share REST table"),
     ("host-word", "prod", "figsh\u0430re"),
     ("host-word", "prod", "dry\u0430d"),
-    ("host-word", "prod", "mendeley-data"),
     ("host-word", "prod", "data.mendeley.com"),
     ("host-word", "prod", "d o i . o r g"),
     ("host-word", "prod", "doi[.]org"),
@@ -678,16 +631,9 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("host-word", "prod", "supplementary table 2 differentially expressed genes REST glioblastoma"),
     ("host-word", "prod", "sciencedirect REST glioblastoma stem"),
     ("host-word", "prod", "nature.com REST glioblastoma"),
-    ("author-prod", "prod", "Okonkwo et al. 2021 Nature glioblastoma"),
-    ("author-prod", "prod", "Okonkwo and M\xfcller Cell 2021 REST"),
-    ("author-prod", "prod", "first author A. Okonkwo REST knockdown"),
-    ("author-prod", "prod", "the Okonkwo lab RNA-seq"),
-    ("author-prod", "prod", "van der Berg 2021 glioblastoma"),
     ("author-variant", "full", "Muller 2021 glioblastoma REST knockdown"),
     ("author-variant", "full", "Mueller 2021 glioblastoma REST"),
     ("author-variant", "full", "MULLER et al"),
-    ("author-variant", "full", "0konkwo et al 2021"),
-    ("author-variant", "full", "Okonkw0 2021"),
     ("author-variant", "full", "Okonkwoetal2021"),
     ("author-variant", "full", "Okon kwo 2021"),
     ("author-variant", "full", "Okon-kwo 2021"),
@@ -699,9 +645,64 @@ QUERY_LEAKS: list[tuple[Any, ...]] = [
     ("author-variant", "full", "Okonkwolab"),
     ("author-variant", "full", "Vanderberg 2021 glioblastoma"),
     ("author-variant", "full", "VanDerBerg 2021"),
-    ("author-variant", "full", "owknokO reversed"),
     ("author-variant", "full", "Li et al 2021 Nature REST glioblastoma"),
     ("author-variant", "full", "Li lab glioblastoma REST 2021"),
+    ("host-word", "prod", "mendeley-data"),
+]
+
+# 97 queries that name the study and are NOT refused (327 before the fixes). (category, mode, text)
+QUERY_LEAKS: list[tuple[Any, ...]] = [
+    ("id-leet", "prod", "G5E123456"),
+    ("id-leet", "prod", "GS3123456"),
+    ("id-leet", "prod", "6SE123456"),
+    ("id-leet", "prod", "GSEl23456"),
+    ("id-leet", "prod", "GSEI23456"),
+    ("id-leet", "prod", "GSEO23456"),
+    ("id-leet", "prod", "GSE12E456"),
+    ("id-leet", "prod", "5RR1234567"),
+    ("id-leet", "prod", "SRR12E4567"),
+    ("id-leet", "prod", "PM1D 31234567"),
+    ("id-leet", "prod", "PRJNAl23456"),
+    ("id-leet", "prod", "E-MT4B-1234"),
+    ("id-split", "prod", "GS E123456"),
+    ("id-split", "prod", "G SE123456"),
+    ("id-spelled", "prod", "GSE one two three four five six"),
+    ("id-spelled", "prod", "GSE one hundred twenty-three thousand four hundred fifty-six"),
+    ("id-spelled", "prod", "G S E one-two-three-four-five-six"),
+    ("id-spelled", "prod", "SRR one two three four five six seven"),
+    ("id-spelled", "prod", "PMID three one two three four five six seven"),
+    ("id-spelled", "prod", "E-MTAB-one-two-three-four"),
+    ("id-spelled", "prod", "GSE uno dos tres cuatro cinco seis"),
+    ("id-spelled", "prod", "GSE CXXIII CDLVI"),
+    ("id-encoded", "prod", "R1NFMTIzNDU2"),
+    ("id-encoded", "prod", "654321ESG"),
+    ("id-encoded", "prod", "TFR123456 rot13"),
+    ("id-encoded", "prod", "47 53 45 31 32 33 34 35 36"),
+    ("id-encoded", "prod", "474553313233343536"),
+    ("id-short", "prod", "GSE12 expression"),
+    ("id-short", "prod", "GSE99"),
+    ("id-short", "prod", "GDS12"),
+    ("id-short", "prod", "SRR123"),
+    ("id-short", "prod", "SRP12"),
+    ("id-short", "prod", "PMID 1234"),
+    ("id-short", "prod", "PMC123"),
+    ("id-short", "prod", "PXD123"),
+    ("id-short", "prod", "syn123"),
+    ("doi-fragment", "prod", "MTAuNTU1NS9nbGhmLjIwMjEuMDQyMTc="),
+    ("doi-fragment", "prod", "eLife 2021;10:e61234"),
+    ("doi-fragment", "prod", "Nature 589:123-128 2021"),
+    ("doi-fragment", "prod", "Cell 184(3):612-628"),
+    ("doi-fragment", "prod", "gkab123 nucleic acids research"),
+    ("host-word", "prod", "b10rxiv REST glioblastoma"),
+    ("host-word", "prod", "zen0do REST glioblastoma"),
+    ("author-prod", "prod", "Okonkwo et al. 2021 Nature glioblastoma"),
+    ("author-prod", "prod", "Okonkwo and M\xfcller Cell 2021 REST"),
+    ("author-prod", "prod", "first author A. Okonkwo REST knockdown"),
+    ("author-prod", "prod", "the Okonkwo lab RNA-seq"),
+    ("author-prod", "prod", "van der Berg 2021 glioblastoma"),
+    ("author-variant", "full", "0konkwo et al 2021"),
+    ("author-variant", "full", "Okonkw0 2021"),
+    ("author-variant", "full", "owknokO reversed"),
     ("author-indirect", "full", "Nature 2021 glioblastoma REST neuronal genes stem cells"),
     ("author-indirect", "full", "the 2021 Nature paper on REST in glioblastoma stem cells"),
     ("author-indirect", "full", "senior author of the glioblastoma REST RNA-seq work"),
@@ -814,7 +815,9 @@ QUERY_LEGIT: list[tuple[Any, ...]] = [
     ("legit", "prod", "error 137 out of memory with 16384 MB"),
 ]
 
-# Legitimate queries written to sit next to a pattern, which still pass.
+# Legitimate queries written to sit next to a pattern, which pass. The 'was-refused' rows were
+# false positives until the patterns were narrowed (SAMD11, 'GDS 1000 Genomes', '-e QUAL 20',
+# '10.12345 / 3').
 QUERY_LEGIT_NEAR_A_PATTERN: list[tuple[Any, ...]] = [
     ("near-a-pattern", "prod", "GEOquery getGEO function arguments GSEMatrix"),
     ("near-a-pattern", "prod", "fasterq-dump SRR accession --split-files syntax"),
@@ -832,35 +835,16 @@ QUERY_LEGIT_NEAR_A_PATTERN: list[tuple[Any, ...]] = [
         "pubmed central open access bulk is not needed; BiocFileCache usage",
     ),
     ("near-a-pattern", "prod", "E. coli K-12 genome 4 Mb bowtie2 index"),
+    ("was-refused", "prod", "biomaRt getBM hgnc_symbol SAMD11 ensembl_gene_id"),
+    ("was-refused", "prod", "GTF first gene on chr1 SAMD11 exon count check"),
+    ("was-refused", "prod", "SNPRelate convert VCF to GDS 1000 Genomes"),
+    ("was-refused", "prod", "bcftools filter -e QUAL 20 exclude sites"),
+    ("was-refused", "prod", "samtools view -e mapq 30 filter expression syntax"),
+    ("was-refused", "prod", "numpy round 10.12345 / 3 floating point"),
 ]
 
 # Legitimate queries that are refused. (mode, text, why and the smallest fix)
 QUERY_WRONGLY_REFUSED: list[tuple[str, str, str]] = [
-    (
-        "prod",
-        "biomaRt getBM hgnc_symbol SAMD11 ensembl_gene_id",
-        "the BioSample pattern SAM(N|EA|D)+digits also matches the gene family SAMD9, SAMD11. Fix: require 5+ digits after SAMD/SAMN/SAMEA",
-    ),
-    (
-        "prod",
-        "GTF first gene on chr1 SAMD11 exon count check",
-        "the BioSample pattern SAM(N|EA|D)+digits also matches the gene family SAMD9, SAMD11. Fix: require 5+ digits after SAMD/SAMN/SAMEA",
-    ),
-    (
-        "prod",
-        "SNPRelate convert VCF to GDS 1000 Genomes",
-        "'GDS 1000 Genomes' (the SNPRelate file format) matches the GEO DataSet pattern. Fix: for GDS allow no space before the digits",
-    ),
-    (
-        "prod",
-        "bcftools filter -e QUAL 20 exclude sites",
-        "the ArrayExpress pattern is case-insensitive, so the option '-e' plus a 4-letter word plus a number matches. Fix: match it case-sensitively and only for known codes (MTAB, GEOD, MEXP, TABM, ...)",
-    ),
-    (
-        "prod",
-        "samtools view -e mapq 30 filter expression syntax",
-        "the ArrayExpress pattern is case-insensitive, so the option '-e' plus a 4-letter word plus a number matches. Fix: match it case-sensitively and only for known codes (MTAB, GEOD, MEXP, TABM, ...)",
-    ),
     (
         "prod",
         "hgu133plus2.db GPL570 probe to gene symbol mapping",
@@ -870,11 +854,6 @@ QUERY_WRONGLY_REFUSED: list[tuple[str, str, str]] = [
         "prod",
         "how to cite nf-core rnaseq zenodo",
         "the word 'zenodo' alone is refused, also in a how-to-cite question (debatable). Fix: refuse it only next to a record number or a URL",
-    ),
-    (
-        "prod",
-        "numpy round 10.12345 / 3 floating point",
-        "a decimal that starts with 10. and is followed by ' / ' reads as a DOI. Fix: require a letter in the DOI suffix when the slash has spaces around it",
     ),
     (
         "full",
@@ -934,15 +913,7 @@ def test_legitimate_query_wrongly_refused(mode: str, text: str) -> None:
 
 
 @pytest.mark.parametrize("text", QUERY_WRONGLY_REFUSED_BY_TITLE_OR_AUTHOR)
-@pytest.mark.xfail(
-    strict=True,
-    reason="[FALSE POSITIVE] a surname that is an everyday word (Read, Lane, Long, Love) or a "
-    "title that opens with method vocabulary ('single-cell RNA sequencing') refuses ordinary tool "
-    "queries once titles and authors are wired in. Fix: skip surnames found in a list of common "
-    "English and bioinformatics words unless 'et al', a year or 'lab' is next to them; ignore "
-    "title 3-grams made of method vocabulary (single, cell, rna, seq, sequencing, expression).",
-)
-def test_legitimate_query_wrongly_refused_by_title_or_author(text: str) -> None:
+def test_legitimate_query_is_allowed_when_title_and_authors_are_everyday_words(text: str) -> None:
     assert tools.query_refusal(text, DOI, [FP_TITLE], FP_AUTHORS) is None
 
 
@@ -964,15 +935,7 @@ def test_legitimate_query_wrongly_refused_by_title_or_author(text: str) -> None:
         (["Li"], "Li et al 2021 glioblastoma"),
     ],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[MEDIUM] names_person compares only the last ASCII letter run of each author string, "
-    "3+ letters: a surname with an accented or non-Latin letter is cut into pieces, 'Surname "
-    "Initials' and 'Surname, Given' compare the initials or the given name, and short surnames "
-    "are skipped. Fix: fold accents first, then compare every 3+ letter word of the author string "
-    "(not only the last); short surnames stay a limit.",
-)
-def test_author_formats_leak(authors: list[str], text: str) -> None:
+def test_author_in_another_format_is_blocked(authors: list[str], text: str) -> None:
     assert guards.names_person(text, authors) is not None
 
 
@@ -999,7 +962,10 @@ def test_identifier_split_between_query_and_objective_is_blocked() -> None:
 # ================================================================================================
 # (a) Result URLs: only tool manuals may come back
 # ================================================================================================
-# 29 manual pages that must be kept (host case, trailing dot, port and query do not matter).
+# 27 manual pages that must be kept (host case, trailing dot, port and query do not matter).
+# Two more were here until 2026-11-14 and are now in URL_BLOCKED on purpose: bioconductor.org/help/
+# (the rule for /help/ was removed with its subtree) and subread.readthedocs.io (no such project
+# is registered on readthedocs).
 URL_ALLOWED: list[tuple[Any, ...]] = [
     ("manual", "https://bioconductor.org/packages/release/bioc/html/DESeq2.html"),
     (
@@ -1016,10 +982,8 @@ URL_ALLOWED: list[tuple[Any, ...]] = [
     ("manual", "  https://bioconductor.org/packages/release/bioc/html/limma.html  "),
     ("manual", "https://bioconductor.org/packages/release/bioc/html/DESeq2.html?x=1"),
     ("manual", "https://bioconductor.org/packages/release/bioc/html/DESeq2.html#details"),
-    ("manual", "https://bioconductor.org/help/"),
     ("manual", "https://bioconductor.org/install/"),
     ("manual", "https://bioconductor.org/install"),
-    ("manual", "https://subread.readthedocs.io/en/latest/featureCounts.html"),
     ("manual", "https://scanpy.readthedocs.io/en/stable/api.html"),
     ("manual", "https://deeptools.readthedocs.io/en/develop/content/tools/bamCoverage.html"),
     ("manual", "https://Salmon.ReadTheDocs.io/en/latest/salmon.html"),
@@ -1041,7 +1005,7 @@ URL_ALLOWED: list[tuple[Any, ...]] = [
     ),
 ]
 
-# 112 URLs that are dropped. (category, url, with the case policy)
+# 171 URLs that are dropped (112 before the fixes). (category, url, with the case policy)
 URL_BLOCKED: list[tuple[Any, ...]] = [
     ("host-not-listed", "https://bioconductor.org.evil.example/packages/release/bioc/x", False),
     ("host-not-listed", "https://evil-bioconductor.org/packages/release/bioc/x", False),
@@ -1211,10 +1175,12 @@ URL_BLOCKED: list[tuple[Any, ...]] = [
     ("answer-url-ok", "https://salmon.readthedocs.io:443/en/latest/answer/sheet.html", True),
     ("answer-url-ok", "  https://salmon.readthedocs.io/en/latest/answer/sheet.html", True),
     ("answer-url-variant", "https://salmon.readthedocs.io/en/latest/answer/sheet.html/", True),
-]
-
-# 59 URLs that must be dropped and are kept. (category, url, with the case policy)
-URL_LEAKS: list[tuple[Any, ...]] = [
+    ("bioc-help-subtree", "https://bioconductor.org/help/", False),
+    (
+        "readthedocs-unregistered",
+        "https://subread.readthedocs.io/en/latest/featureCounts.html",
+        False,
+    ),
     (
         "bioc-dot-segments",
         "https://bioconductor.org/packages/release/bioc/../data/experiment/html/airway.html",
@@ -1343,8 +1309,12 @@ URL_LEAKS: list[tuple[Any, ...]] = [
     ("answer-url-variant", "https://salmon.readthedocs.io/en/latest/answer%2Fsheet.html", True),
     ("answer-url-variant", "https://salmon.readthedocs.io/en/stable/answer/sheet.html", True),
     ("answer-url-variant", "https://salmon.readthedocs.io/en/v1.10.0/answer/sheet.html", True),
-    ("answer-url-variant", "https://salmon.readthedocs.io/_/downloads/en/latest/pdf/", True),
     ("answer-url-variant", "https://salmon.readthedocs.io/en/latest/answer/sheet", True),
+]
+
+# 2 URLs that must be dropped and are kept (59 before the fixes). (category, url, with the case policy)
+URL_LEAKS: list[tuple[Any, ...]] = [
+    ("answer-url-variant", "https://salmon.readthedocs.io/_/downloads/en/latest/pdf/", True),
     ("answer-url-variant", "https://salmon.readthedocs.io/en/latest/answer/index.html", True),
 ]
 
@@ -1376,7 +1346,6 @@ def test_url_that_can_carry_the_study_leak(category: str, url: str, with_policy:
     assert tools.result_block_reason(url, POLICY if with_policy else None) is not None
 
 
-@pytest.mark.xfail(strict=True, reason=_reason("readthedocs-unregistered"))
 def test_every_readthedocs_slug_on_the_allow_list_is_a_registered_project() -> None:
     assert sorted(tools.READTHEDOCS_PROJECTS & READTHEDOCS_UNREGISTERED) == []
 
@@ -1427,7 +1396,6 @@ def _result_loop_source() -> str:
     return source[source.index("body.get(") :]
 
 
-@pytest.mark.xfail(strict=True, reason=_RESULT_TEXT_REASON)
 def test_search_checks_the_text_of_a_result_not_only_its_url() -> None:
     # Reads the source, so it runs whatever the NO_PAID_CALLS switch says.
     loop = _result_loop_source()
@@ -1460,16 +1428,15 @@ def test_search_returns_a_clean_manual_result(monkeypatch: pytest.MonkeyPatch) -
         {"url": _MANUAL, "title": "PMID 31234567", "highlights": []},
     ],
 )
-@pytest.mark.xfail(strict=True, reason=_RESULT_TEXT_REASON)
-def test_result_text_naming_the_study_leak(
+def test_result_whose_text_names_the_study_is_dropped(
     monkeypatch: pytest.MonkeyPatch, result: dict[str, Any]
 ) -> None:
     text = _search_with(monkeypatch, {"results": [result]})
     assert tools.query_refusal(text, DOI, [TITLE], AUTHORS) is None
+    assert _MANUAL not in text and text == "Nothing relevant found on the documentation sites."
 
 
-@pytest.mark.xfail(strict=True, reason=_RESULT_TEXT_REASON)
-def test_search_engine_notice_with_a_paper_url_leak(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_engine_notice_with_a_paper_url_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
     body = {
         "results": [{"url": _MANUAL, "title": "x vignette", "highlights": ["usage"]}],
         "notices": [{"message": "see also https://www.nature.com/articles/s41586-020-2077-3"}],
@@ -1477,12 +1444,34 @@ def test_search_engine_notice_with_a_paper_url_leak(monkeypatch: pytest.MonkeyPa
     assert "nature.com" not in _search_with(monkeypatch, body)
 
 
+@pytest.mark.parametrize(
+    ("message", "passed_on"),
+    [
+        ("Results were limited to the requested domains.", True),
+        ("see also the series GSE123456", False),  # no address, but it names a dataset
+        ("more at unknown.example/paper/results", False),  # an address, and no identifier
+        ("as in Okonkwo et al.", False),
+        ("", False),
+    ],
+)
+def test_search_engine_notice_is_passed_on_only_when_it_is_plain_text(
+    monkeypatch: pytest.MonkeyPatch, message: str, passed_on: bool
+) -> None:
+    body = {
+        "results": [{"url": _MANUAL, "title": "x vignette", "highlights": ["usage"]}],
+        "notices": [{"message": message}],
+    }
+    text = _search_with(monkeypatch, body)
+    assert ("Note from the search engine" in text) is passed_on
+    assert _MANUAL in text
+
+
 # ================================================================================================
 # (b) Lesson lines: task-specific findings must not reach the queue
 # Task behind these lines (invented): a REST knockdown; 312 changed genes, MYC first, SOX2 down,
 # sample KO_3 dropped, adjusted cutoff 0.01.
 # ================================================================================================
-# 72 lines with a result that the filter drops. (category, line)
+# 215 lines with a result that the filter drops (72 before the fixes). (category, line)
 LESSON_BLOCKED: list[tuple[Any, ...]] = [
     ("control", "TP53 is first in the table"),
     ("control", "ENSG00000141510 is missing from the annotation"),
@@ -1556,23 +1545,11 @@ LESSON_BLOCKED: list[tuple[Any, ...]] = [
     ("control", "gene 7157 is the one"),
     ("number-small-or-split", "0.05 gives 312, 0.01 gives 98"),
     ("study-in-words", "Look up geo accession 123 456."),
-]
-
-# 230 lines with a result, a name or a task-tuned value that the filter keeps. (category, line)
-LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("result-in-words", "MYC goes up in the knockdown."),
-    ("result-in-words", "The knockdown lowers neuronal genes strongly."),
     ("result-in-words", "Interferon genes come out on top in the treated group."),
-    ("result-in-words", "Treatment increases expression of the ribosomal genes."),
     ("result-in-words", "REST targets are derepressed after knockdown, as one would guess."),
     ("result-in-words", "The strongest change is in MYC, then the SOX family."),
     ("result-in-words", "Most genes that change go down, few go up."),
-    (
-        "result-in-words",
-        "The tumour samples cluster apart from the normal ones on the first component.",
-    ),
-    ("result-in-words", "Nothing changes between the two doses; the table ends up nearly empty."),
-    ("result-in-words", "The knockout has no effect on cell-cycle genes."),
     ("result-in-words", "Mitochondrial genes dominate the list in the treated cells."),
     ("result-in-words", "The differentially expressed set is mostly neuronal."),
     ("result-in-words", "DE genes are mainly synaptic."),
@@ -1580,14 +1557,11 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("result-in-words", "The leading gene is GAPDH."),
     ("result-in-words", "Pathway that wins: oxidative phosphorylation."),
     ("result-in-words", "The winner in the enrichment is the interferon alpha response."),
-    ("result-in-words", "Hypoxia comes first among the hallmark sets."),
     ("result-in-words", "The DEGs are mostly neuronal."),
     ("result-in-words", "The outcome is a short list led by MYC."),
     ("result-in-words", "Candidates: MYC, SOX, REST."),
     ("result-in-words", "The first row of the table is MYC."),
     ("result-in-words", "The gene list starts with MYC and ends with ACTB."),
-    ("result-in-words", "Cluster seven is the microglia."),
-    ("result-in-words", "The largest cluster is T cells; the smallest is mast cells."),
     ("result-in-words", "The variant sits in the kinase domain of EGFR."),
     ("result-in-words", "The peak at the MYC promoter disappears after treatment."),
     ("gene-without-digit", "MYC"),
@@ -1595,27 +1569,15 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("gene-without-digit", "GAPDH and ACTB are stable here; normalise on them."),
     ("gene-without-digit", "Remember EGFR, PTEN, TERT."),
     ("gene-without-digit", "Watch for REST and its targets SYP, SNAP and STMN."),
-    ("gene-without-digit", "Xist separates the sexes here: three samples are female."),
-    ("gene-without-digit", "gene symbol: Myc"),
-    ("gene-without-digit", "sonic hedgehog is the one to look at"),
-    ("gene-without-digit", "the guardian-of-the-genome gene is central"),
     ("gene-without-digit", "tumor protein p fifty-three is central"),
-    ("gene-without-digit", "interleukin six leads"),
-    ("gene-without-digit", "M.Y.C. is the one"),
-    ("gene-without-digit", "M Y C"),
-    ("gene-without-digit", "Mike Yankee Charlie is the one."),
-    ("gene-without-digit", "the proto-oncogene on chromosome eight"),
-    ("gene-without-digit", "the gene named after myelocytomatosis"),
     ("gene-without-digit", "ENSG for MYC is the first row"),
     ("gene-digit-detached", "TP 53 is first."),
     ("gene-digit-detached", "TP.53 is first."),
     ("gene-digit-detached", "TP/53 is first."),
     ("gene-digit-detached", "TP(53) is first."),
     ("gene-digit-detached", "TP fifty-three is first."),
-    ("gene-digit-detached", "T P 5 3"),
     ("gene-digit-detached", "BRCA one is first."),
     ("gene-digit-detached", "BRCA I and BRCA II"),
-    ("gene-digit-detached", "Sox two is down."),
     ("gene-digit-detached", "IL six goes up."),
     ("gene-digit-detached", "CD four cells dominate."),
     ("gene-digit-detached", "H three K twenty-seven acetylation is lost."),
@@ -1627,7 +1589,6 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("gene-digit-detached", "TP~53"),
     ("gene-digit-detached", "TP#53 first"),
     ("gene-digit-detached", "SOX 2 down"),
-    ("gene-digit-detached", "p 53 central"),
     ("gene-digit-detached", "TP\x1c53 is first."),
     ("number-spelled", "About three hundred and twelve genes pass the cutoff."),
     ("number-spelled", "Three hundred twelve rows in the final table."),
@@ -1635,19 +1596,13 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("number-spelled", "Exactly forty-two genes survive."),
     ("number-spelled", "A dozen genes survive."),
     ("number-spelled", "Ninety-five percent of reads map."),
-    ("number-spelled", "Half of the reads are duplicates."),
-    ("number-spelled", "One in five genes changes."),
     ("number-spelled", "The first gene has a probability near one in a thousand."),
     ("number-spelled", "CCCXII genes remain."),
     ("number-spelled", "The value is two point three one."),
-    ("number-spelled", "Zero point zero zero one two for the first gene."),
     ("number-spelled", "The count is three one two."),
     ("number-small-or-split", "The final table should have 312 rows."),
     ("number-small-or-split", "Keep 312 genes."),
-    ("number-small-or-split", "There are 12 samples, 6 per group, and 3 are female."),
-    ("number-small-or-split", "The count is 12 34."),
     ("number-small-or-split", "Roughly 1.2 thousand genes change."),
-    ("number-small-or-split", "1.2k genes change."),
     ("number-small-or-split", "MYC is up 3.25x."),
     ("number-small-or-split", "MYC changes 2.31 fold."),
     ("number-small-or-split", "The change is 2.3-fold for the first gene."),
@@ -1655,28 +1610,16 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("number-small-or-split", "The mapping rate is 0.95."),
     ("number-small-or-split", "The AUC is 0.91 for the classifier."),
     ("number-small-or-split", "The correlation with the reference is 0.87."),
-    ("number-small-or-split", "Decimal codes 77 89 67."),
     ("number-small-or-split", "Row 1 is MYC, row 2 is SOX."),
-    ("number-small-or-split", "The first digit is 3."),
-    ("number-small-or-split", "The second digit is 1."),
-    ("number-small-or-split", "The third digit is 2."),
     ("number-small-or-split", "Seven clusters, 412 cells in the smallest."),
     ("number-small-or-split", "The value is 0.00 then 12."),
     ("number-small-or-split", "gene 672 is the one"),
     ("number-small-or-split", "about 300 rows"),
-    ("effect-direction", "Up in treated, down in control for the stress genes."),
-    ("effect-direction", "Expression is higher in the mutant."),
     ("effect-direction", "The drug represses the target."),
     ("effect-direction", "Knockdown induces apoptosis genes."),
-    ("effect-direction", "Direction: negative for the main contrast."),
     ("effect-direction", "The sign of the effect is positive for MYC."),
-    ("effect-direction", "Log ratios are negative for most ribosomal genes."),
     ("effect-direction", "Overexpressed in tumour."),
     ("effect-direction", "Depleted in the resistant clone."),
-    ("effect-direction", "Loss of the promoter peak after treatment."),
-    ("effect-direction", "Lower in old mice than in young ones."),
-    ("effect-direction", "The treated group shows more accessibility at enhancers."),
-    ("effect-direction", "Survival is worse in the high-expression group."),
     ("effect-direction", "The effect size for MYC is about two."),
     ("effect-direction", "FC above two for MYC."),
     ("effect-direction", "NES is negative for the hypoxia set."),
@@ -1685,17 +1628,9 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("effect-direction", "pval for MYC is tiny."),
     ("effect-direction", "adj.P.Val is below the cutoff for a dozen genes."),
     ("effect-direction", "P below 0.05 for a dozen genes."),
-    ("effect-direction", "sig. genes are few."),
     ("sample-name", "Drop the sample called KO_c."),
     ("sample-name", "Sample Liver_B is mislabelled."),
-    ("sample-name", "The third knockout replicate is bad; leave it out."),
-    ("sample-name", "Replicate 3 of the KO group must be removed."),
-    ("sample-name", "Patient Alpha is the odd one."),
-    ("sample-name", "The batch from March is the bad one."),
-    ("sample-name", "Samples from donor B swap labels with donor C."),
-    ("sample-name", "KO three is the odd one."),
     ("sample-name", "Remove KO 3 before fitting."),
-    ("sample-name", "ctrl rep three is bad."),
     ("sample-name", "KO#3 is bad."),
     ("sample-name", "KO.3 is bad."),
     ("sample-name", "KO__3 is bad."),
@@ -1703,30 +1638,130 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("sample-name", "KO~3 is bad."),
     ("sample-name", "KO:3 is bad."),
     ("sample-name", "rep/2 of the control is bad."),
-    ("sample-name", "sample S nine is not in the sheet."),
-    ("sample-name", "The file counts_matrix_final.tsv has duplicated ids."),
-    ("sample-name", "The female samples are the last three columns."),
-    ("threshold-after-data", "Use a count cutoff of 17; that recovers the right number of genes."),
     ("threshold-after-data", "Set alpha to 0.01, not 0.05, or the table is too long."),
     (
         "threshold-after-data",
         "A threshold of 0.8 on the correlation removes exactly the bad sample.",
     ),
-    ("threshold-after-data", "Filter at 25 reads; lower values add the wrong genes."),
     ("threshold-after-data", "Use resolution 0.4 to get the 7 clusters."),
+    ("threshold-after-data", "Only the cutoff of 1.5 on the log ratio reproduces the list."),
+    ("encoded", "Reverse this: pu seog CYM."),
+    ("encoded", "CYM si pot eht."),
+    ("encoded", "ZLP tbrf hc."),
+    ("encoded", "thirteen, twenty-five, three as letters"),
+    (
+        "process-tip-carrier",
+        "Always sanity-check that MYC is at the head of the list before writing the table.",
+    ),
+    ("process-tip-carrier", "Process: sort so that MYC is first; the checker likes that."),
+    ("process-tip-carrier", "If the table does not start with MYC, the contrast is flipped."),
+    ("process-tip-carrier", "A quick check of success: the table has about three hundred rows."),
+    ("process-tip-carrier", "For the glioblastoma REST task, use the unstranded setting."),
+    ("study-in-words", "The data come from the Nature article of last spring on REST."),
+    ("study-in-words", "The original article reports the same order."),
+    ("study-in-words", "The manuscript's figure two shows the same thing."),
+    ("study-in-words", "The publication gives the cutoffs."),
+    ("study-in-words", "See the preprint for the cutoffs."),
+    ("study-in-words", "The GEO series for this ends in four five six."),
+    ("study-in-words", "Accession: G S E one two three four five six."),
+    ("study-in-words", "The series is GSE 12 34 56."),
+    ("study-in-words", "Okonkwo et al. describe the filtering."),
+    ("study-in-words", "The article in Cell from the Broad group has the list."),
+    ("grader-synonym", "We got full marks after fixing the header."),
+    ("grader-synonym", "The rubric wants gene symbols, not ids."),
+    ("grader-synonym", "The checker tolerates small differences in the values."),
+    ("grader-synonym", "The judge only looks at the first ten rows."),
+    ("grader-synonym", "Grading is by overlap of the gene lists."),
+    ("grader-synonym", "The benchmark key uses symbols."),
+    ("grader-synonym", "The truth set is small."),
+    ("blocked-word-disguised", "the \u0430nswer is MYC"),
+    ("blocked-word-disguised", "the an-swer is MYC"),
+    ("blocked-word-disguised", "the a n s w e r is MYC"),
+    ("blocked-word-disguised", "the answ\u0435r is MYC"),
+    ("blocked-word-disguised", "the res\u0443lt is MYC"),
+    ("blocked-word-disguised", "tophit is MYC"),
+    ("blocked-word-disguised", "topgene is MYC"),
+    ("blocked-word-disguised", "up regul\u0430ted targets"),
+    ("blocked-word-disguised", "the fold-chang\u0435 is large"),
+    ("blocked-word-disguised", "exp\u0435cted table has MYC first"),
+    ("blocked-word-disguised", "\u0440adj below the cutoff for MYC"),
+    ("blocked-word-disguised", "the s\u0441ore was good"),
+    ("blocked-word-disguised", "ground\xb7truth has MYC"),
+    ("other-language", "MYC est le g\xe8ne le plus augment\xe9."),
+    ("other-language", "MYC \u4e0a\u8c03\u6700\u660e\u663e"),
+    ("other-language", "Das Gen MYC ist hochreguliert."),
+    ("other-language", "MYC sube en el knockdown."),
+    ("other-language", "\u7b54\u6848\u662f MYC"),
+    ("other-language", "Die Antwort ist MYC."),
+    ("other-language", "La r\xe9ponse est MYC."),
+]
+
+# 87 lines with a result, a name or a task-tuned value that the filter keeps (230 before). (category, line)
+LESSON_LEAKS: list[tuple[Any, ...]] = [
+    ("result-in-words", "The knockdown lowers neuronal genes strongly."),
+    ("result-in-words", "Treatment increases expression of the ribosomal genes."),
+    (
+        "result-in-words",
+        "The tumour samples cluster apart from the normal ones on the first component.",
+    ),
+    ("result-in-words", "Nothing changes between the two doses; the table ends up nearly empty."),
+    ("result-in-words", "The knockout has no effect on cell-cycle genes."),
+    ("result-in-words", "Hypoxia comes first among the hallmark sets."),
+    ("result-in-words", "Cluster seven is the microglia."),
+    ("result-in-words", "The largest cluster is T cells; the smallest is mast cells."),
+    ("gene-without-digit", "Xist separates the sexes here: three samples are female."),
+    ("gene-without-digit", "gene symbol: Myc"),
+    ("gene-without-digit", "sonic hedgehog is the one to look at"),
+    ("gene-without-digit", "the guardian-of-the-genome gene is central"),
+    ("gene-without-digit", "interleukin six leads"),
+    ("gene-without-digit", "M.Y.C. is the one"),
+    ("gene-without-digit", "M Y C"),
+    ("gene-without-digit", "Mike Yankee Charlie is the one."),
+    ("gene-without-digit", "the proto-oncogene on chromosome eight"),
+    ("gene-without-digit", "the gene named after myelocytomatosis"),
+    ("gene-digit-detached", "T P 5 3"),
+    ("gene-digit-detached", "Sox two is down."),
+    ("gene-digit-detached", "p 53 central"),
+    ("number-spelled", "Half of the reads are duplicates."),
+    ("number-spelled", "One in five genes changes."),
+    ("number-spelled", "Zero point zero zero one two for the first gene."),
+    ("number-small-or-split", "There are 12 samples, 6 per group, and 3 are female."),
+    ("number-small-or-split", "The count is 12 34."),
+    ("number-small-or-split", "1.2k genes change."),
+    ("number-small-or-split", "Decimal codes 77 89 67."),
+    ("number-small-or-split", "The first digit is 3."),
+    ("number-small-or-split", "The second digit is 1."),
+    ("number-small-or-split", "The third digit is 2."),
+    ("effect-direction", "Up in treated, down in control for the stress genes."),
+    ("effect-direction", "Expression is higher in the mutant."),
+    ("effect-direction", "Direction: negative for the main contrast."),
+    ("effect-direction", "Log ratios are negative for most ribosomal genes."),
+    ("effect-direction", "Loss of the promoter peak after treatment."),
+    ("effect-direction", "Lower in old mice than in young ones."),
+    ("effect-direction", "The treated group shows more accessibility at enhancers."),
+    ("effect-direction", "Survival is worse in the high-expression group."),
+    ("effect-direction", "sig. genes are few."),
+    ("sample-name", "The third knockout replicate is bad; leave it out."),
+    ("sample-name", "Replicate 3 of the KO group must be removed."),
+    ("sample-name", "Patient Alpha is the odd one."),
+    ("sample-name", "The batch from March is the bad one."),
+    ("sample-name", "Samples from donor B swap labels with donor C."),
+    ("sample-name", "KO three is the odd one."),
+    ("sample-name", "ctrl rep three is bad."),
+    ("sample-name", "sample S nine is not in the sheet."),
+    ("sample-name", "The file counts_matrix_final.tsv has duplicated ids."),
+    ("sample-name", "The female samples are the last three columns."),
+    ("threshold-after-data", "Use a count cutoff of 17; that recovers the right number of genes."),
+    ("threshold-after-data", "Filter at 25 reads; lower values add the wrong genes."),
     (
         "threshold-after-data",
         "Choose 30 components; 20 merges the two cell types that must stay apart.",
     ),
     ("threshold-after-data", "Shrinkage must be off or the ranks will not match."),
     ("threshold-after-data", "With the default prefilter the list is too short; relax it to 5."),
-    ("threshold-after-data", "Only the cutoff of 1.5 on the log ratio reproduces the list."),
     ("threshold-after-data", "Minimum of 3 cells per gene, or the key gene is lost."),
     ("encoded", "TVlDIHVw"),
     ("encoded", "Remember the token TVlDIHVw."),
-    ("encoded", "Reverse this: pu seog CYM."),
-    ("encoded", "CYM si pot eht."),
-    ("encoded", "ZLP tbrf hc."),
     ("encoded", "Acrostic: Make Your Checks."),
     ("encoded", "First letters: Monitor Yields Carefully."),
     ("encoded", "Morse: -- -.-- -.-."),
@@ -1735,18 +1770,10 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
     ("encoded", "emay-ay ycay-ay cay-ay"),
     ("encoded", "\U0001f1f2\U0001f1fe\U0001f1e8 first"),
     ("encoded", "M\u2800y\u2800c leads"),
-    ("encoded", "thirteen, twenty-five, three as letters"),
     (
         "process-tip-carrier",
         "Tip: when the knockdown is of a repressor, expect its targets to rise; here they do.",
     ),
-    (
-        "process-tip-carrier",
-        "Always sanity-check that MYC is at the head of the list before writing the table.",
-    ),
-    ("process-tip-carrier", "Process: sort so that MYC is first; the checker likes that."),
-    ("process-tip-carrier", "If the table does not start with MYC, the contrast is flipped."),
-    ("process-tip-carrier", "A quick check of success: the table has about three hundred rows."),
     (
         "process-tip-carrier",
         "Do not drop the female samples even though they separate on the second component.",
@@ -1771,7 +1798,6 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
         "process-tip-carrier",
         "Next time start from the conclusion that the drug does nothing and work backwards.",
     ),
-    ("process-tip-carrier", "For the glioblastoma REST task, use the unstranded setting."),
     ("process-tip-carrier", "On the T-cell exhaustion task the counts are already normalised."),
     (
         "process-tip-carrier",
@@ -1786,55 +1812,18 @@ LESSON_LEAKS: list[tuple[Any, ...]] = [
         "Before anything else, confirm the interferon genes rise; if not, swap the labels.",
     ),
     ("study-in-words", "This is the Okonkwo glioblastoma dataset; their code is on the lab site."),
-    ("study-in-words", "The data come from the Nature article of last spring on REST."),
-    ("study-in-words", "The original article reports the same order."),
-    ("study-in-words", "The manuscript's figure two shows the same thing."),
-    ("study-in-words", "The publication gives the cutoffs."),
-    ("study-in-words", "See the preprint for the cutoffs."),
-    ("study-in-words", "The GEO series for this ends in four five six."),
-    ("study-in-words", "Accession: G S E one two three four five six."),
-    ("study-in-words", "The series is GSE 12 34 56."),
-    ("study-in-words", "Okonkwo et al. describe the filtering."),
     ("study-in-words", "The lab's repository has the sample sheet."),
-    ("study-in-words", "The article in Cell from the Broad group has the list."),
-    ("grader-synonym", "We got full marks after fixing the header."),
-    ("grader-synonym", "The rubric wants gene symbols, not ids."),
     ("grader-synonym", "The evaluation compares the first column only."),
-    ("grader-synonym", "The checker tolerates small differences in the values."),
-    ("grader-synonym", "The judge only looks at the first ten rows."),
-    ("grader-synonym", "Grading is by overlap of the gene lists."),
-    ("grader-synonym", "The benchmark key uses symbols."),
     ("grader-synonym", "The reference table has fewer rows than ours."),
     ("grader-synonym", "The correct output has two columns."),
     ("grader-synonym", "The solution is a list of symbols."),
-    ("grader-synonym", "The truth set is small."),
     ("grader-synonym", "Points are given for the first column only."),
-    ("blocked-word-disguised", "the \u0430nswer is MYC"),
-    ("blocked-word-disguised", "the an-swer is MYC"),
-    ("blocked-word-disguised", "the a n s w e r is MYC"),
-    ("blocked-word-disguised", "the answ\u0435r is MYC"),
-    ("blocked-word-disguised", "the res\u0443lt is MYC"),
-    ("blocked-word-disguised", "tophit is MYC"),
-    ("blocked-word-disguised", "topgene is MYC"),
     ("blocked-word-disguised", "up/regulated targets"),
-    ("blocked-word-disguised", "up regul\u0430ted targets"),
     ("blocked-word-disguised", "signif. genes are few"),
-    ("blocked-word-disguised", "the fold-chang\u0435 is large"),
-    ("blocked-word-disguised", "exp\u0435cted table has MYC first"),
-    ("blocked-word-disguised", "\u0440adj below the cutoff for MYC"),
-    ("blocked-word-disguised", "the s\u0441ore was good"),
-    ("blocked-word-disguised", "ground\xb7truth has MYC"),
     ("blocked-word-disguised", "out-lier sample is the third knockout"),
-    ("other-language", "MYC est le g\xe8ne le plus augment\xe9."),
-    ("other-language", "MYC \u4e0a\u8c03\u6700\u660e\u663e"),
-    ("other-language", "Das Gen MYC ist hochreguliert."),
-    ("other-language", "MYC sube en el knockdown."),
-    ("other-language", "\u7b54\u6848\u662f MYC"),
-    ("other-language", "Die Antwort ist MYC."),
-    ("other-language", "La r\xe9ponse est MYC."),
 ]
 
-# Process lessons that pass (51 of 60 written before any was tried).
+# Process lessons that pass (58 of 60 written before any was tried; 51 before the fixes).
 LESSON_LEGIT: list[tuple[Any, ...]] = [
     ("process", "Check line endings first; use the csv module and strip fields."),
     ("process", "Pin STAR 2.7.10b and run it with 8 threads."),
@@ -1923,18 +1912,26 @@ LESSON_LEGIT: list[tuple[Any, ...]] = [
         "process",
         'Write deviations.md even when empty ("none"), so the reporter does not have to infer it.',
     ),
+    (
+        "process",
+        "p-values must be written unrounded; adjust them with the Benjamini-Hochberg method.",
+    ),
+    ("process", "DESeq2 results() needs the contrast as a character vector of length three."),
+    ("process", "Peak files are BED6+4 (narrowPeak); keep all ten columns."),
+    (
+        "process",
+        "The annotation and the genome must use the same chromosome naming (chr1 versus 1).",
+    ),
+    (
+        "process",
+        "Set a timeout of 3600 seconds on the alignment step and resume from the last finished sample.",
+    ),
+    ("process", "Give the JVM 16 GB with -Xmx16g for picard."),
+    ("process", "Trim adapters with fastp before alignment; TruSeq3 adapters are the usual ones."),
 ]
 
 # Process lessons the filter drops. (line, why and the smallest fix)
 LESSON_WRONGLY_REFUSED: list[tuple[str, str]] = [
-    (
-        "p-values must be written unrounded; adjust them with the Benjamini-Hochberg method.",
-        "'p-values' is a result word even in advice about how to write them. Fix: none cheap; accept it (the prompt tells the reporter to avoid the word)",
-    ),
-    (
-        "DESeq2 results() needs the contrast as a character vector of length three.",
-        "'results' is refused although results() is a DESeq2 function. Fix: allow 'results(' and 'results name(s)'",
-    ),
     (
         "Check the expected column names in the brief before writing the table.",
         "'expected' is refused in 'expected column names'. Fix: none cheap; accept it",
@@ -1942,26 +1939,6 @@ LESSON_WRONGLY_REFUSED: list[tuple[str, str]] = [
     (
         "Mark rows that are not significant with NA rather than dropping them, if the brief asks for all genes.",
         "'significant' is refused in formatting advice. Fix: none cheap; accept it",
-    ),
-    (
-        "Peak files are BED6+4 (narrowPeak); keep all ten columns.",
-        "format name with a digit. Fix: add bed3 bed6 bed12 to _NOT_IDENTIFIERS",
-    ),
-    (
-        "The annotation and the genome must use the same chromosome naming (chr1 versus 1).",
-        "chromosome naming advice. Fix: add chr1 chrm chrx chry to _NOT_IDENTIFIERS",
-    ),
-    (
-        "Set a timeout of 3600 seconds on the alignment step and resume from the last finished sample.",
-        "a timeout in seconds is a 4-digit integer. Fix: allow an integer directly before seconds, MB, GB, threads or cores",
-    ),
-    (
-        "Give the JVM 16 GB with -Xmx16g for picard.",
-        "a JVM option. Fix: set aside tokens that follow '-' (command-line options) before the identifier check",
-    ),
-    (
-        "Trim adapters with fastp before alignment; TruSeq3 adapters are the usual ones.",
-        "an adapter kit name. Fix: add truseq2 truseq3 to _NOT_IDENTIFIERS",
     ),
 ]
 
@@ -1993,13 +1970,7 @@ def test_process_lesson_wrongly_refused(line: str) -> None:
     assert memory.lesson_rejection(line) is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="[MEDIUM] every rule looks at one line: a value given one digit per line passes, since "
-    "each line holds one small number. Fix: in filter_lessons apply the 'several numbers' rule "
-    "to the whole submission (for example at most 3 numbers that are not versions).",
-)
-def test_answer_spread_over_lines_leak() -> None:
+def test_answer_spread_over_lines_is_blocked() -> None:
     text = "- The first digit is 3.\n- The second digit is 1.\n- The third digit is 2.\n- And then 0.\n"
     assert memory.filter_lessons(text)[0] == []
 
@@ -2007,13 +1978,7 @@ def test_answer_spread_over_lines_leak() -> None:
 @pytest.mark.parametrize(
     "separator", ["\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"]
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[MEDIUM] filter_lessons splits with str.splitlines(), which also splits on control "
-    "characters and Unicode line separators: 'TP<sep>53' becomes the kept lines 'TP' and '53'. "
-    "Fix: delete these characters from the text first, then split on '\\n' only.",
-)
-def test_identifier_cut_by_a_line_separator_leak(separator: str) -> None:
+def test_identifier_cut_by_a_line_separator_is_blocked(separator: str) -> None:
     kept, _ = memory.filter_lessons(f"- TP{separator}53 is first\n")
     assert kept == []
 
@@ -2036,7 +2001,6 @@ def _save(
         ("9", "9"),
         ("9", 9),  # an int id is compared as text
         ("a/b", "a/b"),
-        ("a, b", "a, b"),
         ("task.with.dots-and_more", "task.with.dots-and_more"),
         ("10.5555/glhf.2021.04217", "10.5555/glhf.2021.04217"),
         ("id with spaces", "id with spaces"),
@@ -2100,13 +2064,7 @@ def test_pending_and_unheaded_lines_are_never_injected(tmp_path: Path) -> None:
         ("caf\u00e9", "cafe\u0301"),  # the same text in two Unicode forms
     ],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[LOW] the same-task rule compares task ids as exact strings, so the same task under "
-    "another spelling of its id is another task. Fix: compare ids through one canonical form "
-    "(NFKC, strip, casefold) in load_memory and add_pending.",
-)
-def test_same_task_under_another_spelling_of_its_id_leak(
+def test_same_task_under_another_spelling_of_its_id_is_blocked(
     tmp_path: Path, writer: str, reader: str
 ) -> None:
     folder = str(tmp_path)
@@ -2114,54 +2072,39 @@ def test_same_task_under_another_spelling_of_its_id_leak(
     assert memory.read_memory(folder, reader) == ""
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="[MEDIUM] the context of a section is written as a comma-separated list and read back "
-    "with split(','), so a task id with a comma is cut in two and the laundering rule no longer "
-    "names it. Fix: refuse ',' and ';' in a task id in add_pending, or write the context as JSON.",
-)
-def test_context_task_id_with_a_comma_leak(tmp_path: Path) -> None:
-    folder = str(tmp_path)
-    _save(folder, "X,1", "- compare the sheet with the data first")
-    seen = memory.load_memory(folder, "Y")
-    _save(folder, "Y", "- always compare the sheet and the data before planning", seen.sources)
-    assert memory.read_memory(folder, "X,1") == ""
+@pytest.mark.parametrize("task", ["X,1", "a, b", "x; context: y", "a\nb", " "])
+def test_a_task_id_that_cannot_be_read_back_from_a_heading_is_refused(
+    tmp_path: Path, task: str
+) -> None:
+    # "," separates the context list and "; context: " starts it. Such an id used to be cut in
+    # two when the heading was read back, and the same-task rule then missed it.
+    lesson = "- compare the sheet with the data first"
+    with pytest.raises(ValueError, match="task id"):
+        memory.add_pending(str(tmp_path), task, lesson)
+    with pytest.raises(ValueError, match="task id"):
+        memory.add_pending(str(tmp_path), "Y", lesson, [task])
+    assert memory.pending_lessons(tmp_path) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="[LOW] a task id that contains '; context: ' is cut at that text when the heading is "
-    "read back. Fix: refuse ',' and ';' in a task id in add_pending.",
-)
-def test_task_id_with_the_context_marker_leak(tmp_path: Path) -> None:
-    folder = str(tmp_path)
-    _save(folder, "x; context: y", "- pin the annotation version")
-    assert memory.read_memory(folder, "x; context: y") == ""
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="[LOW] load_memory(dir, None) applies no same-task rule and returns every lesson "
-    "(fail-open default; solver.py always passes the id). Fix: make task_id a required argument.",
-)
 def test_no_task_id_means_no_lessons(tmp_path: Path) -> None:
     folder = str(tmp_path)
     _save(folder, "9", "- pin the annotation version")
-    assert memory.read_memory(folder) == ""
+    assert memory.read_memory(folder, "10") == "- pin the annotation version"
+    assert memory.read_memory(folder, None) == "" and memory.read_memory(folder, " ") == ""
+    assert memory.load_memory(folder, None).sources == frozenset()
+    with pytest.raises(TypeError):
+        memory.read_memory(folder)  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        memory.load_memory(folder)  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize(
     "heading",
     ["## task 9, t", "##  Task 9, t", "### Task 9, t", "##Task 9, t", "\ufeff## Task 9, t"],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[LOW] in a hand-edited lessons.md a heading that is not exactly '## Task ' is read as "
-    "a lesson line, and the lines under it are credited to the section above, so task 9 is shown "
-    "its own lessons. Fix: in _sections treat any line starting with '#' as a heading, and skip "
-    "the section when it does not parse.",
-)
-def test_misspelled_heading_in_the_approved_file_leak(tmp_path: Path, heading: str) -> None:
+def test_misspelled_heading_in_the_approved_file_is_not_credited_to_the_task_above(
+    tmp_path: Path, heading: str
+) -> None:
     (tmp_path / memory.MEMORY_FILE).write_text(
         f"# Approved\n\n## Task 11, t\n- index first\n\n{heading}\n- sort by name\n",
         encoding="utf-8",
@@ -2212,15 +2155,9 @@ def test_recalled_item_from_the_same_task_is_blocked(result: dict[str, Any], tas
         ),
     ],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[HIGH when past.dev is on] from_task fails open: a recalled item whose provenance is "
-    "missing or in another shape is treated as coming from no task, so it is shown to every task, "
-    "the one that wrote it included, and the run that reads it records no context (laundering "
-    "X -> Y -> X opens again). past.dev returns synthesised text, so this shape is not under "
-    "our control. Fix: in recall_with_sources skip any result for which tasks_of() is empty.",
-)
-def test_recalled_item_without_usable_provenance_leak(result: dict[str, Any], task: str) -> None:
+def test_recalled_item_without_usable_provenance_is_blocked(
+    result: dict[str, Any], task: str
+) -> None:
     assert past_memory.from_task(result, task)
 
 
@@ -2236,27 +2173,17 @@ def test_recalled_item_without_usable_provenance_leak(result: dict[str, Any], ta
         ("GLHF swarm lessons, task 11; context: task 9.", "9."),
     ],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="[MEDIUM when past.dev is on] task ids in a label are read with 'task ([\\w.-]+)' and "
-    "trailing punctuation is stripped, so an id with a space or a slash, or one that ends in a "
-    "dot, is cut short and the context rule misses it. Fix: write the context into the label as "
-    "JSON, or split the label on '; context: ' and ', task '.",
-)
-def test_recalled_context_with_an_unusual_task_id_leak(label: str, task: str) -> None:
+def test_recalled_context_with_an_unusual_task_id_is_blocked(label: str, task: str) -> None:
     assert past_memory.from_task({"content": "x", "sources": [{"label": label}]}, task)
 
 
-def test_recall_fails_open_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
-    """What the run on task 9 is shown when past.dev returns its own lesson without sources.
-
-    Not an xfail: it documents the present behaviour of recall_with_sources with a canned reply
-    (no request is made). When the fix above lands, this assert must be turned around."""
+def _recall(monkeypatch: pytest.MonkeyPatch, results: list[Any], task: str | None) -> Any:
+    """recall_with_sources on a canned reply of past.dev (no request is made)."""
 
     class Reply:
         def raise_for_status(self) -> None: ...
         def json(self) -> dict[str, Any]:
-            return {"results": [{"content": "sort the table by the oncogene column first"}]}
+            return {"results": results}
 
     class Client:
         def __init__(self, **_: object) -> None: ...
@@ -2269,10 +2196,25 @@ def test_recall_fails_open_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("PAST_API_KEY", "test-key")
     monkeypatch.setattr(past_memory.httpx, "AsyncClient", Client)
-    text, sources = _unless_paid_calls_are_off(
-        lambda: asyncio.run(past_memory.recall_with_sources(task_id="9"))
+    return _unless_paid_calls_are_off(
+        lambda: asyncio.run(past_memory.recall_with_sources(task_id=task))
     )
-    assert text == "sort the table by the oncogene column first" and sources == set()
+
+
+def test_recall_fails_closed_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What the run on task 9 is shown when past.dev returns its own lesson without sources:
+    nothing. (Until the fail-open was fixed this test asserted that the lesson came through.)"""
+    unknown = {"content": "sort the table by the oncogene column first"}
+    other = {
+        "content": "check the delimiter before parsing",
+        "sources": [{"label": "GLHF swarm lessons, task 11; context: task 12"}],
+    }
+    own = {"content": "index the genome first", "sources": [_OWN]}
+    assert _recall(monkeypatch, [unknown], "9") == ("", set())
+    text, sources = _recall(monkeypatch, [unknown, own, "not an item", other], "9")
+    assert text == "check the delimiter before parsing" and sources == {"11", "12"}
+    # A reader that does not say which task it is gets nothing at all.
+    assert _recall(monkeypatch, [other], None) == ("", set())
 
 
 # ----------------------------------------------------------------- the size of the suite

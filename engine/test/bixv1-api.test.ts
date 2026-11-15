@@ -10,6 +10,7 @@ import { after, before, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { guard } from "../src/http.ts"
 import { handleBixV1 } from "../src/bixv1/routes.ts"
+import { sessionToken } from "../src/glhf/routes.ts"
 import { listRuns, loadRun, runsRoot } from "../src/bixv1/store.ts"
 import type { BixRun, BixRunDetail, BixScoreRow } from "../src/bixv1/types.ts"
 
@@ -32,7 +33,8 @@ before(async () => {
 })
 after(() => { server.close() })
 
-const get = async <T>(path: string, init?: RequestInit) => {
+/** Sends the session token unless the call gives its own headers: what a person reviewing a run does. */
+const get = async <T>(path: string, init: RequestInit = { headers: { "x-glhf-token": sessionToken() } }) => {
   const res = await fetch(base + path, init)
   const text = await res.text()
   return { status: res.status, text, body: JSON.parse(text) as T, headers: res.headers }
@@ -198,6 +200,18 @@ test("ideal answers are hidden unless asked for on a finished run", async () => 
     assert.ok(!/"ideal"|judgeResponse|graderNote|judge_response/.test(res.text), `${path} has a field that can carry the ideal`)
   }
   assert.equal((await get<BixRunDetail>("/api/bixv1/runs/pair-a")).body.idealsRevealed, false)
+
+  // M5: the opt-in needs the session token. Without it nothing is revealed: not to a caller with no Origin, not
+  // to the dashboard's Origin (a header any local program can send), not with a wrong token.
+  for (const headers of [{}, { origin: "http://127.0.0.1:5317" }, { "x-glhf-token": "0".repeat(48) }, { origin: "tauri://localhost", "x-glhf-token": "" }] as Record<string, string>[]) {
+    for (const flag of ["ideal=1", "ideal=true"]) for (const id of ["pair-a", "still-running", "no-such-run"]) {
+      const res = await get<{ error: string; field: string; needsToken: boolean }>(`/api/bixv1/runs/${id}?${flag}`, { headers })
+      assert.equal(res.status, 401, `${id} ${flag} ${JSON.stringify(headers)}`)
+      assert.deepEqual([res.body.field, res.body.needsToken], ["token", true])
+      assert.ok(!res.text.includes(SECRET) && !/"ideal"|judgeResponse|graderNote|questions/.test(res.text))
+      assert.ok(!res.text.includes(sessionToken()))
+    }
+  }
 
   // The opt-in, on a finished run.
   const open = await get<BixRunDetail>("/api/bixv1/runs/pair-a?ideal=1")

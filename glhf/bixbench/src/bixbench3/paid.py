@@ -58,11 +58,14 @@ HOW_TO_ALLOW = (
 PAID_KEYS = (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
     "EXA_API_KEY",
     "PAST_API_KEY",
     "HF_TOKEN",
     "TINKER_API_KEY",
+    # Blanked defensively: no provider here uses these any more, but a stray one in .env must not reach a child
+    # while paid calls are off. They are not keys a run needs.
+    "OPENROUTER_API_KEY",
+    "TYPESAFE_API_KEY",
 )
 # Inside VS Code, Inspect loads .env over variables that are already set, which would put the
 # keys back. These are what make it think it is in VS Code.
@@ -224,9 +227,16 @@ def local_server(
     url = re.sub(r"(/v1)?/*$", "", raw)
     if is_loopback(url):
         return url, False
-    host = urlsplit(url).hostname if "://" in url else None
-    if not host or urlsplit(url).scheme not in ("http", "https"):
-        raise LocalModelRefused(f"{name} is not an http address of a model server: refused.")
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        host = None
+    if not host or parts.scheme not in ("http", "https") or parts.username or parts.password:
+        raise LocalModelRefused(
+            f"{name} is not a plain http address of a model server (no user name or password): "
+            "refused."
+        )
     if _setting(ALLOW_REMOTE, environ, files) == "1":
         return url, True
     raise LocalModelRefused(
@@ -253,7 +263,7 @@ def is_local(
 def model_class(
     model: str, environ: Mapping[str, str] | None = None, files: Iterable[Path] | None = None
 ) -> ModelClass:
-    """"scripted" (no model is called), "local" (a real model on this machine, free, nothing
+    """ "scripted" (no model is called), "local" (a real model on this machine, free, nothing
     leaves it) or "paid" (everything else, also an ollama id whose server was refused)."""
     if is_mock(model):
         return "scripted"

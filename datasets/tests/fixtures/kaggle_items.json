@@ -1,0 +1,108 @@
+{
+ "recorded_at": "2026-11-14T23:51:21Z",
+ "endpoint": "GET https://www.kaggle.com/api/v1/datasets/list?search=molecules+smiles&sortBy=votes&page=1",
+ "items": [
+  {
+   "ref": "xiaotawkaggle/inhibitors",
+   "title": "Cancer Inhibitors",
+   "subtitle": "Predict small molecules' activity targeting  protein kinase",
+   "licenseName": "CC BY-NC-SA 4.0",
+   "totalBytes": 109444960,
+   "lastUpdated": "2019-11-14T06:48:37.497Z",
+   "downloadCount": 12979,
+   "voteCount": 250,
+   "usabilityRating": 0.88235295,
+   "isPrivate": false,
+   "description": "",
+   "tags": [
+    {
+     "name": "healthcare"
+    },
+    {
+     "name": "chemistry"
+    },
+    {
+     "name": "drugs and medications"
+    },
+    {
+     "name": "cancer"
+    }
+   ]
+  },
+  {
+   "ref": "dmitriigluzdov/casmi26-pubchem-popularity-prior",
+   "title": "CASMI26 PubChem Popularity Prior",
+   "subtitle": "PubChem documentation and candidate fingerprints for molecular identification",
+   "licenseName": "Other (specified in description)",
+   "totalBytes": 43847868943,
+   "lastUpdated": "2026-10-27T17:07:06.607Z",
+   "downloadCount": 98919,
+   "voteCount": 143,
+   "usabilityRating": 1.0,
+   "isPrivate": false,
+   "description": "",
+   "tags": [
+    {
+     "name": "biology"
+    },
+    {
+     "name": "chemistry"
+    },
+    {
+     "name": "biotechnology"
+    },
+    {
+     "name": "drugs and medications"
+    }
+   ]
+  },
+  {
+   "ref": "sorkun/aqsoldb-a-curated-aqueous-solubility-dataset",
+   "title": "AqSolDB: A curated aqueous solubility dataset",
+   "subtitle": "Aqueous solubility and 2D descriptors for a diverse set of compounds",
+   "licenseName": "CC0: Public Domain",
+   "totalBytes": 1454326,
+   "lastUpdated": "2019-11-21T13:19:47.817Z",
+   "downloadCount": 3132,
+   "voteCount": 139,
+   "usabilityRating": 1.0,
+   "isPrivate": false,
+   "description": "",
+   "tags": [
+    {
+     "name": "earth and nature"
+    },
+    {
+     "name": "chemistry"
+    }
+   ]
+  },
+  {
+   "ref": "rohitfarmer/classify-the-bitter-or-sweet-taste-of-compounds",
+   "title": "Classify the bitter or sweet taste of compounds",
+   "subtitle": "Dataset for 2,393 small molecules with 1,826 features",
+   "licenseName": "CC BY-NC-SA 4.0",
+   "totalBytes": 24668095,
+   "lastUpdated": "2022-09-21T21:12:18.6Z",
+   "downloadCount": 639,
+   "voteCount": 11,
+   "usabilityRating": 1.0,
+   "isPrivate": false,
+   "description": "",
+   "tags": [
+    {
+     "name": "chemistry"
+    },
+    {
+     "name": "classification"
+    },
+    {
+     "name": "feature engineering"
+    },
+    {
+     "name": "dimensionality reduction"
+    }
+   ]
+  }
+ ]
+}

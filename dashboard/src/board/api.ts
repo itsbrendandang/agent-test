@@ -1,8 +1,9 @@
 // Client for the engine (engine/src/server.ts). The engine owns runs; the dashboard only watches and starts them.
 import { useEffect, useMemo, useState } from "react"
+import { ENGINE, readEngine } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
 
-export const ENGINE = (import.meta.env.VITE_ENGINE_URL as string | undefined) ?? "http://localhost:8787"
+export { ENGINE }
 
 export type Verdict = "verified" | "unsupported" | "contradicted" | "unchecked"
 
@@ -21,7 +22,7 @@ export type BoardEvent = { key: string; at: number } & (
   | { type: "round.started"; round: number; message: string; final: boolean }
   | { type: "member.replied"; round: number; member: string; mode?: string; text: string }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: { url: string; title: string; studyType?: string }[] }
-  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: string; p?: number; note?: string }
+  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: string; p?: number; note?: string; checkedBy?: string; source?: string }
   | { type: "constraint"; reason: string; detail: string }
   | { type: "memo.written"; path: string; decision: string }
   | { type: "run.finished"; usd: number; minutes: number }
@@ -29,7 +30,7 @@ export type BoardEvent = { key: string; at: number } & (
   | { type: "run.resumed" | "lead.framed"; [k: string]: unknown }
 )
 
-export const get = <T,>(path: string): Promise<T> => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+export const get = readEngine
 export const post = <T,>(path: string, body?: unknown): Promise<T> =>
   engineFetch(ENGINE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) })
     .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json().catch(() => ({}))).error ?? `The engine answered ${r.status}.`))))

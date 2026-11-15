@@ -357,6 +357,8 @@ def prepare_study_data(study: Study, cache_dir: Path) -> Path:
             root / study.data_folder,
             root / study.study_id,
         ):
+            if cand == root:  # empty data_folder: never the whole cache
+                continue
             if cand.is_dir() and (is_prepared(cand) or not from_hf):
                 study._data_dir = cand.resolve()
                 return study._data_dir

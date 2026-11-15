@@ -143,6 +143,23 @@ def test_the_keys_are_blank_while_the_switch_is_on(monkeypatch: pytest.MonkeyPat
     assert os.environ[paid.SWITCH] == "1"  # passed on to child processes
 
 
+def test_stray_openrouter_and_typesafe_keys_are_blanked_in_a_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No provider uses these keys any more, but one left in .env must not reach a child while paid calls are off."""
+    import subprocess
+    import sys
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "stray-key-for-test")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "stray-key-for-test")
+    monkeypatch.setenv("NO_PAID_CALLS", "1")
+    assert {"OPENROUTER_API_KEY", "TYPESAFE_API_KEY"} <= set(paid.PAID_KEYS)
+    assert paid.enforce() is True
+    out = subprocess.run(
+        [sys.executable, "-c", "import os; print(repr([os.environ.get('OPENROUTER_API_KEY'), os.environ.get('TYPESAFE_API_KEY')]))"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert out == "['', '']"
+
+
 def test_inspect_does_not_read_the_blanked_keys_back_from_dotenv(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -324,7 +341,9 @@ def test_a_local_model_runs_with_the_switch_on_and_only_reaches_the_checked_addr
     out = tmp_path / "run"
     monkeypatch.setenv("INSPECT_EVAL_MODEL_BASE_URL", "https://api.example.com/v1")
     with pytest.raises(Reached):
-        glhf_local.run_local(DEMO_CASE, out, model=LOCAL, role_models={"critic": "ollama/qwen2.5:7b"})
+        glhf_local.run_local(
+            DEMO_CASE, out, model=LOCAL, role_models={"critic": "ollama/qwen2.5:7b"}
+        )
     assert reached == [f"get_model {LOCAL}"] and outbound == []
     assert os.environ[paid.OLLAMA_URL] == "http://127.0.0.1:11434/v1"
     assert "INSPECT_EVAL_MODEL_BASE_URL" not in os.environ
@@ -340,7 +359,9 @@ def test_a_local_model_runs_with_the_switch_on_and_only_reaches_the_checked_addr
         with pytest.raises(paid.LocalModelRefused, match="not this machine"):
             glhf_local.run_local(DEMO_CASE, tmp_path / "c", model=LOCAL)
         with pytest.raises(paid.LocalModelRefused, match="not this machine"):
-            glhf_local.run_local(DEMO_CASE, tmp_path / "c", model="mock", role_models={"critic": LOCAL})
+            glhf_local.run_local(
+                DEMO_CASE, tmp_path / "c", model="mock", role_models={"critic": LOCAL}
+            )
         monkeypatch.delenv(name)
     for model in LOOKALIKES:
         with pytest.raises(paid.PaidCallsOff, match="NO_PAID_CALLS"):
@@ -499,7 +520,7 @@ def test_approving_lessons_keeps_the_file_and_sends_nothing(
 ) -> None:
     folder = str(tmp_path / "memory")
     memory.add_pending(folder, "9", "- pin the annotation version\n")
-    assert memory.main(["--dir", folder, "approve-all"]) == 0
+    assert memory.main(["--dir", folder, "approve-all", "--i-read-them"]) == 0
     printed = capsys.readouterr()
     assert "nothing sent" in printed.err and "NO_PAID_CALLS" in printed.err
     assert outbound == []
@@ -507,5 +528,7 @@ def test_approving_lessons_keeps_the_file_and_sends_nothing(
 
     allow(monkeypatch)
     memory.add_pending(folder, "11", "- check the strandedness first\n")
-    assert memory.main(["--dir", folder, "approve-all"]) == 0  # a failed send never fails approval
+    assert (
+        memory.main(["--dir", folder, "approve-all", "--i-read-them"]) == 0
+    )  # a failed send never fails approval
     assert outbound == ["https://api.past.dev/api/v1/ingest"]

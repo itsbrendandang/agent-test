@@ -49,7 +49,7 @@ How each item was checked:
    `<local user>@<Mac hostname>.local`, which shows the local account name and the computer's name. If that
    should not be public, publish from a fresh history (or rewrite the author) before the first public push; it
    cannot be undone after. Personal identifiers also in the tree: `authors = ["Brendan Dang"]` in
-   `dashboard/src-tauri/Cargo.toml`, the bundle identifier `com.brendandang.drugboard` in
+   `dashboard/src-tauri/Cargo.toml`, the keychain service `com.brendandang.drugboard` (the bundle identifier is `com.brendandang.aiscientistbot`) in
    `dashboard/src-tauri/tauri.conf.json` and `dashboard/src-tauri/src/keys.rs`, and the clone URL
    `github.com/itsbrendandang/agent-test` in `CONTRIBUTING.md`. Keep or change them on purpose. (F)
 8. **Do not publish benchmark run folders until two things are settled.** (a) BixBench v1: transcripts and
@@ -75,7 +75,7 @@ Should fix, not blocking:
 Checked and clean:
 
 - No key in history. `git log -p --all` (20 commits, one branch, no stash) was scanned for OpenAI, Anthropic,
-  OpenRouter, Hugging Face, GitHub, AWS, Google, Slack key shapes, JWTs, private-key blocks and
+  Hugging Face, GitHub, AWS, Google, Slack key shapes, JWTs, private-key blocks and
   `key|token|secret|password = <long value>`. One match: commit `47913c3`, file
   `glhf/bixbench/tests/unit/test_runner_commands.py` (line 183 today). It is an upstream test placeholder made
   of lowercase words, not a key. (F)

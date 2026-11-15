@@ -11,12 +11,14 @@ interface Props {
   name: string
   label?: string
   disabled?: boolean
+  /** Segments only: the caller shows the description itself, under id `${name}-facts`. */
+  compact?: boolean
 }
 
-export function EffortPicker({ efforts, value, onChange, name, label = "Effort", disabled }: Props) {
+export function EffortPicker({ efforts, value, onChange, name, label = "Effort", disabled, compact }: Props) {
   const current = efforts.find((e) => e.id === value)
   return (
-    <fieldset className="effort" disabled={disabled}>
+    <fieldset className="effort" data-compact={compact || undefined} disabled={disabled}>
       <legend>{label}</legend>
       <div className="effort-segments">
         {efforts.map((e) => (
@@ -26,7 +28,7 @@ export function EffortPicker({ efforts, value, onChange, name, label = "Effort",
           </label>
         ))}
       </div>
-      <p className="muted small effort-facts" id={`${name}-facts`}>{current ? <>{current.description} <span>{effortFacts(current)}.</span></> : "Pick how much work this question should get."}</p>
+      {!compact && <p className="muted small effort-facts" id={`${name}-facts`}>{current ? <>{current.description} <span>{effortFacts(current)}.</span></> : "Pick how much work this question should get."}</p>}
     </fieldset>
   )
 }

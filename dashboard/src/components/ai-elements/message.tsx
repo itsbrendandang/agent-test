@@ -1,5 +1,9 @@
 "use client";
 
+// Restored from git history as it was, with one change: MessageResponse (the Markdown renderer and its four
+// plugins: code highlighting, maths, diagrams, CJK) moved to ./message-response.tsx, so that showing a message does
+// not pull about 740 kB of renderers into the first load. Import it from there, lazily, if it is ever needed.
+
 import { Button } from "@/components/ui/button";
 import {
   ButtonGroup,
@@ -12,23 +16,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
   createContext,
-  memo,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -318,28 +316,6 @@ export const MessageBranchPage = ({
     </ButtonGroupText>
   );
 };
-
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
-
-const streamdownPlugins = { cjk, code, math, mermaid };
-
-export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
-    <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      plugins={streamdownPlugins}
-      {...props}
-    />
-  ),
-  (prevProps, nextProps) =>
-    prevProps.children === nextProps.children &&
-    nextProps.isAnimating === prevProps.isAnimating
-);
-
-MessageResponse.displayName = "MessageResponse";
 
 export type MessageToolbarProps = ComponentProps<"div">;
 

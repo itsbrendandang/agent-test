@@ -66,7 +66,8 @@ def reached(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     class Judge:
         calls = tokens = 0
 
-        def __init__(self, model: str, temperature: float) -> None:
+        def __init__(self, model: str, temperature: float | None) -> None:
+            self.model, self.temperature = model, temperature
             seen.append(f"judge {model}")
 
     def run_capsule(*_: Any, **arguments: Any) -> Any:
@@ -114,9 +115,9 @@ def test_a_run_with_a_real_model_is_refused_before_anything_starts(
         reached.clear()
         with pytest.raises(SystemExit) as stopped:
             command(monkeypatch, "run", "--capsules", "bix-1", "--out", str(out), *extra)
-        assert "NO_PAID_CALLS" in str(stopped.value.code) and "real model" in str(
-            stopped.value.code
-        )
+        message = str(stopped.value.code)
+        # bixbench3.paid words the refusal; it has said "real model" and "paid model".
+        assert "NO_PAID_CALLS" in message and ("real model" in message or "paid model" in message)
         # .env was loaded after the keys were blanked, so it could not fill them in again.
         assert reached == ["load_env keys=blank"]
     assert outbound == [] and not out.exists()
@@ -190,3 +191,50 @@ def test_the_repository_env_file_cannot_put_the_keys_back(
     assert paid.paid_calls_off() is True
     env_file.write_text("NO_PAID_CALLS=0\n")
     assert paid.paid_calls_off() is False
+
+
+def test_every_profiles_default_judge_is_behind_the_switch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outbound: list[str], reached: list[str]
+) -> None:
+    monkeypatch.setattr(cli, "_capsules", lambda arguments: [])
+    monkeypatch.setattr(cli, "_write_report", lambda out, profile: reached.append("report"))
+    # Switch on: the paper profile's Anthropic judge is refused like any other, by name.
+    for profiles in ("paper", "official", "per-mode,official,paper"):
+        reached.clear()
+        with pytest.raises(SystemExit) as stopped:
+            command(monkeypatch, "grade", "--out", str(tmp_path), "--grading", profiles)
+        assert "NO_PAID_CALLS" in str(stopped.value.code)
+        assert reached == ["load_env keys=blank"] and outbound == []
+    with pytest.raises(SystemExit) as stopped:
+        command(monkeypatch, "grade", "--out", str(tmp_path), "--grading", "paper")
+    assert "claude-3-5-sonnet-20241022" in str(stopped.value.code)
+    # Switch off: each profile gets its own default judge and temperature...
+    monkeypatch.setenv(paid.SWITCH, "0")
+    built: list[tuple[str, float | None]] = []
+    real = cli.InspectJudge
+
+    class Spy(real):  # type: ignore[valid-type,misc]
+        def __init__(self, model: str, temperature: float | None) -> None:
+            built.append((model, temperature))
+            self.model, self.temperature, self.calls, self.tokens = model, temperature, 0, 0
+
+    monkeypatch.setattr(cli, "InspectJudge", Spy)
+    command(monkeypatch, "grade", "--out", str(tmp_path), "--grading", "per-mode,official,paper")
+    assert built == [
+        ("openai/gpt-4o", 0.0),
+        ("openai/gpt-4o", 1.0),
+        ("anthropic/claude-3-5-sonnet-20241022", None),
+    ]
+    # ...unless the command line names one, which then applies to every profile.
+    built.clear()
+    command(
+        monkeypatch, "grade", "--out", str(tmp_path), "--grading", "official,paper",
+        "--judge-model", "openai/gpt-5.5", "--judge-temperature", "0",
+    )  # fmt: skip
+    assert built == [("openai/gpt-5.5", 0.0)]
+    built.clear()
+    command(
+        monkeypatch, "grade", "--out", str(tmp_path), "--grading", "official",
+        "--judge-temperature", "default",
+    )  # fmt: skip
+    assert built == [("openai/gpt-4o", None)] and outbound == []

@@ -1,21 +1,28 @@
 // Home: a chat box for starting research, and what it can use. A question goes to the engine (POST /api/chat); the
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation"
+import { Message, MessageContent } from "@/components/ai-elements/message"
+import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input"
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
+import { Loading, Mascots } from "@/components/Crew"
+import { UserMessage } from "@/components/Thread"
+import { ENGINE } from "@/board/api"
 import { PageHead } from "@/components/Shared"
-import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type ProviderId, type SearchResult } from "@/home/api"
+import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type ProviderId } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
-import { chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, viewOfResult, type Choice, type PlanState, type Turn } from "@/home/chat"
+import { boardScriptedWhy, chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
+import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
-import { SearchBox } from "@/home/SearchBox"
-import { setOpen, setOpenItem, viewOfKind } from "@/lib/open"
+import { setOpen, viewOfKind } from "@/lib/open"
 
 const ABOUT = "Ask a research question. The answer says whether a model wrote it, links the runs it used, and may propose a plan that starts only when you confirm it."
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
-export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agents") => void }) {
+export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
   const [turns, setTurns] = useState<Turn[]>(loadTurns)
   const [text, setText] = useState("")
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
@@ -23,18 +30,24 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
   const [picked, setPicked] = useState(AUTO) // "auto", or "provider model"
   const [catalog, setCatalog] = useState<Catalog | null>()
   const [again, setAgain] = useState(0)
+  const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
   const [chosenEffort, setChosenEffort] = useState(loadEffort)
+  const [boardStatus, setBoardStatus] = useState<Parameters<typeof boardScriptedWhy>[0]>() // GET /api/status: what the board would run on
   const box = useRef<HTMLTextAreaElement>(null)
-  const end = useRef<HTMLDivElement>(null)
   const asking = useRef<AbortController | undefined>(undefined)
 
   useEffect(() => {
     let stale = false
-    getCatalog().then((c) => { if (!stale) setCatalog(c) }, () => { if (!stale) setCatalog(null) })
+    getCatalog().then((c) => { if (!stale) { setCatalog(c); setWhyNone(undefined) } },
+      (error: unknown) => { if (!stale) { setCatalog(null); setWhyNone(error instanceof ChatRefused && error.status !== 0 ? error.message : undefined) } })
+    return () => { stale = true }
+  }, [again])
+  useEffect(() => {
+    let stale = false
+    fetch(`${ENGINE}/api/status`).then((r) => (r.ok ? r.json() : undefined), () => undefined).then((status) => { if (!stale) setBoardStatus(status) })
     return () => { stale = true }
   }, [again])
   useEffect(() => saveTurns(turns), [turns])
-  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }) }, [turns, sending])
   useEffect(() => () => asking.current?.abort(), [])
 
   // Models a person may pick: only from providers whose key the engine has, and only while paid calls are on.
@@ -70,17 +83,9 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
     }
   }
 
-  const submit = (e: FormEvent) => { e.preventDefault(); void send(text) }
-  const key = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter sends. Shift+Enter is a new line. Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text) }
-  }
+  // Enter sends, Shift+Enter is a new line, and Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send: PromptInputTextarea does this.
   const clear = () => { asking.current?.abort(); setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
   const openRun = (kind: "swarm" | "board", id: string) => { setOpen(kind, id); onOpen(viewOfKind(kind)) }
-  const openResult = (r: SearchResult) => {
-    if (r.kind === "swarm" || r.kind === "board") return openRun(r.kind, r.id)
-    setOpenItem(r.kind, r.id); onOpen(viewOfResult(r))
-  }
   /** The plan of one reply, asked for again at another effort. The reply is replaced only when a new plan arrives. */
   const replan = async (turnId: number, next: EffortId): Promise<string | undefined> => {
     const request = replanRequest(turns, turnId, { ...choice, effort: next })
@@ -95,88 +100,113 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
   const setPlan = (turnId: number, plan: PlanState) => setTurns((old) => old.map((t) => (t.id === turnId && t.role === "assistant" ? { ...t, plan } : t)))
 
   const empty = turns.length === 0 && sending === undefined
+  const level = efforts.find((e) => e.id === effort)
+  const effortLine = level ? <>{level.description} <span>{effortFacts(level)}.</span></> : "Pick how much work this question should get."
 
   return (
-    <div className="page home-chat">
+    <div className="page home-chat" data-wide>
       <PageHead title="Home" about={ABOUT}>
         {!empty && <button type="button" className="btn" onClick={clear}>Clear conversation</button>}
       </PageHead>
-      <SearchBox onOpen={openResult} />
       <div className="home-cols">
         <section className="home-main" aria-label="Conversation">
-          <div className="home-log" role="log" aria-live="polite" aria-label="Messages">
-            {empty && (
-              <div className="home-empty">
-                <h2>What do you want to find out?</h2>
-                <p className="muted">Ask about past runs, or describe a drug candidate question to get a research plan. Nothing starts and nothing is spent until you confirm a plan.</p>
-                <div className="home-examples" role="group" aria-label="Example questions">
-                  {EXAMPLES.map((q) => <button key={q} type="button" className="btn" onClick={() => void send(q)}>{q}</button>)}
-                </div>
-              </div>
-            )}
-            {turns.map((t) => t.role === "user" ? (
-              <article key={t.id} className="home-turn" data-role="user" aria-label="You asked"><p className="home-text">{t.content}</p></article>
-            ) : (
-              <article key={t.id} className="home-turn" data-role="assistant" aria-label="Reply">
-                <p className="home-mode">
-                  <span className="pill" data-kind={MODE_KIND[t.reply.mode]}>{MODE_LABEL[t.reply.mode]}</span>
-                  {t.reply.note && <span className="muted small">{t.reply.note}</span>}
-                </p>
-                <p className="home-text">{t.reply.reply}</p>
-                {t.reply.runs && (
-                  <ul className="exp-list exp-cited" aria-label="Runs this reply used">
-                    {t.reply.runs.map((r) => (
-                      <li key={`${r.kind}:${r.id}`}>
-                        <button type="button" className="exp-hit card-surface" onClick={() => openRun(r.kind, r.id)}>
-                          <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
-                          <span className="muted small run-id" title={r.id}>{r.id}</span>
-                          {r.why && <span className="exp-match small">{r.why}</span>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {t.reply.plan && (
-                  <PlanCard key={t.reply.plan.id} plan={t.reply.plan} state={t.plan ?? { state: "open" }} paidCalls={catalog?.paidCalls}
-                    efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
-                    onState={(s) => setPlan(t.id, s)} onOpenRun={(id) => openRun("board", id)} />
-                )}
-              </article>
-            ))}
-            {sending !== undefined && (
-              <>
-                <article className="home-turn" data-role="user" aria-label="You asked"><p className="home-text">{sending}</p></article>
-                <p className="muted small exp-loading" role="status"><span className="exp-spinner" aria-hidden="true" />Waiting for the engine's reply…</p>
-              </>
-            )}
-            <div ref={end} />
-          </div>
+          <Conversation className="home-log" aria-live="polite" aria-label="Messages">
+            <ConversationContent className="home-thread">
+              {empty && (
+                <ConversationEmptyState className="home-empty">
+                  <Mascots size={72} />
+                  <h2>What do you want to find out?</h2>
+                  <p className="muted">Ask about past runs, or describe a research question to get a plan. Nothing starts and nothing is spent until you confirm a plan.</p>
+                  <Suggestions className="home-examples" role="group" aria-label="Example questions">
+                    {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
+                  </Suggestions>
+                </ConversationEmptyState>
+              )}
+              {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : (
+                <Message key={t.id} from="assistant" role="article" aria-label="Reply" className="home-turn">
+                  <MessageContent>
+                    <p className="home-mode">
+                      <span className="pill" data-kind={MODE_KIND[t.reply.mode]} data-mode={t.reply.mode === "scripted" ? "scripted" : undefined}>{MODE_LABEL[t.reply.mode]}</span>
+                      {t.reply.note && <span className="muted small">{t.reply.note}</span>}
+                    </p>
+                    <p className="home-text">{t.reply.reply}</p>
+                    {t.reply.runs && (
+                      <ul className="exp-list exp-cited" aria-label="Runs this reply used">
+                        {t.reply.runs.map((r) => (
+                          <li key={`${r.kind}:${r.id}`}>
+                            <button type="button" className="exp-hit card-surface" onClick={() => openRun(r.kind, r.id)}>
+                              <span className="exp-head"><b>{r.title}</b><span className="pill" data-kind="outline">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
+                              <span className="muted small run-id" title={r.id}>{r.id}</span>
+                              {r.why && <span className="exp-match small">{r.why}</span>}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {t.reply.plan && (
+                      <PlanCard key={t.reply.plan.id} plan={t.reply.plan} state={t.plan ?? { state: "open" }} paidCalls={catalog?.paidCalls}
+                        efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
+                        onState={(s) => setPlan(t.id, s)} onOpenRun={(id) => openRun("board", id)} />
+                    )}
+                  </MessageContent>
+                </Message>
+              ))}
+              {sending !== undefined && (
+                <>
+                  <UserMessage>{sending}</UserMessage>
+                  <Loading>Waiting for the engine's reply…</Loading>
+                </>
+              )}
+            </ConversationContent>
+            <ConversationScrollButton className="btn home-latest" aria-label="Scroll to the latest message" title="Scroll to the latest message" />
+          </Conversation>
 
-          <form className="home-composer card-surface" onSubmit={submit}>
-            <label htmlFor="home-box">Ask a research question</label>
-            <textarea id="home-box" ref={box} rows={3} maxLength={MAX_MESSAGE + 200} value={text} autoFocus placeholder="For example: should we advance a compound with a hERG IC50 of 6 µM?"
-              onChange={(e) => { setText(e.currentTarget.value); if (problem?.control === "box") setProblem(undefined) }} onKeyDown={key}
-              aria-invalid={problem?.control === "box"} aria-describedby={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`} />
+          <div className="home-composer">
+            <PromptInput onSubmit={(message) => { void send(message.text) }}>
+              <PromptInputBody>
+                <PromptInputTextarea id="home-box" ref={box} rows={2} maxLength={MAX_MESSAGE + 200} value={text} autoFocus aria-label="Ask a research question"
+                  placeholder="Ask a research question. For example: should we advance a compound with a hERG IC50 of 6 µM?"
+                  onChange={(e) => { setText(e.currentTarget.value); if (problem?.control === "box") setProblem(undefined) }}
+                  onKeyDown={(e) => {
+                    // Enter on an empty box says what to do instead of doing nothing (the Send button is disabled then).
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !text.trim()) { e.preventDefault(); void send(text) }
+                  }}
+                  aria-invalid={problem?.control === "box"} aria-describedby={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`} />
+              </PromptInputBody>
+              <PromptInputFooter className="home-composer-foot">
+                {/* Clicks in the toolbar stay in the toolbar: the input group would otherwise move the focus away from the control. */}
+                <PromptInputTools className="home-tools" onClick={(e) => e.stopPropagation()}>
+                  {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" compact />}
+                  <details className="home-more">
+                    <summary>More options</summary>
+                    <label className="home-model">
+                      <span className="small">Model</span>
+                      <select value={choice.model ? picked : AUTO} disabled={offered.length === 0} onChange={(e) => { setPicked(e.target.value); if (problem?.control === "model") setProblem(undefined) }}
+                        aria-invalid={problem?.control === "model"} aria-describedby={problem?.control === "model" ? "home-model-error" : "home-model-help"}>
+                        <option value={AUTO}>{offered.length ? "Let the engine choose" : catalog?.paidCalls === false ? "None: paid calls are off" : "Engine default"}</option>
+                        {offered.map((o) => <option key={`${o.provider} ${o.model}`} value={`${o.provider} ${o.model}`}>{o.model}</option>)}
+                      </select>
+                    </label>
+                  </details>
+                </PromptInputTools>
+                <PromptInputSubmit className="btn btn-primary" size="sm" aria-label={sending !== undefined ? "Sending…" : "Send"} status={sending !== undefined ? "submitted" : undefined}
+                  disabled={sending !== undefined || !text.trim()}>{sending !== undefined ? "Sending…" : "Send"}</PromptInputSubmit>
+              </PromptInputFooter>
+            </PromptInput>
             {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
-            {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" />}
             {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
-            <div className="home-composer-foot">
-              <span className="muted small" id="home-box-help">Enter sends. Shift+Enter starts a new line. Do not type API keys here.</span>
-              <label className="home-model">
-                <span className="small">Model</span>
-                <select value={choice.model ? picked : AUTO} disabled={offered.length === 0} onChange={(e) => { setPicked(e.target.value); if (problem?.control === "model") setProblem(undefined) }}
-                  aria-invalid={problem?.control === "model"} aria-describedby={problem?.control === "model" ? "home-model-error" : "home-model-help"}>
-                  <option value={AUTO}>{offered.length ? "Let the engine choose" : catalog?.paidCalls === false ? "None: paid calls are off" : "Engine default"}</option>
-                  {offered.map((o) => <option key={`${o.provider} ${o.model}`} value={`${o.provider} ${o.model}`}>{o.model}</option>)}
-                </select>
-              </label>
-              <button type="submit" className="btn btn-primary" disabled={sending !== undefined || !text.trim()}>{sending !== undefined ? "Sending…" : "Send"}</button>
-            </div>
             {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
-            {catalog?.paidCalls === false && <p className="muted small" id="home-model-help">Paid calls are off, so no model is asked: replies are keyword searches or fixed text, and each reply says which.</p>}
-          </form>
+            {efforts.length > 0 && <p className="muted small effort-facts" id="home-effort-facts">{effortLine}</p>}
+            <p className="muted small">
+              <span id="home-box-help">Enter sends. Shift+Enter starts a new line. Do not type API keys here.</span>
+              {catalog?.paidCalls === false && <span id="home-model-help"> Paid calls are off, so no model is asked: replies are keyword searches or fixed text, and each reply says which.</span>}
+            </p>
+          </div>
         </section>
-        <CatalogPanel catalog={catalog} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
+        <div className="home-side">
+          <Checked onOpen={openRun} />
+          <CatalogPanel catalog={catalog} why={whyNone} boardWhy={catalog ? boardScriptedWhy(boardStatus, catalog.providers) : undefined} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
+        </div>
       </div>
     </div>
   )

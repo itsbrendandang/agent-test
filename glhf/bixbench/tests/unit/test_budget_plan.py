@@ -436,3 +436,35 @@ def test_the_fallback_methods_file_says_who_wrote_it_and_holds_only_recorded_fac
     assert "stopped by its token limit" in text and "DONE: read the ledger" in text
     assert "a.tsv: missing" in text and "## Supported findings (0)" in text
     assert "hand-off note" not in solver.fallback_methods("no time left.", "", "ok", "none")
+
+
+def test_the_phases_before_review_leave_room_for_a_round_to_start() -> None:
+    # 26-minute run, 300 s spent before the first pass. The review floors are 255 s; a round
+    # starts only with min_review_seconds() left (227 s here), and the margin makes that 272 s.
+    plan = solver.plan_budget(None, 1560 * (1 - solver.RUN_MARGIN))
+    later = ["audit", "critique", "revise"]
+    room = solver.review_room(plan.seconds)
+    assert room == pytest.approx(1.2 * 0.15 * plan.seconds) and room > 255
+    hold = sum(plan.time_reserves.values())
+    assert solver.seconds_for(plan, "experiment", 300, later) == int(
+        plan.seconds - 300 - hold - room
+    )
+    # On a long run a round needs 15 minutes, far more than the review floors.
+    assert solver.review_room(DAY) == 1.2 * 15 * 60
+    # The room yields to the phase's own floor: a first pass that starts 100 s later still
+    # gets its floor (480 s), and never the review floors themselves.
+    assert solver.seconds_for(plan, "experiment", 400, later) == 480
+    assert solver.seconds_for(plan, "experiment", 500, later) == int(
+        plan.seconds - 500 - hold - 255
+    )
+    # A plan without review holds nothing back for it.
+    bare = solver.plan_budget(None, 700)
+    assert "critique" not in bare.phases
+    assert solver.seconds_for(bare, "experiment", 0, []) == 700 - sum(bare.time_reserves.values())
+    # The plan itself counts the room: a run that cannot start a round does not plan one.
+    for seconds in range(600, 4000, 50):
+        chosen = solver.plan_budget(None, seconds)
+        if "critique" in chosen.phases:
+            early = sum(chosen.time_floors[k] for k in chosen.phases if k in solver.TIME_TARGET)
+            held = sum(chosen.time_reserves.values())
+            assert seconds - early - held >= solver.review_room(seconds) - 1, seconds

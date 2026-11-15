@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { Mood } from "./Buddy"
-import { CrewSprite } from "@/crew/CrewSprite"
-import { useCrew } from "@/crew/store"
+import { MASCOTS, useCharacters } from "@/crew/store"
+import { Buddy } from "./Buddy"
 
 const LINES = [
   "Go touch grass. I'll hold the fort.",
@@ -12,12 +12,11 @@ const LINES = [
 ]
 const SLEEP_AFTER_MS = 45_000
 
-// The crew lives quietly in the side rail. Easter eggs:
+// The characters live quietly in the side rail, as decoration: they are not agents and report nothing. Easter eggs:
 //  - poke a character: it says something; poke it 5 times and it looks startled
 //  - leave the app alone for 45s: they fall asleep
-//  - click the logo 5 times: the crew strolls across the window
-export function SideCrew({ parade }: { parade: number }) {
-  const { crew } = useCrew()
+export function SideCrew() {
+  const shown = useCharacters()
   const [bubble, setBubble] = useState<{ id: string; text: string } | null>(null)
   const [dizzy, setDizzy] = useState<string | null>(null)
   const [asleep, setAsleep] = useState(false)
@@ -58,30 +57,23 @@ export function SideCrew({ parade }: { parade: number }) {
     later(() => setBubble((b) => (b?.id === id ? null : b)), 2600)
   }
 
-  if (crew.length === 0) return null // demo crew off: no box, no parade
+  if (!shown) return null // characters turned off in Settings: no box
 
   return (
     <>
       <div className="side-crew">
-        {crew.map((m) => {
+        {MASCOTS.map((m) => {
           const mood: Mood = dizzy === m.id ? "alert" : bubble?.id === m.id ? "happy" : asleep ? "sleeping" : "happy"
           return (
             <button key={m.id} type="button" className="side-buddy" data-dizzy={dizzy === m.id || undefined}
-              data-poked={bubble?.id === m.id || undefined} aria-label={`${m.name}, ${m.role}`} onClick={() => poke(m.id)}>
-              <CrewSprite member={m} mood={mood} size={36} />
+              data-poked={bubble?.id === m.id || undefined} aria-label={m.name} title={`${m.name} (decoration: click to poke)`} onClick={() => poke(m.id)}>
+              <Buddy species={m.species} mood={mood} size={36} />
               {bubble?.id === m.id && <span className="side-bubble" role="status">{bubble.text}</span>}
             </button>
           )
         })}
       </div>
 
-      {parade > 0 && (
-        <div key={parade} className="parade" aria-hidden="true">
-          {crew.map((m, i) => (
-            <span key={m.id} style={{ animationDelay: `${i * 0.6}s` }}><CrewSprite member={m} mood="happy" size={64} /></span>
-          ))}
-        </div>
-      )}
     </>
   )
 }

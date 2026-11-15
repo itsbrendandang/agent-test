@@ -25,7 +25,8 @@ export const PAID_OFF: GlhfStatus = { record: 0.523, tools: { docker: true, uv: 
 export const PAID_ON: GlhfStatus = { ...PAID_OFF, paidCalls: true, models: ["mock", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5", "openai/gpt-5.5"] }
 
 type Reply = { status: number; body: unknown }
-type Answer = Reply | ((sent: Sent) => Reply | Promise<Reply>)
+export type SentTo = Sent & { headers: Record<string, string>; query: string }
+type Answer = Reply | ((sent: SentTo) => Reply | Promise<Reply>)
 /**
  * A stand-in engine with routes: "GET /api/chat/catalog": reply. A list of replies is used up in order (the last one
  * repeats); a function sees the request. A request to a route that is not listed fails like a network error.

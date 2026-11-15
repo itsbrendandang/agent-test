@@ -1,5 +1,5 @@
-// The one model call behind POST /api/chat, when paid calls are on: Anthropic Messages by default, OpenAI or
-// OpenRouter chat completions when chosen. The model reads the catalog, the run records and the conversation, all
+// The one model call behind POST /api/chat, when paid calls are on: Anthropic Messages by default, OpenAI
+// chat completions when chosen. The model reads the catalog, the run records and the conversation, all
 // as data between markers with every "<" escaped (as ask.ts does), and replies with one JSON object. It cannot
 // start a run: nothing in its reply is acted on except through the checks in plan.ts.
 import { refusePaid } from "../paid.ts"
@@ -30,7 +30,6 @@ export function prompt(catalog: unknown, records: string, turns: Turn[], questio
 const ENDPOINT: Record<ProviderId, string> = {
   anthropic: "https://api.anthropic.com/v1/messages",
   openai: "https://api.openai.com/v1/chat/completions",
-  openrouter: "https://openrouter.ai/api/v1/chat/completions",
 }
 
 /** One call. Returns the reply text. Throws PaidCallsOff while the switch is on, and on any failure. */

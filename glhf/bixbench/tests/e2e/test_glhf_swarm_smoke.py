@@ -37,8 +37,18 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
     assert summary["score"] == 1.0
     outputs = tmp_path / "outputs"
 
-    ledger = json.loads((outputs / "glhf" / "ledger.json").read_text())
+    # The ledger that counts is the one the solver process wrote next to run.json. The copy in
+    # the sandbox's outputs folder is the roles' working copy; here nobody tampered with it.
+    ledger = json.loads((tmp_path / "ledger.json").read_text())
     assert {c["id"]: c["verdict"] for c in ledger["claims"]} == {"C1": "supported", "C2": "refuted"}
+    assert [(c["id"], c["verdict"]) for c in summary["claims"]] == [
+        ("C1", "supported"),
+        ("C2", "refuted"),
+    ]
+    assert summary["sandbox_ledger_differs"] is False and "unreviewed" not in summary
+    assert (tmp_path / "FINDINGS.md").read_text() == (outputs / "glhf" / "FINDINGS.md").read_text()
+    # Graded from the copy made after the sandbox was gone, never from the mounted folder.
+    assert summary["outputs_rejected"] == [] and (tmp_path / "graded" / "gene_counts.csv").is_file()
     assert [(i["id"], i["status"]) for i in ledger["issues"]] == [("I1", "fixed")]
     phases = [e["phase"] for e in ledger["events"] if e["kind"] == "phase.started"]
     assert phases == [
@@ -310,3 +320,30 @@ def test_run_settings_are_recorded_for_disclosure(tmp_path: Path) -> None:
     assert "Lessons from earlier runs" not in "\n".join(
         str(m.content) for m in log.samples[0].messages
     )
+
+
+def test_outputs_linked_to_the_grader_s_files_from_inside_the_sandbox_are_not_graded(
+    tmp_path: Path,
+) -> None:
+    """The attack that scored 1.0, for real: inside the sandbox each required output is made a
+    symbolic link to the host path of its truth file. In the sandbox the links dangle; on the
+    host they point at the grader's own files."""
+    truth = (DEMO_CASE / "grader" / "artifacts").resolve()
+    link = "import os\n" + "".join(
+        f"os.symlink({str(truth / name)!r}, '/outputs/{name}')\n"
+        for name in ("gene_counts.csv", "treated_vs_control.csv")
+    )
+    outputs = [
+        _call("python", code=link + "print('linked')"),
+        _write("/outputs/METHODS.md", "# Methods\n"),
+        _done("done"),
+    ]
+    summary = run_local(DEMO_CASE, tmp_path, solver="single", model="mock", mock_outputs=outputs)
+    assert (tmp_path / "outputs" / "gene_counts.csv").is_symlink()  # the attack did happen
+    assert summary["status"] == "failed" and summary["score"] is None
+    assert sorted(r["path"] for r in summary["outputs_rejected"]) == [
+        "gene_counts.csv",
+        "treated_vs_control.csv",
+    ]
+    assert "symbolic link" in summary["error"]
+    assert json.loads((tmp_path / "grade.json").read_text())["score"] is None

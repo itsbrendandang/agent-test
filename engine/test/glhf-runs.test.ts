@@ -4,7 +4,7 @@
 // (GLHF_BIXBENCH3_CMD): no Docker, no model, no cloud, no cost.
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, symlinkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
@@ -43,7 +43,8 @@ const { sessionToken, startTracker, stopTracker, TOKEN_FILE } = await import("..
 const { loadStored, patchRun, RUNS, saveStored } = await import("../src/glhf/store.ts")
 const { pairKey } = await import("../src/glhf/scoreboard.ts")
 const { alive } = await import("../src/glhf/proc.ts")
-const { BadRequest, checkRequest, checkStart } = await import("../src/glhf/tracker.ts")
+const { BadRequest, checkRequest, checkStart, cloudMaxHours, dailyTokenCap, DAILY_TOKENS, HARD_STOP, mostTokens, tokensToday } = await import("../src/glhf/tracker.ts")
+const { readJson, readText, RUN_FILES, runFile, tail } = await import("../src/glhf/store.ts")
 const { cancelDetail, predecessor, removeSandbox, sandboxNote, startOnce, stopAndWait } = await import("../src/glhf/task.ts")
 const { LIMITS, modelsFor } = await import("../src/glhf/types.ts")
 
@@ -74,7 +75,8 @@ const call = async (method: string, path: string, body?: unknown, origin: string
 const start = (body: object, ms = 300, fail = "") => {
   process.env.GLHF_STUB_MS = String(ms)
   process.env.GLHF_STUB_FAIL = fail
-  return call("POST", "/api/glhf/runs", { mode: "local", model: "mock", ...body })
+  // The dashboard's page with the session token: what is not the plain scripted run needs the token (routes.ts needsToken).
+  return call("POST", "/api/glhf/runs", { mode: "local", model: "mock", ...body }, DASH, sessionToken())
 }
 const run = (id: string) => loadStored(id)!.run
 const until = async (what: string, ok: () => boolean, ms = 15_000) => {
@@ -207,7 +209,8 @@ test("cancel stops the runner and what it started, marks the run cancelled, and 
   assert.equal((await call("POST", "/api/glhf/runs/no-such-run/cancel")).status, 404)
   // A cloud run is not marked cancelled while its VM may be billing: refused, with the command that removes the VM.
   saveStored({ request: { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", project: "proj" }, run: { id: "cloud-run", mode: "cloud", task: "9", solver: "glhf", model: "openai/gpt-5.5", roleModels: {}, phase: "running", remoteId: "remote-1", startedAt: 1 } })
-  const cloud = await call("POST", "/api/glhf/runs/cloud-run/cancel")
+  assert.equal((await call("POST", "/api/glhf/runs/cloud-run/cancel")).status, 401, "the page alone may not touch a cloud run")
+  const cloud = await cancel("cloud-run")
   assert.equal(cloud.status, 409)
   assert.match(cloud.body.error, /bixbench3 cancel --run remote-1 --project proj/)
   assert.equal(run("cloud-run").phase, "running")
@@ -273,6 +276,9 @@ test("cancelling a queued partner means it never starts; cancelling the first ca
   assert.ok(!existsSync(join(runs, tail, "runner.pid")))
 })
 
+/** What a cloud start must say besides its settings: that the bill is meant, and for how long at most. */
+const BILL = { billCloud: true, maxHours: 2 } as const
+
 test("a real model needs a token budget", async () => {
   const real = { mode: "local", solver: "glhf", model: "anthropic/claude-sonnet-5-5" } as const
   for (const trust of [true, { token: false, origin: true }] as const) {
@@ -283,8 +289,9 @@ test("a real model needs a token budget", async () => {
   assert.throws(() => checkStart({ mode: "local", model: real.model, solvers: ["glhf", "single"] }, true), /maxTokens is required/)
   assert.equal(checkStart({ mode: "local", model: real.model, solvers: ["glhf", "single"], maxTokens: 5_000 }, true).length, 2)
   // A cloud run cannot take maxTokens (the cloud runner has its own limit), so it is not asked for one.
-  assert.equal(checkRequest({ ...real, mode: "cloud", task: "9", effort: "high", project: "p" }, true).maxTokens, undefined)
-  const sent = await call("POST", "/api/glhf/runs", real)
+  assert.equal(checkRequest({ ...real, mode: "cloud", task: "9", effort: "high", project: "p", ...BILL }, true).maxTokens, undefined)
+  assert.equal((await call("POST", "/api/glhf/runs", real)).status, 401, "the page alone: a real model needs the token")
+  const sent = await call("POST", "/api/glhf/runs", real, DASH, sessionToken())
   assert.equal(sent.status, 400)
   assert.equal(sent.body.field, "maxTokens")
 })
@@ -402,7 +409,7 @@ const pidIn = (id: string, file: string) => Number(pidOf(id, file).split(" ")[0]
 const exists = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
 /** Is any process of the group left? */
 const groupLeft = (pgid: number) => { try { process.kill(-pgid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH" } }
-const cancel = (id: string) => call("POST", `/api/glhf/runs/${id}/cancel`)
+const cancel = (id: string) => call("POST", `/api/glhf/runs/${id}/cancel`, undefined, DASH, sessionToken())
 const trackerLogOf = (id: string) => readFileSync(join(runs, id, "tracker.log"), "utf8")
 const STOPPED = /^cancelled; the runner was stopped and no process of its group is left; /
 /** A process in its own group that has nothing to do with any run. */
@@ -699,7 +706,7 @@ test("L4: the token file is created with mode 600, never widened and never writt
 })
 
 test("L6: what reaches the cloud runner's command line cannot start with a dash", () => {
-  const cloud = { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", task: "9", effort: "high", project: "my-project" } as const
+  const cloud = { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", task: "9", effort: "high", project: "my-project", ...BILL } as const
   const ok = checkRequest({ ...cloud, resultsBucket: "gs://my-bucket/results/run_1" }, true)
   assert.deepEqual([ok.task, ok.effort, ok.project, ok.resultsBucket], ["9", "high", "my-project", "gs://my-bucket/results/run_1"])
   assert.equal(checkRequest({ ...cloud, task: "bix-12.v2", project: "example.com:proj", resultsBucket: "bucket" }, true).project, "example.com:proj")
@@ -773,11 +780,160 @@ test("one local run at a time is about local runs: a cloud run starts while a lo
   const local = await start({ solver: "glhf" }, 60_000)
   await until("the local run to be going", () => run(local.body.id).phase === "running")
   // `bixbench3` is a stub that fails at once (GLHF_BIXBENCH3_CMD): nothing is provisioned.
-  const cloud = await call("POST", "/api/glhf/runs", { mode: "cloud", solver: "glhf", model: "stub/model", task: "9", effort: "high", project: "stub-project" }, null, sessionToken())
+  const cloud = await call("POST", "/api/glhf/runs", { mode: "cloud", solver: "glhf", model: "stub/model", task: "9", effort: "high", project: "stub-project", ...BILL }, null, sessionToken())
   assert.equal(cloud.status, 201, JSON.stringify(cloud.body))
   assert.equal((await start({ solver: "single" }, 50)).status, 409, "a local one is still refused")
   await until("the cloud launch to fail", () => isSettled(cloud.body.id))
   assert.match(run(cloud.body.id).error ?? "", /^bixbench3 run exited with status 3\nbixbench3 stub: refusing to launch/)
   assert.equal(run(local.body.id).phase, "running")
   await cancel(local.body.id)
+})
+
+// ---------------------------------------------------------------- security review: M4, M2, M7, the daily cap
+
+test("M4: a symlink the sandbox leaves in a run's outputs is not followed, so GET /api/glhf/runs/:id cannot return a file from outside the run folder", async () => {
+  const sent = await start({ solver: "glhf" }, 50)
+  const id = sent.body.id as string
+  await until("it to finish", () => isSettled(id))
+  const dir = join(runs, id), outside = mkdtempSync(join(tmpdir(), "glhf-outside-"))
+  try {
+    const secret = join(outside, "secret.env")
+    writeFileSync(secret, '{"events": [], "KEY": "sk-not-for-the-dashboard"}')
+    writeFileSync(join(outside, "ledger.json"), '{"KEY": "sk-through-a-folder"}')
+    const put = (make: () => void) => { rmSync(join(dir, "outputs"), { recursive: true, force: true }); mkdirSync(join(dir, "outputs", "glhf"), { recursive: true }); make() }
+    const served = async () => { const got = await call("GET", `/api/glhf/runs/${id}`); assert.equal(got.status, 200); return got }
+    const nothing = async (what: string) => {
+      const got = await served()
+      assert.deepEqual([got.body.ledger, got.body.findings, got.body.methods], [null, null, null], what)
+      assert.doesNotMatch(JSON.stringify(got.body), /sk-/, what)
+    }
+
+    put(() => { writeFileSync(runFile(id, "ledger"), '{"events": [1]}'); writeFileSync(runFile(id, "findings"), "found"); writeFileSync(runFile(id, "methods"), "how") })
+    const plain = await served()
+    assert.deepEqual([plain.body.ledger, plain.body.findings, plain.body.methods], [{ events: [1] }, "found", "how"], "regular files are served as before")
+
+    put(() => { for (const name of ["ledger", "findings", "methods"] as const) symlinkSync(secret, runFile(id, name)) })
+    await nothing("a symlink to a file outside the run folder")
+    put(() => { symlinkSync(join(dir, "record.json"), runFile(id, "findings")) })
+    await nothing("a symlink is refused also when it points inside the run folder")
+    put(() => { rmSync(join(dir, "outputs", "glhf"), { recursive: true }); symlinkSync(outside, join(dir, "outputs", "glhf")) })
+    await nothing("a symlinked folder on the way: the real path leaves the run folder")
+    rmSync(join(dir, "outputs"), { recursive: true }); symlinkSync(outside, join(dir, "outputs"))
+    writeFileSync(join(outside, "METHODS.md"), "sk-methods")
+    await nothing("outputs itself replaced by a symlink")
+    put(() => { mkdirSync(runFile(id, "ledger")); spawnSync("mkfifo", [runFile(id, "findings")]) })
+    await nothing("a folder, and a pipe that would block the engine for good")
+
+    // The readers themselves, for every other file of a run folder (run.json, the logs, the pid files).
+    rmSync(join(dir, "run.json"), { force: true }); symlinkSync(secret, join(dir, "run.json"))
+    rmSync(join(dir, "runner.log"), { force: true }); symlinkSync(secret, join(dir, "runner.log"))
+    assert.equal(readText(join(dir, "run.json")), null)
+    assert.equal(readJson(join(dir, "run.json")), undefined)
+    assert.equal(tail(join(dir, "runner.log")), "", "error messages quote the log: not through a symlink either")
+    assert.equal(readText(secret), '{"events": [], "KEY": "sk-not-for-the-dashboard"}', "outside glhf/runs a regular file is read")
+    symlinkSync(secret, join(outside, "link"))
+    assert.equal(readText(join(outside, "link")), null, "and a symlink is not, wherever it is")
+
+    // Size: no more than the cap is read; of a long log, its end.
+    put(() => { writeFileSync(runFile(id, "findings"), "x".repeat(5_000)); writeFileSync(runFile(id, "methods"), "short") })
+    process.env.GLHF_MAX_READ_BYTES = "4096"
+    const capped = await served()
+    assert.deepEqual([capped.body.findings, capped.body.methods], [null, "short"], "a file over the cap counts as unreadable")
+    delete process.env.GLHF_MAX_READ_BYTES
+    rmSync(join(dir, "runner.log")); writeFileSync(join(dir, "runner.log"), `${"line\n".repeat(100_000)}the end`)
+    assert.equal(tail(join(dir, "runner.log"), 2), "line\nthe end")
+    assert.equal(RUN_FILES.ledger, "outputs/glhf/ledger.json", "the one place the ledger's path is named")
+  } finally { delete process.env.GLHF_MAX_READ_BYTES; rmSync(outside, { recursive: true, force: true }) }
+})
+
+test("M2: a cloud start needs an explicit acknowledgement of the bill (billCloud: true and maxHours within the cap), also with the token", async () => {
+  const cloud = { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", task: "9", effort: "high", project: "p" } as const
+  const refused = (body: object) => { try { checkRequest(body as never, true); return "accepted" } catch (e: any) { assert.ok(e instanceof BadRequest, String(e)); return e.field } }
+  assert.equal(refused(cloud), "billCloud")
+  for (const no of [false, "true", 1, "yes", null]) assert.equal(refused({ ...cloud, billCloud: no, maxHours: 2 }), "billCloud", `billCloud: ${JSON.stringify(no)}`)
+  assert.equal(refused({ ...cloud, billCloud: true }), "maxHours")
+  for (const no of [0, -1, 1.5, "soon", cloudMaxHours() + 1, 1e9]) assert.equal(refused({ ...cloud, billCloud: true, maxHours: no }), "maxHours", `maxHours: ${JSON.stringify(no)}`)
+  assert.equal((checkRequest({ ...cloud, billCloud: true, maxHours: cloudMaxHours() } as never, true) as any).maxHours, cloudMaxHours(), "stored with the request, so the task knows it")
+  assert.equal(cloudMaxHours(), 24)
+  process.env.GLHF_CLOUD_MAX_HOURS = "3"
+  try { assert.equal(refused({ ...cloud, billCloud: true, maxHours: 4 }), "maxHours"); assert.equal(refused({ ...cloud, billCloud: true, maxHours: 3 }), "accepted") } finally { delete process.env.GLHF_CLOUD_MAX_HOURS }
+  assert.equal(refused({ ...cloud, ...BILL }, ), "accepted")
+  assert.equal((checkRequest({ mode: "local", solver: "glhf", model: "mock", billCloud: true, maxHours: 5 } as never, true) as any).maxHours, undefined, "a local run takes no such field")
+  // Who may not start a cloud run at all is told that first: the acknowledgement does not replace the token.
+  assert.throws(() => checkRequest({ ...cloud, ...BILL } as never, { token: false, origin: true }), (e: any) => e instanceof BadRequest && e.field === "mode")
+
+  // Over HTTP, with the token the CLI reads by itself: 400 and the field; nothing is launched.
+  const before = stubLines().length
+  const sent = await call("POST", "/api/glhf/runs", { ...cloud, model: "stub/model" }, null, sessionToken())
+  assert.equal(sent.status, 400, JSON.stringify(sent.body))
+  assert.equal(sent.body.field, "billCloud")
+  assert.match(sent.body.error, /creates a VM that bills until it is removed.*billCloud: true and maxHours \(1 to 24\).*--yes-bill-cloud --max-hours N/)
+  const half = await call("POST", "/api/glhf/runs", { ...cloud, model: "stub/model", billCloud: true, maxHours: 500 }, null, sessionToken())
+  assert.deepEqual([half.status, half.body.field], [400, "maxHours"])
+  assert.equal(stubLines().length, before)
+  assert.ok(listRunsDone(), "no run was created")
+})
+
+test("M7: the refusal that asks for maxTokens says what it is: the budget the run plans by, with the hard stop a multiple of it", () => {
+  const tasks = readFileSync(join(here, "../../glhf/bixbench/src/bixbench3/inspect_harness/tasks.py"), "utf8")
+  assert.equal(Number(tasks.match(/^TOKEN_BACKSTOP = ([\d.]+)/m)?.[1]), HARD_STOP, "HARD_STOP in tracker.ts mirrors TOKEN_BACKSTOP of the harness")
+  assert.match(tasks, /token_limit=int\(max_tokens \* TOKEN_BACKSTOP\) if max_tokens else None/, "and that is the limit the harness sets")
+  assert.ok(HARD_STOP > 1)
+  assert.throws(() => checkRequest({ mode: "local", solver: "glhf", model: "anthropic/claude-sonnet-5-5" }, true), (e: any) => {
+    assert.equal(e.field, "maxTokens")
+    assert.ok(e.message.includes(`It is not a hard limit: the run is cut off only once ${HARD_STOP} x maxTokens is passed (checked after each model call), so count on that much being spent`), e.message)
+    assert.doesNotMatch(e.message, /the limit on what the run can spend/)
+    return true
+  })
+  assert.equal(mostTokens({ mode: "local", model: "a/b", maxTokens: 1_000 }), Math.floor(1_000 * HARD_STOP))
+  assert.equal(mostTokens({ mode: "local", model: "mock", maxTokens: 1_000 }), 0, "the scripted model spends nothing")
+  assert.equal(mostTokens({ mode: "local", model: "mock", maxTokens: 1_000, roleModels: { critic: "a/b" } }), Math.floor(1_000 * HARD_STOP))
+})
+
+test("the daily token cap: today's local runs are summed, running and queued ones at their full budget, and a start past the cap is refused with 429", async () => {
+  const most = (maxTokens: number) => mostTokens({ mode: "local", model: "a/b", maxTokens })
+  const now = new Date(2026, 5, 10, 15), today = now.getTime() - 3_600_000, yesterday = now.getTime() - 20 * 3_600_000
+  const stored = (id: string, startedAt: number, phase: string, maxTokens: number | undefined, used?: number, model = "a/b") =>
+    ({ request: { mode: "local", solver: "glhf", model, maxTokens }, run: { id, mode: "local", task: "demo", solver: "glhf", model, roleModels: {}, phase, startedAt, ...(used !== undefined && { usage: { [model]: { input_tokens: used, output_tokens: 0, total_tokens: used } } }) } }) as never
+  assert.equal(tokensToday([stored("a", today, "done", 1_000, 700)], now), 700, "settled: what it used")
+  assert.equal(tokensToday([stored("a", today, "done", 1_000, 2_600)], now), 2_600, "also when that is more than its budget")
+  assert.equal(tokensToday([stored("a", today, "running", 1_000, 300)], now), most(1_000), "running: its hard stop")
+  assert.equal(tokensToday([stored("a", today, "queued", 1_000)], now), most(1_000), "queued: its hard stop too")
+  assert.equal(tokensToday([stored("a", today, "failed", 1_000)], now), 0, "failed before a runner was started: nothing")
+  assert.equal(tokensToday([stored("a", yesterday, "done", 1_000, 700), stored("b", yesterday, "running", 1_000)], now), 0, "started on an earlier day")
+  assert.equal(tokensToday([stored("a", today, "running", 1_000, undefined, "mock")], now), 0, "scripted runs count nothing")
+  assert.equal(tokensToday([stored("a", today, "done", 1_000, 700), stored("b", today, "running", 5_000), stored("c", today, "queued", 5_000)], now), 700 + 2 * most(5_000))
+  assert.equal(dailyTokenCap(), DAILY_TOKENS)
+  for (const [value, cap] of [["1000", 1_000], ["0", 0], ["lots", DAILY_TOKENS], ["-5", DAILY_TOKENS]] as const) {
+    process.env.GLHF_DAILY_TOKENS = value
+    try { assert.equal(dailyTokenCap(), cap, `GLHF_DAILY_TOKENS=${value}: a value that is not a number does not switch the cap off`) } finally { delete process.env.GLHF_DAILY_TOKENS }
+  }
+
+  // Over HTTP. The stub stands in for the runner, so "stub/model" costs nothing here.
+  await until("earlier runs to end", listRunsDone)
+  const base = tokensToday()
+  process.env.GLHF_DAILY_TOKENS = String(base + most(20_000) + most(5_000))
+  try {
+    const first = await start({ solver: "glhf", model: "stub/model", maxTokens: 20_000 }, 60_000)
+    assert.equal(first.status, 201, JSON.stringify(first.body))
+    assert.equal(tokensToday(), base + most(20_000), "in flight: counted at its hard stop")
+    assert.equal((await cancel(first.body.id)).body.phase, "cancelled")
+    assert.equal(tokensToday(), base + most(20_000), "cancelled without a usage report: it may have spent its budget")
+
+    const over = await start({ solver: "glhf", model: "stub/model", maxTokens: 6_000 }, 50)
+    assert.equal(over.status, 429, JSON.stringify(over.body))
+    assert.match(over.body.error, /^the daily token cap would be passed: [\d,]+ of [\d,]+ tokens are counted for today's local runs \(running and queued ones at their hard stop, [\d.]+ x maxTokens\), and this start can use up to ([\d,]+) more\. Lower maxTokens, wait until tomorrow, or raise GLHF_DAILY_TOKENS$/)
+    assert.ok(over.body.error.includes(`up to ${most(6_000).toLocaleString("en-US")} more`))
+    const pair = await start({ solvers: ["glhf", "single"], model: "stub/model", maxTokens: 3_000 }, 50)
+    assert.equal(pair.status, 429, "a pair asks for both budgets, and neither run is created")
+    assert.ok(listRunsDone())
+    assert.equal(tokensToday(), base + most(20_000), "a refused start reserves nothing")
+
+    const fits = await start({ solver: "glhf", model: "stub/model", maxTokens: 5_000 }, 50)
+    assert.equal(fits.status, 201, "exactly up to the cap")
+    await until("it to finish", () => isSettled(fits.body.id))
+    const demo = await start({ solver: "glhf" }, 50)
+    assert.equal(demo.status, 201, "the scripted demo is never refused by the cap")
+    await until("it to finish", () => isSettled(demo.body.id))
+  } finally { delete process.env.GLHF_DAILY_TOKENS }
 })

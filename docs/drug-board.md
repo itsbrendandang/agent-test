@@ -8,13 +8,18 @@ The pattern follows IndyDevDan's "CEO and board" video (brief in, memo out, cons
 
 The Board view shows a plain summary (progress, recommendation, how many claims checked out, open questions, next steps). Tick **Show details** for the full roster, discussion with per-claim verdicts, evidence pool and memo ([screenshot](board-details.png)).
 
-> **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` and `NO_PAID_CALLS=0` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
+> **Status.** The board runs from brief to memo on scripted models (no keys). With `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `NO_PAID_CALLS=0` in `.env` it calls those two providers directly. This repository holds no record of a finished run with real models, and none of the model ids, the structured-output format or the cost per run has been tried with a paid call, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
+<<<<<<< HEAD
 brief.md ──▶ Lead Scientist ──converse──▶ 5 board members (parallel, each its own durable conversation)
                  ▲                            │ no member searches today (tools: [])
+=======
+brief.md ──▶ Lead Scientist ──converse──▶ 9 board members (parallel, each its own durable conversation)
+                 ▲                            │ only the scout searches (exa_search)
+>>>>>>> 2144730ecb318bc73f504e6ecbb0407f4b86e930
                  │                            ▼
-                 └── replies + verdicts ◀── claim checks: Jev first ─(uncertain)─▶ OpenAI / Claude Code
+                 └── replies + verdicts ◀── claim checks: cheap first pass ─(unsettled)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
 ```
 
@@ -39,7 +44,7 @@ In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and
 | While paid calls are off | What happens | Code |
 |---|---|---|
 | Board models (lead and members) | Scripted. No real provider is registered. | `engine/src/models.ts` |
-| Jev checker | Refused before any call. | `engine/src/jev.ts` |
+| First-pass checker (cheap model) | Refused before any call. | `engine/src/triage.ts` |
 | OpenAI checker | Refused before any call. | `engine/src/checkers.ts` |
 | Claude Code checker | Refused before the process is started. | `engine/src/checkers.ts` |
 | Exa literature search | Refused before the request. | `engine/src/exa.ts` |
@@ -47,14 +52,13 @@ In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and
 
 In a scripted run the checkers and the search give scripted answers, so nothing is refused; the refusals above are a second barrier for code paths that would reach a real service. Tested in `engine/test/paid.test.ts`, with no network.
 
-With paid calls allowed, the only required key for a live run is **`OPENROUTER_API_KEY`**. Every board model and Jev (`typesafe/jev-1.14`) go through it, so you do not need a key per model. Without it, or with `DRUG_BOARD_MOCK=1`, the board uses scripted models. Copy `.env.example` to `.env`:
+With paid calls allowed, a live run needs the key of **every tier** in `board/config.yaml`: Anthropic for `lead`, `strong` and `cheap`, OpenAI for `rival`, the first-pass checker of Claude members' claims and the literature checker (`engine/src/providers.ts`). If one is missing, the run is refused when it starts, with the tier and the key named (HTTP 503). It is **never** silently run with scripted models: a run that looks real but is scripted is the worst outcome. With `DRUG_BOARD_MOCK=1` the board is scripted on purpose. Copy `.env.example` to `.env`:
 
 | Key | Used for | Required |
 |---|---|---|
-| `OPENROUTER_API_KEY` | All agents (Opus lead, Sonnet / Gemini Flash / GPT-mini members) + Jev | yes |
-| `EXA_API_KEY` | Literature search | for real searches |
-| `OPENAI_API_KEY` | Escalation checker for contested literature claims | optional |
-| `TYPESAFE_API_KEY` | Jev directly instead of through OpenRouter | optional |
+| `ANTHROPIC_API_KEY` | `lead`, `strong`, `cheap` tiers (Claude Sonnet 5.5 lead and strong, Haiku 5.5 cheap) | yes |
+| `OPENAI_API_KEY` | `rival` tier (the Critic, GPT-5 mini), first-pass checker of Claude members' claims, literature checker | yes |
+| `EXA_API_KEY` | Search, for a member that has the `exa_search` tool (the scout) | yes while the scout can search |
 
 Claude Code (the checker for computed claims) uses your existing `claude` login. By default it runs with `--restricted` and **cannot run code**: it checks a claim by reasoning and answers "unsupported" when that is not enough. It runs in an empty temporary folder, with only the tools named in `checkers.claude_code_tools` (`Read Write`), and with a fixed list of environment variables, so other providers' keys are not passed (`engine/src/checkers.ts`). It is not in a container. The `--restricted` mode was not tested with a live call. Details: [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
@@ -95,15 +99,21 @@ Other limits:
   "not run". No member has open web search, because benchmark agents get none (see `AGENTS.md`).
 - The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
 
-To add or bench a member, add or remove a line under `board:` in `board/config.yaml` and add an agent file. Tiers map to OpenRouter model IDs in `models:`, so changing a model is a one-line edit.
+To add or bench a member, add or remove a line under `board:` in `board/config.yaml` and add an agent file. Tiers map to `<vendor>/<model>` ids in `models:` (Anthropic or OpenAI only), so changing a model is a one-line edit. Keep `rival` (the Critic) on a different vendor from `lead`.
 
 ## How it stays cheap
 
-1. **Jev before LLMs.** Every Exa result is triaged by Jev (relevant? reports results? study type?) before any agent reads it.
-2. **Jev checks claims.** Members end each reply with a `CLAIMS` section. Jev judges each claim against its cited evidence (`supports` / `contradicts` Nouls, one request per evidence source). Code holds the truth table:
-   contradicts > 0.7 → contradicted · supports > 0.7 → verified · both < 0.3 → unsupported · otherwise → **escalate**.
-3. **Only uncertain claims go to a second checker**: literature claims go to OpenAI, computed claims to Claude Code (Jev does not do math; by default Claude Code also does not run code, see Keys). At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
-4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). Past a limit, the lead is told to finish. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
+1. **A cheap model before the expensive ones.** Every Exa result is screened by the `cheap` tier (relevant? reports results? study type?) before a member reads it, in one call per search. A result already in the pool, or already dropped for the same key question, is not screened again. (No member searches today, so this step does not run; see "What a real run checks" below.)
+2. **A cheap model makes the first check of each claim.** Members end each reply with a `CLAIMS` section. The first pass reads the cited source and answers in strict JSON: `supports`, `contradicts`, `not_stated` or `unclear`, **with a quote** of the source passage. Code then decides (`engine/src/triage.ts`):
+   - `supports` is **verified** only if the quote is really in the source text (case and spacing aside), is at least 20 characters, and contains every number of the claim (digits inside names such as CMP-0517 or H358 are ignored; a minus sign counts);
+   - `contradicts` is **contradicted** only if its quote is in the source;
+   - `not_stated` is **unsupported**;
+   - `unclear`, any reply that is not exactly the expected JSON (also truncated, repeated or out-of-range entries), a quote that is not in the source, or a missing number is **escalate**. Nothing malformed is ever verified.
+   - **Independence:** the checker is never from the same vendor as the member who made the claim. The `cheap` tier (Anthropic) checks claims of OpenAI members; `checkers.first_pass.alt` (OpenAI) checks everyone else's. If both were on one vendor, the first pass could not verify anything.
+   - Reasoning is switched off for these calls where the model allows it, and their output is capped.
+3. **Only unsettled claims go to a second checker**: literature claims go to a model from the other vendor than the claim's author (OpenAI for Claude members, the strong-tier Claude model for the OpenAI critic; with no such model the claim stays `unchecked`). Computed claims are **not sent to Claude Code at all** while it runs `--restricted` (it cannot run code): they are recorded `unchecked` with the reason "computed claim not re-executed". At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
+   A claim that the same member repeats from the same source in a later round is not checked again: the earlier ruling is copied into the new round's ledger row.
+4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). It counts models, the first-pass checker, the second checkers and Exa. A round is not started when the last round's cost would take the run past `max_usd`, and no first-pass check, escalation or search is started once the cap is reached (the claim is recorded `unchecked`). Worst-case overshoot: the round in progress when the cap is crossed (every member's turns, up to `member_turns` each), plus the one final-positions round. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
 
 Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
@@ -111,7 +121,16 @@ Every key of `board/config.yaml` is listed in [configuration.md](configuration.m
 
 With `memory.enabled: true`, each member's verified and contradicted claims are added to `board/expertise/<member>.md` after a run, under the heading `## From earlier runs`. The file is read into that member's instructions in the next run. Text above the heading is yours and is kept. Scripted runs write to the run folder, so made-up claims never reach `board/expertise/`.
 
-All Jev wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/jev.ts`.
+All first-pass wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/triage.ts`. Which provider and key each tier needs: `engine/src/providers.ts`.
+
+## The paid switch (practice mode and real mode)
+
+Paid calls start off. The dashboard's switch (`POST /api/paid`) turns them on **for the running engine only**: it is kept in memory and a restart goes back to `.env`. It needs the session token, the exact text `I will be charged`, every key the board needs, and `PAID_SWITCH_LOCKED` not set to 1. Details and what it does when turned off: [configuration.md](configuration.md#paid-calls-no_paid_calls-and-the-runtime-switch). A run keeps the mode it started in: switching never relabels past runs, and a real run is not continued as scripted.
+
+## What a real run checks, and what was lost
+
+- **Evidence.** Only the scout has `exa_search`; the other members have no tool. What the scout finds is screened by the cheap model and enters the evidence pool; a claim can be verified only against a source in that pool (or the brief). A `[literature]` claim that cites anything else (a URL from a model's memory, or a source another member read) is recorded `unsupported` ("source is not in the screened evidence pool"), without a model call. Search is capped at 20 per run, counted in `max_usd`, and limited by a $40 lifetime ceiling (`board/runs/.exa-ledger.jsonl`).
+- **Not calibrated any more.** The old checker (Jev) returned calibrated probabilities. A language model's own confidence is not calibrated, so there are no probability thresholds. In their place is a check that code can do: the quote must be in the source. Its weakness: a real quote does not prove that the passage supports the claim, and a web page can contain text written to be quoted. Treat `verified` as "a model from another vendor found a real passage that matches, with the same numbers".
 
 ## Durable over time (Pi Durable)
 
@@ -132,8 +151,8 @@ These come from the failure-mode probes in [acyclic-labs/sdk `research/experimen
 
 ```
 board/                 config.yaml, agents/, briefs/ (+ _template.md), context/ (shared), expertise/, runs/
-engine/src/            board.ts (Pi Durable), jev.ts + questions.ts, exa.ts, checkers.ts, claims.ts,
-                       models.ts (OpenRouter / scripted), mock.ts, app.ts (HTTP + SSE handler), server.ts (listens),
+engine/src/            board.ts (Pi Durable), triage.ts + questions.ts + providers.ts, exa.ts + exaledger.ts, checkers.ts, claims.ts,
+                       models.ts (Anthropic and OpenAI directly / scripted), mock.ts, app.ts (HTTP + SSE handler), server.ts (listens),
                        http.ts, runlock.ts, cli.ts
 engine/src/glhf/       not part of the board: the GLHF run tracker
 dashboard/             the web UI (Tauri + React); the board is dashboard/src/views/BoardView.tsx
@@ -141,7 +160,7 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 
 ## Next steps
 
-- [ ] Add keys; run the example brief live; tune Jev questions on real Exa results.
+- [ ] Add keys; run the example brief live; check that the model ids resolve and the first-pass JSON is accepted.
 - [ ] Watch mode: scheduled Exa searches reopen a run when new evidence changes a verdict. The `watch:` keys exist in the config, but no code uses them yet.
 - [x] Members' checked claims are written to their `expertise/` files after each run (see Memory).
 - [ ] Run the phases in order in code instead of all at once, and call only the members with a task.
@@ -150,6 +169,6 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Brief sections for research tasks. `brief.required_sections` in `board/config.yaml` still asks for drug sections (Candidates, Target and Indication).
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
 - [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.
-- [ ] Add OpenRouter, Exa and TypeSafe keys to the dashboard Settings (keychain) instead of `.env`.
+- [ ] Add the Exa key to the dashboard Settings (keychain) instead of `.env`.
 
 Decision support only. This doesn't replace expert review or regulatory judgment.

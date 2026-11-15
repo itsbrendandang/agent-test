@@ -36,13 +36,13 @@ def _save(folder: str, task: str, lessons: str, context: tuple[str, ...] = ()) -
 
 def test_a_run_only_queues_lessons_and_nothing_is_injected_before_approval(tmp_path: Path) -> None:
     folder = str(tmp_path / "memory")
-    assert memory.read_memory(folder) == "" and memory.read_memory(None) == ""
+    assert memory.read_memory(folder, "10") == "" and memory.read_memory(None, "10") == ""
     assert memory.add_pending(folder, "9", "- pin the annotation version\n") == 1
     assert memory.add_pending(folder, "9", "- pin the annotation version\n") == 0  # known
     assert memory.add_pending(folder, "9", "none") == 0
     # Queued, not saved: the approved file does not exist and no run is shown the lesson.
     assert not (tmp_path / "memory" / memory.MEMORY_FILE).exists()
-    assert memory.read_memory(folder) == "" and memory.read_memory(folder, "16") == ""
+    assert memory.read_memory(folder, "10") == "" and memory.read_memory(folder, "16") == ""
     assert [(n, s.task, line) for n, s, line in memory.pending_lessons(folder)] == [
         (1, "9", "- pin the annotation version")
     ]
@@ -52,12 +52,12 @@ def test_a_run_only_queues_lessons_and_nothing_is_injected_before_approval(tmp_p
         ("9", ["- pin the annotation version"]),
         ("11", ["- sort by name"]),
     ]
-    assert memory.read_memory(folder) == "- pin the annotation version\n- sort by name"
+    assert memory.read_memory(folder, "10") == "- pin the annotation version\n- sort by name"
     # What was not chosen is still waiting, renumbered; rejecting it removes it for good.
     assert [line for _, _, line in memory.pending_lessons(folder)] == ["- index BAMs first"]
     memory.decide(folder, [1], approve=False)
     assert memory.pending_lessons(folder) == []
-    assert "index BAMs first" not in memory.read_memory(folder)
+    assert "index BAMs first" not in memory.read_memory(folder, "10")
     # An approved lesson is not queued again by a later run.
     assert memory.add_pending(folder, "16", "- sort by name\n") == 0
     with pytest.raises(ValueError, match="no pending lesson"):
@@ -80,7 +80,7 @@ def test_the_memory_command_lists_approves_and_rejects(
     assert memory.main(["--dir", folder, "approve", "5"]) == 2  # no such number
     # A line the filter refuses cannot be approved: it could never be injected anyway.
     (tmp_path / memory.PENDING_FILE).write_text("## Task 9, t\n- BRCA1 is the top hit\n")
-    assert memory.main(["--dir", folder, "approve-all"]) == 1
+    assert memory.main(["--dir", folder, "approve-all", "--i-read-them"]) == 1
     assert "BRCA1" not in (tmp_path / memory.MEMORY_FILE).read_text()
     assert len(memory.pending_lessons(folder)) == 1
 
@@ -102,19 +102,20 @@ def test_approved_lessons_go_to_past_dev_only_on_approval(
     memory.add_pending(folder, "9", "- pin the annotation version\n", ["11"])
     assert sent == []  # a run sends nothing
     assert memory.main(["--dir", folder, "--no-past", "list"]) == 0 and sent == []
-    assert memory.main(["--dir", folder, "approve-all"]) == 0
+    assert memory.main(["--dir", folder, "approve-all", "--i-read-them"]) == 0
     assert sent == [("9", "- pin the annotation version", ["11"])]
 
 
 def test_memory_injects_only_the_newest_lessons(tmp_path: Path) -> None:
-    words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+    # Not number words: a lesson with two of those is refused as a number written in words.
+    words = ["ant", "bee", "cat", "dog", "eel", "fox", "gnu", "hen", "ibis", "jay"]
     for n in range(400):
         name = " ".join(words[int(d)] for d in str(n))
         memory.add_pending(str(tmp_path), "1", f"- lesson number {name} end " + "x" * 40)
     _approve_all(tmp_path)
-    text = memory.read_memory(str(tmp_path))
+    text = memory.read_memory(str(tmp_path), "2")
     assert len(text) <= memory.MEMORY_INJECT_CHARS
-    assert "lesson number three nine nine end" in text and "lesson number zero end" not in text
+    assert "lesson number dog jay jay end" in text and "lesson number ant end" not in text
 
 
 def test_lessons_from_the_same_task_are_never_injected(tmp_path: Path) -> None:
@@ -301,7 +302,7 @@ def test_search_is_limited_to_documentation_sites(monkeypatch: pytest.MonkeyPatc
         "https://www.bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html",
         "https://bioconductor.org/packages/3.19/bioc/manuals/edgeR/man/edgeR.pdf",
         "https://bioconductor.org/packages/devel/bioc/html/limma.html",
-        "https://subread.readthedocs.io/en/latest/featureCounts.html",
+        "https://scanpy.readthedocs.io/en/stable/api.html",
         "https://scanpy.readthedocs.io/en/stable/api.html",
         "https://www.htslib.org/doc/samtools-view.html",
         "https://nf-co.re/rnaseq/usage",
@@ -350,7 +351,7 @@ def test_results_that_can_carry_a_study_are_dropped(url: str, why: str) -> None:
 def test_the_case_policy_and_the_restricted_hosts_win_over_the_allow_list(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    manual = "https://subread.readthedocs.io/en/latest/featureCounts.html"
+    manual = "https://scanpy.readthedocs.io/en/stable/api.html"
     assert tools.result_block_reason(manual) is None
     # A host the benchmark's gate restricts is dropped even if it were put on the allow-list.
     monkeypatch.setattr(tools, "DOC_DOMAINS", [*tools.DOC_DOMAINS, "github.com"])
@@ -360,9 +361,9 @@ def test_the_case_policy_and_the_restricted_hosts_win_over_the_allow_list(
     # So is a host the case itself restricts or names as an answer source.
     policy = NetworkAccessPolicy(restricted_domain_scopes=["readthedocs.io"])
     assert tools.result_block_reason(manual, policy) == "host is a restricted code or data host"
-    policy = NetworkAccessPolicy(answer_source_domains=["subread.readthedocs.io"])
+    policy = NetworkAccessPolicy(answer_source_domains=["scanpy.readthedocs.io"])
     assert tools.result_block_reason(manual, policy) == "host is an answer source for this task"
-    policy = NetworkAccessPolicy(answer_source_urls=["https://subread.readthedocs.io/en/latest"])
+    policy = NetworkAccessPolicy(answer_source_urls=["https://scanpy.readthedocs.io/en/stable"])
     assert tools.result_block_reason(manual, policy) == "URL is an answer source for this task"
 
 
@@ -373,7 +374,7 @@ def test_search_drops_results_outside_the_allow_list_and_the_case_policy(
     _fake_exa(
         monkeypatch,
         [
-            "https://subread.readthedocs.io/en/latest/featureCounts.html",
+            "https://scanpy.readthedocs.io/en/stable/api.html",
             "https://github.com/authors/paper-code/blob/main/results.csv",
             "https://zenodo.org/records/1",
             "https://www.nature.com/articles/x",
@@ -391,13 +392,13 @@ def test_search_drops_results_outside_the_allow_list_and_the_case_policy(
     ledger = Ledger()
     search = tools.search_docs(ledger, "scout", policy, "10.1234/abc.5")
     text = asyncio.run(search(query="featureCounts strandedness", objective="manual first"))  # type: ignore[arg-type]
-    assert "subread.readthedocs.io" in text
+    assert "scanpy.readthedocs.io" in text
     for leaked in ("github.com", "zenodo", "nature.com", "evil.example", "answers.", "salmon."):
         assert leaked not in text
     assert "rdrr.io" not in text
     event = ledger.events[-1]
     assert event["kind"] == "search"
-    assert event["urls"] == ["https://subread.readthedocs.io/en/latest/featureCounts.html"]
+    assert event["urls"] == ["https://scanpy.readthedocs.io/en/stable/api.html"]
     assert len(event["dropped"]) == 8  # type: ignore[arg-type]
 
 
@@ -557,7 +558,7 @@ def test_past_dev_calls_match_the_documented_shapes(monkeypatch: pytest.MonkeyPa
             return Reply(
                 {
                     "results": [
-                        {"content": "pin the annotation version"},
+                        {"content": "pin the annotation version"},  # says no task: dropped
                         {"content": ""},
                         {  # built from an earlier run on task 9: by source id
                             "content": "compare the sheet with the data first",
@@ -579,16 +580,17 @@ def test_past_dev_calls_match_the_documented_shapes(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(past_memory.httpx, "AsyncClient", Client)
     assert asyncio.run(past_memory.remember("9", "- pin the annotation version")) == "abc"
     assert calls[0][1]["label"] == "GLHF swarm lessons, task 9"
+    # A reader that does not say which task it is gets nothing, and no request is made.
+    assert asyncio.run(past_memory.recall("lessons for RNA-seq")) == ""
+    assert len(calls) == 1
     assert (
-        asyncio.run(past_memory.recall("lessons for RNA-seq"))
-        == "pin the annotation version\ncompare the sheet with the data first\n"
+        asyncio.run(past_memory.recall("lessons for RNA-seq", task_id="5"))
+        == "compare the sheet with the data first\n"
         "Applies to task 9: strip fields.\nindex alignments first"
     )
-    # A run on task 9 gets nothing that came from task 9, and the default query is fixed text.
-    assert (
-        asyncio.run(past_memory.recall(task_id="9"))
-        == "pin the annotation version\nindex alignments first"
-    )
+    # A run on task 9 gets nothing that came from task 9, nor the item that names no task,
+    # and the default query is fixed text.
+    assert asyncio.run(past_memory.recall(task_id="9")) == "index alignments first"
     assert calls[-1][1]["query"] == past_memory.RECALL_QUERY
     del calls[2:]
     (ingest_url, sent, headers), (recall_url, asked, _) = calls

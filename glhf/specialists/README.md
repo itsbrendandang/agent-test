@@ -18,16 +18,16 @@ files are in git history (for example `git show d8f249d:board/agents/skeptic.md`
 | `medicinal-chemist` | Medicinal Chemist | Specialist | compounds, dose-response |
 | `admet` | ADMET / DMPK Scientist | Specialist | pharmacokinetics, assays |
 | `toxicologist` | Toxicologist | Specialist | safety, survival, clinical outcomes, unstable results |
-| `prior-work-analyst` | Competitive and IP Analyst | Specialist | drug briefs only, never benchmark tasks |
+| `literature-evidence-synthesist` | Competitive and IP Analyst | Specialist | competing-programme landscape on drug briefs only, never benchmark tasks; trial landscapes, meta-analysis, method comparison (carries 5 skills) |
 
 Residents (experimenters) and nurses (plain-code data checks) are the existing swarm roles and are not
 repeated here.
 
 ## Skill agents (draft, instructions only)
 
-`skills/` groups the 100 Biomni Skill Hub skills into 19 role agents (`skills/README.md`, `skills/skills-map.json`). **Status: the skill
+`skills/` groups the 100 Biomni Skill Hub skills into 19 role agents (`skills/README.md`, `skills/skills-map.json`): 18 files in `skills/` and `literature-evidence-synthesist` above, which absorbed the skill agent with the same job. `python3 glhf/specialists/verify_skills.py` checks that every skill has exactly one owner. **Status: the skill
 packages (scripts, references, assets) are not installed, 38 of the 100 skills have no Overview text at all, these agents are instructions
-only and are not wired into any solver, and nothing routes work to them yet.** The nine profiles above are separate and unchanged.
+only and are not wired into any solver, and nothing routes work to them yet.** The other eight profiles carry no skills. Reviewer profiles and executor skill agents in the same domain were kept apart on purpose (`skills/README.md`, "Reviewer and executor pairs").
 
 ## When a specialist is called
 

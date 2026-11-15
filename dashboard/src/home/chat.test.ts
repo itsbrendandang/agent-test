@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { CATALOG_ON, EFFORTS, PLAN, reply, SCRIPTED_PLAN } from "@/test/home"
-import { routes, to } from "@/test/engine"
-import { ChatRefused, getCatalog, searchAll, sendChat, startPlan } from "./api"
+import { routes } from "@/test/engine"
+import { ChatRefused, getCatalog, sendChat, startPlan } from "./api"
 import {
-  chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, highlight, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
-  MODE_LABEL, moveActive, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, viewOfResult, type Turn,
+  boardScriptedWhy, keyOfModel, chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
+  MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, type Turn,
 } from "./chat"
 
 const turns: Turn[] = [
@@ -14,7 +14,7 @@ const turns: Turn[] = [
 
 describe("mode labels", () => {
   it("say plainly whether a model wrote the reply", () => {
-    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Keyword search, not an AI answer", scripted: "Scripted: fixed text, not research" })
+    expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Keyword search, not an AI answer", scripted: "Practice: fixed text, not research" })
   })
 })
 
@@ -44,7 +44,7 @@ describe("chatRequest", () => {
 describe("what may be sent", () => {
   it("refuses empty and too long text", () => {
     expect(refuseText("   ")).toMatch(/Type a question/)
-    expect(refuseText("x".repeat(MAX_MESSAGE + 1))).toMatch(/at most 4,000 characters/)
+    expect(refuseText("x".repeat(MAX_MESSAGE + 1))).toMatch(/at most 2,000 characters/)
     expect(refuseText("Is hERG a risk?")).toBeUndefined()
   })
   it.each(["sk-ant-api03-abcdefghijklmnop", "my key is sk-proj-ABCDEFGHIJKLMNOPQRST", "sk-or-v1-0123456789abcdef", "AIzaSyA-0123456789abcdefghij", "xai-0123456789abcdefghij", "hf_abcdefghijklmnopqrstuv"])("refuses text that holds an API key: %s", (text) => {
@@ -93,9 +93,9 @@ describe("starting a plan", () => {
     expect(startRequest(PLAN, editsOf(PLAN))).toEqual({ errors: {}, request: { confirm: true } })
   })
   it("sends lowered limits and a shorter list of agents", () => {
-    const { errors, request } = startRequest(PLAN, { maxUsd: "2.5", maxMinutes: "10", maxRounds: "4", agents: ["toxicologist"] }, "standard")
+    const { errors, request } = startRequest(PLAN, { maxUsd: "2.5", maxMinutes: "10", maxRounds: "4", agents: ["critic"] }, "standard")
     expect(errors).toEqual({})
-    expect(request).toEqual({ confirm: true, effort: "standard", limits: { maxUsd: 2.5, maxMinutes: 10, maxRounds: 4 }, agents: ["toxicologist"] })
+    expect(request).toEqual({ confirm: true, effort: "standard", limits: { maxUsd: 2.5, maxMinutes: 10, maxRounds: 4 }, agents: ["critic"] })
   })
   it("refuses to raise a limit, and wrong numbers", () => {
     expect(startRequest(PLAN, { ...editsOf(PLAN), maxUsd: "50" }).errors.maxUsd).toMatch(/can be lowered, not raised above 5/)
@@ -105,7 +105,7 @@ describe("starting a plan", () => {
   })
   it("refuses a plan with no agent, and ignores names the plan does not have", () => {
     expect(startRequest(PLAN, { ...editsOf(PLAN), agents: [] }).errors.agents).toBe("Keep at least one agent.")
-    expect(startRequest(PLAN, { ...editsOf(PLAN), agents: ["toxicologist", "intruder"] }).request.agents).toEqual(["toxicologist"])
+    expect(startRequest(PLAN, { ...editsOf(PLAN), agents: ["critic", "intruder"] }).request.agents).toEqual(["critic"])
   })
   it("a paid plan needs the tick", () => {
     expect(startBlock(PLAN, true, false)).toMatch(/Tick the box/)
@@ -156,29 +156,6 @@ describe("the conversation of a session", () => {
   })
 })
 
-describe("search helpers", () => {
-  it("marks the query's words, whatever their case", () => {
-    expect(highlight("hERG liability of HERG blockers", "herg")).toEqual([{ text: "hERG", hit: true }, { text: " liability of ", hit: false }, { text: "HERG", hit: true }, { text: " blockers", hit: false }])
-    expect(highlight("plain", "")).toEqual([{ text: "plain", hit: false }])
-    expect(highlight("", "x")).toEqual([])
-  })
-  it("treats the query as words, not as a pattern", () => {
-    expect(highlight("a(b[ c.d", "a(b[ .")).toEqual([{ text: "a(b[", hit: true }, { text: " c", hit: false }, { text: ".", hit: true }, { text: "d", hit: false }])
-  })
-  it("moves through the rows without wrapping; -1 is the field", () => {
-    expect(moveActive(-1, "ArrowDown", 3)).toBe(0)
-    expect(moveActive(2, "ArrowDown", 3)).toBe(2)
-    expect(moveActive(0, "ArrowUp", 3)).toBe(-1)
-    expect(moveActive(-1, "ArrowUp", 3)).toBe(-1)
-    expect(moveActive(1, "Home", 3)).toBe(0)
-    expect(moveActive(1, "End", 3)).toBe(2)
-    expect(moveActive(0, "ArrowDown", 0)).toBe(-1)
-  })
-  it("opens runs in their view and agents and skills in Agents", () => {
-    expect((["swarm", "board", "agent", "skill"] as const).map((kind) => viewOfResult({ kind }))).toEqual(["Swarm", "Board", "Agents", "Agents"])
-  })
-})
-
 describe("client", () => {
   it("POSTs the conversation and keeps only what it can read of the reply", async () => {
     const sent = routes({ "POST /api/chat": { status: 200, body: { reply: "hi", mode: "scripted", note: "", runs: [{ kind: "board", id: "a", title: "t", why: "w" }, { kind: "other" }], plan: { id: 1 }, extra: true } } })
@@ -211,9 +188,24 @@ describe("client", () => {
     routes({ "GET /api/chat/catalog": { status: 200, body: { paidCalls: "no" } } })
     await expect(getCatalog()).rejects.toMatchObject({ message: "The engine sent a catalog this page cannot read." })
   })
-  it("searches with q, kind and limit, and leaves out rows it cannot read", async () => {
-    const sent = routes({ "GET /api/chat/search": { status: 200, body: { mode: "keyword", results: [{ kind: "agent", id: "tox", title: "Toxicologist" }, { kind: "memo", id: "x", title: "t" }, { kind: "skill", id: 4 }] } } })
-    expect(await searchAll("hERG risk", "agent", 5)).toEqual([{ kind: "agent", id: "tox", title: "Toxicologist", excerpt: "" }])
-    expect(to(sent, "GET", "/api/chat/search")[0].query).toBe("?q=hERG%20risk&kind=agent&limit=5")
+})
+
+describe("can a board review use real models?", () => {
+  const live = { mock: true, paidCalls: false, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } }
+  it("names the key a board model needs", () => {
+    expect(keyOfModel("anthropic/claude-sonnet-5-5")).toBe("ANTHROPIC_API_KEY")
+    expect(keyOfModel("openai/gpt-5-mini")).toBe("OPENAI_API_KEY")
+    expect(keyOfModel("~anthropic/claude-opus-latest")).toBeUndefined() // no aliases any more
+    expect(keyOfModel("ollama/qwen2.5:14b")).toBeUndefined()
+  })
+  it("a missing key comes before the paid switch: turning paid calls on would not be enough", () => {
+    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board reviews are practice runs only")
+  })
+  it("says paid calls are off when every key is there", () => {
+    expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Paid calls are off: board reviews are practice runs only")
+  })
+  it("says nothing when the board can use real models", () => {
+    expect(boardScriptedWhy({ ...live, mock: false, paidCalls: true })).toBeUndefined()
+    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in practice mode: board reviews are practice runs only")
   })
 })

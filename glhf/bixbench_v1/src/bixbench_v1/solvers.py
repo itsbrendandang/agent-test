@@ -15,14 +15,19 @@ whose total cannot cover the three floors is refused before anything starts. `sw
   equal     the swarm's total is the single agent's budget (a "same budget" result);
   extended  the analyst gets the single agent's whole budget and the total is larger
             (a "more budget" result). run.json records which.
-A derivation that stops with questions unanswered gets one forced final turn from a small
-reserve: a short prompt holding the tail of its own work log, no tools but submit_answer.
+A solver that stops with questions unanswered gets one forced final turn from a small reserve
+inside its budget: a short prompt holding the tail of its own work log, no tools but
+submit_answer. The single agent and each swarm derivation get the same turn from the same
+reserve (`BudgetPolicy.final_reserve`). A submit_answer call made in the very model call that
+crossed a limit is executed before the limit takes effect (`pending_submits`), for both.
 
 Blindness (`_BLIND`, `blind_check`). The critic's prompt is built without access to the ledger:
-the capsule's questions and its own instructions, nothing else. Before it starts, root moves
-every file the analyst's user owns outside its home into a root-only folder, takes over the
-analyst's home, empties /outputs and gives the critic a new empty working directory; then a
-check run as the critic's user must find nothing of the analyst's, or the critic does not run.
+the capsule's questions and its own instructions, nothing else. Before it starts, root kills
+every process of the analyst's user (by uid, so a renamed process cannot hide), moves every
+file that user owns outside its home into a root-only folder, takes over the analyst's home,
+empties /outputs, empties /dev/mqueue (its own mount), removes every System V shared-memory
+segment, message queue and semaphore, and gives the critic a new empty working directory; then
+a check run as the critic's user must find none of these, or the critic does not run.
 
 Reconciler. It sees both answers, each side's one-line method and the commands and outputs that
 produced each answer (taken from the transcripts by code, not the roles' prose). It records
@@ -45,6 +50,8 @@ from typing import Any, Literal
 from bixbench3.inspect_harness.swarm.solver import Clock, PhaseResult
 from bixbench3.inspect_harness.swarm.tools import background_processes
 from inspect_ai.agent import Agent, AgentState, react, run
+from inspect_ai.event import ModelEvent
+from inspect_ai.log import transcript
 from inspect_ai.model import (
     ChatMessage,
     ChatMessageAssistant,
@@ -87,13 +94,16 @@ COMPACTION_THRESHOLD_TOKENS = 100_000
 SAME_METHOD_THRESHOLD = 0.5  # token overlap (Jaccard) of two method lines
 EXEC_TOOLS = ("bash_session", "python", "text_editor")
 TOKEN_SEMANTICS = {
-    "single": "one agent may spend all of max_tokens. Limits are checked after each model call, "
-    "so a run can end slightly over.",
+    "single": "one agent may spend max_tokens: all but the final-turn reserve while working, "
+    "and the reserve for a forced final turn if it stops with questions unanswered (the same "
+    "reserve a swarm derivation has). Limits are checked after each model call, so a run can "
+    "end slightly over; answers submitted in the call that crossed the limit are recorded.",
     "glhf": "each role has a floor derived from the number of questions; the analyst may spend "
     "the total minus the critic's and reconciler's floors (extended: the single agent's whole "
     "budget), the critic what is left minus the reconciler's floor, the reconciler the rest; "
     "unused tokens roll forward; a derivation that ends with questions unanswered gets a forced "
-    "final turn from a reserve inside its allowance. Limits are checked after each model call.",
+    "final turn from a reserve inside its allowance. Limits are checked after each model call; "
+    "answers submitted in the call that crossed a limit are recorded.",
 }
 
 
@@ -155,6 +165,12 @@ class BudgetPlan:
             "final_reserve": self.final_reserve,
             "analyst_allowance": self.allowance("analyst", 0),
         }
+
+
+def single_reserve(max_tokens: int, policy: BudgetPolicy | None = None) -> int:
+    """The single agent's reserve for its forced final turn: the swarm derivations' reserve,
+    or half its budget if the budget is smaller than two reserves (toy budgets in tests)."""
+    return min((policy or BudgetPolicy()).final_reserve, max_tokens // 2)
 
 
 def swarm_budget_mode(value: str | None = None) -> SwarmBudget:
@@ -240,8 +256,22 @@ _PRUNE = "\\( -path /proc -o -path /sys -o -path /data -o -path /root \\) -prune
 # the analyst's home goes to root, so the analyst's own chmod cannot reopen it; /outputs is a
 # bind mount where ownership may not be enforced, so all of it is moved; the critic gets new,
 # empty work and tmp directories.
+# Remove every System V shared-memory segment, message queue and semaphore the calling user
+# may remove. Run as root AND as the analyst's user: a container's root has no CAP_IPC_OWNER
+# or CAP_SYS_ADMIN by default, so it cannot remove another user's object; its creator can.
+_IPC_REMOVE = """
+command -v ipcrm >/dev/null 2>&1 && ipcrm -a 2>/dev/null
+for kind in shm:m msg:q sem:s; do
+  [ -r /proc/sysvipc/${kind%%:*} ] || continue
+  tail -n +2 /proc/sysvipc/${kind%%:*} | while read -r _key id _rest; do
+    ipcrm -${kind##*:} "$id" 2>/dev/null
+  done
+done
+true
+"""
 _BLIND = f"""
 mkdir -p {QUARANTINE}/outputs && chmod 700 /root {QUARANTINE}
+find /dev/mqueue -mindepth 1 -delete 2>/dev/null
 chown root:root /home/{USER_A} && chmod 700 /home/{USER_A}
 i=0
 find {_SEARCH_ROOTS} -xdev {_PRUNE} -o -path /home/{USER_A} -prune -o -user {USER_A} -prune -print0 \
@@ -257,9 +287,17 @@ true
 """
 
 # Run as the critic's user. Any line of output is something of the analyst's the critic could
-# see: a path its user owns, a readable analyst home or quarantine, anything in /outputs, or a
-# working directory that is not empty.
+# see: a path its user owns, a readable analyst home or quarantine, anything in /outputs, a
+# working directory that is not empty, a POSIX message queue, or a System V IPC object (the
+# last two are checked whoever owns them: nothing has run since the analyst but root's seal).
 _BLIND_CHECK = f"""
+find /dev/mqueue -mindepth 1 2>/dev/null | head -n 20 | sed 's/^/message queue: /'
+for kind in shm msg sem; do
+  [ -r /proc/sysvipc/$kind ] || continue
+  tail -n +2 /proc/sysvipc/$kind | head -n 20 | while read -r _key id _rest; do
+    echo "sysv ipc: $kind id $id"
+  done
+done
 find {_SEARCH_ROOTS} -xdev \\( -path /proc -o -path /sys -o -path /data \\) -prune \
     -o -user {USER_A} -print 2>/dev/null | head -n 20
 for d in /home/{USER_A} {QUARANTINE} /root; do
@@ -269,6 +307,40 @@ done
 find /outputs -mindepth 1 2>/dev/null | head -n 20
 find "$HOME/work" "$HOME/tmp" -mindepth 1 2>/dev/null | head -n 20
 true
+"""
+
+# Runs inside the sandbox. "kill" (root) kills every process whose real, effective, saved or
+# filesystem uid is one of the named users, until none is left; "list" only looks. Selection is
+# by uid from /proc/<pid>/status, never by command line: `exec -a inspect-sandbox-tools ...`
+# renames a process but cannot change whose it is. Prints what is still there as JSON; a zombie
+# counts, since its name stays readable.
+_USER_PROCESSES = r"""
+import json, os, pwd, signal, sys, time
+uids = set()
+for name in sys.argv[2:]:
+    try: uids.add(pwd.getpwnam(name).pw_uid)
+    except KeyError: pass
+def owned():
+    found = []
+    for name in os.listdir("/proc"):
+        if not name.isdigit(): continue
+        try:
+            with open(f"/proc/{name}/status") as fh: lines = fh.read().splitlines()
+        except OSError: continue
+        fields = dict(line.split(":", 1) for line in lines if ":" in line)
+        try: ids = {int(i) for i in fields.get("Uid", "").split()}
+        except ValueError: continue
+        if ids & uids: found.append({"pid": int(name), "name": fields.get("Name", "").strip()})
+    return found
+if sys.argv[1] == "kill":
+    for _ in range(20):
+        left = owned()
+        if not left: break
+        for process in left:
+            try: os.kill(process["pid"], signal.SIGKILL)
+            except OSError: pass
+        time.sleep(0.25)
+print(json.dumps(owned()))
 """
 
 # Scripts and notes only: small text files, so /outputs stays small and holds no data copies.
@@ -366,10 +438,12 @@ class CrossCheck:
         return any((role, question_id) in self.forced for role in (ledger.primary, ledger.checker))
 
     def weak_agreement(self, ledger: AnswerLedger, question_id: str) -> bool:
-        """An agreement that is not two independent derivations: same method, or a forced guess."""
+        """An agreement that is weak evidence: same method, a forced guess, or a side whose own
+        alternative result differs (the answer hangs on a choice both happened to make)."""
         return ledger.comparison(question_id) == "agree" and (
             bool(self.same_method_by_code(ledger, question_id))
             or self.any_forced(ledger, question_id)
+            or bool(ledger.sensitive(question_id))
         )
 
 
@@ -463,6 +537,8 @@ def review_text(ledger: AnswerLedger, cross: CrossCheck) -> str:
             ]
         if kind == "weak" and cross.same_method_by_code(ledger, question_id):
             lines.append("  Code finds the two method lines to be the SAME method.")
+        for alternative in ledger.sensitive(question_id):
+            lines.append(f"  A side's own alternative result differs: {alternative}")
         blocks[kind].append("\n".join(lines))
     parts: list[str] = []
     for kind, heading in (
@@ -632,14 +708,41 @@ def assert_blind_prompt(prompt: str, ledger: AnswerLedger, cross: CrossCheck, br
             raise RuntimeError("the critic's prompt contains text the analyst produced")
 
 
+async def user_processes(users: list[str], kill: bool, user: str = "root") -> list[dict[str, Any]]:
+    """Processes owned by `users` (by uid). `kill=True`, as root, kills them first and returns
+    what survived. Raises if the look itself fails: an unknown is not "none"."""
+    result = await sandbox().exec(
+        ["python3", "-c", _USER_PROCESSES, "kill" if kill else "list", *users],
+        user=user,
+        timeout=60,
+    )
+    if not result.success:
+        raise RuntimeError(f"process check failed: {(result.stderr or '')[-200:]}")
+    found: list[dict[str, Any]] = json.loads(result.stdout or "[]")
+    return found
+
+
 async def blind_check() -> list[str]:
     """Seal the analyst's traces, then look for them as the critic's user. Returns what the
-    critic could still see (empty = blind)."""
+    critic could still see (empty = blind): files, a process of the analyst's user (it could
+    serve data on loopback), a POSIX message queue, a System V IPC object."""
+    lines: list[str] = []
+    try:
+        await user_processes([USER_A], kill=True)
+    except Exception as error:
+        lines.append(f"process kill failed: {error}"[:200])
+    for owner in (USER_A, "root"):  # after the kill: nothing of the analyst's is attached
+        await sandbox().exec(["bash", "-c", _IPC_REMOVE], user=owner, timeout=60)
     await sandbox().exec(["bash", "-c", _BLIND], user="root", timeout=180)
     seen = await sandbox().exec(["bash", "-c", _BLIND_CHECK], user=USER_B, timeout=120)
-    lines = [line for line in (seen.stdout or "").splitlines() if line.strip()]
+    lines += [line for line in (seen.stdout or "").splitlines() if line.strip()]
     if not seen.success:
         lines.append(f"check failed: {(seen.stderr or '')[-200:]}")
+    try:
+        alive = await user_processes([USER_A], kill=False, user=USER_B)
+        lines += [f"process of {USER_A}: pid {p['pid']} ({p['name']})" for p in alive]
+    except Exception as error:
+        lines.append(f"process check failed: {error}"[:200])
     return lines
 
 
@@ -674,11 +777,22 @@ def _recorded(ledger: AnswerLedger, role: str, derivation_id: str, question_id: 
     )
 
 
-@tool
-def submit_answer(ledger: AnswerLedger, role: str, options: dict[str, int] | None = None) -> Tool:
-    """The single agent's tool (unchanged since the first pilot)."""
+FORCED_ROUTE = "FORCED final answer at the budget limit (best estimate from the work so far)."
 
-    async def execute(question_id: str, answer: str, route: str, evidence: str) -> str:
+
+@tool
+def submit_answer(
+    ledger: AnswerLedger, role: str, options: dict[str, int] | None = None, forced: bool = False
+) -> Tool:
+    """The single agent's tool. `forced=True` is the one used in its forced final turn."""
+
+    async def execute(
+        question_id: str,
+        answer: str,
+        route: str,
+        evidence: str = "",
+        alternatives: list[str] | None = None,
+    ) -> str:
         """Record your answer to one question. Call it again for the same question to replace it.
 
         Args:
@@ -687,12 +801,20 @@ def submit_answer(ledger: AnswerLedger, role: str, options: dict[str, int] | Non
             route: How you derived it, in one or two lines (inputs, tool, parameters), without
                 the resulting value.
             evidence: The script path and the output line that shows the value.
+            alternatives: Optional. Results you computed under other defensible readings of
+                the question, each as "value | what was different".
         """
         answer = _check_letter(options, question_id, answer)
+        if forced:
+            route = f"{FORCED_ROUTE} {route}"
         try:
-            derivation = ledger.submit(question_id, answer, route, evidence, role)
+            derivation = ledger.submit(
+                question_id, answer, route, evidence, role, alternatives, forced=forced
+            )
         except ValueError as error:
             raise ToolError(str(error)) from error
+        if forced:
+            ledger.log("answer.forced", question=question_id, by=role, derivation=derivation.id)
         return _recorded(ledger, role, derivation.id, question_id)
 
     return execute
@@ -709,7 +831,12 @@ def submit_answer_with_method(
     """The swarm derivations' tool: the same record plus a one-line method statement."""
 
     async def execute(
-        question_id: str, answer: str, method: str, route: str = "", evidence: str = ""
+        question_id: str,
+        answer: str,
+        method: str,
+        route: str = "",
+        evidence: str = "",
+        alternatives: list[str] | None = None,
     ) -> str:
         """Record your answer to one question. Call it again for the same question to replace it.
 
@@ -722,6 +849,8 @@ def submit_answer_with_method(
                 Do not put the resulting value in it.
             route: Anything else about how you derived it, in one or two lines.
             evidence: The script path and the output line that shows the value.
+            alternatives: Optional. Results you computed under other defensible readings of
+                the question, each as "value | what was different".
         """
         answer = _check_letter(options, question_id, answer)
         method = " ".join(method.split())
@@ -731,9 +860,11 @@ def submit_answer_with_method(
                 "procedure=...; tool=..."
             )
         if forced:
-            route = f"FORCED final answer at the budget limit (best estimate from the work so far). {route}"
+            route = f"{FORCED_ROUTE} {route}"
         try:
-            derivation = ledger.submit(question_id, answer, route or method, evidence, role)
+            derivation = ledger.submit(
+                question_id, answer, route or method, evidence, role, alternatives, forced=forced
+            )
         except ValueError as error:
             raise ToolError(str(error)) from error
         cross.methods[(role, question_id)] = method
@@ -958,27 +1089,67 @@ def work_log(messages: list[ChatMessage], limit: int = 24_000) -> str:
     return "\n\n".join(reversed(parts))
 
 
+async def pending_submits(
+    role: str,
+    ledger: AnswerLedger,
+    messages: list[ChatMessage],
+    submit: Tool,
+    events_before: int,
+) -> list[ChatMessage]:
+    """Execute submit_answer calls the model issued in the call that crossed a limit.
+
+    Inspect checks the token limit when a model call returns, before the agent loop runs the
+    tool calls in that reply; the reply is then in the transcript but not in the agent's
+    messages, and an answer submitted in it would be lost. The limit is the role's; the answer
+    was produced inside it. Only submit_answer is executed: nothing else may run past a limit.
+    Returns the messages to append (the reply, cut down to those calls, and the tool results)."""
+    events = transcript().events[events_before:]
+    last = next((e for e in reversed(events) if isinstance(e, ModelEvent)), None)
+    if last is None or last.pending or not last.output.choices:
+        return []
+    reply = last.output.message
+    if reply.id is not None and any(m.id == reply.id for m in messages):
+        return []  # the agent loop already handled this reply
+    calls = [c for c in reply.tool_calls or [] if c.function == "submit_answer"]
+    if not calls:
+        return []
+    pending = reply.model_copy(update={"tool_calls": calls})
+    try:
+        ran = (await execute_tools([*messages, pending], [submit])).messages
+    except Exception as error:  # never lose the phase over this
+        ledger.log("pending_submits.failed", phase=role, error=f"{type(error).__name__}"[:100])
+        return []
+    ledger.log(
+        "pending_submits.executed",
+        phase=role,
+        questions=[str(c.arguments.get("question_id", "")) for c in calls],
+    )
+    return [pending, *ran]
+
+
 async def forced_final(
     role: str,
     model: str | None,
     questions: list[PublicQuestion],
     ledger: AnswerLedger,
-    cross: CrossCheck,
+    submit: Tool,
+    instructions: str,
     messages: list[ChatMessage],
-    options: dict[str, int] | None,
     reserve_tokens: int | None,
     sink: list[ChatMessage] | None = None,
 ) -> list[str]:
-    """A derivation stopped with questions unanswered: one last short exchange, charged to its
+    """A solver stopped with questions unanswered: one last short exchange, charged to its
     reserve, in which it records its best answer for each from its own work log. The prompt is
-    a few thousand tokens, not the role's whole context. Returns the questions answered."""
+    a few thousand tokens, not the role's whole context. `submit` is that solver's forced
+    submit_answer tool and `instructions` its forced-turn text (`roles.forced_final`); the
+    single agent and the swarm derivations differ in nothing else. Returns the questions
+    answered."""
     todo = ledger.unanswered(role)
     if not todo:
         return []
     start = sample_limits().token.usage
-    submit = submit_answer_with_method(ledger, cross, role, options, forced=True)
     conversation: list[ChatMessage] = [
-        ChatMessageSystem(content=roles.FORCED_FINAL),
+        ChatMessageSystem(content=instructions),
         ChatMessageUser(
             content=roles.brief([q for q in questions if q.question_id in todo])
             + "\n---\n\nYour work log so far (most recent last):\n\n"
@@ -1019,17 +1190,28 @@ async def forced_final(
     return answered
 
 
+async def stop_processes(ledger: AnswerLedger, users: list[str]) -> None:
+    """Kill everything the role users left running (by uid), then root's own stray jobs."""
+    try:
+        left = await user_processes(users, kill=True)
+        if left:
+            ledger.log("background.survived", processes=left[:20])
+    except Exception as error:
+        ledger.log("background.kill_failed", error=str(error)[:200])
+    try:
+        killed = await background_processes(kill=True)
+        if killed:
+            ledger.log("background.killed", processes=killed[:20])
+    except Exception as error:  # never block what follows
+        ledger.log("background.kill_failed", error=str(error)[:200])
+
+
 async def _write_outputs(
     ledger: AnswerLedger, settings: dict[str, Any], cross: CrossCheck | None = None
 ) -> None:
     """Final writes, as root, after every agent has stopped. Overwrites anything an agent may
     have put at these paths."""
-    try:
-        killed = await background_processes(kill=True)
-        if killed:
-            ledger.log("background.killed", processes=killed[:20])
-    except Exception as error:  # never block the final writes
-        ledger.log("background.kill_failed", error=str(error)[:200])
+    await stop_processes(ledger, [USER_A, USER_B])
     await sandbox().exec(["bash", "-c", "mkdir -p /outputs/glhf"], user="root")
     findings = ledger.findings_markdown()
     if cross is not None:
@@ -1060,19 +1242,30 @@ async def _write_outputs(
 
 @solver
 def single_agent(
-    budget_seconds: int, max_tokens: int | None = None, max_messages: int | None = None
+    budget_seconds: int,
+    max_tokens: int | None = None,
+    max_messages: int | None = None,
+    budget_policy: dict[str, Any] | None = None,
 ) -> Solver:
-    """The baseline: one agent, one context, the whole budget."""
+    """The baseline: one agent, one context, the whole budget. Like a swarm derivation it
+    works up to its budget minus the final-turn reserve and, if it stops with questions
+    unanswered, gets the same forced final turn from that reserve."""
+    policy = BudgetPolicy(**(budget_policy or {}))
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         del generate
         questions = _questions(state)
+        options = _option_counts(questions)
         ledger = AnswerLedger(
             {q.question_id: q.question for q in questions}, "single", primary="single", checker=None
         )
+        reserve = single_reserve(max_tokens, policy) if max_tokens else None
+        working = max_tokens - (reserve or 0) if max_tokens else None
         settings = {
             "budget_seconds": int(budget_seconds * CLOCK_MARGIN),
             "max_tokens": max_tokens,
+            "tokens_working": working,
+            "final_reserve": reserve,
             "max_messages": max_messages,
             "token_semantics": TOKEN_SEMANTICS["single"] if max_tokens else None,
             "compaction_threshold_tokens": COMPACTION_THRESHOLD_TOKENS,
@@ -1081,32 +1274,55 @@ def single_agent(
         await _setup()
         start_tokens = sample_limits().token.usage
         seconds = int(budget_seconds * CLOCK_MARGIN)
+        submit = submit_answer(ledger, "single", options)
         agent = _agent(
             "single",
-            roles.rules(f"/home/{USER_A}/work", _option_counts(questions) is not None)
-            + "\n\n"
-            + roles.SINGLE,
+            roles.rules(f"/home/{USER_A}/work", options is not None) + "\n\n" + roles.SINGLE,
             USER_A,
             None,
-            [submit_answer(ledger, "single", _option_counts(questions))],
+            [submit],
         )
         limits: list[Limit] = [time_limit(seconds)]
-        if max_tokens:
-            limits.append(token_limit(max_tokens))
+        if working:
+            limits.append(token_limit(working))
         if max_messages:
             limits.append(message_limit(max_messages))
-        prompt = state.input_text + _budget_note(seconds, max_tokens, max_messages)
+        prompt = state.input_text + _budget_note(seconds, working, max_messages)
         try:
-            ledger.log("phase.started", phase="single", seconds=seconds, tokens_allowed=max_tokens)
+            ledger.log(
+                "phase.started",
+                phase="single",
+                seconds=seconds,
+                tokens_allowed=max_tokens,
+                tokens_working=working,
+            )
+            events_before = len(transcript().events)
             result = await run(agent, prompt, limits=limits)
             agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
             assert isinstance(agent_state, AgentState)
             state.messages = agent_state.messages
+            if limit_error is not None:
+                state.messages.extend(
+                    await pending_submits("single", ledger, state.messages, submit, events_before)
+                )
+            forced = await forced_final(
+                "single",
+                None,
+                questions,
+                ledger,
+                submit_answer(ledger, "single", options, forced=True),
+                roles.FORCED_FINAL_SINGLE,
+                list(state.messages),
+                reserve,
+                state.messages,
+            )
             ledger.log(
                 "phase.finished",
                 phase="single",
                 limit=str(getattr(limit_error, "type", "limit")) if limit_error else None,
                 tokens=int(sample_limits().token.usage - start_tokens),
+                forced_answers=forced,
+                unanswered=ledger.unanswered("single"),
             )
         finally:
             ledger.log("finished", tokens=int(sample_limits().token.usage - start_tokens))
@@ -1203,9 +1419,20 @@ def glhf_qa_swarm(
             prompt += _budget_note(seconds, working, max_messages_per_role)
             if title == "critic":
                 assert_blind_prompt(prompt, ledger, cross, state.input_text)
+            events_before = len(transcript().events)
             result = await run(who, prompt, limits=limits)
             agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
             assert isinstance(agent_state, AgentState)
+            if limit_error is not None and derivation:
+                agent_state.messages.extend(
+                    await pending_submits(
+                        title,
+                        ledger,
+                        agent_state.messages,
+                        submit_answer_with_method(ledger, cross, title, options),
+                        events_before,
+                    )
+                )
             state.messages.extend(m for m in agent_state.messages if m.role != "system")
             limit = str(getattr(limit_error, "type", "limit")) if limit_error is not None else None
             forced: list[str] = []
@@ -1215,9 +1442,9 @@ def glhf_qa_swarm(
                     model,
                     questions,
                     ledger,
-                    cross,
+                    submit_answer_with_method(ledger, cross, title, options, forced=True),
+                    roles.FORCED_FINAL,
                     agent_state.messages,
-                    options,
                     plan.final_reserve if plan else None,
                     state.messages,
                 )
@@ -1242,10 +1469,8 @@ def glhf_qa_swarm(
                 forced_answers=forced,
                 unanswered=ledger.unanswered(title) if derivation else [],
             )
-            try:  # a role that was cut off may have left jobs running
-                await background_processes(kill=True)
-            except Exception as error:
-                ledger.log("background.kill_failed", error=str(error)[:200])
+            # A role that was cut off may have left jobs running; its user's processes all go.
+            await stop_processes(ledger, [USER_B] if title == "critic" else [USER_A])
             await sandbox().exec(
                 ["bash", "-c", _SEAL.format(users=f"{USER_A} {USER_B}")], user="root", timeout=120
             )

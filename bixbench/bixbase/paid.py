@@ -33,11 +33,14 @@ HOW_TO_ALLOW = (
 PAID_KEYS = (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
     "EXA_API_KEY",
     "PAST_API_KEY",
     "HF_TOKEN",
     "TINKER_API_KEY",
+    # Blanked defensively: no provider here uses these any more, but a stray one in .env must not reach a child
+    # while paid calls are off. They are not keys a run needs.
+    "OPENROUTER_API_KEY",
+    "TYPESAFE_API_KEY",
 )
 REPO_ENV = Path(__file__).resolve().parents[2] / ".env"
 _LINE = re.compile(rf"^\s*(?:export\s+)?{SWITCH}\s*=\s*(.*)$")

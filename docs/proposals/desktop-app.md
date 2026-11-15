@@ -1,8 +1,186 @@
 # Proposal: a downloadable desktop app
 
-Status: the unsigned macOS download in section 1 exists and was opened once. Options (b) and (c)
-in section 3 are plans only; nothing in them has been built or run. Sizes and hours marked
-"estimate" were not measured.
+Status: **a self-contained macOS app was built and tested** (section A below). It carries its own Node
+and engine, does practice runs out of the box, and needs no checkout and no terminal. Sections 0 to 6 are
+the earlier analysis; where they say option (b) is "a plan only" or that the engine cannot yet run from
+a bundle, section A supersedes them. Sizes and hours marked "estimate" in sections 0 to 6 were not measured.
+
+## Download and open
+
+For a person who only wants to use it. Apple Silicon Macs only (M1 or newer), macOS 11 or later.
+
+1. Download `AI Scientist Bot_0.1.0_aarch64.dmg` and double-click it.
+2. Drag **AI Scientist Bot** onto **Applications** in the window that opens. Then eject the disk image.
+3. Open **Applications** and double-click **AI Scientist Bot**. macOS will refuse the first time: the app
+   is not signed by an identified developer (there is no paid Apple Developer account behind it). This is
+   expected. Click **Done** (or **Cancel**).
+4. Open **System Settings**, then **Privacy & Security**, and scroll down to **Security**. You will see
+   *"AI Scientist Bot" was blocked to protect your Mac.* Click **Open Anyway**, confirm, and enter your password
+   or use Touch ID. You do this once. On macOS 14 and older you can instead Control-click the app, choose
+   **Open**, then **Open** again.
+5. If macOS says the app is **damaged**, open **Terminal** once and run
+   `xattr -dr com.apple.quarantine "/Applications/AI Scientist Bot.app"`, then open the app again.
+6. The app opens after a second or two. It starts its own engine; you do not start anything.
+   **Paid calls are off.** The app does practice runs: replies are fixed text written in advance, not
+   research, and every screen says so. No key is needed and none is inside the app.
+
+Your runs are kept in `~/Library/Application Support/com.brendandang.aiscientistbot/`. Quit the app with
+Cmd-Q; its engine stops with it. Delete that folder to remove the data. To remove the app, drag it to the Bin.
+
+What does not work in this app: swarm runs and the benchmark (they need Docker, uv and Python, which are not
+included), real model runs (paid calls are off and there is no key screen yet), and Claude Code checking.
+Each of these says so in plain words instead of failing silently (list in section A).
+
+## A. The self-contained app (built and tested)
+
+### What it is
+
+| | |
+|---|---|
+| Inside the .app | `Contents/Resources/engine-app/`: the official Node binary (`node`), `engine/` (source plus 47 MB of production `node_modules`, trimmed of maps, type files and docs), `board/` (config.yaml, agents, context, briefs), `glhf/specialists/*.md`, `skills/*/SKILL.md`, `watchdog.mjs`, `NODE-LICENSE`. No Python, Docker file, test, source map, `.env` or key (the build fails if one is staged). |
+| Frontend | The production dashboard build (`vite build`), served by the Tauri webview as `tauri://localhost`. No dev server. |
+| Start | The app takes a lock, makes its working folder, starts **one** `node` process on a free port of `127.0.0.1`, waits for `/api/status`, then opens the window. |
+| Stop | Cmd-Q sends SIGTERM to the engine's process group (the engine releases its run locks), SIGKILL after 5 s. If the app is killed or crashes, the engine stops itself within about 2 s (`--import watchdog.mjs` checks that its parent is alive). |
+| Second copy | The second launch cannot get the lock (`app.lock`), prints a line and exits. One engine only. |
+| Data | `~/Library/Application Support/com.brendandang.aiscientistbot/`: `engine-root/board/runs`, `board/expertise`, `glhf/runs` (tracker database, session token), `glhf/memory`, `logs/engine.log`, `app.lock`. Nothing is written inside the .app or at the home root. |
+| Paid calls | Off: the engine is started with `NO_PAID_CALLS=1` and an empty environment (no key passes through from the shell). |
+
+### How the engine runs from a read-only bundle with no engine change
+
+The engine takes its "repository root" from where its source file is, and writes runs under it. So the app
+builds `engine-root/` in Application Support: `engine` and the read-only board files are **symbolic links** into
+the bundle, and the four folders the engine writes to are real folders. Node is started with
+`--preserve-symlinks --preserve-symlinks-main` so the engine sees the link path as its root. Only environment
+variables the engine already reads are used: `DRUG_BOARD_PORT`, `HOST=127.0.0.1`, `DASHBOARD_ORIGINS=tauri://localhost`,
+`GLHF_RUNS_DIR`, `NO_PAID_CALLS=1`. **No engine change was needed.** Node also gets `--max-old-space-size=512`
+(the engine's heap stays far below that; it only caps a runaway). The origin, host, content-type and token
+checks are untouched: a foreign `Origin` and a foreign `Host` are still refused with 403 (tested in the app).
+If the engine later gets a `DRUG_BOARD_HOME` variable, the symbolic links can go; it was offered, not needed.
+
+### How the page finds a port it did not know at build time
+
+The dashboard is built with `VITE_ENGINE_URL=http://engine.localhost`. The window gets an initialisation script
+that rewrites addresses starting with exactly that origin to `http://127.0.0.1:<port>` in `fetch`,
+`EventSource` and `XMLHttpRequest`. Look-alike hosts (`engine.localhost.evil.com`) are not rewritten (tested).
+The content-security policy of this build allows `connect-src http://127.0.0.1:*` in place of port 8787: any
+port of this machine's loopback, nothing remote. The window is declared with `create: false` and opened by the
+Rust code after the engine answers. Settings shows the address `http://engine.localhost`; that text and its
+"reads its keys from .env" line are dashboard text to fix.
+
+### Signing
+
+Ad-hoc: `codesign` reports `Signature=adhoc, flags=runtime`, `--verify --deep --strict` passes. The bundled
+`node` keeps the **Node.js Foundation Developer ID signature** it was published with (hardened runtime, the JIT
+entitlements Node needs); it is not changed, so it stays valid. There is no other program in the bundle: the
+build checks that no other Mach-O file is staged, and the engine has no native modules (`*.node`: none).
+`spctl -a -vv` says **rejected**, which is what an app without a Developer ID gets.
+
+**What Gatekeeper shows a downloader:** "AI Scientist Bot" Not Opened, Apple could not verify it is free of
+malware; buttons Done and Move to Trash. Steps to open: "Download and open" above (Open Anyway). Not observed
+here: no quarantined copy was opened, because the screen of this Mac was locked during testing.
+
+### Node runtime
+
+| | |
+|---|---|
+| Version | v26.13.1 (Node 26 "Lithium", the long-term-support line; the engine was developed on 26.13.0) |
+| URL | https://nodejs.org/dist/v26.13.1/node-v26.13.1-darwin-arm64.tar.gz |
+| SHA-256 | `aec2514ea1ceb2ba52455e9ec65986f6749a06dd759e5db2a72e6889668c9735` (equals the line in `SHASUMS256.txt` on nodejs.org; pinned in `scripts/desktop/build.sh`, which refuses a file that does not match). The GPG signature of `SHASUMS256.txt` was not checked. |
+| Licence | MIT (the `LICENSE` file of the tarball, copied into the app as `NODE-LICENSE`; it also lists the licences of the libraries inside Node). |
+| Size | 147 MB on disk. |
+
+### What does not work inside the app, and what the person sees
+
+| Feature | What happens |
+|---|---|
+| Swarm run (needs Docker, uv, Python, the harness source) | The run is accepted and ends at once as failed: "the local runner could not be started: the folder to start it in does not exist (...)". Tested. It names a folder inside the app's data folder and does not say "not included in this app". |
+| Real model run, cloud run, Exa | Refused with 400 and a field: "runs with a real model are refused ... Paid calls are off (NO_PAID_CALLS)". Tested. The text says to edit `.env`; the app has none. |
+| Ask with a model | Answers by keyword and says so ("no model was asked"). Tested. |
+| Claude Code checker | Used only in real runs, which are refused. Not reachable. Not exercised. |
+| Local model (Ollama) when it is not installed | The model list only offers "mock". Not exercised with Ollama present or absent in the app. |
+| BixBench results (`/api/bixv1`) | Empty list: the results folder is not in the app. Tested (200, `[]`). |
+| Engine fails to start (files missing, no free port, crash at start) | A dialog: "AI Scientist Bot could not start its engine", with the reason and the log path; the app then quits. The symbolic-link case was triggered by hand and the dialog text read. |
+
+### Keys and paid calls: what a later step would take (not built)
+
+`src/keys.rs` already stores keys for openai, anthropic, xai and google in the keychain and never returns them
+to the window. To use them, `Engine::start` would read the saved keys in Rust and add `ANTHROPIC_API_KEY` and
+`OPENAI_API_KEY` (and `EXA_API_KEY`, which has no keychain slot yet) to the child's environment, so a key never
+passes through the page. It would need: those providers added to `keys.rs` and Settings, an engine restart after a
+key changes (mock mode is decided at start), and a separate, deliberate "allow paid calls" switch that sets
+`NO_PAID_CALLS=0` for the child, off by default and showing the spending caps. Today the child is started
+with an empty environment on purpose. Starting a real board run also needs both Anthropic and OpenAI keys
+(the board's lead and skeptic are on different vendors).
+
+### Memory (measured; Apple Silicon, macOS, screen locked, so views were not drawn on screen)
+
+Resident memory (`ps` RSS) and `footprint` (macOS's figure for private memory; shared system pages not counted
+twice). Two measurement runs differ in the GPU figure, so ranges are given.
+
+| State | App shell | Engine (node) | Webview helpers (WebContent + GPU + Networking) | All 5 processes, RSS |
+|---|---|---|---|---|
+| Idle on Home, 25 s after launch | 110 to 116 MB (footprint 32 to 34) | 133 to 136 MB (footprint 77 to 81) | 107 to 150 MB RSS | 351 to 401 MB |
+| Idle after one finished practice run | 110 to 116 MB | 142 MB (footprint 85 to 86) | 107 to 150 MB | 360 to 406 MB |
+| Graph view open (relaunch on the same data) | 112 to 119 MB (footprint 37) | 134 to 135 MB (footprint 71 to 78) | 229 to 236 MB RSS (WebContent 166 MB, GPU 50 to 56 MB) | 478 to 481 MB |
+
+After quit, no app, engine or webview helper process is left. Processes of the app: 5, namely the shell, one
+`node`, and WebKit's three helpers (WebContent, GPU, Networking). The engine's watchdog is inside the same
+`node` process, not a helper. The app has no file watchers of its own; the engine watches a run's event
+file only while a dashboard stream for that run is open.
+
+What explains the numbers:
+- **Shell 110 MB RSS but 32 to 37 MB footprint.** RSS counts the WebKit and AppKit pages that come from the
+  system's shared cache and are shared with every other app. The private cost is the footprint.
+- **Engine 133 MB.** A bare Node 26 process is 47 MB; running TypeScript directly (type stripping) adds about
+  25 MB; the engine's modules and SQLite the rest. The run adds about 9 MB. It cannot go lower without
+  compiling the engine to JavaScript, which is an engine change. The heap cap is 512 MB and nothing came near it.
+- **GPU helper footprint 13 to 244 MB.** The macOS compositor and WebGL buffers; it changed between runs with
+  nothing else changing, and the Graph view's WebGL context is the largest part. A hidden or locked screen
+  does not draw, so a Graph view on a visible screen may differ. That number is the least certain here.
+- The Graph view was opened by relaunching with `ASB_START_VIEW=Graph` (a letters-only variable the app reads to
+  pick the first view); the view change was inferred from the page's network behaviour and from the memory
+  jump, not seen.
+
+### Sizes
+
+| | |
+|---|---|
+| `.app` | 196 MB on disk (`du`). Node 147 MB, engine modules 47 MB, dashboard and shell about 5 MB. |
+| `.dmg` | 56,401,640 bytes (53.8 MiB), compressed. Before trimming `node_modules` it was 68.5 MB. |
+| Earlier window-only image (step 1) | 3,343,154 bytes. |
+
+### How to rebuild
+
+```sh
+scripts/desktop/build.sh                        # dashboard from the working tree
+DASHBOARD_FROM=head scripts/desktop/build.sh    # dashboard from the last commit, when dashboard/src does not compile
+# about 75 to 100 s with Rust dependencies compiled; first time longer. Output: dashboard/src-tauri/target/artifacts/step2/
+scripts/desktop/verify.sh "/private/tmp/some/AI Scientist Bot.app"     # clean-environment proof (copy the app out of the repo first)
+scripts/desktop/measure.sh "/private/tmp/some/AI Scientist Bot.app"    # memory table above
+```
+
+Needs Apple Silicon, Rust (rustup), Node and npm on the build machine only, and network on the first build
+(Node tarball, `npm ci`). Run the app from a real folder, not through a symbolic link such as `/tmp`: Tauri
+refuses to resolve its resources through a link, and the app then shows the dialog above. `verify.sh` leaves
+temporary data under `/private/tmp/asb-run-*`. The `ASB_START_VIEW` variable and `verify.sh` need the Mac
+unlocked for the window check.
+
+### Verified (clean environment, copy outside the repo, then from the mounted .dmg)
+
+`verify.sh` ran from a copy at `/private/tmp` and from the mounted disk image (read-only). It starts the app with
+`env -i` (HOME, PATH=/usr/bin:/bin, TMPDIR, USER only; a throwaway HOME), so there is no system Node, no repo and no
+dev engine (the dev engine on 8787 stayed up and was not touched). 21 checks, all passed on the final image:
+window opens; engine on its own port, bound to 127.0.0.1; the page's network process holds connections to that
+port; paid calls off and no key; catalogue (19 agents) loaded from the app's engine; run list starts empty (the
+dev engine's runs are not visible); foreign Origin and Host refused; a paid-model run refused; a practice board
+run started from a Home plan finishes with a memo; the run is under Application Support; a swarm run fails
+with a plain message; a second launch starts no second engine; after quit no process is left; after relaunch
+the run is still listed; after `kill -9` of the app the engine stops within 4 s and the app starts again;
+nothing inside the app changed (hash of every file, and no file newer than the start); nothing at the home root.
+
+Not verified: clicking through the window (the Mac's screen was locked: the Home start flow was run through the
+same API calls Home makes, not with the mouse), opening a quarantined download, a second Mac, Intel, any macOS
+but this one, the Graph view on a visible screen, and any paid path.
 
 ## 0. Short answer
 
@@ -16,8 +194,8 @@ not low risk. Three things make it so, and none of them is in the desktop shell:
 1. The engine writes run folders inside its own source tree. Inside an application bundle that
    is a read-only, signed place. The engine needs a separate data folder first (section 3b).
 2. The engine reads keys only from environment variables and the repo's `.env`. The app's
-   keychain commands store keys for four providers, and the two keys the drug board needs
-   (OpenRouter and Exa) are not among them. Nothing hands a keychain key to the engine
+   keychain commands store keys for four providers, and the key the drug board needs that is
+   not among them is Exa's (the Anthropic and OpenAI keys are). Nothing hands a keychain key to the engine
    (section 2).
 3. Paid calls are off unless `NO_PAID_CALLS=0` is in `.env`. A downloaded app has no `.env`, so
    it needs a deliberate switch of its own.
@@ -31,14 +209,14 @@ start runs on an engine that someone started from a checkout.
 |---|---|
 | Command | `cd dashboard && PATH=/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH nice npx tauri build --bundles app,dmg` (on a Mac, `npm run desktop:build` does the same) |
 | Time | 1 min 4 s with dependencies already compiled (frontend build, 40 s Rust link, bundling). A first build from nothing compiles the 458 crates in Cargo.lock and was not timed. |
-| App | `dashboard/src-tauri/target/release/bundle/macos/Drug Board.app`, 7.3 MB |
-| Disk image | `dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg`, 5,745,492 bytes (5.5 MB) |
+| App | `dashboard/src-tauri/target/release/bundle/macos/AI Scientist Bot.app`, 7.3 MB |
+| Disk image | `dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg`, 5,745,492 bytes (5.5 MB) |
 | Architecture | arm64 only (Apple Silicon). Minimum macOS 11. |
 | Signature | Ad-hoc (`"signingIdentity": "-"` in `tauri.conf.json`). No Developer ID: `security find-identity -v -p codesigning` reports 0 valid identities. Not notarised. `spctl` rejects it, as expected. |
 | In git | No. `dashboard/src-tauri/target/` is ignored. |
 
 The disk image changes on every build, so record its checksum when publishing:
-`shasum -a 256 "dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg"`.
+`shasum -a 256 "dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg"`.
 
 Why ad-hoc and not fully unsigned: a build made with `--no-sign` has a signature on the binary
 but none on the bundle (`codesign --verify` fails with "code has no resources but signature
@@ -67,9 +245,9 @@ people with access to the repository can download from it. Do not commit the ima
 
 ```sh
 gh release create desktop-v0.1.0 \
-  "dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg#Drug Board 0.1.0 for Apple Silicon (unsigned)" \
+  "dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg#AI Scientist Bot 0.1.0 for Apple Silicon (unsigned)" \
   --repo itsbrendandang/agent-test \
-  --title "Drug Board desktop 0.1.0" \
+  --title "AI Scientist Bot desktop 0.1.0" \
   --prerelease \
   --notes "Window only: needs the engine running on 127.0.0.1:8787 (docs/running.md). Apple Silicon. Not signed by an identified developer: see docs/proposals/desktop-app.md, section 1, for how to open it."
 ```
@@ -78,12 +256,12 @@ This creates a tag on the default branch's current commit. It was not run.
 
 ### What a person downloading it sees
 
-1. Downloads the .dmg in a browser, opens it, drags Drug Board to Applications.
-2. Opens it. macOS 15 and later show: **"Drug Board" Not Opened. Apple could not verify "Drug
+1. Downloads the .dmg in a browser, opens it, drags AI Scientist Bot to Applications.
+2. Opens it. macOS 15 and later show: **"AI Scientist Bot" Not Opened. Apple could not verify "Drug
    Board" is free of malware that may harm your Mac or compromise your privacy.** The buttons are
    Done and Move to Trash. Choose Done.
 3. The supported way to open it: System Settings, Privacy & Security, scroll to Security, where
-   it says "Drug Board" was blocked to protect your Mac. Click **Open Anyway**, confirm, and
+   it says "AI Scientist Bot" was blocked to protect your Mac. Click **Open Anyway**, confirm, and
    enter the password or use Touch ID. The button is offered for about an hour after step 2.
    This is needed once. On macOS 14 and earlier: Control-click the app, Open, then Open.
 4. The window opens. If the engine is not running on port 8787, each view says the engine is
@@ -128,16 +306,15 @@ What it uses:
 
 | Purpose | Variable | In the app's keychain list? |
 |---|---|---|
-| Every drug board model, and Jev | `OPENROUTER_API_KEY` | No |
-| Board literature search | `EXA_API_KEY` | No |
-| Jev directly (optional) | `TYPESAFE_API_KEY` | No |
-| Board checker, benchmark judge | `OPENAI_API_KEY` | Yes |
-| Swarm agents, Ask box | `ANTHROPIC_API_KEY` | Yes |
+| Board search (if a member has the tool), swarm `--exa` | `EXA_API_KEY` | No |
+| Board `rival` tier and checkers, benchmark judge | `OPENAI_API_KEY` | Yes |
+| Board `lead`, `strong`, `cheap` tiers, swarm agents, Ask box | `ANTHROPIC_API_KEY` | Yes |
 | Gated benchmark dataset | `HF_TOKEN` | No |
 | Allow anything paid | `NO_PAID_CALLS=0` | Not a key; `.env` only |
 
-Without `OPENROUTER_API_KEY`, or with paid calls off, the board runs on scripted models
-(`mockMode` in `engine/src/config.ts`). That is decided once, when the engine starts.
+With paid calls off the board runs on scripted models (`mockMode` in `engine/src/config.ts`). That is
+decided once, when the engine starts. With paid calls on and a tier's key missing, a board run is
+refused when it starts.
 
 ## 3. Three ways to make the download self-contained
 
@@ -200,14 +377,14 @@ writing there breaks the signature, fails outright when the app runs from a read
 (macOS runs a freshly downloaded app that way until it is moved), and is lost on every update.
 The engine needs one new variable, for example `DRUG_BOARD_HOME`, with read-only material still
 found from `ROOT` and everything written going to
-`~/Library/Application Support/com.brendandang.drugboard/`. About ten places use `ROOT` or a
+`~/Library/Application Support/com.brendandang.aiscientistbot/`. About ten places use `ROOT` or a
 path derived from it. `bixv1/store.ts` already does this with `BIXV1_RUNS_DIR`.
 
 **Keys and `.env`.** There is no `.env` in a download. The app reads the keychain in Rust and
 puts the keys in the child's environment when it starts the engine. A key never passes through
 the window, as now. Needed:
 
-- OpenRouter and Exa (and optionally Typesafe and Hugging Face) added to the provider list in
+- Exa (and optionally Hugging Face) added to the provider list in
   `keys.rs` and in Settings, each mapped to its variable name.
 - A restart of the engine after a key is saved or removed, because mock mode is decided at
   start. The board resumes unfinished runs, so this is safe but must be said in the interface.

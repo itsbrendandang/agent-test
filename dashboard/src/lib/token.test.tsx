@@ -164,11 +164,9 @@ describe("Settings: forget token", () => {
 describe("reads", () => {
   it("do not carry the token", async () => {
     keepToken("t0k3n")
-    const sent = routes({ "GET /api/chat/catalog": { status: 200, body: {} }, "GET /api/chat/search": { status: 200, body: { results: [], mode: "keyword" } } })
+    const sent = routes({ "GET /api/chat/catalog": { status: 200, body: {} } })
     const home = await import("@/home/api")
     await home.getCatalog().catch(() => undefined)
-    await home.searchAll("herg", "all")
     expect(to(sent, "GET", "/api/chat/catalog")[0].headers[TOKEN_HEADER]).toBeUndefined()
-    expect(to(sent, "GET", "/api/chat/search")[0].headers[TOKEN_HEADER]).toBeUndefined()
   })
 })

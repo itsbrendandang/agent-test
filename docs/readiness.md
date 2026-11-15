@@ -1,250 +1,244 @@
 # Readiness: can the system run real research?
 
-Written 2026-11-14 by the `runnable` agent. Nothing here cost money. `NO_PAID_CALLS=1` was set in every shell, `.env` was
-never read (only variable names were listed), and no engine on 8787 or dashboard on 5317 was touched.
+Written 2026-11-14 and **updated 2026-11-15** by the `runnable` agent, after the direct-provider rewire and the new nine-role
+board roster landed. Nothing here cost money. `NO_PAID_CALLS=1` was set in every shell, `.env` was never read (only variable
+names were listed), and no engine on 8787 or dashboard on 5317 was touched.
 
-How this was tested: a private `git worktree` of commit `0d3b50e` in `/tmp/drug-board-head` (no `.env`, so no key could
-reach it), with its own engine on **127.0.0.1:8788**. The shared tree has many uncommitted edits from other agents; this
-report describes **HEAD as committed**, and says where the shared tree differs.
+How this was tested, in two passes. Both used private `git worktree`s under `/tmp` with no `.env`, so no key could reach them,
+and engines on port 8788:
 
-Labels: **measured** = I ran it and saw it. **read** = from the code, not run. **unverified** = needs a paid call or a
-network login, so I did not do it.
+- **Pass 1, commit `0d3b50e`** (before the rewire): routes, board and swarm walk-throughs, the original findings. Sections 3 and 5a.
+- **Pass 2, commit `b749e38` plus the uncommitted edits to `board.ts`, `triage.ts`, `events.ts`, `board/config.yaml`**
+  (the rewire and Josue's roster): type check, tests, a scripted board run, the plan route. Sections 1, 2, 4, 5b, 6.
 
-## 1. Answer in four lines
+The shared tree changes while others work. Where something is only in the working tree it says so.
+
+Labels: **measured** = I ran it and saw it. **read** = from the code, not run. **unverified** = needs a paid call or a login.
+
+## 1. Answer in five lines
 
 | Question | Answer |
 |---|---|
-| Does the board run end to end? | **Only scripted.** Brief, plan, start, event stream, memo and claim verdicts all work with scripted models (measured, 2 s). It has never run with a real model: all 12 recorded runs in `board/runs` are scripted (`usd: 0`). |
-| If you turn `NO_PAID_CALLS` off today, does a real board run start? | **No. It stays scripted.** `engine/src/config.ts:42` makes the board scripted when `OPENROUTER_API_KEY` is empty, and it is. See section 4. |
-| Does the swarm run end to end? | **Yes, scripted** (measured: score 1.0, 20 s). With a real model it ran 3 times on the demo case in the past, and the single agent once (recorded in `glhf/runs/real`). It is the only part that can spend money usefully today. |
-| First thing that breaks when the switch goes off | **Board:** nothing breaks, it silently stays scripted (section 4). **Swarm:** nothing known; it uses Anthropic directly and has done so before. |
+| Does the board run end to end? | **Only scripted**, and that works (measured at both commits: brief, plan, start, events, memo, verdicts). It has never run with a real model: every recorded run in `board/runs` is scripted (`usd: 0`). |
+| If `NO_PAID_CALLS` is off, does a real run now start? | **Yes, by the code (read; 39 tests of it pass).** Since the rewire, scripted mode is `paid off OR DRUG_BOARD_MOCK=1` only (`config.ts:50`). With the switch off and no key for a tier, the start fails with 503 naming the tier and key (`providers.ts`). It never silently goes scripted. **Not run live.** |
+| What does a real board run actually do today? | **Less than "research".** No role has a tool (`tools: []` in all nine `board/agents/*.md`; the experimenter's prompt says "You cannot run code on this board yet"). So no retrieved evidence, no computation. Literature claims are `unsupported` with no model call, computed claims are `unchecked`, and only claims about the brief's own tables can be `verified`. See section 6. |
+| Does the swarm run end to end? | **Yes, scripted** (score 1.0, 20 s). With a real model it ran 3 times on the demo case, and the single agent once (recorded in `glhf/runs/real`). It is the only path that has produced real model output with tools (it runs code in Docker). |
+| First thing that breaks with the switch off | **The first paid call is the lead's Anthropic call** (`claude-sonnet-5-5`, the one id used for real before). The likeliest non-switch failures come next and are all unverified: ids never called by this repo (`claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini`), and the reasoning setting on `gpt-5-mini`. Section 6. |
 
-HEAD is not in a clean state: `tsc` reports 7 errors in the engine and 1 in the dashboard (all in test files) and 27 of 186 engine tests fail (section 2). The
-commit message of `d8f249d` says so ("mid-edit … test suites not run").
+## 2. Build and tests
 
-## 2. Build and tests at HEAD (measured)
-
-| Check | Result |
-|---|---|
-| `cd engine && npx tsc --noEmit` | **7 errors, all in tests**: `test/chat.test.ts` (6, `url`/`init`/`startsWith` on type `never`), `test/glhf-timeouts.test.ts` (1). `src/` is clean. |
-| `cd dashboard && npx tsc -b` | **1 error**: `src/lib/token.test.tsx(126,60)` property `headers` does not exist on type `Sent`. |
-| `cd engine && npm test` | **186 tests, 159 pass, 27 fail.** By file: `glhf-runs` 12, `app` 4, `chat` 3, `paid` 3, `glhf-tracker` 2, `bixv1-api` 1, `bixv1-budget` 1, `board-http` 1. Others pass (`board-core` 12/12, `glhf-timeouts` 46/46, `bixv1-stats` 7/7). |
-| Why they fail | HEAD's `src/` has session-token auth (`401 needsToken`) but the tests at HEAD were written before it. Examples: `paid.test.ts` `401 !== 201`, `a scripted run may continue 401 !== 202`; `glhf-runs.test.ts` `Cannot read properties of undefined (reading 'run')`. The shared working tree has modified these test files; I did not run those. |
-| `cd glhf/bixbench && uv run pytest` | See the line at the end of this section. |
-
-Python at HEAD (`uv run pytest -q tests`, with the 1,161 red-team guard cases in `test_redteam_guards.py` left out because
-they are strict-xfail records of known gaps, not gates): **1,230 passed, 1 failed, 2 skipped** in 134 s, Docker end-to-end
-tests included. The one failure is `tests/unit/test_budget_plan.py::test_a_phase_may_not_spend_the_floors_of_the_phases_still_owed`
-(`assert 44 == 1746 - 1000 - 255 - 387`): the budget planner's reserves and the test disagree, in the 30-minute case.
-The 2 skips need a sibling checkout that is not here.
-
-Meaning: you cannot rely on `npm test` as a gate at HEAD. A reviewer should run it on the shared tree after the other
-agents finish.
-
-## 3. Routes on a HEAD build (measured on 8788, with the dashboard's `Origin` header)
-
-The owner restarted the live engine at HEAD, and I confirmed `GET /api/chat/catalog` answers 200 on 8787 now. So **no
-route in this table needs a restart any more**. The earlier 404 was a stale process.
-
-| Route | Result at HEAD | Note |
+| Check | At `0d3b50e` (measured) | At `b749e38` + uncommitted edits (measured) |
 |---|---|---|
-| `GET /api/status` | 200 | `mock`, `paidCalls`, key presence for OPENROUTER, EXA, OPENAI, TYPESAFE only (no ANTHROPIC flag). |
-| `GET /api/roster`, `/api/briefs`, `/api/runs` | 200 | |
-| `POST /api/runs {brief}` | 201 `{runId}`; 400 for `_template.md` (names the unfilled sections); 404 unknown brief | No Origin needed in scripted mode. |
-| `GET /api/runs/:id/events` | SSE, 57 events for a full run | Stays open: `curl` needs a timeout. |
-| `GET /api/runs/:id/memo` | 200 Markdown | 404 `no memo yet` before the end. |
-| `POST /api/runs/:id/resume` | 202 | On a finished run it is a no-op. |
-| `GET /api/chat/catalog` | 200 | Providers anthropic, openai, **openrouter** (still listed), agents, skills. |
-| `GET /api/chat/search?q=` | 200 | Keyword only. |
-| `POST /api/chat` | 200, `mode: "scripted"` | Returns a plan, starts nothing. No Origin: 403. |
-| `POST /api/chat/plans/:id/start` | 400 without `confirm`; 400 for a brief missing sections (names them); 201; 409 on a second start | |
-| `POST /api/ask` | 200 keyword mode | No Origin: 403. |
-| `GET/POST /api/glhf/*` (`status`, `runs`, `roles`, `scoreboard`, `runs/:id`, `runs/:id/cancel`) | 200 / 201 | A real model or a cloud run: 400 with the `NO_PAID_CALLS` message. `roles` runs `uv`; no Origin: 403. |
-| `GET /api/bixv1/runs`, `/scoreboard` | 200 (empty in the worktree: the runs folder is not in git) | `runs/:id` 404 `no such run`. |
-| `GET /api/token` | 401 without the token | By design. |
+| `cd engine && npx tsc --noEmit` | 7 errors, all in `test/chat.test.ts` (6) and `test/glhf-timeouts.test.ts` (1) | **0 errors** |
+| `cd dashboard && npx tsc -b` | 1 error, `src/lib/token.test.tsx` | not re-run |
+| Engine tests | 186 tests, 159 pass, **27 fail** (HEAD's tests predate its token auth: `401 !== 201`) | **250 pass, 6 fail** in a keyless worktree (below) |
+| Python, `glhf/bixbench`, red-team file left out | 1,230 passed, 1 failed (`test_budget_plan`), 2 skipped, 134 s | not re-run |
 
-Behaviour to know: a plan from `/api/chat` is **not applied** by the board at HEAD. `board.ts` never reads `overrides.json`
-(`chat/plan.ts:43` says so). I started a `quick` plan (3 members, 1 round, $1 limit); the board ran **all 8 members for 3
-rounds** under the config caps. The plan's own `warnings` say "Not applied yet". Any cost reading from a plan is only the
-cap, not a forecast.
+The six engine failures at pass 2, run file by file:
+
+| File | Failing test | Cause |
+|---|---|---|
+| `board-core` | `resume: a run does not continue past the daily cap…` | **Needs keys.** It gets `MissingTierKey`, not `BudgetReached`, in a clone without keys; it passes with fake `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in the environment (I tried). A CI job with no secrets will fail it. Reported to `direct-providers`. |
+| `app` | `an event stream sends only what was appended, and streams are capped…` | assertion `one more on the same run`; the file also took 150 s. Not investigated. |
+| `bixv1-budget` | `over HTTP: the new fields are served…` | `Cannot read properties of undefined (reading '0')`; the runs folder is not in git, so likely a missing fixture in a clone. Not investigated. |
+| `glhf-runs` | `M7: the refusal that asks for maxTokens…` | wording assertion; owned by the run-control agents |
+| `glhf-tracker` (2) | cloud-run tests | error text now asks for `billCloud`; tests predate it |
+
+Meaning: `npm test` is still not a clean gate. One of the six hurts any CI without secrets.
+
+## 3. Routes (measured at `0d3b50e`, with the dashboard's `Origin` header)
+
+The owner restarted the live engine, and `GET /api/chat/catalog` answers 200 there, so **no route needs a restart**. Pass 2
+confirmed `/api/chat` and `/api/chat/plans/:id/start` again, and that `POST /api/runs` now returns `{runId, scripted, mode}`.
+
+| Route | Result | Note |
+|---|---|---|
+| `GET /api/status` | 200 | `mock`, `paidCalls`, key flags |
+| `GET /api/roster`, `/api/briefs`, `/api/runs` | 200 | |
+| `POST /api/runs {brief}` | 201; 400 for `_template.md` (names the unfilled sections); 404 unknown brief | No `Origin` needed in scripted mode |
+| `GET /api/runs/:id/events` | SSE, stays open | `curl` needs a timeout |
+| `GET /api/runs/:id/memo` | 200 Markdown; 404 `no memo yet` | |
+| `POST /api/runs/:id/resume` | 202; a no-op on a finished run | |
+| `GET /api/chat/catalog`, `/api/chat/search?q=` | 200 | |
+| `POST /api/chat` | 200 `mode: scripted`; no `Origin`: 403 | returns a plan, starts nothing |
+| `POST /api/chat/plans/:id/start` | 400 without `confirm`; 400 for a brief missing sections; 201; 409 on a second start | |
+| `POST /api/ask` | 200 keyword mode; no `Origin`: 403 | |
+| `/api/glhf/*` | 200 / 201 | a real model or cloud run: 400 with the `NO_PAID_CALLS` message; `roles` runs `uv`, no `Origin`: 403 |
+| `/api/bixv1/*` | 200 | `runs/:id` 404 in a clone: the runs folder is not in git |
+| `GET /api/token` | 401 without the token | by design |
+
+Plans: at `0d3b50e` a plan's members and limits were ignored (a "quick" plan ran 8 members for 3 rounds). **Now they are
+applied**: a quick plan ran 2 members for 1 round (measured). Not applied: the plan's model tier and search cap, as its own
+warning says.
 
 ## 4. The central question: what happens with `NO_PAID_CALLS=0` and no OpenRouter key
 
-Fact checked on the live engine: the keys it sees are `ANTHROPIC` true, `OPENAI` true, `EXA` true, `OPENROUTER` false,
-`TYPESAFE` false (`/api/status`, `/api/chat/catalog`). `engine/src/env.ts` skips a blank value, so an empty
-`OPENROUTER_API_KEY=` is the same as unset.
+**At `0d3b50e` (before the rewire).** The keys the live engine saw: `ANTHROPIC` true, `OPENAI` true, `EXA` true, `OPENROUTER`
+false, `TYPESAFE` false. `config.ts:42` was `paidCallsOff || DRUG_BOARD_MOCK=1 || !OPENROUTER_API_KEY`, so turning the
+switch off still gave scripted models and a run with no API call. It was not fully silent: the dashboard showed "Scripted
+models", but the engine log printed `(mock models)` then `Paid calls: ON … can spend`, and `POST /api/runs` returned a bare 201.
 
-Code path (read, and consistent with what the engine prints):
+**Now (working tree, read, and exercised by `board-direct.test.ts`, 39 tests passing):**
 
-1. `config.ts:42`: `mockMode = paidCallsOff(env) || env.DRUG_BOARD_MOCK === "1" || !env.OPENROUTER_API_KEY`. With the switch
-   off and no OpenRouter key this is `true`. `MOCK` is computed once at import.
-2. `models.ts:16-21` `buildModels(roster, MOCK)`: `MOCK` true gives faux (scripted) providers. The `refusePaid` call and the
-   OpenRouter registration are inside the `if (!mock)` branch and are never reached.
-3. `models.ts:44` `modelFor`: `MOCK` gives `mock-<agent>`. `jev.ts` and `checkers.ts` also take `mock = MOCK`, and
-   `exa.ts:54` returns fixture papers. Result: a full run with **no API call at all**, and `run.json` says `"mock": true`.
-
-So: **turning the switch off does not produce a real board run.** (Before the owner's decision, the fix would have been an
-OpenRouter key: then the board goes real and Jev uses OpenRouter. That path is being removed, see section 6.)
-
-**Is it silent?** Partly. What tells the user:
-
-| Place | What it says | Good enough? |
+| What | Behaviour | Where |
 |---|---|---|
-| Engine start (`server.ts:17-18`) | `(mock models)` then `Paid calls: ON (NO_PAID_CALLS=0). Runs with real models … can spend API credits.` | **Misleading.** Two lines that contradict each other. The second line is a promise the first one breaks. |
-| `GET /api/status` | `mock: true, paidCalls: true` | A client must read both fields together. |
-| Dashboard Board view (`BoardView.tsx:91,124,153`) | Warning pill "Scripted models" and "The engine has no OPENROUTER_API_KEY, so the board runs with scripted models." | Yes. |
-| Chat plan | `paid: false`, "Scripted: costs nothing", button "Start scripted run" | Yes. |
-| CLI `npm run board` | `(mock models, no keys)` on the first line | Yes, small. |
-| `POST /api/runs`, `POST …/plans/:id/start` | 201 with no flag in the body (the plan route has a `note`) | **Silent** for an API client. |
-| Run events | `run.started` has `mock: true` | Yes, but only if read. |
+| Scripted or real | scripted iff `NO_PAID_CALLS` is not `0` or `DRUG_BOARD_MOCK=1`. A missing key no longer means scripted. | `config.ts:50` |
+| A tier key missing in a real run | HTTP **503** from `POST /api/runs` and the plan start, CLI exit 3, naming each tier, model and key. Also checked on resume. | `providers.ts` `assertBoardKeys`, `board.ts:399,427`, `cli.ts:51` |
+| Which keys a real run needs | `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` (lead and strong, cheap, critic, first-pass). `EXA_API_KEY` only if a member has the search tool, which none has. No OpenRouter or TypeSafe key. | `providers.ts` `missingKeys` |
+| Start-up banner | `Board runs: SCRIPTED (paid calls are off)…` or `REAL (anthropic/…, openai/…)`, then the paid-calls line, then a warning if a real run would be refused. The contradiction is gone. | `server.ts`, `providers.ts` `boardModeLine` |
+| API response | `POST /api/runs` returns `{runId, scripted, mode}` | `app.ts:183` |
 
-A person watching the dashboard is told. A person who reads only the engine log, or a script that calls the API, is told
-`Paid calls: ON` and gets a scripted run. After `direct-providers` lands, the rule in its brief (fail loudly at start,
-name the tier and key, never fall back to scripted) closes this. Verify that with the test in the block at the end.
+So the silent path is closed, in code. Verify it live, for free, with the check in section 9 (step 2 with the keys removed
+shows the refusal, but only with the switch off for that command; do not do that: the unit tests cover it).
 
 ## 5. The scripted walk-through (measured)
 
-All in the HEAD worktree, scripted models, 8788.
+### 5a. Pass 1, `0d3b50e`, eight-member roster
 
 | Step | Command / route | Result |
 |---|---|---|
-| Plan | `POST /api/chat` "Should we advance a KRAS G12C covalent inhibitor series…", effort quick | 200, `mode: scripted`, plan with 4 agents, `paid: false`, estimate $0. Warnings: brief says "not stated" for 5 sections. |
-| Validate | `POST …/plans/:id/start {confirm:true, brief:"# Brief: x\n\n## Question\nhello"}` | **400** `Brief … is missing or has unfilled sections: Candidates, Target and Indication, …` (field `brief`). |
-| Validate (CLI) | `node engine/src/cli.ts run board/briefs/_template.md` | exit 2, same message. |
-| Start | `POST …/plans/:id/start {confirm:true}` | 201 `{kind: board, id: <runId>, scripted: true}`; a second start gives 409. |
-| Direct start | `POST /api/runs {brief: "kras-g12c-hit-to-lead.md"}` | 201 `{runId}`. |
-| Watch | SSE `GET /api/runs/:id/events` | 57 events: 3 rounds, 24 `member.replied`, 7 `evidence.triaged`, 20 `claim.checked`, `memo.written`, `run.finished` after 2.2 s. |
-| Memo | `GET /api/runs/:id/memo` | "Go with conditions: advance CMP-0423; park CMP-0517", text fixed in `mock.ts`. |
-| Verdicts | `verification_ledger.json` | 20 rows: verified 10 (jev 9, claude-code 1), unsupported 9 (jev 7, openai 2), contradicted 1. They come from the scripted word-overlap proxy, so they say nothing about science. |
+| Plan | `POST /api/chat` "Should we advance a KRAS G12C covalent inhibitor series…", quick | 200, `mode: scripted`, plan with 4 agents, `paid: false`, estimate $0 |
+| Validate | `POST …/plans/:id/start {confirm:true, brief:"# Brief: x\n\n## Question\nhello"}` | **400** `Brief … is missing or has unfilled sections: Candidates, Target and Indication, …` |
+| Validate (CLI) | `node engine/src/cli.ts run board/briefs/_template.md` | exit 2, same message |
+| Start | plan start, `{confirm:true}`; again | 201; then 409 |
+| Watch | SSE | 57 events, 3 rounds, 24 replies, 7 searches, 20 claims, memo, in 2.2 s |
+| Memo | `GET /api/runs/:id/memo` | "Go with conditions: advance CMP-0423; park CMP-0517" (text fixed in `mock.ts`) |
+| Verdicts | `verification_ledger.json` | 20 rows: verified 10, unsupported 9, contradicted 1 (scripted word-overlap proxy: says nothing about science) |
 
-No step failed. Two observations: scripted `jev` verdicts and the one scripted `claude-code` verdict only prove that the
-routing and ledger code run; the plan's agent and limit choices were ignored (section 3).
+### 5b. Pass 2, `b749e38` + edits, nine-role roster
 
-### GLHF swarm, scripted (measured)
+`node engine/src/cli.ts run board/briefs/kras-g12c-hit-to-lead.md`, scripted:
 
-| Run (HEAD worktree, mock model, Docker sandbox) | Settings | Result |
+| Item | Result |
+|---|---|
+| Events | 3 rounds, **27** replies (9 roles), **0 searches**, 19 `claim.checked`, memo, finish |
+| Claims | 17 `brief`, 2 `computed`, 0 `literature`; first pass verified 12, unsupported 2, contradicted 1; 2 escalated (scripted) |
+| Plan route | `POST /api/chat` (quick) names `scout` and `critic`; started, it ran **2 members, 1 round** |
+| Scripted-only caveats | the scripted `claude-code` check still says `verified` for a computed claim; a real run records computed claims `unchecked` and does not call it |
+
+No step failed.
+
+### 5c. GLHF swarm, scripted (measured at `0d3b50e`; the swarm code was not touched by the rewire)
+
+| Run (mock model, Docker sandbox) | Settings | Result |
 |---|---|---|
-| `POST /api/glhf/runs` solver `glhf`, model `mock`, seed 7 | default time limit (1800 s) | **done, score 1.0**, 20.4 s, 98,555 scripted tokens, 10 phases, 2 claims, 2 registered tests. |
-| same, `single` | default | done, score 1.0, 11,454 tokens. |
-| same, `glhf`, `timeLimit: 600` | 600 s | **done, score 0.0.** The budget planner found that the floors of the full plan need 1,124 s, chose a degraded `direct` plan (experiment, finish, report) and the scripted experiment wrote no artifact. The ledger records `budget.degraded` with the numbers. |
+| solver `glhf`, seed 7 | default 1,800 s | **done, score 1.0**, 20.4 s, 98,555 scripted tokens, 10 phases, 2 claims, 2 registered tests |
+| solver `single` | default | done, score 1.0, 11,454 tokens |
+| solver `glhf` | `timeLimit: 600` | **done, score 0.0.** The planner found the full plan's floors need 1,124 s, chose a degraded `direct` plan (experiment, finish, report), and the scripted experiment wrote no artifact. The ledger records `budget.degraded`. |
 
-The 600 s result is expected behaviour of the planner plus the scripted model, not a crash. For a real run, give the swarm
-at least ~1,500 s (the default 1,800 is fine). This matches the earlier mock-pair question; the owner of that item is
-`mock-pair`.
+The 600 s result is the planner plus the scripted model, not a crash. For a real run give the swarm 1,500 s or more.
 
-## 6. What a real run would do: provider by provider
+## 6. What a real run would do, step by step (read; nothing live)
 
-### 6a. Before the change (state today, read)
+### Board, current config
 
-| Step | Provider and key | Outcome today |
-|---|---|---|
-| Board, any model turn | OpenRouter, `OPENROUTER_API_KEY` | Not reached: scripted (section 4). |
-| Board, search | Exa, `EXA_API_KEY` | Not reached: fixture papers. |
-| Board, triage and first-pass verdict | Jev through OpenRouter, or TypeSafe if `TYPESAFE_API_KEY` | Not reached: scripted. Latent bug, for the record: with `TYPESAFE_API_KEY` set, `jev.ts:22` asks for provider `typesafe`, but `buildModels` registers only OpenRouter and OpenAI, so Jev would throw `Jev model … is not available` (lookup returns undefined, checked offline). |
-| Board, escalation | OpenAI `gpt-5-mini` (key present), Claude Code CLI | Not reached. `claude` 2.1.311 is installed and its help lists `--restricted` and `--strict-mcp-config` (checked). |
-| Swarm, real model | Anthropic direct through Inspect, `ANTHROPIC_API_KEY` | **Works**: 4 recorded real runs (3 swarm, 1 single) on `anthropic/claude-sonnet-5-5`. Needs `--max-tokens`, Docker, and for `--exa` an Exa key. |
-| BixBench v1 judge | OpenAI `gpt-4o` | Worked in the 3-capsule pilot (judge tokens recorded). |
+Order in time, with the key each step needs:
 
-### 6b. After `direct-providers` lands (conditional, nothing here is verified)
-
-`direct-providers` is replacing OpenRouter and Jev with direct Anthropic and OpenAI calls and a cheap first-pass checker.
-Until it is merged and its tests are green, treat this table as the expected path to check, not as fact.
-
-| Order | Step | Provider and key | What could still fail for a reason other than the switch |
+| Order | Step | Provider and key | What could fail for a reason other than the switch |
 |---|---|---|---|
-| 1 | Lead's first model call | Anthropic, `ANTHROPIC_API_KEY` | Model id not in the account. `claude-sonnet-5-5` was used for real by the swarm (recorded); every other id is only in pi-ai's bundled catalog (see section 7). **This is the first paid call.** |
-| 2 | 7 members in parallel | Anthropic (strong, cheap), OpenAI (Skeptic) | OpenAI reasoning models through the Responses API have not been called by this repo's board code. Hidden reasoning tokens can multiply cost (cost.md). |
-| 3 | `exa_search` per member | Exa, `EXA_API_KEY` | `exaSearch` returns **fixture papers** if the key is missing (`exa.ts:54`), even in a real run. Key is present now. Exa spend is **not counted** in `max_usd`. |
-| 4 | Triage of each search result | cheap tier, direct | Rate limits: the old code fired 10 calls per search from 7 members at once. |
-| 5 | First-pass claim verdict | other vendor than the claimant | `openaiCheck` returns a fake `unsupported` ("mock: …") if `OPENAI_API_KEY` is missing (`checkers.ts:40`), even in a real run. Key is present now. |
-| 6 | Computed claims | `claude -p --restricted` | Unverified live. In restricted mode it cannot run code, so it will often answer `unsupported`. With `ANTHROPIC_API_KEY` in its environment it bills the API. Each check is sequential, up to 180 s. |
+| 1 | Lead's kickoff call | Anthropic `claude-sonnet-5-5`, `ANTHROPIC_API_KEY` | Least risk: this id has run for real in the swarm. **This is the first paid call.** |
+| 2 | Nine roles reply in parallel | Haiku (scout, pilot, finisher), Sonnet (five), `gpt-5-mini` via OpenAI (critic) | `claude-haiku-5-5` and `gpt-5-mini` have never been called by this repo. `gpt-5-mini` cannot switch reasoning off; the critic uses the default, so a few thousand hidden tokens are billed. |
+| 3 | First-pass check of claims about the brief | Haiku (for the critic's claims), `gpt-4o-mini` (for the rest), JSON with a quote, reasoning off or `minimal` | `gpt-4o-mini` never used here. Whether the providers honour the reasoning setting: unverified. A malformed reply is never `verified`; it escalates. |
+| 4 | Escalation of what the first pass cannot settle | OpenAI `gpt-5-mini` | **Not vendor-aware** (`board.ts:580`): a claim by the OpenAI critic is escalated to OpenAI. Reported to `direct-providers`. |
+| 5 | Literature claims | none | `unsupported`, no call: "source is not in the screened evidence pool" |
+| 6 | Computed claims | none | `unchecked`, `claude` is not called. `claude` 2.1.311 is installed and its help lists `--restricted`; unused today. |
 | 7 | Memo | lead model | none known |
 
-Not applicable on this path: Ollama (only with `DRUG_BOARD_LOCAL_MODEL=1`), Docker (the board does not use it).
+Money guards (read): the spend cap counts models, first pass, checkers and Exa; a round is refused when the last round's cost
+would pass `max_usd`; no paid call is made after the cap. The first round cannot be predicted, so it can overshoot.
 
-### The single answer to "what breaks first"
+**What the output is.** Nine models reasoning over one brief, with every claim about the brief's table checked by a
+different vendor's model that must quote the table. It shows the machinery. It is not research: no retrieved evidence, no
+computation. The brief itself says its data is "illustrative placeholders". To make it research, a role needs a tool (the
+cheapest: `tools: [exa_search]` on the scout, plus a prompt line telling it to search; then `EXA_API_KEY` is needed and the Exa
+path, dormant today, wakes up). That is a decision for the owner, not something I changed.
 
-Today, with the switch off: **the board does not break, it just does not go real.** After `direct-providers`, the first
-paid call is the lead's Anthropic call. It is the first thing that can fail for a non-switch reason (a model id the
-account cannot use), and that risk is lowest for `claude-sonnet-5-5` because the swarm has used it.
+### Swarm (unchanged)
+
+| Step | Provider and key | Status |
+|---|---|---|
+| Real model | Anthropic through Inspect, `ANTHROPIC_API_KEY` | **Works**: 4 recorded real runs (3 swarm, 1 single) on `claude-sonnet-5-5`. Needs `--max-tokens`, Docker, and for `--exa` an Exa key. |
+| Runs code | Docker image `python:3.12-slim` (present) | works scripted and real |
+
+BixBench v1 additionally needs the 18 GB image `futurehouse/bixbench:aviary-notebook-env`: **present** locally (18.3 GB).
+
+Not applicable on these paths: Ollama (only with `DRUG_BOARD_LOCAL_MODEL=1`), OpenRouter, TypeSafe, Jev (removed).
 
 ## 7. Do the model ids exist? (partly unverified)
 
 | Id | Where used | Evidence it resolves | Live check |
 |---|---|---|---|
-| `~anthropic/claude-opus-latest`, `~anthropic/claude-sonnet-latest`, `~google/gemini-flash-latest`, `~openai/gpt-mini-latest`, `typesafe/jev-1.14` | `board/config.yaml` at HEAD | Present in pi-ai 1.5.2's bundled OpenRouter catalog (looked up offline). | **Not possible:** OpenRouter is no longer used and its key is gone. Moot after the change. |
-| `claude-sonnet-5-5` | swarm, chat, `MODEL_CHOICES` | Used in 4 real demo-case runs (3 swarm, 1 single) and the BixBench pilot (recorded). Also in pi-ai's Anthropic catalog. | Verified by use, as of those runs. |
-| `claude-haiku-5-5`, `claude-opus-5-5`, `gpt-5.5`, `gpt-5-mini`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-6-luna` (classifier) | candidates for `direct-providers` | Present in pi-ai 1.5.2's bundled Anthropic and OpenAI catalogs (`getModel` returned them offline). | **Unverified.** Both providers' model-list endpoints need an API key, and I may not read `.env`. A bundled catalog is a snapshot; it does not prove the account can use the model. |
-| `gpt-4o` | BixBench judge | Worked in the pilot (judge tokens recorded). | by use |
+| `claude-sonnet-5-5` | lead, strong, swarm | used in 4 real runs and the BixBench pilot; in pi-ai's catalog | **verified by use** |
+| `gpt-4o` | BixBench judge | worked in the pilot (judge tokens recorded) | verified by use |
+| `claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini` | cheap tier, critic, first pass | in pi-ai 1.5.2's bundled catalogs (`getModel` found them, `gpt-5-mini` and `gpt-4o-mini` also priced) | **unverified** |
+| `claude-opus-5-5`, `gpt-5.5` | optional upgrades named in `config.yaml` comments | in the catalog | unverified |
 
-Cheapest way to settle the unverified rows, for the payer: `curl -s https://api.anthropic.com/v1/models -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01"` and `curl -s https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`. Both list models and are free (no inference). I did not run them. Do not paste the keys anywhere.
+I cannot do a live check: both model-list endpoints need an API key and I may not read `.env`. For the payer, a free check
+that costs nothing (no inference):
+`curl -s https://api.anthropic.com/v1/models -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01"` and
+`curl -s https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`. I did not run them.
 
-## 8. What I could not verify without spending (or logging in)
+## 8. What I could not verify without spending
 
-- That any model id other than `claude-sonnet-5-5` and `gpt-4o` resolves on the account.
-- That Exa's request shape in `exa.ts` still returns 200 (the README says it was tested live; I did not repeat it).
-- That `claude -p --restricted` returns a parseable verdict, and what one call costs.
-- Real token counts and real cost of any board run (none was ever recorded; cost.md uses estimates).
-- Prompt caching on the board's conversations (it is real on the swarm: 69-80% of input tokens were cache reads).
-- That structured output (the checker's replacement for Jev) is accepted by each provider.
-- The dashboard in a browser (not in scope).
+- That `claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini` resolve on the accounts, and that the reasoning setting is honoured.
+- That a real model writes the `CLAIMS` section the checkers read (a real run that produces no claims has nothing to check).
+- Real token counts, cache hits and cost of any board run (cost.md is a model).
+- That Exa works from the board's code (dormant now) and its real price per search.
+- That the structured JSON reply is accepted by each provider.
+- The dashboard in a browser; the Python suite and dashboard `tsc` at pass 2.
 
 ## 9. To do one real run
 
-**Conditional on `direct-providers` landing.** Do not run steps 3 onward until step 2 is all green. The payer makes one
-decision (step 3). Everything before it is free. Commands run from the repo root. `NO_PAID_CALLS=0` is given **for one
-command only** (the process environment wins over `.env`), so nothing stays enabled afterwards; do not put it in `.env`
-unless you want it to persist.
+**Conditional on the rewire being merged and its tests green** (it is in the working tree, uncommitted at the time of
+writing). The payer makes one decision (step 4). Everything before it is free. `NO_PAID_CALLS=0` is given **for one command
+only** (the process environment wins over `.env`), so nothing stays enabled; do not put it in `.env` unless you want that.
+Needed keys: `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in `.env`. No OpenRouter or TypeSafe key.
 
 ```bash
 # 0. Be in the repo, with the switch ON for everything free.
 cd /Users/brendandang/AI/workspace/drug-board
 export NO_PAID_CALLS=1
 
-# 1. The change must have landed and nothing may still name the removed providers.
-git status --short engine/src board/config.yaml          # review what direct-providers changed
-git grep -nIi 'openrouter\|typesafe\|jev' -- engine/src board/config.yaml .env.example   # expect: no live code or config hits
+# 1. The rewire must be in, and nothing live may still name the removed providers.
+git status --short engine/src board/config.yaml
+git grep -nIi 'openrouter\|typesafe\|jev' -- engine/src board/config.yaml .env.example     # expect: no live code or config hits
 
 # 2. Free gates. All must pass before any money is spent.
-(cd engine && npx tsc --noEmit && npm test)             # expect 0 errors, 0 failures
-npm run board -- board/briefs/kras-g12c-hit-to-lead.md  # scripted run: must print a memo and claim verdicts
-#   (this is the control: it prints "(mock models, no keys)")
+(cd engine && npx tsc --noEmit && npm test)       # expect 0 errors and 0 failures (today: see section 2)
+npm run board -- board/briefs/kras-g12c-hit-to-lead.md    # scripted control: prints a memo and claim verdicts, first line says SCRIPTED
 
-# 3. Cheap demo configuration (see docs/cost.md, "Cheapest honest demo"). Back up, then edit.
+# 3. Demo A configuration (docs/cost.md section 7): 4 roles, 2 rounds, small caps. Back up, then edit.
 cp board/config.yaml /tmp/config.yaml.bak
 sed -i '' -e 's/^  max_usd: .*/  max_usd: 1/' -e 's/^  max_rounds: .*/  max_rounds: 2/' \
           -e 's/^  max_escalations: .*/  max_escalations: 3/' -e 's/^  member_turns: .*/  member_turns: 4/' board/config.yaml
-sed -i '' -e '/^  - target-biologist$/d' -e '/^  - admet$/d' -e '/^  - competitive-ip$/d' -e '/^  - moonshot$/d' board/config.yaml
-git diff board/config.yaml                               # confirm only the caps and the roster changed
+sed -i '' -e '/^  - pilot/d' -e '/^  - experimenter$/d' -e '/^  - methods-auditor$/d' -e '/^  - reviser$/d' -e '/^  - finisher$/d' board/config.yaml
+git diff board/config.yaml                         # confirm: caps changed, roster is scout, proposer, critic, reporter
 
 # 4. THE PAYER'S DECISION. Only the person who pays sets this, for this one command.
-#    A real run is refused (fails loudly, naming the tier and key) if a key is missing.
 NO_PAID_CALLS=0 npm run board -- board/briefs/kras-g12c-hit-to-lead.md
+#    If a key is missing it stops at once (exit 3), naming the tier and key, and spends nothing.
 
-# 5. Check it was real, not scripted. All three must hold.
+# 5. Check it was real, not scripted. All must hold.
 RUN=$(ls -t board/runs | grep -v '^\.' | head -1)
-grep -c '"mock": true' board/runs/$RUN/run.json          # expect 0
-node -e 'const s=require("./board/runs/'"$RUN"'/run.json"); console.log("usd", s.usd, "escalations", s.escalations, "mock", s.mock)'   # expect usd > 0, mock false
-sed -n 1,40p board/runs/$RUN/memo.md                     # the memo
-# If run.json says mock true, or usd is 0: stop. It was not a real run.
+grep -c '"mock": true' board/runs/$RUN/run.json    # expect 0
+node -e 'const s=require("./board/runs/'"$RUN"'/run.json"); console.log("usd", s.usd, "firstPassUsd", s.firstPassUsd, "escalations", s.escalations, "mock", s.mock, "costEstimated", s.costEstimated)'
+sed -n 1,40p board/runs/$RUN/memo.md
+# usd 0 or mock true: stop, it was not a real run. costEstimated true: a price was missing, the cap used a fallback.
 
-# 6. Restore the config. The switch was never exported as 0, so nothing else is on.
+# 6. Restore the config. The switch was never exported as 0.
 cp /tmp/config.yaml.bak board/config.yaml
 ```
 
-A real run also writes each member's verified and contradicted claims into `board/expertise/<member>.md` (tracked files,
-`memory.enabled: true`), and they are read into that member's next run. Review `git diff board/expertise` afterwards; set
-`memory.enabled: false` in step 3 if you do not want that.
+Notes:
 
-Expected cost of this run: about **$0.30, plausible range $0.13 to $0.95** (estimate; see docs/cost.md). The hard stop is
-`max_usd: 1`, checked between rounds (one round can overshoot), and it does not count Exa.
-
-Optional second run, the swarm on the demo case (measured $0.23 to $0.38 on `claude-sonnet-5-5`, needs Docker; this has
-been done before and proves nothing new):
-
-```bash
-NO_PAID_CALLS=0 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --follow
-```
-
-If a run must be stopped: `Ctrl-C`, then `npm run resume <run-id>` continues it later (only with the switch off for that
-command again), or leave it paused.
+- The roster `sed` was tested on a copy of `board/config.yaml`: it removes pilot, experimenter, methods-auditor, reviser and
+  finisher, and leaves `scout`, `proposer`, `critic` and `reporter`. Check the `git diff` anyway.
+- A real run writes each role's verified and contradicted claims into `board/expertise/<member>.md` (tracked files,
+  `memory.enabled: true`), and they are read into that role's next run. Review `git diff board/expertise`, or set
+  `memory.enabled: false` in step 3.
+- Expected cost: about **$0.10, plausible $0.05 to $0.25** (estimate; `docs/cost.md` section 7). The hard stop is `max_usd: 1`
+  plus whatever round 1 costs.
+- This run shows the machinery on illustrative data. It does not retrieve evidence or compute anything (section 6).
+- Optional, the swarm on the demo case (measured $0.23 to $0.38; done before, proves nothing new):
+  `NO_PAID_CALLS=0 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --follow`
+- To stop: `Ctrl-C`; `NO_PAID_CALLS=0 npm run resume <run-id>` continues it later.

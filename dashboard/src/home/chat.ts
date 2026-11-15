@@ -1,27 +1,30 @@
 // The rules of the Home chat, apart from its markup so they can be tested: the labels, what is sent, what a person
 // must do before a plan may start, and where an engine refusal is shown.
 import { HOW_TO_TURN_ON } from "@/lib/paid"
+import type { RunSummary } from "@/board/api"
 import { fmtDuration } from "@/lib/format"
-import type { Catalog, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, SearchKind, SearchResult, StartRequest } from "./api"
+import type { ScoreRow } from "@/swarm/api"
+import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
 export const MODE_LABEL: Record<ChatMode, string> = {
   ai: "AI answer",
   keyword: "Keyword search, not an AI answer",
-  scripted: "Scripted: fixed text, not research",
+  scripted: "Practice: fixed text, not research",
 }
 export const MODE_KIND: Record<ChatMode, string> = { ai: "success", keyword: "warning", scripted: "neutral" }
 
 export const EXAMPLES = [
   "Should we advance a KRAS G12C hit that has a hERG liability?",
   "What did past board reviews decide about hERG risk?",
-  "Which runs had a rejected claim, and what was wrong with it?",
+  "Which runs had a statement that was proven wrong, and what was wrong with it?",
   "Plan a review of a covalent kinase inhibitor with poor solubility.",
 ]
 
-export const MAX_MESSAGE = 4000
-/** How many past messages go with a new one. Older ones stay on screen but are not sent. */
-export const MAX_HISTORY = 40
+// The engine's own limits (engine/src/chat/routes.ts): a question of at most 2,000 characters, at most 20 messages.
+export const MAX_MESSAGE = 2000
+/** How many messages go in one request, the new question included. Older ones stay on screen but are not sent. */
+export const MAX_HISTORY = 20
 
 /** What happened to the plan of one reply. */
 export type PlanState = { state: "open" } | { state: "discarded" } | { state: "expired" } | { state: "started"; runId: string }
@@ -38,7 +41,7 @@ export const KEY_REFUSAL = "This looks like an API key, so it was not sent. Keys
 /** Why this text cannot be sent, or undefined when it can. */
 export function refuseText(text: string): string | undefined {
   if (!text.trim()) return "Type a question first."
-  if (text.length > MAX_MESSAGE) return `A message can have at most ${MAX_MESSAGE.toLocaleString("en-US")} characters.`
+  if (text.trim().length > MAX_MESSAGE) return `A message can have at most ${MAX_MESSAGE.toLocaleString("en-US")} characters.`
   if (looksLikeKey(text)) return KEY_REFUSAL
   return undefined
 }
@@ -144,21 +147,39 @@ export const saveTurns = (turns: Turn[]) => {
   try { if (turns.length) sessionStorage.setItem(STORE, JSON.stringify(turns)); else sessionStorage.removeItem(STORE) } catch { /* storage full or off: the conversation stays in memory */ }
 }
 
-// ---- search (finds what exists; the chat asks a question)
-export const SEARCH_KINDS: readonly { id: SearchKind | "all"; label: string }[] = [
-  { id: "all", label: "All" }, { id: "swarm", label: "Swarm runs" }, { id: "board", label: "Board reviews" }, { id: "agent", label: "Agents" }, { id: "skill", label: "Skills" },
-]
-export const KIND_LABEL: Record<SearchKind, string> = { swarm: "swarm run", board: "board review", agent: "agent", skill: "skill" }
-/** Where a result opens: a run in its view, an agent or a skill in the Agents view. */
-export const viewOfResult = (r: Pick<SearchResult, "kind">): "Swarm" | "Board" | "Agents" => (r.kind === "swarm" ? "Swarm" : r.kind === "board" ? "Board" : "Agents")
-
-/** Text cut into pieces, with the pieces that are one of the query's words marked. Matching ignores case. */
-export function highlight(text: string, query: string): { text: string; hit: boolean }[] {
-  const words = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))]
-  if (!words.length || !text) return text ? [{ text, hit: false }] : []
-  const pattern = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length).join("|")})`, "gi")
-  return text.split(pattern).filter(Boolean).map((part) => ({ text: part, hit: words.includes(part.toLowerCase()) }))
+// ---- "What was checked"
+/** The newest row where both solvers ran with the same settings and both were graded. */
+export const pairedRow = (rows: unknown): ScoreRow | undefined =>
+  (Array.isArray(rows) ? (rows as ScoreRow[]) : []).find((r) => r && r.diff !== undefined && r.single?.score !== undefined && r.swarm?.score !== undefined)
+/** The newest finished review, else the newest. */
+export const latestReview = (runs: unknown): RunSummary | undefined => {
+  const list = Array.isArray(runs) ? (runs as RunSummary[]).filter((r) => r && typeof r.id === "string") : []
+  return list.find((r) => r.status === "done") ?? list[0]
 }
-/** The row the arrow keys move to. -1 is the search field itself; the ends do not wrap. */
-export const moveActive = (active: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End", count: number): number =>
-  count === 0 ? -1 : key === "ArrowDown" ? Math.min(count - 1, active + 1) : key === "ArrowUp" ? Math.max(-1, active - 1) : key === "Home" ? 0 : count - 1
+
+
+// ---- can a board review use real models?
+const KEY_FOR: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" }
+const KEY_NAME: Record<string, string> = { ANTHROPIC_API_KEY: "Anthropic", OPENAI_API_KEY: "OpenAI" }
+/** The key a board model id needs: the provider is the part before the slash. Undefined for a provider that needs none. */
+export const keyOfModel = (id: string): string | undefined => KEY_FOR[id.split("/")[0]]
+
+/**
+ * Why a board review can only run with scripted models, in one plain sentence, or undefined when it can use real
+ * ones. From the engine's own facts (GET /api/status: the board's model ids, which keys are set, the paid switch,
+ * and whether it is in scripted mode), plus the catalog's provider list.
+ */
+export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; keys?: Record<string, unknown>; models?: Record<string, unknown> } | undefined,
+  providers: { id: string; keyPresent: boolean }[] = []): string | undefined {
+  const needed = new Set(Object.values(status?.models ?? {}).flatMap((id) => (typeof id === "string" ? [keyOfModel(id)] : [])).filter((k): k is string => !!k))
+  const missing = [...needed].filter((key) => status?.keys?.[key] === false || providers.some((p) => KEY_FOR[p.id] === key && !p.keyPresent))
+  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board reviews are practice runs only`
+  if (status?.paidCalls === false) return "Paid calls are off: board reviews are practice runs only"
+  if (status?.mock === true) return "The engine is in practice mode: board reviews are practice runs only"
+  return undefined
+}
+
+// ---- the words the Agents view filter looks in
+export const agentText = (a: CatalogAgent) => [a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" ")].join(" ")
+export const skillText = (s: CatalogSkill) => `${s.name} ${s.description} ${s.installed ? "installed" : "index only not installed"}`
+

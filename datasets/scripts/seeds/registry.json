@@ -1,0 +1,2539 @@
+[
+ {
+  "id": "chembl",
+  "name": "ChEMBL",
+  "url": "https://www.ebi.ac.uk/chembl/",
+  "api": "https://www.ebi.ac.uk/chembl/api/data/status.json",
+  "domains": [
+   "admet",
+   "bioactivity",
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "small-molecule bioactivity tables (relational)",
+  "description": "Manually curated database of bioactive molecules with drug-like properties: compounds, targets, assays and measured activities (IC50, Ki, ...), drug mechanisms and indications, taken from the literature and deposited sets.",
+  "format": "PostgreSQL, MySQL and SQLite dumps, SDF, FASTA, RDF; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-SA-3.0",
+   "evidence": [
+    "https://chembl.gitbook.io/chembl-interface-documentation/about"
+   ],
+   "pattern": "Creative Commons Attribution-Share ?Alike 3\\.0 Unported",
+   "bioregistry": "chembl"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1004",
+   "title_has": "ChEMBL"
+  },
+  "notes": "Share-alike: a database built from ChEMBL data must keep the same licence."
+ },
+ {
+  "id": "pubchem",
+  "name": "PubChem (Compound, Substance)",
+  "url": "https://pubchem.ncbi.nlm.nih.gov/",
+  "api": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/",
+  "domains": [
+   "bioactivity",
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "chemical structures, identifiers and properties",
+  "description": "Open chemistry database of the US National Library of Medicine: substances deposited by hundreds of sources, standardised compounds, properties, synonyms, patents and literature links.",
+  "format": "SDF, ASN.1, XML, JSON, CSV; PUG REST and PUG View APIs; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac956",
+   "title_has": "PubChem"
+  },
+  "notes": "Each depositor keeps its own terms; PubChem shows them per data source. PUG REST is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "pubchem-bioassay",
+  "name": "PubChem BioAssay",
+  "url": "https://pubchem.ncbi.nlm.nih.gov/docs/bioassays",
+  "api": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/assay/",
+  "domains": [
+   "bioactivity",
+   "chemistry",
+   "drug-discovery",
+   "toxicology"
+  ],
+  "modality": "screening results: one table per assay (AID)",
+  "description": "Biological test results for small molecules and RNAi: high-throughput screens (including the NIH Molecular Libraries Program and Tox21), dose-response data and literature-derived activities, each with a protocol description.",
+  "format": "CSV, JSON, XML, ASN.1; PUG REST; FTP",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkw1118",
+   "title_has": "PubChem BioAssay"
+  },
+  "notes": "Depositor terms apply per assay. PUG REST is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "bindingdb",
+  "name": "BindingDB",
+  "url": "https://www.bindingdb.org/rwd/bind/index.jsp",
+  "api": "https://www.bindingdb.org/rwd/bind/BindingDBRESTfulAPI.jsp",
+  "domains": [
+   "bioactivity",
+   "chemistry",
+   "drug-discovery",
+   "protein"
+  ],
+  "modality": "protein-ligand binding affinities (tabular)",
+  "description": "Measured binding affinities (Ki, Kd, IC50, EC50) between proteins considered drug targets and small, drug-like molecules, curated from journals and patents.",
+  "format": "TSV, SDF; REST web services",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-3.0-US",
+   "evidence": [
+    "https://www.bindingdb.org/rwd/bind/info.jsp",
+    "https://www.bindingdb.org/rwd/bind/index.jsp",
+    "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/Download.jsp"
+   ],
+   "pattern": "Creative Commons Attribution 3\\.0 (United States )?License|creativecommons\\.org/licenses/by/3\\.0/us"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkv1072",
+   "title_has": "BindingDB"
+  }
+ },
+ {
+  "id": "tdc",
+  "name": "Therapeutics Data Commons (TDC)",
+  "url": "https://tdcommons.ai/",
+  "api": "https://raw.githubusercontent.com/mims-harvard/TDC/main/tdc/metadata.py",
+  "domains": [
+   "admet",
+   "bioactivity",
+   "chemistry",
+   "drug-discovery",
+   "toxicology"
+  ],
+  "modality": "machine-learning-ready tables for therapeutics tasks",
+  "description": "Collection of curated datasets and benchmark groups for drug discovery machine learning: ADME, toxicity, high-throughput screens, drug-target interaction, drug response, synergy, antibodies, generation and retrosynthesis. Single datasets are listed as tdc:* entries.",
+  "format": "CSV, TSV and pickle files on Harvard Dataverse; Python package PyTDC",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (see the tdc:* entries); the PyTDC code is MIT"
+  },
+  "citation": {
+   "doi": "10.1038/s41589-022-01131-2",
+   "title_has": "therapeutic"
+  }
+ },
+ {
+  "id": "moleculenet",
+  "name": "MoleculeNet",
+  "url": "https://deepchem.readthedocs.io/en/latest/api_reference/moleculenet.html",
+  "domains": [
+   "admet",
+   "bioactivity",
+   "chemistry",
+   "quantum-chemistry",
+   "toxicology"
+  ],
+  "modality": "benchmark tables of molecules (SMILES) with labels",
+  "description": "Benchmark collection for molecular machine learning: ESOL, FreeSolv, Lipophilicity, BBBP, Tox21, ToxCast, SIDER, ClinTox, HIV, BACE, MUV, PCBA, QM7, QM8, QM9 and PDBbind subsets, loaded through DeepChem.",
+  "format": "CSV, SDF; DeepChem loaders",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "evidence": [],
+   "unverified": "no single licence; DeepChem code is MIT and each dataset keeps the terms of its original source"
+  },
+  "citation": {
+   "doi": "10.1039/c7sc02664a",
+   "title_has": "MoleculeNet"
+  },
+  "notes": "The old site moleculenet.org no longer answers; the DeepChem documentation is the current reference."
+ },
+ {
+  "id": "zinc",
+  "name": "ZINC20 / ZINC22",
+  "url": "https://zinc20.docking.org/",
+  "domains": [
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "purchasable compounds: 2D SMILES and 3D docking-ready structures",
+  "description": "Free database of commercially available compounds prepared for virtual screening, with purchasability, physical properties and ready-to-dock 3D formats. ZINC22 adds billions of make-on-demand molecules.",
+  "format": "SMILES, SDF, mol2, DOCK flexibase; tranche downloads",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "ZINC terms: free to use for everyone; redistribution of significant subsets needs written permission",
+   "evidence": [
+    "https://zinc20.docking.org/",
+    "https://zinc15.docking.org/",
+    "https://zinc.docking.org/"
+   ],
+   "pattern": "free to use for everyone",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1021/acs.jcim.0c00675",
+   "title_has": "ZINC20"
+  }
+ },
+ {
+  "id": "drugbank-open",
+  "name": "DrugBank Open Data (vocabulary and open structures)",
+  "url": "https://go.drugbank.com/releases/latest#open-data",
+  "domains": [
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "drug identifiers, names, synonyms and structures",
+  "description": "The public-domain part of DrugBank: DrugBank identifiers with names, CAS numbers, UNII, synonyms and InChIKeys, and structures of drugs. The full DrugBank database is not part of this entry.",
+  "format": "CSV, SDF",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://go.drugbank.com/releases/latest",
+    "https://go.drugbank.com/releases/help"
+   ],
+   "pattern": "CC0 1\\.0|Creative Common.{0,3}s CC0"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad976",
+   "title_has": "DrugBank"
+  },
+  "notes": "The full DrugBank database is CC BY-NC 4.0 for academic use only, needs an approved account, and is left out of this catalogue."
+ },
+ {
+  "id": "opentargets-platform",
+  "name": "Open Targets Platform",
+  "url": "https://platform.opentargets.org/",
+  "api": "https://api.platform.opentargets.org/api/v4/graphql",
+  "domains": [
+   "drug-discovery",
+   "genomics",
+   "pathways-networks",
+   "variation"
+  ],
+  "modality": "target-disease evidence and annotation tables",
+  "description": "Integrated evidence that links drug targets to diseases: genetic associations, somatic mutations, known drugs, expression, pathways, literature mining and animal models, with association scores, plus target, disease and drug annotation.",
+  "format": "Parquet and JSON on FTP, Google Cloud and BigQuery; GraphQL API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://platform-docs.opentargets.org/licence",
+    "https://platform-docs.opentargets.org/terms-of-use"
+   ],
+   "pattern": "CC0 1\\.0|Creative Commons Public Domain Dedication|creativecommons\\.org/publicdomain/zero"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1046",
+   "title_has": "Open Targets"
+  }
+ },
+ {
+  "id": "pdb",
+  "name": "Protein Data Bank (wwPDB archive, RCSB PDB)",
+  "url": "https://www.rcsb.org/",
+  "api": "https://data.rcsb.org/",
+  "domains": [
+   "drug-discovery",
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "experimental 3D structures of macromolecules and ligands",
+  "description": "The single worldwide archive of experimentally determined 3D structures of proteins, nucleic acids and complexes with ligands (X-ray, cryo-EM, NMR), with experimental data and the Chemical Component Dictionary.",
+  "format": "mmCIF, PDB, BinaryCIF, PDBML; REST and GraphQL APIs",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://www.rcsb.org/pages/usage-policy",
+    "https://www.wwpdb.org/about/usage-policies"
+   ],
+   "pattern": "CC0 1\\.0 Universal"
+  },
+  "citation": {
+   "doi": "10.1093/nar/28.1.235",
+   "title_has": "Protein Data Bank"
+  },
+  "notes": "The RCSB data API is disallowed in robots.txt for crawlers, so this catalogue did not call it.",
+  "same_as": [
+   "bioregistry:pdb"
+  ]
+ },
+ {
+  "id": "alphafold-db",
+  "name": "AlphaFold Protein Structure Database",
+  "url": "https://alphafold.ebi.ac.uk/",
+  "api": "https://alphafold.ebi.ac.uk/api-docs",
+  "domains": [
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "predicted 3D protein structures with confidence scores",
+  "description": "Predicted structures for over 200 million UniProt sequences from AlphaFold, with per-residue confidence (pLDDT) and predicted aligned error; bulk archives per model organism proteome and for Swiss-Prot.",
+  "format": "mmCIF, PDB, JSON (PAE); bulk tar archives; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://alphafold.ebi.ac.uk/faq",
+    "https://alphafold.ebi.ac.uk/",
+    "https://alphafold.ebi.ac.uk/download"
+   ],
+   "pattern": "CC[- ]BY[- ]4\\.0|Creative Commons Attribution 4\\.0",
+   "bioregistry": "alphafold"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1061",
+   "title_has": "AlphaFold Protein Structure Database"
+  }
+ },
+ {
+  "id": "pdbbind",
+  "name": "PDBbind",
+  "url": "https://www.pdbbind-plus.org.cn/",
+  "domains": [
+   "bioactivity",
+   "drug-discovery",
+   "structural-biology"
+  ],
+  "modality": "protein-ligand complex structures with binding affinities",
+  "description": "Experimentally measured binding affinities for biomolecular complexes in the PDB, with processed structure files; the usual training and test set for scoring functions (general, refined and core sets).",
+  "format": "PDB, mol2, SDF, index tables",
+  "access": "registration",
+  "level": "dataset",
+  "licence": {
+   "evidence": [],
+   "unverified": "a provider licence that needs a registered account; recent releases have commercial terms"
+  },
+  "notes": "Needs a registered account. Open alternatives are in this catalogue: BindingDB, BioLiP, PLINDER, PoseBusters."
+ },
+ {
+  "id": "biolip",
+  "name": "BioLiP",
+  "url": "https://zhanggroup.org/BioLiP/",
+  "domains": [
+   "bioactivity",
+   "drug-discovery",
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "biologically relevant ligand-protein interactions from the PDB",
+  "description": "Semi-manually curated database of biologically relevant ligand-protein binding interactions: binding site residues, ligand type, affinity where known, catalytic sites and function annotation, updated weekly from the PDB.",
+  "format": "tab-separated annotation files, PDB-format receptor and ligand files",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "BioLiP: all data are freely available (no licence named)",
+   "evidence": [
+    "https://zhanggroup.org/BioLiP/download.html"
+   ],
+   "pattern": "all data from the BioLiP database are freely available",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gks966",
+   "title_has": "BioLiP"
+  }
+ },
+ {
+  "id": "plinder",
+  "name": "PLINDER",
+  "url": "https://www.plinder.sh/",
+  "domains": [
+   "bioactivity",
+   "drug-discovery",
+   "structural-biology"
+  ],
+  "modality": "protein-ligand interaction systems with splits for machine learning",
+  "description": "Large annotated set of protein-ligand complexes from the PDB with quality annotations, similarity clusters and leakage-aware train and test splits for docking and co-folding models.",
+  "format": "mmCIF, SDF, Parquet index; Google Cloud bucket; Python package",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "Apache-2.0",
+   "evidence": [
+    "https://raw.githubusercontent.com/plinder-org/plinder/main/LICENSE.txt",
+    "https://raw.githubusercontent.com/plinder-org/plinder/main/LICENSE"
+   ],
+   "pattern": "Apache License\\s+Version 2\\.0"
+  },
+  "notes": "The licence file read here is the one in the PLINDER code repository."
+ },
+ {
+  "id": "tox21",
+  "name": "Tox21 (Toxicology in the 21st Century)",
+  "url": "https://tox21.gov/",
+  "domains": [
+   "bioactivity",
+   "chemistry",
+   "toxicology"
+  ],
+  "modality": "quantitative high-throughput screening results",
+  "description": "US federal programme that tested about 10,000 chemicals in nuclear receptor and stress response assays. Results are deposited in PubChem and shown in the Tox21 data browser; the Tox21 Data Challenge 2014 subset is a common benchmark.",
+  "format": "CSV, SDF, PubChem assay tables",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "evidence": [
+    "https://tox21.gov/data-and-tools/",
+    "https://tox21.gov/overview/"
+   ]
+  }
+ },
+ {
+  "id": "toxcast",
+  "name": "ToxCast (invitroDB)",
+  "url": "https://www.epa.gov/comptox-tools/exploring-toxcast-data",
+  "domains": [
+   "bioactivity",
+   "chemistry",
+   "toxicology"
+  ],
+  "modality": "in vitro assay results with concentration-response fits",
+  "description": "US EPA high-throughput screening data for thousands of chemicals across hundreds of assay endpoints, released as the invitroDB database with summary files and the tcpl processing pipeline.",
+  "format": "MySQL dump, CSV summary files",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://www.epa.gov/comptox-tools/exploring-toxcast-data"
+   ]
+  }
+ },
+ {
+  "id": "sider",
+  "name": "SIDER (Side Effect Resource)",
+  "url": "http://sideeffects.embl.de/",
+  "domains": [
+   "drug-discovery",
+   "pharmacovigilance"
+  ],
+  "modality": "drug - side effect pairs with frequencies",
+  "description": "Side effects of marketed medicines mined from package inserts, mapped to MedDRA terms, with frequency information and indications. Version 4.1 is the last release.",
+  "format": "TSV",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [],
+   "unverified": "CC BY-NC-SA 4.0"
+  },
+  "notes": "The site's robots.txt blocks AI agents, so no page of it was read."
+ },
+ {
+  "id": "faers",
+  "name": "FDA Adverse Event Reporting System (FAERS) quarterly files",
+  "url": "https://fis.fda.gov/extensions/FPD-QDE-FAERS/FPD-QDE-FAERS.html",
+  "domains": [
+   "clinical",
+   "drug-discovery",
+   "pharmacovigilance"
+  ],
+  "modality": "spontaneous adverse event reports (tabular)",
+  "description": "Quarterly extracts of adverse event and medication error reports sent to the FDA: demographics, drugs, reactions (MedDRA terms), outcomes, report sources and indications. The same reports are served as JSON by openFDA (openfda:drug/event).",
+  "format": "ASCII (dollar-delimited) and XML, zipped per quarter",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "Public domain (FDA website policy: content is not copyrighted unless noted)",
+   "evidence": [
+    "https://www.fda.gov/about-fda/about-website/website-policies"
+   ],
+   "pattern": "not copyrighted.{0,200}public domain|public domain.{0,200}may be republished",
+   "commercial_use": "yes"
+  },
+  "notes": "Reaction terms are coded in MedDRA, which has its own licence."
+ },
+ {
+  "id": "clinicaltrials-gov",
+  "name": "ClinicalTrials.gov",
+  "url": "https://clinicaltrials.gov/",
+  "api": "https://clinicaltrials.gov/data-api/api",
+  "domains": [
+   "clinical",
+   "clinical-trials",
+   "drug-discovery"
+  ],
+  "modality": "registered clinical studies with protocols and results (structured text)",
+  "description": "Registry of clinical studies run in over 200 countries: design, conditions, interventions, eligibility, outcomes, sponsors, status and, for many completed trials, summary results.",
+  "format": "JSON, CSV; REST API v2; bulk zip of all studies",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://clinicaltrials.gov/about-site/terms-conditions"
+   ],
+   "unverified": "public registry data with attribution conditions (ClinicalTrials.gov terms and conditions)"
+  },
+  "notes": "The terms page is script-driven and could not be read by this script. The API path is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "aact",
+  "name": "AACT (Aggregate Analysis of ClinicalTrials.gov)",
+  "url": "https://aact.ctti-clinicaltrials.org/",
+  "domains": [
+   "clinical",
+   "clinical-trials"
+  ],
+  "modality": "relational copy of ClinicalTrials.gov",
+  "description": "Relational database with every study registered in ClinicalTrials.gov, refreshed daily by the Clinical Trials Transformation Initiative; easier for SQL analysis than the registry's own API.",
+  "format": "PostgreSQL dump, pipe-delimited flat files; free account for the cloud database",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://aact.ctti-clinicaltrials.org/",
+    "https://aact.ctti-clinicaltrials.org/downloads"
+   ]
+  }
+ },
+ {
+  "id": "drugcentral",
+  "name": "DrugCentral",
+  "url": "https://drugcentral.org/",
+  "domains": [
+   "clinical",
+   "drug-discovery",
+   "pharmacovigilance"
+  ],
+  "modality": "approved drugs with targets, indications and pharmacology (relational)",
+  "description": "Online drug compendium: active ingredients, chemical structures, regulatory approval, mechanism-of-action targets, indications, pharmacologic class, FAERS signal summaries and product labels.",
+  "format": "PostgreSQL dump, TSV, SDF; API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-SA-4.0",
+   "evidence": [
+    "https://drugcentral.org/download",
+    "https://drugcentral.org/",
+    "https://drugcentral.org/about"
+   ],
+   "pattern": "CC BY-SA 4\\.0|Attribution-ShareAlike 4\\.0|creativecommons\\.org/licenses/by-sa/4\\.0",
+   "bioregistry": "drugcentral"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1085",
+   "title_has": "DrugCentral"
+  }
+ },
+ {
+  "id": "gtopdb",
+  "name": "IUPHAR/BPS Guide to PHARMACOLOGY (GtoPdb)",
+  "url": "https://www.guidetopharmacology.org/",
+  "api": "https://www.guidetopharmacology.org/webServices.jsp",
+  "domains": [
+   "bioactivity",
+   "drug-discovery",
+   "immunology"
+  ],
+  "modality": "expert-curated targets, ligands and their interactions",
+  "description": "Expert-curated quantitative data on drug targets (GPCRs, ion channels, nuclear receptors, enzymes, transporters) and the approved and experimental ligands that act on them, with selectivity and affinity.",
+  "format": "CSV, TSV, PostgreSQL dump, SDF, RDF; REST web services",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://www.guidetopharmacology.org/about.jsp",
+    "https://www.guidetopharmacology.org/download.jsp"
+   ],
+   "claims": [
+    {
+     "claim": "CC-BY-SA-4.0 AND ODbL-1.0",
+     "patterns": [
+      "Open Data Commons Open Database License",
+      "Attribution-ShareAlike 4\\.0"
+     ]
+    }
+   ],
+   "bioregistry": "iuphar.ligand"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad944",
+   "title_has": "Guide to PHARMACOLOGY"
+  },
+  "notes": "The database is under ODbL and its contents under CC BY-SA 4.0: both are share-alike."
+ },
+ {
+  "id": "ord",
+  "name": "Open Reaction Database (ORD)",
+  "url": "https://open-reaction-database.org/",
+  "api": "https://github.com/open-reaction-database/ord-data",
+  "domains": [
+   "chemistry",
+   "reactions-synthesis"
+  ],
+  "modality": "structured records of chemical reactions",
+  "description": "Open-access schema and repository for organic reaction data: reactants, conditions, procedures and outcomes, including patent-derived reactions and high-throughput experimentation sets.",
+  "format": "Protocol buffer records (gzipped), Python client",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-SA-4.0",
+   "evidence": [
+    "https://raw.githubusercontent.com/open-reaction-database/ord-data/main/LICENSE"
+   ],
+   "pattern": "Attribution-ShareAlike 4\\.0 International"
+  },
+  "citation": {
+   "doi": "10.1021/jacs.1c09820",
+   "title_has": "Open Reaction Database"
+  }
+ },
+ {
+  "id": "coconut",
+  "name": "COCONUT (Collection of Open Natural Products)",
+  "url": "https://coconut.naturalproducts.net/",
+  "domains": [
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "natural product structures with annotation",
+  "description": "Aggregated, curated open collection of natural product structures from more than 50 sources, with stereochemistry, organisms, literature and computed properties.",
+  "format": "SDF, CSV, PostgreSQL dump; REST API",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://coconut.naturalproducts.net/",
+    "https://coconut.naturalproducts.net/download"
+   ],
+   "pattern": "CC0|Creative Commons.{0,40}Zero"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkae1063",
+   "title_has": "COCONUT"
+  }
+ },
+ {
+  "id": "npatlas",
+  "name": "Natural Products Atlas",
+  "url": "https://www.npatlas.org/",
+  "domains": [
+   "chemistry",
+   "drug-discovery",
+   "microbiome"
+  ],
+  "modality": "microbial natural product structures with source organisms",
+  "description": "Curated database of microbially derived natural product structures from the primary literature, with producing organism, isolation reference and chemical ontology terms.",
+  "format": "TSV, SDF, JSON, GraphML; API",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-NC-4.0",
+   "evidence": [
+    "https://www.npatlas.org/download"
+   ],
+   "pattern": "licensed under a Creative Commons Attribution-Noncommercial 4\\.0 International License"
+  },
+  "notes": "Non-commercial."
+ },
+ {
+  "id": "ctd",
+  "name": "Comparative Toxicogenomics Database (CTD)",
+  "url": "https://ctdbase.org/",
+  "domains": [
+   "drug-discovery",
+   "pathways-networks",
+   "toxicology"
+  ],
+  "modality": "curated chemical-gene, chemical-disease and gene-disease relations",
+  "description": "Manually curated interactions between chemicals, genes, phenotypes, diseases and exposures from the literature, with inferred relations and pathway and Gene Ontology enrichment.",
+  "format": "CSV, TSV, XML bulk files; batch query",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://ctdbase.org/about/legal.jsp"
+   ],
+   "unverified": "free for research and education only; commercial use needs permission"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac833",
+   "title_has": "Comparative Toxicogenomics Database"
+  }
+ },
+ {
+  "id": "clinpgx",
+  "name": "ClinPGx / PharmGKB",
+  "url": "https://www.clinpgx.org/",
+  "domains": [
+   "clinical",
+   "drug-discovery",
+   "variation"
+  ],
+  "modality": "pharmacogenomic annotations (variant, gene, drug)",
+  "description": "Curated knowledge on how human genetic variation affects drug response: clinical and variant annotations, drug label annotations, dosing guidelines and pathways.",
+  "format": "TSV, JSON (account needed for bulk downloads); API",
+  "access": "registration",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-SA-4.0",
+   "evidence": [
+    "https://www.clinpgx.org/page/dataUsagePolicy",
+    "https://www.pharmgkb.org/page/dataUsagePolicy"
+   ],
+   "pattern": "Attribution-ShareAlike 4\\.0",
+   "bioregistry": "pharmgkb.drug"
+  }
+ },
+ {
+  "id": "dailymed",
+  "name": "DailyMed (structured product labels)",
+  "url": "https://dailymed.nlm.nih.gov/dailymed/",
+  "api": "https://dailymed.nlm.nih.gov/dailymed/app-support-web-services.cfm",
+  "domains": [
+   "clinical",
+   "drug-discovery",
+   "pharmacovigilance",
+   "text-literature"
+  ],
+  "modality": "drug labels as structured XML documents",
+  "description": "Current labelling (package inserts) that companies submit to the FDA for marketed human and animal drugs, as Structured Product Labeling documents, with bulk downloads and web services.",
+  "format": "SPL XML (zipped); REST web services",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "NLM web policy: government works may be freely used or reproduced in the U.S.; some content may be copyrighted",
+   "evidence": [
+    "https://www.nlm.nih.gov/web_policies.html"
+   ],
+   "pattern": "may be freely used or reproduced without permission in the U\\.S\\.",
+   "commercial_use": "unclear"
+  },
+  "notes": "Label text is written by the manufacturers."
+ },
+ {
+  "id": "ema-medicines",
+  "name": "European Medicines Agency: medicine data tables",
+  "url": "https://www.ema.europa.eu/en/medicines/download-medicine-data",
+  "domains": [
+   "clinical",
+   "drug-discovery"
+  ],
+  "modality": "tables of authorised medicines, opinions and referrals",
+  "description": "Downloadable tables on centrally authorised human and veterinary medicines in the EU: European public assessment reports, orphan designations, paediatric plans, referrals and herbal medicines.",
+  "format": "XLSX, CSV",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "EMA legal notice: information may be reproduced when the source is acknowledged",
+   "evidence": [
+    "https://www.ema.europa.eu/en/about-us/about-website/legal-notice",
+    "https://www.ema.europa.eu/en/about-us/legal-notice"
+   ],
+   "pattern": "may be reproduced|reproduction is authorised|reuse",
+   "commercial_use": "unclear"
+  }
+ },
+ {
+  "id": "biogen-adme",
+  "name": "Biogen ADME dataset (Fang et al. 2023)",
+  "url": "https://github.com/molecularinformatics/Computational-ADME",
+  "domains": [
+   "admet",
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "molecules (SMILES) with six in vitro ADME endpoints",
+  "description": "About 3,500 diverse compounds measured in-house at Biogen for microsomal stability (human, rat), MDR1-MDCK efflux, solubility and plasma protein binding (human, rat), released for model benchmarking.",
+  "format": "CSV, SDF",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://raw.githubusercontent.com/molecularinformatics/Computational-ADME/main/README.md",
+    "https://raw.githubusercontent.com/molecularinformatics/Computational-ADME/main/LICENSE"
+   ]
+  },
+  "citation": {
+   "doi": "10.1021/acs.jcim.3c00160",
+   "title_has": "Prospective Validation"
+  }
+ },
+ {
+  "id": "ncats-adme",
+  "name": "NCATS ADME data and models",
+  "url": "https://opendata.ncats.nih.gov/adme/",
+  "domains": [
+   "admet",
+   "chemistry",
+   "drug-discovery"
+  ],
+  "modality": "molecules with in vitro ADME assay results",
+  "description": "Public subsets of NCATS in-house ADME assay data (rat liver microsomal stability, PAMPA permeability, kinetic solubility, CYP inhibition) with trained prediction models.",
+  "format": "CSV, SDF",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://opendata.ncats.nih.gov/adme/data",
+    "https://opendata.ncats.nih.gov/adme/"
+   ]
+  }
+ },
+ {
+  "id": "drug-repurposing-hub",
+  "name": "Broad Drug Repurposing Hub",
+  "url": "https://repo-hub.broadinstitute.org/repurposing",
+  "domains": [
+   "drug-discovery",
+   "perturbation"
+  ],
+  "modality": "annotated library of approved and clinical-stage compounds",
+  "description": "Curated collection of several thousand approved, clinical-trial and pre-clinical tool compounds with mechanism of action, protein targets, disease area, indication and vendor identifiers.",
+  "format": "TSV",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC BY 4.0 as stated by the Hub, with added limits: not for clinical treatment or commercial marketing; no commercial redistribution without permission",
+   "evidence": [
+    "https://repo-hub.broadinstitute.org/repurposing"
+   ],
+   "pattern": "made available under the permissive CC-BY 4\\.0 license",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1038/nm.4306",
+   "title_has": "Drug Repurposing Hub"
+  },
+  "notes": "The Hub names CC BY 4.0 and, on the same page, forbids commercial redistribution and commercial marketing use. Treat it as not cleared for commercial use."
+ },
+ {
+  "id": "geo",
+  "name": "Gene Expression Omnibus (GEO)",
+  "url": "https://www.ncbi.nlm.nih.gov/geo/",
+  "api": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds",
+  "domains": [
+   "epigenomics",
+   "genomics",
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "functional genomics submissions: expression matrices, raw files, sample metadata",
+  "description": "Public repository for array- and sequence-based functional genomics data: gene expression, methylation, chromatin and single-cell studies, each with platform, sample and series records and curated DataSets.",
+  "format": "SOFT, MINiML, series matrix TXT, supplementary files (H5, MTX, CSV); E-utilities; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gks1193",
+   "title_has": "NCBI GEO"
+  },
+  "notes": "Listed as a whole archive. Single studies are not catalogued. E-utilities is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "sra",
+  "name": "Sequence Read Archive (SRA)",
+  "url": "https://www.ncbi.nlm.nih.gov/sra",
+  "api": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra",
+  "domains": [
+   "genomics",
+   "microbiome",
+   "transcriptomics"
+  ],
+  "modality": "raw sequencing reads with run and sample metadata",
+  "description": "The largest public archive of high-throughput sequencing reads, part of the International Nucleotide Sequence Database Collaboration; also mirrored on AWS and Google Cloud.",
+  "format": "SRA, FASTQ, BAM; SRA Toolkit; cloud buckets",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkq1019",
+   "title_has": "Sequence Read Archive"
+  },
+  "notes": "Listed as a whole archive. Single studies are not catalogued. Controlled-access human data (dbGaP) is not part of this entry."
+ },
+ {
+  "id": "ena",
+  "name": "European Nucleotide Archive (ENA)",
+  "url": "https://www.ebi.ac.uk/ena/browser/home",
+  "api": "https://www.ebi.ac.uk/ena/portal/api/",
+  "domains": [
+   "genomics",
+   "microbiome",
+   "transcriptomics"
+  ],
+  "modality": "raw reads, assemblies and annotated sequences",
+  "description": "Europe's archive of nucleotide sequencing data: raw reads, assemblies and annotated sequences with sample and study metadata, exchanged daily with NCBI and DDBJ.",
+  "format": "FASTQ, BAM, CRAM, FASTA, EMBL flat file; Portal and Browser APIs; FTP and Aspera",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "INSDC policy: free and unrestricted access, no use restrictions or licensing requirements",
+   "evidence": [
+    "https://www.insdc.org/policy/",
+    "https://www.ebi.ac.uk/ena/browser/about/policies"
+   ],
+   "pattern": "no use restrictions or licensing requirements|free and unrestricted access",
+   "commercial_use": "yes"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1051",
+   "title_has": "European Nucleotide Archive"
+  },
+  "notes": "Listed as a whole archive. Single studies are not catalogued."
+ },
+ {
+  "id": "biostudies-arrayexpress",
+  "name": "BioStudies and the ArrayExpress collection",
+  "url": "https://www.ebi.ac.uk/biostudies/arrayexpress",
+  "api": "https://www.ebi.ac.uk/biostudies/api/v1/search",
+  "domains": [
+   "epigenomics",
+   "genomics",
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "functional genomics studies: processed and raw files with MAGE-TAB metadata",
+  "description": "EMBL-EBI's archive of study descriptions and supporting data. Its ArrayExpress collection holds functional genomics experiments (microarray and sequencing) with standardised sample annotation.",
+  "format": "MAGE-TAB (IDF, SDRF), raw and processed files; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkaa1062",
+   "title_has": "BioStudies"
+  },
+  "notes": "Listed as a whole archive. Single studies are not catalogued. Some records carry their own CC0 or CC BY licence."
+ },
+ {
+  "id": "expression-atlas",
+  "name": "Expression Atlas and Single Cell Expression Atlas",
+  "url": "https://www.ebi.ac.uk/gxa/home",
+  "domains": [
+   "proteomics",
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "re-analysed baseline and differential expression matrices",
+  "description": "Curated and uniformly re-analysed gene and protein expression across species, tissues, cell types and conditions: baseline and differential bulk experiments and single-cell experiments with cell type annotation.",
+  "format": "TSV, R data objects, MTX; FTP",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://www.ebi.ac.uk/gxa/licence.html",
+    "https://www.ebi.ac.uk/gxa/about.html"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0|CC[- ]BY[- ]4\\.0"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1030",
+   "title_has": "Expression Atlas"
+  }
+ },
+ {
+  "id": "gtex",
+  "name": "GTEx (Genotype-Tissue Expression) open-access data",
+  "url": "https://gtexportal.org/home/downloads/adult-gtex",
+  "api": "https://gtexportal.org/api/v2/redoc",
+  "domains": [
+   "genomics",
+   "transcriptomics",
+   "variation"
+  ],
+  "modality": "expression matrices, eQTL and sQTL summary tables, sample annotation",
+  "description": "Gene expression and regulation across more than 50 human tissues from about 1,000 donors: gene and transcript counts and TPM, eQTL and sQTL results and public sample attributes. Genotypes and raw reads are controlled access and not part of this entry.",
+  "format": "GCT, TSV, Parquet (gzipped) on Google Cloud",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "evidence": [
+    "https://gtexportal.org/home/license"
+   ]
+  },
+  "citation": {
+   "doi": "10.1126/science.aaz1776",
+   "title_has": "GTEx"
+  },
+  "notes": "The portal's robots.txt disallows every path for unnamed crawlers, so no page of it was read."
+ },
+ {
+  "id": "gdc",
+  "name": "NCI Genomic Data Commons (TCGA, TARGET, CPTAC and more), open tier",
+  "url": "https://portal.gdc.cancer.gov/",
+  "api": "https://api.gdc.cancer.gov/",
+  "source": "gdc",
+  "domains": [
+   "cancer",
+   "clinical",
+   "genomics",
+   "transcriptomics",
+   "variation"
+  ],
+  "modality": "harmonised cancer genomics files and clinical tables",
+  "description": "Harmonised genomic and clinical data from NCI programmes. The open tier has clinical and biospecimen data, gene expression quantification, masked somatic mutations, copy number segments and slide images. Projects are listed as gdc:* entries.",
+  "format": "TSV, MAF, BCR XML, SVS; REST API; gdc-client",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "NIH Genomic Data Sharing Policy; GDC open-access tier (no licence stated)",
+   "evidence": [
+    "https://gdc.cancer.gov/access-data/data-access-policies"
+   ],
+   "pattern": "open and controlled data access adhere to the National Institutes of Health \\(NIH\\) Genomic Data Sharing Policy",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1056/nejmp1607591",
+   "title_has": "Cancer Genomic Data"
+  }
+ },
+ {
+  "id": "encode",
+  "name": "ENCODE (Encyclopedia of DNA Elements)",
+  "url": "https://www.encodeproject.org/",
+  "api": "https://www.encodeproject.org/help/rest-api/",
+  "domains": [
+   "epigenomics",
+   "genomics",
+   "transcriptomics"
+  ],
+  "modality": "functional genomics tracks, peaks and quantifications",
+  "description": "Uniformly processed functional genomics experiments in human and mouse: ChIP-seq, ATAC-seq, DNase-seq, RNA-seq, Hi-C and more, with candidate cis-regulatory element annotations and rich metadata.",
+  "format": "FASTQ, BAM, bigWig, bigBed, BED, TSV; REST API; AWS open data bucket",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "ENCODE data use policy: external users may freely download, analyse and publish without restrictions",
+   "evidence": [
+    "https://www.encodeproject.org/help/citing-encode/",
+    "https://www.encodeproject.org/about/data-use-policy/"
+   ],
+   "pattern": "without restrictions",
+   "commercial_use": "yes"
+  },
+  "citation": {
+   "doi": "10.1038/nature11247",
+   "title_has": "integrated encyclopedia of DNA elements"
+  },
+  "notes": "The search API path is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "hca",
+  "name": "Human Cell Atlas Data Portal",
+  "url": "https://data.humancellatlas.org/",
+  "api": "https://service.azul.data.humancellatlas.org/",
+  "domains": [
+   "genomics",
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "single-cell and spatial datasets with standard metadata",
+  "description": "Community data portal of the Human Cell Atlas: single-cell and single-nucleus transcriptomics and other modalities from healthy human tissues, with raw files, contributor matrices and uniformly processed outputs.",
+  "format": "FASTQ, BAM, loom, h5ad, MTX; Azul API; Terra export",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://data.humancellatlas.org/about/data-use-agreement"
+   ],
+   "unverified": "CC BY 4.0 for open-access projects"
+  },
+  "citation": {
+   "doi": "10.7554/elife.27041",
+   "title_has": "Human Cell Atlas"
+  },
+  "notes": "Listed as a whole portal. Single projects are not catalogued. Some projects are managed access."
+ },
+ {
+  "id": "cellxgene",
+  "name": "CZ CELLxGENE Discover and Census",
+  "url": "https://cellxgene.cziscience.com/",
+  "api": "https://api.cellxgene.cziscience.com/curation/ui/",
+  "domains": [
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "standardised single-cell expression matrices (cells by genes) with cell metadata",
+  "description": "Curated single-cell datasets in one schema with ontology-based cell metadata, and the Census: all the data as one queryable corpus of tens of millions of cells for Python and R.",
+  "format": "h5ad (AnnData), Seurat RDS, TileDB-SOMA (Census); Discover and Census APIs",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://cellxgene.cziscience.com/docs/032__Contribute%20and%20Publish%20Data",
+    "https://cellxgene.cziscience.com/tos/",
+    "https://chanzuckerberg.github.io/cellxgene-census/cellxgene_census_docsite_data_release_info.html"
+   ],
+   "pattern": "CC[- ]BY 4\\.0|CC-BY-4\\.0|Creative Commons Attribution 4\\.0",
+   "bioregistry": "cellxgene.collection"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkae1142",
+   "title_has": "CELLxGENE"
+  },
+  "notes": "Listed as a whole resource. Single collections are not catalogued."
+ },
+ {
+  "id": "lincs",
+  "name": "LINCS (Library of Integrated Network-based Cellular Signatures)",
+  "url": "https://maayanlab.cloud/sigcom-lincs/",
+  "domains": [
+   "drug-discovery",
+   "perturbation",
+   "proteomics",
+   "transcriptomics"
+  ],
+  "modality": "perturbation signatures: L1000 expression, proteomics, imaging, viability",
+  "description": "NIH programme that profiled human cells after chemical and genetic perturbation. The L1000 Connectivity Map has over a million expression signatures; other centres added phosphoproteomics, imaging and cell viability.",
+  "format": "GCTx, TSV, HDF5; clue.io, iLINCS and SigCom LINCS portals",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "evidence": []
+  },
+  "citation": {
+   "doi": "10.1016/j.cell.2017.10.049",
+   "title_has": "Connectivity Map"
+  },
+  "notes": "The programme site lincsproject.org no longer answers and clue.io disallows scripts; the landing page here is the SigCom LINCS portal."
+ },
+ {
+  "id": "recount3",
+  "name": "recount3",
+  "url": "https://rna.recount.bio/",
+  "domains": [
+   "genomics",
+   "transcriptomics"
+  ],
+  "modality": "uniformly processed RNA-seq coverage and count matrices",
+  "description": "Uniformly processed gene, exon and exon-exon junction counts and base-level coverage for over 750,000 public human and mouse RNA-seq samples from SRA, GTEx and TCGA, with an R/Bioconductor interface.",
+  "format": "RangedSummarizedExperiment (R), bigWig, TSV; AWS open data bucket",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "evidence": [
+    "https://rna.recount.bio/",
+    "https://rna.recount.bio/docs/"
+   ]
+  },
+  "citation": {
+   "doi": "10.1186/s13059-021-02533-6",
+   "title_has": "recount3"
+  }
+ },
+ {
+  "id": "archs4",
+  "name": "ARCHS4",
+  "url": "https://maayanlab.cloud/archs4/",
+  "domains": [
+   "genomics",
+   "transcriptomics"
+  ],
+  "modality": "uniformly aligned RNA-seq gene and transcript count matrices",
+  "description": "Gene- and transcript-level counts for most public human and mouse RNA-seq samples from GEO and SRA, aligned with one pipeline and shipped as large HDF5 matrices with sample metadata.",
+  "format": "HDF5 (H5)",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "CC BY 4.0 as stated by ARCHS4, with the added line: free for non-commercial purposes; commercial use needs a licence from Mount Sinai",
+   "evidence": [
+    "https://maayanlab.cloud/archs4/help.html"
+   ],
+   "pattern": "free to use for non-commercial purposes",
+   "commercial_use": "no"
+  },
+  "citation": {
+   "doi": "10.1038/s41467-018-03751-6",
+   "title_has": "RNA-seq"
+  },
+  "notes": "The help page names CC BY 4.0 for the expression files and, in the next sentence, limits free use to non-commercial purposes."
+ },
+ {
+  "id": "ensembl",
+  "name": "Ensembl",
+  "url": "https://www.ensembl.org/",
+  "api": "https://rest.ensembl.org/",
+  "domains": [
+   "genomics",
+   "transcriptomics",
+   "variation"
+  ],
+  "modality": "genome assemblies, gene annotation, variation and comparative genomics",
+  "description": "Genome browser and annotation for vertebrates and model organisms: gene builds, transcripts, regulatory features, variants with consequences, orthologues and alignments, with BioMart, VEP and FTP dumps.",
+  "format": "FASTA, GTF, GFF3, VCF, MySQL dumps; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "Ensembl: no restrictions on access to or use of the data",
+   "evidence": [
+    "https://www.ensembl.org/info/about/legal/disclaimer.html",
+    "https://www.ensembl.org/info/about/legal/index.html"
+   ],
+   "pattern": "imposes no restrictions on access to, or use of, the data|no restrictions on (the )?(access to, or )?use of",
+   "commercial_use": "yes"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1049",
+   "title_has": "Ensembl"
+  }
+ },
+ {
+  "id": "gencode",
+  "name": "GENCODE",
+  "url": "https://www.gencodegenes.org/",
+  "domains": [
+   "genomics",
+   "transcriptomics"
+  ],
+  "modality": "reference gene annotation for human and mouse",
+  "description": "The reference gene annotation for the human and mouse genomes used by ENCODE, GTEx and most RNA-seq pipelines: protein-coding genes, lncRNAs, pseudogenes and small RNAs with transcript models.",
+  "format": "GTF, GFF3, FASTA",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "GENCODE: all project data is open access (no licence named)",
+   "evidence": [
+    "https://www.gencodegenes.org/pages/data_access.html"
+   ],
+   "pattern": "GENCODE project data is open access",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1071",
+   "title_has": "GENCODE"
+  }
+ },
+ {
+  "id": "ucsc-genome-browser",
+  "name": "UCSC Genome Browser database",
+  "url": "https://genome.ucsc.edu/",
+  "api": "https://api.genome.ucsc.edu/",
+  "domains": [
+   "epigenomics",
+   "genomics",
+   "variation"
+  ],
+  "modality": "genome assemblies and annotation tracks",
+  "description": "Reference assemblies and thousands of annotation tracks (genes, conservation, regulation, variation, repeats) for many species, with table downloads, a public MySQL server and a REST API.",
+  "format": "2bit, FASTA, BED, bigBed, bigWig, MySQL tables; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://genome.ucsc.edu/conditions.html",
+    "https://genome.ucsc.edu/license/"
+   ]
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad987",
+   "title_has": "UCSC Genome Browser"
+  }
+ },
+ {
+  "id": "igsr-1000genomes",
+  "name": "1000 Genomes Project (IGSR)",
+  "url": "https://www.internationalgenome.org/",
+  "domains": [
+   "genomics",
+   "variation"
+  ],
+  "modality": "whole-genome sequences and phased variant calls from 26 populations",
+  "description": "Open catalogue of human genetic variation from 2,504 individuals (3,202 in the high-coverage resequencing), maintained with later collections by the International Genome Sample Resource.",
+  "format": "CRAM, VCF, FASTQ; FTP, AWS and Globus",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "IGSR: 1000 Genomes data are available without embargo or restriction on use",
+   "evidence": [
+    "https://www.internationalgenome.org/IGSR_disclaimer",
+    "https://www.internationalgenome.org/IGSR_disclaimer/"
+   ],
+   "pattern": "without embargo|publicly available without",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1038/nature15393",
+   "title_has": "global reference for human genetic variation"
+  }
+ },
+ {
+  "id": "gnomad",
+  "name": "gnomAD (Genome Aggregation Database)",
+  "url": "https://gnomad.broadinstitute.org/",
+  "domains": [
+   "genomics",
+   "variation"
+  ],
+  "modality": "allele frequencies and constraint metrics from aggregated exomes and genomes",
+  "description": "Harmonised exome and genome sequencing data from hundreds of thousands of people: variant sites with population allele frequencies, quality annotations, structural variants and gene constraint scores.",
+  "format": "VCF, Hail Tables, TSV; on Google Cloud, AWS and Azure",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [],
+   "bioregistry": "gnomad"
+  },
+  "citation": {
+   "doi": "10.1038/s41586-020-2308-7",
+   "title_has": "mutational constraint spectrum"
+  },
+  "notes": "The gnomAD site is a script-driven page that this script cannot read; the licence is the one Bioregistry lists."
+ },
+ {
+  "id": "clinvar",
+  "name": "ClinVar",
+  "url": "https://www.ncbi.nlm.nih.gov/clinvar/",
+  "domains": [
+   "clinical",
+   "genomics",
+   "variation"
+  ],
+  "modality": "variant - condition assertions with review status",
+  "description": "Public archive of reports on the relationship between human variants and conditions, with clinical significance, supporting evidence and review status from submitting laboratories and expert panels.",
+  "format": "VCF, XML, TSV; E-utilities; FTP",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkx1153",
+   "title_has": "ClinVar"
+  }
+ },
+ {
+  "id": "gwas-catalog",
+  "name": "NHGRI-EBI GWAS Catalog",
+  "url": "https://www.ebi.ac.uk/gwas/",
+  "api": "https://www.ebi.ac.uk/gwas/rest/api",
+  "domains": [
+   "genomics",
+   "variation"
+  ],
+  "modality": "curated SNP-trait associations and full summary statistics",
+  "description": "Curated collection of published genome-wide association studies: study descriptions, significant variant-trait associations mapped to ontology terms, and deposited full summary statistics.",
+  "format": "TSV, OWL/RDF; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://www.ebi.ac.uk/gwas/docs/about",
+    "https://www.ebi.ac.uk/gwas/docs/faq"
+   ],
+   "pattern": "CC0",
+   "bioregistry": "gwascentral.study"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1010",
+   "title_has": "GWAS Catalog"
+  }
+ },
+ {
+  "id": "jaspar",
+  "name": "JASPAR",
+  "url": "https://jaspar.elixir.no/",
+  "api": "https://jaspar.elixir.no/api/v1/",
+  "domains": [
+   "epigenomics",
+   "genomics"
+  ],
+  "modality": "transcription factor binding profiles (position frequency matrices)",
+  "description": "Open-access database of curated, non-redundant transcription factor binding profiles for eukaryotes, with genome-wide predicted binding site tracks.",
+  "format": "JASPAR, MEME and TRANSFAC matrix formats, BED tracks; REST API",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://jaspar.elixir.no/about/",
+    "https://jaspar.elixir.no/faq/",
+    "https://jaspar.elixir.no/"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0|CC[- ]BY[- ]4\\.0",
+   "bioregistry": "jaspar"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1059",
+   "title_has": "JASPAR"
+  }
+ },
+ {
+  "id": "msigdb",
+  "name": "MSigDB (Molecular Signatures Database)",
+  "url": "https://www.gsea-msigdb.org/gsea/msigdb",
+  "domains": [
+   "genomics",
+   "pathways-networks",
+   "transcriptomics"
+  ],
+  "modality": "annotated gene sets",
+  "description": "Tens of thousands of annotated gene sets for enrichment analysis in human and mouse: hallmark sets, curated pathways, regulatory targets, ontology sets, oncogenic and immunologic signatures and cell type signatures.",
+  "format": "GMT, JSON, XML, SQLite",
+  "access": "registration",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://www.gsea-msigdb.org/gsea/msigdb_license_terms.jsp",
+    "https://www.gsea-msigdb.org/gsea/license_terms_list.jsp"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0"
+  },
+  "citation": {
+   "doi": "10.1016/j.cels.2015.12.004",
+   "title_has": "Molecular Signatures Database"
+  },
+  "notes": "Download needs a free account. Some sub-collections (for example those derived from KEGG or BioCarta) have their own terms.",
+  "same_as": [
+   "bioregistry:msigdb"
+  ]
+ },
+ {
+  "id": "cbioportal-datahub",
+  "name": "cBioPortal public datasets (datahub)",
+  "url": "https://www.cbioportal.org/datasets",
+  "api": "https://www.cbioportal.org/api",
+  "domains": [
+   "cancer",
+   "clinical",
+   "genomics",
+   "variation"
+  ],
+  "modality": "per-study mutation, copy number, expression and clinical tables",
+  "description": "Curated, analysis-ready tables from published cancer genomics studies and from TCGA: mutations, copy number, expression, methylation and clinical attributes in one file layout.",
+  "format": "tab-delimited study files (MAF and matrices); REST API",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "ODbL-1.0",
+   "evidence": [
+    "https://docs.cbioportal.org/user-guide/faq/"
+   ],
+   "pattern": "data in cBioPortal are available under the ODC Open Database License"
+  },
+  "citation": {
+   "doi": "10.1158/2159-8290.cd-12-0095",
+   "title_has": "cBio"
+  },
+  "notes": "Listed as a whole collection. Single studies are not catalogued. The FAQ says some studies have other terms."
+ },
+ {
+  "id": "eqtl-catalogue",
+  "name": "eQTL Catalogue",
+  "url": "https://www.ebi.ac.uk/eqtl/",
+  "api": "https://www.ebi.ac.uk/eqtl/api/",
+  "domains": [
+   "genomics",
+   "transcriptomics",
+   "variation"
+  ],
+  "modality": "uniformly processed QTL summary statistics",
+  "description": "Uniformly processed gene expression and splicing QTL summary statistics from many public studies across human tissues and cell types, with fine-mapping credible sets.",
+  "format": "TSV (tabix-indexed), Parquet; REST API; FTP",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://www.ebi.ac.uk/eqtl/License/"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0|CC[- ]BY[- ]4\\.0"
+  },
+  "citation": {
+   "doi": "10.1038/s41588-021-00924-w",
+   "title_has": "quantitative trait loci"
+  }
+ },
+ {
+  "id": "pride",
+  "name": "PRIDE Archive",
+  "url": "https://www.ebi.ac.uk/pride/",
+  "api": "https://www.ebi.ac.uk/pride/ws/archive/v2/",
+  "domains": [
+   "proteomics"
+  ],
+  "modality": "mass spectrometry proteomics submissions: raw files, identifications, quantification",
+  "description": "The largest public repository of mass spectrometry proteomics data and a founding member of ProteomeXchange: raw spectra, search results and study metadata.",
+  "format": "RAW, mzML, mzIdentML, mzTab; REST API; FTP and Aspera",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1038",
+   "title_has": "PRIDE"
+  },
+  "notes": "Listed as a whole archive. Single projects are not catalogued. PRIDE's own licence page is script-driven and was not read; PRIDE is reported to release new submissions under CC0."
+ },
+ {
+  "id": "massive",
+  "name": "MassIVE",
+  "url": "https://massive.ucsd.edu/",
+  "domains": [
+   "metabolomics",
+   "proteomics"
+  ],
+  "modality": "mass spectrometry submissions and reanalyses",
+  "description": "Community repository of mass spectrometry data at UC San Diego and a ProteomeXchange member, with the MassIVE-KB spectral library and links to GNPS for metabolomics.",
+  "format": "RAW, mzML, mzXML, MGF; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp"
+   ]
+  },
+  "notes": "Listed as a whole archive. Single submissions are not catalogued."
+ },
+ {
+  "id": "metabolights",
+  "name": "MetaboLights",
+  "url": "https://www.ebi.ac.uk/metabolights/",
+  "api": "https://www.ebi.ac.uk/metabolights/ws/api/spec.html",
+  "domains": [
+   "metabolomics"
+  ],
+  "modality": "metabolomics studies: raw spectra, metabolite assignments, ISA-Tab metadata",
+  "description": "Open repository for metabolomics experiments and derived information: NMR and mass spectrometry raw data, identified metabolites and study design.",
+  "format": "ISA-Tab, mzML, nmrML, vendor raw formats; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1045",
+   "title_has": "MetaboLights"
+  },
+  "notes": "Listed as a whole archive. Single studies are not catalogued."
+ },
+ {
+  "id": "metabolomics-workbench",
+  "name": "Metabolomics Workbench",
+  "url": "https://www.metabolomicsworkbench.org/",
+  "api": "https://www.metabolomicsworkbench.org/tools/mw_rest.php",
+  "domains": [
+   "metabolomics"
+  ],
+  "modality": "metabolomics studies with raw and processed data, metabolite structures",
+  "description": "US national repository for metabolomics data (NIH Common Fund): studies with raw and processed measurements, protocols, a metabolite structure database and RefMet nomenclature.",
+  "format": "mwTab, mzML, vendor raw formats; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": []
+  },
+  "notes": "The site's robots.txt disallows every path for crawlers, so no page of it was read."
+ },
+ {
+  "id": "hmdb",
+  "name": "Human Metabolome Database (HMDB)",
+  "url": "https://hmdb.ca/",
+  "domains": [
+   "chemistry",
+   "metabolomics"
+  ],
+  "modality": "metabolite records with spectra, concentrations and pathways",
+  "description": "Detailed records of small-molecule metabolites found in the human body: chemical data, reference spectra, normal and abnormal concentrations, disease links, enzymes and pathways.",
+  "format": "XML, SDF, FASTA, spectra files",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://hmdb.ca/about"
+   ],
+   "unverified": "CC BY-NC 4.0"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1062",
+   "title_has": "HMDB"
+  },
+  "notes": "Commercial use needs explicit permission from the HMDB team."
+ },
+ {
+  "id": "hpa",
+  "name": "Human Protein Atlas",
+  "url": "https://www.proteinatlas.org/",
+  "api": "https://www.proteinatlas.org/about/help/dataaccess",
+  "domains": [
+   "cancer",
+   "imaging",
+   "proteomics",
+   "single-cell",
+   "transcriptomics"
+  ],
+  "modality": "protein and RNA expression tables and immunohistochemistry images",
+  "description": "Maps of human proteins in tissues, single cell types, cell lines, blood, brain and tumours from antibody-based imaging and transcriptomics, with downloadable expression tables per gene.",
+  "format": "TSV (zipped), XML, RDF, images",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://www.proteinatlas.org/about/licence"
+   ],
+   "claims": [
+    {
+     "claim": "CC-BY-SA-4.0",
+     "pattern": "licensed under the Creative Commons Attribution-ShareAlike 4\\.0"
+    },
+    {
+     "claim": "CC-BY-SA-3.0",
+     "pattern": "licensed under the Creative Commons Attribution-ShareAlike 3\\.0"
+    },
+    {
+     "claim": "CC-BY-4.0",
+     "pattern": "licensed under the Creative Commons Attribution 4\\.0 International License for all copyrightable parts"
+    }
+   ]
+  },
+  "citation": {
+   "doi": "10.1126/science.1260419",
+   "title_has": "human proteome"
+  },
+  "notes": "Earlier versions of the atlas were CC BY-SA; the licence is read from the licence page on every run. The page adds that some data are subject to third-party constraints."
+ },
+ {
+  "id": "uniprot",
+  "name": "UniProt (UniProtKB, UniRef, UniParc, Proteomes)",
+  "url": "https://www.uniprot.org/",
+  "api": "https://rest.uniprot.org/",
+  "domains": [
+   "genomics",
+   "protein",
+   "proteomics"
+  ],
+  "modality": "protein sequences with functional annotation",
+  "description": "The reference resource for protein sequence and function: reviewed Swiss-Prot and unreviewed TrEMBL entries, UniRef clusters, the UniParc archive and reference proteomes, with cross-references to hundreds of databases.",
+  "format": "FASTA, TSV, XML, RDF, JSON; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://rest.uniprot.org/help/license",
+    "https://www.uniprot.org/help/license"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0 International \\(CC BY 4\\.0\\)|creativecommons\\.org/licenses/by/4\\.0",
+   "bioregistry": "uniprot"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1052",
+   "title_has": "UniProt"
+  }
+ },
+ {
+  "id": "string",
+  "name": "STRING",
+  "url": "https://string-db.org/",
+  "api": "https://string-db.org/help/api/",
+  "domains": [
+   "pathways-networks",
+   "protein"
+  ],
+  "modality": "scored protein-protein association networks",
+  "description": "Known and predicted protein-protein associations (physical and functional) for thousands of organisms, scored by evidence channel: experiments, databases, co-expression, text mining and genomic context.",
+  "format": "TSV (gzipped), SQL dump; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://string-db.org/cgi/access",
+    "https://string-db.org/cgi/download"
+   ],
+   "pattern": "Creative Commons BY 4\\.0|CC[- ]BY 4\\.0|creativecommons\\.org/licenses/by/4\\.0"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1000",
+   "title_has": "STRING"
+  },
+  "notes": "The API path is disallowed in robots.txt for crawlers, so this catalogue did not call it."
+ },
+ {
+  "id": "reactome",
+  "name": "Reactome",
+  "url": "https://reactome.org/",
+  "api": "https://reactome.org/ContentService/",
+  "domains": [
+   "pathways-networks",
+   "protein"
+  ],
+  "modality": "curated pathways and reactions with participants",
+  "description": "Manually curated, peer-reviewed knowledge base of human biological pathways and reactions, with inferred pathways for other species, interaction data and an analysis service.",
+  "format": "BioPAX, SBML, SBGN, PSI-MITAB, Neo4j and MySQL dumps, GMT; REST services",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [],
+   "bioregistry": "reactome"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1025",
+   "title_has": "Reactome"
+  },
+  "notes": "Reactome's robots.txt blocks AI agents, so no page of it was read; the licence is the one Bioregistry lists. Reactome has also described its terms as CC BY 4.0: check its licence page before use."
+ },
+ {
+  "id": "biogrid",
+  "name": "BioGRID",
+  "url": "https://thebiogrid.org/",
+  "domains": [
+   "pathways-networks",
+   "perturbation",
+   "protein"
+  ],
+  "modality": "curated protein, genetic and chemical interactions",
+  "description": "Curated protein-protein, genetic and chemical interactions and post-translational modifications from the literature for the main model organisms and human, plus the ORCS collection of CRISPR screens.",
+  "format": "tab-delimited (TAB3, MITAB), PSI-MI XML; REST API (free key)",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "MIT",
+   "evidence": [
+    "https://wiki.thebiogrid.org/doku.php/terms_and_conditions",
+    "https://downloads.thebiogrid.org/BioGRID"
+   ],
+   "pattern": "MIT License",
+   "bioregistry": "biogrid"
+  },
+  "citation": {
+   "doi": "10.1002/pro.3978",
+   "title_has": "BioGRID"
+  }
+ },
+ {
+  "id": "sabdab",
+  "name": "SAbDab (Structural Antibody Database)",
+  "url": "https://opig.stats.ox.ac.uk/webapps/sabdab-sabpred/sabdab",
+  "domains": [
+   "immunology",
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "antibody and nanobody structures with annotation",
+  "description": "All antibody and nanobody structures in the PDB, annotated in one scheme: heavy and light chain pairing, antigen details, numbering, affinity data where known; with a therapeutic antibody subset.",
+  "format": "PDB files with numbering schemes, TSV summary",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://opig.stats.ox.ac.uk/webapps/sabdab-sabpred/sabdab/about"
+   ],
+   "unverified": "CC BY 4.0"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkt1043",
+   "title_has": "SAbDab"
+  }
+ },
+ {
+  "id": "oas",
+  "name": "Observed Antibody Space (OAS)",
+  "url": "https://opig.stats.ox.ac.uk/webapps/oas/",
+  "domains": [
+   "immunology",
+   "protein"
+  ],
+  "modality": "annotated antibody repertoire sequences",
+  "description": "Cleaned and annotated antibody sequences from immune repertoire sequencing studies: over a billion unpaired and millions of paired heavy and light chain sequences with study metadata.",
+  "format": "CSV (gzipped) data units",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://opig.stats.ox.ac.uk/webapps/oas/documentation/",
+    "https://opig.stats.ox.ac.uk/webapps/oas/"
+   ],
+   "pattern": "CC[- ]BY 4\\.0|Creative Commons Attribution 4\\.0"
+  },
+  "citation": {
+   "doi": "10.1002/pro.4205",
+   "title_has": "Observed Antibody Space"
+  }
+ },
+ {
+  "id": "iedb",
+  "name": "Immune Epitope Database (IEDB)",
+  "url": "https://www.iedb.org/",
+  "api": "https://query-api.iedb.org/",
+  "domains": [
+   "immunology",
+   "protein"
+  ],
+  "modality": "curated epitopes with T cell, B cell and MHC binding assays",
+  "description": "Experimental data on antibody and T cell epitopes studied in humans and other species for infectious disease, allergy, autoimmunity and transplantation, curated from the literature, with prediction tools.",
+  "format": "CSV, XLSX, MySQL dump, XML; query API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://www.iedb.org/terms_of_use_v3.php"
+   ],
+   "unverified": "CC BY 4.0",
+   "bioregistry": "iedb"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gky1006",
+   "title_has": "Immune Epitope Database"
+  }
+ },
+ {
+  "id": "esm-atlas",
+  "name": "ESM Metagenomic Atlas",
+  "url": "https://esmatlas.com/",
+  "domains": [
+   "microbiome",
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "predicted structures for metagenomic protein sequences",
+  "description": "More than 600 million protein structures predicted with ESMFold for sequences in the MGnify metagenomic database, with confidence scores and bulk downloads.",
+  "format": "PDB, mmCIF, Parquet metadata, Foldcomp archives",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://raw.githubusercontent.com/facebookresearch/esm/main/scripts/atlas/README.md",
+    "https://raw.githubusercontent.com/facebookresearch/esm/main/README.md"
+   ],
+   "pattern": "CC BY 4\\.0"
+  },
+  "citation": {
+   "doi": "10.1126/science.ade2574",
+   "title_has": "atomic-level protein structure"
+  }
+ },
+ {
+  "id": "rxrx",
+  "name": "RxRx (Recursion cellular imaging datasets)",
+  "url": "https://www.rxrx.ai/",
+  "domains": [
+   "drug-discovery",
+   "imaging",
+   "perturbation"
+  ],
+  "modality": "fluorescence microscopy images and embeddings of perturbed cells",
+  "description": "Open phenomics datasets from Recursion: RxRx1 (siRNA, batch effects), RxRx2, RxRx19 (COVID-19 screens) and RxRx3 (genome-wide CRISPR knockouts and compounds) as Cell Painting-style images and deep learning embeddings.",
+  "format": "PNG and JPEG 2000 images, Parquet embeddings, CSV metadata",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "claim": "CC-BY-NC-SA-4.0",
+   "evidence": [
+    "https://www.rxrx.ai/rxrx1",
+    "https://www.rxrx.ai/rxrx3",
+    "https://www.rxrx.ai/"
+   ],
+   "pattern": "CC[- ]BY[- ]NC[- ]SA 4\\.0|Attribution-NonCommercial-ShareAlike 4\\.0"
+  },
+  "notes": "Non-commercial and share-alike."
+ },
+ {
+  "id": "bbbc",
+  "name": "Broad Bioimage Benchmark Collection (BBBC)",
+  "url": "https://bbbc.broadinstitute.org/",
+  "domains": [
+   "imaging",
+   "perturbation"
+  ],
+  "modality": "annotated microscopy image sets with ground truth",
+  "description": "Freely downloadable microscopy image sets with ground truth for testing image analysis: cell counts, segmentation outlines, phenotype labels and dose-response sets, including Cell Painting plates.",
+  "format": "TIFF and PNG images, CSV metadata",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by image set (stated on each set's page)"
+  },
+  "citation": {
+   "doi": "10.1038/nmeth.2083",
+   "title_has": "microscopy image sets"
+  }
+ },
+ {
+  "id": "idr",
+  "name": "Image Data Resource (IDR)",
+  "url": "https://idr.openmicroscopy.org/",
+  "api": "https://idr.openmicroscopy.org/api/v0/",
+  "domains": [
+   "imaging",
+   "perturbation"
+  ],
+  "modality": "reference bioimage datasets with experimental and phenotype annotation",
+  "description": "Public repository of reference image datasets from published studies: high-content screens, time-lapse, light sheet and histology, linked to gene and compound annotation.",
+  "format": "OME-TIFF, OME-Zarr, annotation CSV; JSON API; S3",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "evidence": [
+    "https://idr.openmicroscopy.org/about/",
+    "https://idr.openmicroscopy.org/about/download.html"
+   ]
+  },
+  "citation": {
+   "doi": "10.1038/nmeth.4326",
+   "title_has": "Image Data Resource"
+  },
+  "notes": "Listed as a whole resource. Single studies are not catalogued."
+ },
+ {
+  "id": "empiar",
+  "name": "EMPIAR (Electron Microscopy Public Image Archive)",
+  "url": "https://www.ebi.ac.uk/empiar/",
+  "api": "https://www.ebi.ac.uk/empiar/api/documentation/",
+  "domains": [
+   "imaging",
+   "structural-biology"
+  ],
+  "modality": "raw electron microscopy images behind 3D reconstructions",
+  "description": "Public archive of raw 2D electron microscopy images (cryo-EM micrographs, particle stacks, tilt series, volume EM) that underlie 3D structures in EMDB.",
+  "format": "MRC, TIFF, EER, STAR files; REST API; FTP, Aspera and Globus",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://www.ebi.ac.uk/empiar/about/",
+    "https://www.ebi.ac.uk/empiar/faq/"
+   ],
+   "pattern": "CC0",
+   "bioregistry": "empiar"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1062",
+   "title_has": "EMPIAR"
+  },
+  "notes": "Listed as a whole archive. Single entries are not catalogued."
+ },
+ {
+  "id": "cellosaurus",
+  "name": "Cellosaurus",
+  "url": "https://www.cellosaurus.org/",
+  "api": "https://api.cellosaurus.org/",
+  "domains": [
+   "cancer",
+   "genomics",
+   "perturbation"
+  ],
+  "modality": "cell line records with identifiers, origin and known problems",
+  "description": "Knowledge resource on cell lines: names and synonyms, species, disease, STR profiles, misidentified or contaminated lines, genetic modifications and cross-references to catalogues and omics databases.",
+  "format": "TXT, OBO, XML; API",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "CC-BY-4.0",
+   "evidence": [
+    "https://www.cellosaurus.org/description.html",
+    "https://www.cellosaurus.org/faq.html"
+   ],
+   "pattern": "Creative Commons Attribution 4\\.0|CC[- ]BY 4\\.0",
+   "bioregistry": "cellosaurus"
+  },
+  "citation": {
+   "doi": "10.7171/jbt.18-2902-002",
+   "title_has": "Cellosaurus"
+  }
+ },
+ {
+  "id": "refseq",
+  "name": "NCBI RefSeq",
+  "url": "https://www.ncbi.nlm.nih.gov/refseq/",
+  "domains": [
+   "genomics",
+   "protein",
+   "transcriptomics"
+  ],
+  "modality": "curated reference sequences: genomes, transcripts, proteins",
+  "description": "Curated, non-redundant reference sequences for genomes, transcripts and proteins across the tree of life, with annotation; the usual reference for alignment and annotation pipelines.",
+  "format": "FASTA, GenBank flat file, GFF3, GTF; FTP; NCBI Datasets",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkv1189",
+   "title_has": "RefSeq"
+  }
+ },
+ {
+  "id": "dbsnp",
+  "name": "dbSNP",
+  "url": "https://www.ncbi.nlm.nih.gov/snp/",
+  "domains": [
+   "genomics",
+   "variation"
+  ],
+  "modality": "catalogue of short genetic variants with frequencies",
+  "description": "Reference catalogue of single-nucleotide variants, small insertions and deletions for human, with reference SNP identifiers, allele frequencies from large projects and links to ClinVar.",
+  "format": "VCF, JSON; FTP; E-utilities",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/29.1.308",
+   "title_has": "dbSNP"
+  }
+ },
+ {
+  "id": "ncbi-gene",
+  "name": "NCBI Gene",
+  "url": "https://www.ncbi.nlm.nih.gov/gene/",
+  "domains": [
+   "genomics"
+  ],
+  "modality": "gene records with identifiers, summaries and cross-references",
+  "description": "Gene-centred records for many species: nomenclature, genomic location, summaries, GeneRIFs, orthologues, pathways and links to sequences and literature; gene_info and gene2* tables are handy for identifier mapping.",
+  "format": "tab-delimited tables, ASN.1, JSON; FTP; NCBI Datasets",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gku1055",
+   "title_has": "Gene"
+  }
+ },
+ {
+  "id": "pubtator3",
+  "name": "PubTator 3.0",
+  "url": "https://www.ncbi.nlm.nih.gov/research/pubtator3/",
+  "api": "https://www.ncbi.nlm.nih.gov/research/pubtator3/api",
+  "domains": [
+   "chemistry",
+   "genomics",
+   "text-literature"
+  ],
+  "modality": "entity and relation annotations on PubMed abstracts and PMC full text",
+  "description": "Machine annotations of genes, diseases, chemicals, variants, species and cell lines, and relations between them, across PubMed abstracts and the PMC open-access subset, with an API and bulk files.",
+  "format": "BioC XML and JSON, PubTator tab-delimited; API; FTP",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkae235",
+   "title_has": "PubTator"
+  }
+ },
+ {
+  "id": "ncbi-taxonomy",
+  "name": "NCBI Taxonomy",
+  "url": "https://www.ncbi.nlm.nih.gov/taxonomy",
+  "domains": [
+   "genomics",
+   "microbiome",
+   "ontology"
+  ],
+  "modality": "classification and names of organisms",
+  "description": "Curated classification and nomenclature for all organisms in the public sequence databases; the taxdump files map taxon identifiers to names and lineages.",
+  "format": "taxdump (tab-delimited); FTP; E-utilities",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "claim": "NCBI data usage policy: NCBI places no restrictions on use or distribution; submitters may hold rights",
+   "evidence": [
+    "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+   ],
+   "pattern": "places no restrictions on the use or distribution of the data",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/database/baaa062",
+   "title_has": "Taxonomy"
+  }
+ },
+ {
+  "id": "pdbe",
+  "name": "PDBe and PDBe-KB",
+  "url": "https://www.ebi.ac.uk/pdbe/",
+  "api": "https://www.ebi.ac.uk/pdbe/api/doc/",
+  "domains": [
+   "protein",
+   "structural-biology"
+  ],
+  "modality": "macromolecular structures with added annotation and residue-level mappings",
+  "description": "The European PDB site: the wwPDB archive plus SIFTS mappings to UniProt, ligand and interface annotation, validation and the PDBe-KB aggregated residue-level annotations.",
+  "format": "mmCIF, JSON; REST and graph APIs; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab988",
+   "title_has": "PDBe"
+  },
+  "notes": "The PDB archive itself is CC0-1.0 (see db:pdb)."
+ },
+ {
+  "id": "emdb",
+  "name": "Electron Microscopy Data Bank (EMDB)",
+  "url": "https://www.ebi.ac.uk/emdb/",
+  "api": "https://www.ebi.ac.uk/emdb/api/",
+  "domains": [
+   "imaging",
+   "structural-biology"
+  ],
+  "modality": "3D electron microscopy density maps",
+  "description": "Public archive of 3D maps of macromolecular complexes and subcellular structures from cryo-electron microscopy and tomography, with masks, half-maps and validation reports.",
+  "format": "MRC/CCP4 maps, XML metadata; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear",
+   "bioregistry": "emdb"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkad1019",
+   "title_has": "EMDB"
+  }
+ },
+ {
+  "id": "intact",
+  "name": "IntAct",
+  "url": "https://www.ebi.ac.uk/intact/home",
+  "domains": [
+   "pathways-networks",
+   "protein"
+  ],
+  "modality": "curated molecular interactions with experimental detail",
+  "description": "Open molecular interaction database populated by curation of the literature and direct deposits, in the IMEx standard: participants, detection method, features and confidence.",
+  "format": "PSI-MI XML, MITAB; REST (PSICQUIC); FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear",
+   "bioregistry": "intact"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1006",
+   "title_has": "IntAct"
+  }
+ },
+ {
+  "id": "mgnify",
+  "name": "MGnify",
+  "url": "https://www.ebi.ac.uk/metagenomics",
+  "api": "https://www.ebi.ac.uk/metagenomics/api/v1/",
+  "domains": [
+   "genomics",
+   "microbiome",
+   "protein"
+  ],
+  "modality": "analysed metagenomes: taxonomic and functional profiles, genome and protein catalogues",
+  "description": "Analysis and archiving of microbiome sequencing data: taxonomic and functional profiles per sample, metagenome-assembled genome catalogues by biome and a protein database with hundreds of millions of sequences.",
+  "format": "TSV, FASTA, GFF, BIOM; REST API; FTP",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkac1080",
+   "title_has": "MGnify"
+  },
+  "notes": "Listed as a whole resource. Single studies are not catalogued."
+ },
+ {
+  "id": "biosamples",
+  "name": "BioSamples",
+  "url": "https://www.ebi.ac.uk/biosamples/",
+  "api": "https://www.ebi.ac.uk/biosamples/docs/references/api",
+  "domains": [
+   "general-biology",
+   "genomics"
+  ],
+  "modality": "sample metadata records linked to data archives",
+  "description": "Descriptions of the biological samples behind records in ENA, ArrayExpress, PRIDE, EVA and other archives, with curated attributes and ontology annotation.",
+  "format": "JSON, JSON-LD; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1093/nar/gkab1046",
+   "title_has": "BioSamples"
+  }
+ },
+ {
+  "id": "bioimage-archive",
+  "name": "BioImage Archive",
+  "url": "https://www.ebi.ac.uk/bioimage-archive/",
+  "domains": [
+   "imaging"
+  ],
+  "modality": "biological image datasets with study metadata",
+  "description": "EMBL-EBI's repository for biological images from publications and reference studies, across light and electron microscopy, including AI-ready annotated image collections.",
+  "format": "OME-TIFF, OME-Zarr and native formats; BioStudies API; FTP and Globus",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "EMBL-EBI Terms of Use: no restrictions beyond those of the data owner",
+   "evidence": [
+    "https://www.ebi.ac.uk/about/terms-of-use/"
+   ],
+   "pattern": "no additional restriction|not impose any additional restrictions",
+   "commercial_use": "unclear"
+  },
+  "citation": {
+   "doi": "10.1016/j.jmb.2022.167505",
+   "title_has": "BioImage Archive"
+  },
+  "notes": "Listed as a whole archive. Single submissions are not catalogued; many carry their own CC0 or CC BY licence."
+ },
+ {
+  "id": "pubmed",
+  "name": "PubMed / MEDLINE baseline and updates",
+  "url": "https://pubmed.ncbi.nlm.nih.gov/download/",
+  "api": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+  "domains": [
+   "medical",
+   "text-literature"
+  ],
+  "modality": "citations and abstracts of biomedical articles",
+  "description": "Citations, abstracts and MeSH indexing for more than 37 million biomedical articles, as an annual baseline with daily update files and through E-utilities.",
+  "format": "XML (gzipped); E-utilities",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://www.nlm.nih.gov/databases/download/terms_and_conditions.html"
+   ],
+   "unverified": "NLM terms and conditions for data distribution; abstracts may be under publisher copyright"
+  }
+ },
+ {
+  "id": "pmc-oa",
+  "name": "PubMed Central Open Access Subset",
+  "url": "https://pmc.ncbi.nlm.nih.gov/tools/openftlist/",
+  "api": "https://pmc.ncbi.nlm.nih.gov/tools/oai/",
+  "domains": [
+   "medical",
+   "text-literature"
+  ],
+  "modality": "full-text articles (XML and text) with figures",
+  "description": "The part of PubMed Central that may be reused under Creative Commons or similar licences, split into commercial-use-allowed, non-commercial and other groups, for text mining.",
+  "format": "JATS XML, plain text, PDF packages; FTP, AWS open data, OAI-PMH",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by article (the subset is split into commercial-use, non-commercial and other licence groups)"
+  }
+ },
+ {
+  "id": "europepmc",
+  "name": "Europe PMC",
+  "url": "https://europepmc.org/",
+  "api": "https://www.ebi.ac.uk/europepmc/webservices/rest/",
+  "domains": [
+   "medical",
+   "text-literature"
+  ],
+  "modality": "abstracts, open-access full text, preprints and text-mined annotations",
+  "description": "Life science literature database with abstracts, open-access full text, preprints, grants and text-mined entities (genes, diseases, chemicals, accession numbers) through a REST API and bulk files.",
+  "format": "JSON, XML; REST API; FTP",
+  "access": "open",
+  "level": "collection",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by article; the open-access subset carries Creative Commons licences"
+  }
+ },
+ {
+  "id": "openalex",
+  "name": "OpenAlex",
+  "url": "https://openalex.org/",
+  "api": "https://api.openalex.org/",
+  "domains": [
+   "text-literature"
+  ],
+  "modality": "graph of scholarly works, authors, sources, institutions and topics",
+  "description": "Open index of the world's research: hundreds of millions of works with citations, authors, institutions, venues, topics and open-access status, as a free API and full snapshot.",
+  "format": "JSON Lines snapshot on AWS S3; REST API",
+  "access": "open",
+  "level": "dataset",
+  "licence": {
+   "evidence": [
+    "https://docs.openalex.org/additional-help/faq"
+   ],
+   "unverified": "CC0"
+  }
+ },
+ {
+  "id": "huggingface-hub",
+  "name": "Hugging Face Hub (datasets)",
+  "url": "https://huggingface.co/datasets",
+  "api": "https://huggingface.co/api/datasets",
+  "source": "huggingface",
+  "domains": [
+   "chemistry",
+   "general-biology",
+   "text-literature"
+  ],
+  "modality": "any (each dataset repository states its own)",
+  "description": "General hub of machine learning datasets. Biology and chemistry datasets that are not gated are listed as hf:* entries. The API can filter by tag and returns licence, size and gating state.",
+  "format": "Parquet, CSV, JSON and others; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (licence tag on each dataset card)"
+  }
+ },
+ {
+  "id": "zenodo",
+  "name": "Zenodo",
+  "url": "https://zenodo.org/",
+  "api": "https://api.datacite.org/dois?client-id=cern.zenodo",
+  "domains": [
+   "chemistry",
+   "general-biology"
+  ],
+  "modality": "any (each record states its own)",
+  "description": "General research data repository run by CERN. Every record has a DOI and a licence chosen by the uploader. Named reference datasets are listed as zenodo:* entries, found through DataCite.",
+  "format": "any; REST API, OAI-PMH; metadata also in DataCite",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by record (chosen by the uploader)"
+  },
+  "notes": "Zenodo's own REST API path is disallowed in robots.txt for crawlers, so this catalogue reads Zenodo metadata from DataCite."
+ },
+ {
+  "id": "figshare",
+  "name": "Figshare",
+  "url": "https://figshare.com/",
+  "api": "https://api.figshare.com/v2/articles",
+  "domains": [
+   "chemistry",
+   "general-biology"
+  ],
+  "modality": "any (each item states its own)",
+  "description": "General research data repository. Every public item has a DOI and a licence. Named reference datasets are listed as figshare:* entries, found through DataCite.",
+  "format": "any; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by item (chosen by the uploader)"
+  },
+  "notes": "figshare.com answers scripts with a bot challenge, so landing pages were not read; the API host api.figshare.com is open."
+ },
+ {
+  "id": "dryad",
+  "name": "Dryad",
+  "url": "https://datadryad.org/",
+  "api": "https://datadryad.org/api/v2/search",
+  "domains": [
+   "general-biology"
+  ],
+  "modality": "any (data underlying publications)",
+  "description": "Curated repository for data that underlie scientific publications. Dryad holds single-study deposits, so this catalogue lists it as a whole and adds only a few named reference datasets.",
+  "format": "any; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "claim": "CC0-1.0",
+   "evidence": [
+    "https://datadryad.org/stash/faq",
+    "https://datadryad.org/help/requirements/files",
+    "https://datadryad.org/"
+   ],
+   "pattern": "CC0|Creative Commons Zero"
+  }
+ },
+ {
+  "id": "harvard-dataverse",
+  "name": "Harvard Dataverse",
+  "url": "https://dataverse.harvard.edu/",
+  "api": "https://dataverse.harvard.edu/api/search",
+  "domains": [
+   "chemistry",
+   "general-biology"
+  ],
+  "modality": "any (each dataset states its own)",
+  "description": "General research data repository on the Dataverse software; hosts the files of Therapeutics Data Commons, GEOM and many laboratory datasets.",
+  "format": "any; Dataverse REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (chosen by the depositor)"
+  },
+  "notes": "The site answers scripts with a bot challenge (HTTP 202), so no page or API call of it was made; its DOIs are read from DataCite."
+ },
+ {
+  "id": "kaggle-datasets",
+  "name": "Kaggle Datasets",
+  "url": "https://www.kaggle.com/datasets",
+  "api": "https://www.kaggle.com/api/v1/datasets/list",
+  "source": "kaggle",
+  "domains": [
+   "chemistry",
+   "general-biology"
+  ],
+  "modality": "any (each dataset states its own)",
+  "description": "Community dataset hub. Licences are labels set by the uploader and are often wrong for copies of third-party data. A small set of well-used biology and chemistry datasets is listed as kaggle:* entries.",
+  "format": "CSV and others; public list endpoint (metadata), downloads need an account",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (label set by the uploader)"
+  }
+ },
+ {
+  "id": "openml",
+  "name": "OpenML",
+  "url": "https://www.openml.org/",
+  "api": "https://www.openml.org/api/v1/json/data/list",
+  "domains": [
+   "chemistry",
+   "general-biology"
+  ],
+  "modality": "tabular datasets with machine-readable task definitions",
+  "description": "Open platform for sharing machine learning datasets, tasks and results; includes many QSAR and biology tables.",
+  "format": "ARFF, Parquet; REST API",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (licence field on each dataset)"
+  },
+  "notes": "OpenML's robots.txt blocks AI agents, so the agent that built this catalogue did not call it and no openml:* entries exist yet. A person can run fetch_openml.py."
+ },
+ {
+  "id": "aws-open-data",
+  "name": "Registry of Open Data on AWS",
+  "url": "https://registry.opendata.aws/",
+  "api": "https://registry.opendata.aws/roda/ndjson/index.ndjson",
+  "domains": [
+   "general-biology",
+   "genomics"
+  ],
+  "modality": "any (large datasets in public cloud buckets)",
+  "description": "Registry of public datasets stored in AWS buckets, each with a documented licence field. Biology and chemistry entries are listed as aws:* entries.",
+  "format": "any; S3; registry index as NDJSON",
+  "access": "open",
+  "level": "repository",
+  "licence": {
+   "kind": "varies",
+   "claim": "Varies by dataset (licence field in the registry)"
+  }
+ }
+]

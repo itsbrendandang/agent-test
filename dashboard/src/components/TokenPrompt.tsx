@@ -1,6 +1,6 @@
 // Asks for the engine's session token when a request needs it (see lib/token.ts). Mounted once, in the shell.
 import { type FormEvent, useEffect, useId, useRef, useState } from "react"
-import { answer, refuseToken, TOKEN_FILE, useAsking } from "@/lib/token"
+import { answer, refuseToken, useAsking } from "@/lib/token"
 
 export function TokenPrompt() {
   const asking = useAsking()
@@ -33,7 +33,7 @@ export function TokenPrompt() {
           <p className="token-why">{asking.why}</p>
           <p>
             Anything that can spend money needs this token, so that only a person at this machine can start it. The engine writes the token to
-            the file <code>{TOKEN_FILE}</code> and names that file when it starts. Open the file on this machine, copy its content and paste it here.
+            the file <code>{asking.file}</code> and names that file when it starts. Open the file on this machine, copy its content and paste it here.
           </p>
           <div className="newrun-field">
             <label htmlFor={`${uid}-token`}>Session token</label>

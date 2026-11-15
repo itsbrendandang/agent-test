@@ -24,7 +24,7 @@ from ...network_gateway.policy import (
     normalize_url,
 )
 from ..models import ExpectedOutput, NetworkAccessPolicy
-from .guards import names_person, normalise, shared_phrase, study_identifier
+from .guards import names_doi, names_person, normalise, shared_phrase, study_identifier
 from .ledger import Ledger
 
 WORK = "/workspace/work/glhf"
@@ -451,22 +451,37 @@ DOC_DOMAINS = [
     "docs.python.org",
 ]
 # bioconductor.org: software package pages, manuals and vignettes only. Experiment-data packages
-# (/packages/*/data/experiment/), annotation data and workflows can carry a study's own data.
+# (/packages/*/data/experiment/), annotation data and workflows can carry a study's own data, and
+# /help/ holds /help/workflows/, /help/publications/ and /help/course-materials/: worked analyses
+# of named datasets. support.10xgenomics.com: the software documentation only; the same host
+# serves the dataset pages (/<product>/datasets/...), and a data repository may not be searched.
 _PATH_RULES: dict[str, re.Pattern[str]] = {
     "bioconductor.org": re.compile(
-        r"^/(?:packages/(?:release|devel|\d+\.\d+)/bioc/|help/|install/?)"
+        r"^/(?:packages/(?:release|devel|\d+\.\d+)/bioc/|install(?:/|$))"
+    ),
+    "support.10xgenomics.com": re.compile(
+        r"^/(?!.*/datasets?(?:/|$))(?:[a-z0-9-]+/software/|docs(?:/|$)|[a-z0-9-]+/docs(?:/|$))"
     ),
 }
-# readthedocs.io hosts any project anyone creates; only these tool manuals are allowed.
+# A page of a manual is a page, not a table: files in these formats are data, whatever host
+# serves them (a tutorial site keeps the dataset it analyses next to its lessons).
+_DATA_FILE = re.compile(
+    r"\.(?:csv|tsv|tab|txt|xls|xlsx|ods|rds|rda|rdata|h5|h5ad|hdf5|loom|mtx|json|jsonl|parquet|"
+    r"feather|gz|bgz|bz2|xz|zst|zip|tar|tgz|7z|bam|cram|sam|vcf|bcf|bed|bedgraph|bw|bigwig|gtf|"
+    r"gff|gff3|fa|fasta|fastq|fq|sqlite|db|pkl|pickle|npy|npz|mat)$",
+    re.IGNORECASE,
+)
+# readthedocs.io hosts any project anyone creates; only these tool manuals are allowed. Every
+# slug here must be a project that exists: a slug nobody has registered can be registered by
+# anyone, who then publishes under an allow-listed host. 40 such slugs were removed (subread,
+# gatk, samtools, hisat2, bwa, multiqc, ...; the list is READTHEDOCS_UNREGISTERED in
+# tests/unit/test_redteam_guards.py). Check that a project exists before adding it.
 READTHEDOCS_PROJECTS = frozenset(
-    "subread star-aligner hisat2 salmon kallisto pachterlab-kallisto bowtie-bio bowtie2 bwa "
-    "samtools pysam bedtools deeptools macs3 macs2 multiqc fastqc cutadapt trimgalore htseq "
-    "rsem stringtie gffread gffutils pyranges pybedtools scanpy anndata scvi-tools squidpy muon "
-    "episcanpy scvelo cellrank harmonypy bbknn leidenalg umap-learn pandas numpy scipy "
-    "statsmodels scikit-learn matplotlib seaborn snakemake nextflow biopython gseapy pydeseq2 "
-    "decoupler pertpy mudata snapatac2 pyensembl mygene goatools sourmash khmer qiime2 dada2 "
-    "bismark methylpy pyfaidx cyvcf2 pyvcf bcbio-gff umi-tools fastp spades quast busco prokka "
-    "bakta gatk picard varscan freebayes snpeff cnvkit homer chipseeker rseqc qualimap".split()
+    "salmon kallisto pysam bedtools deeptools cutadapt htseq gffutils pyranges scanpy anndata "
+    "squidpy muon episcanpy scvelo cellrank bbknn leidenalg umap-learn pandas numpy scipy "
+    "scikit-learn matplotlib snakemake gseapy pydeseq2 decoupler pertpy mudata pyensembl mygene "
+    "goatools sourmash khmer qiime2 bismark pyvcf umi-tools spades bakta picard snpeff "
+    "cnvkit".split()
 )
 MAX_SEARCHES = 20  # per run, all roles together; a failed call counts
 # Verbatim from Exa's build-with-exa skill: the description of the `objective` parameter.
@@ -476,24 +491,38 @@ _OBJECTIVE = (
 )
 
 
+# Words that point at where a paper, its code or its supplement lives. Refused in a query (no
+# tool manual is found by them), not in the text of a result: a manual may say "GitHub".
+_PAPER_PLACES = re.compile(
+    r"(?<![A-Za-z])(?:github|gitlab|bitbucket|arxiv|sciencedirect|nature\.com|cell\.com|"
+    r"springer|wiley|pre-?prints?|supplementary (?:tables?|data|files?|materials?|information)|"
+    r"series matrix|ncbi geo|geo series|sci-?hub)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
 def query_refusal(
     text: str,
     doi: str | None = None,
     titles: Sequence[str] = (),
     authors: Sequence[str] = (),
+    *,
+    places: bool = True,
 ) -> str | None:
-    """Why a search text is refused, or None. Checked on the query and on the objective.
+    """Why a search text is refused, or None. Checked on the query and the objective, and
+    (with `places=False`) on the title and highlights of every result.
 
     `titles` (the paper's title) and `authors` (surnames) are compared when the case provides
-    them; the BixBench3 case record has neither today, so the solver passes none."""
+    them; the BixBench3 metadata has neither today, so in benchmark runs both are empty."""
     found = study_identifier(text)
     if found:
         return f"it contains a study or dataset identifier ({found!r})"
-    plain = normalise(text).lower()
-    if doi:
-        squeeze = re.compile(r"[\s/]|%2f")
-        if doi.lower() in plain or squeeze.sub("", doi.lower()) in squeeze.sub("", plain):
-            return "it contains the study's DOI"
+    if doi and names_doi(text, doi):
+        return "it contains the study's DOI"
+    if places:
+        place = _PAPER_PLACES.search(normalise(text))
+        if place:
+            return f"it points at a paper, its code or its supplement ({place.group(0)!r})"
     for title in titles:
         phrase = shared_phrase(text, title)
         if phrase:
@@ -502,6 +531,20 @@ def query_refusal(
     if surname:
         return f"it names an author of the study ({surname!r})"
     return None
+
+
+def _same_page(host: str, path: str) -> tuple[str, str]:
+    """A URL's host and path in the form answer sources are compared in: percent-decoded,
+    lower-case, without "index", ".html" or a trailing slash, and on readthedocs.io without the
+    language and version ("/en/latest/", "/en/stable/" and "/en/v1.2/" are one manual)."""
+    parts = [p for p in unquote(unquote(path)).lower().split("/") if p]
+    if host.endswith(".readthedocs.io") and len(parts) >= 2 and len(parts[0]) <= 5:
+        parts = parts[2:]
+    if parts:
+        parts[-1] = re.sub(r"\.html?$", "", parts[-1])
+        if parts[-1] == "index":
+            parts.pop()
+    return host, "/" + "/".join(parts)
 
 
 def result_block_reason(url: str, policy: NetworkAccessPolicy | None = None) -> str | None:
@@ -517,18 +560,39 @@ def result_block_reason(url: str, policy: NetworkAccessPolicy | None = None) -> 
         host = host_from_url(raw)
     except ValueError:
         return "not an http(s) URL"
+    # The path as it was written. A dot segment, an encoded dot or slash, a doubled slash or a
+    # ";" parameter makes the path that a server answers differ from the path that is checked.
+    written = parts.path.lower()
+    if "/." in unquote(written) or any(
+        mark in written for mark in ("%2e", "%2f", "%5c", "%25", ";", "//")
+    ):
+        return "path has dot segments, encoded separators, ';' or '//'"
+    carried = f"{parts.query}#{parts.fragment}".lower()
+    if any(mark in unquote(unquote(carried)) for mark in ("//", "http", "www.")):
+        return "another address is carried in the query or the fragment"
+    if _DATA_FILE.search(unquote(parts.path)):
+        return "a data file, not a page of a manual"
     restricted = [*RESTRICTED_DOMAIN_SCOPES, *(policy.restricted_domain_scopes if policy else [])]
     if any(domain_matches(host, d) for d in restricted):
         return "host is a restricted code or data host"
     if policy:
         if any(domain_matches(host, d) for d in policy.answer_source_domains):
             return "host is an answer source for this task"
+        page_host, page = _same_page(host, parts.path)
         for source in policy.answer_source_urls:
             try:
                 if normalized.startswith(normalize_url(source).rstrip("/")):
                     return "URL is an answer source for this task"
+                # The same page under another scheme, port, encoding or manual version.
+                source_host, source_page = _same_page(
+                    host_from_url(source), urlsplit(source.strip()).path
+                )
             except ValueError:
                 continue
+            if page_host == source_host and (
+                page == source_page or page.startswith(source_page.rstrip("/") + "/")
+            ):
+                return "URL is an answer source for this task"
     domain = next((d for d in DOC_DOMAINS if domain_matches(host, d)), None)
     if domain is None:
         return "host is not on the documentation allow-list"
@@ -618,6 +682,12 @@ def search_docs(
         results, dropped = [], []
         for r in body.get("results", []):
             why = result_block_reason(str(r.get("url") or ""), policy)
+            if not why:
+                # The title and the highlights are what the role reads: they are checked like
+                # a query, so a manual page that quotes the study is dropped with its text.
+                shown = f"{r.get('title') or ''}\n" + "\n".join(map(str, r.get("highlights") or []))
+                named = query_refusal(shown, doi, titles, authors, places=False)
+                why = f"its text names the study: {named}" if named else None
             if why:
                 dropped.append({"url": r.get("url"), "reason": why})
             else:
@@ -631,7 +701,17 @@ def search_docs(
             + " ".join(" ".join(r.get("highlights") or []).split())[:700]
             for r in results[:8]
         ]
-        notices = [f"Note from the search engine: {n['message']}" for n in body.get("notices", [])]
+        # A notice is free text from the engine. It is passed on only when it is short, has
+        # no address in it and passes the same check as a query; anything else is dropped.
+        notices = []
+        for notice in body.get("notices", []):
+            message = " ".join(str(notice.get("message", "")).split())[:300]
+            if (
+                message
+                and not re.search(r"https?:|www\.|://|\w\.\w{2,}/", message, re.IGNORECASE)
+                and query_refusal(message, doi, titles, authors) is None
+            ):
+                notices.append(f"Note from the search engine: {message}")
         return "\n".join(lines + notices)
 
     assert execute.__doc__

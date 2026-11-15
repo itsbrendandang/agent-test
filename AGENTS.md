@@ -1,6 +1,6 @@
 # Notes for coding agents (Pi, Claude Code, Codex and others)
 
-This repository holds GLHF, a multi-agent solver (the swarm) for the BixBench3 benchmark, and a
+This repository holds GLHF (the AI Scientist Bot product), a multi-agent solver (the swarm) for the BixBench3 benchmark, and a
 drug candidate board that shares its engine and dashboard. The swarm has nine phases, each
 with its own instructions and an empty context (`swarm/catalog.py`). The nine phases use four
 model groups: planner, experimenter, critic, reporter. So a run uses at most four different
@@ -30,6 +30,11 @@ documents are in `docs/`.
     (`bixbench-v1 run`), and sending lessons to past.dev.
   - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid.ts`).
     Do not edit `.env`, do not export the variable, and do not change or go around `paid.ts`.
+  - The engine also has a **runtime paid switch**: `POST /api/paid` turns paid calls on for the life of the engine
+    process (it is not saved, and a restart goes back to `.env`). **An agent never calls `POST /api/paid` with
+    `on: true`**, with or without the token and the confirmation text. It has the same standing as setting
+    `NO_PAID_CALLS=0`: only the person who pays does it. `PAID_SWITCH_LOCKED=1` (set by `npm test` and CI) refuses it;
+    never unset that lock outside a test of the switch itself, which uses fakes only (`engine/test/paidswitch.test.ts`).
   - The Python command lines have the same switch (`glhf/bixbench/src/bixbench3/paid.py`,
     `glhf/bixbench_v1/src/bixbench_v1/paid.py`). The value is read from the process
     environment first, then from `.env`.

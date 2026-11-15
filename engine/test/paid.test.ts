@@ -22,7 +22,6 @@ const realSpawnSync = childProcess.spawnSync
 // and a key would, so that the tests below reach the gates in the real-model code, not the scripted shortcuts.
 process.env.NO_PAID_CALLS = "0"
 process.env.DRUG_BOARD_MOCK = "0"
-process.env.OPENROUTER_API_KEY = "fake-key-for-tests"
 process.env.GLHF_RUNS_DIR = runs
 process.env.GLHF_LOCAL_CMD = `${process.execPath} ${join(here, "fixtures", "local-runner-stub.mjs")}`
 process.env.GLHF_LOCAL_POLL_MS = "40"
@@ -35,7 +34,7 @@ const { ask } = await import("../src/ask.ts")
 const { runBoard } = await import("../src/board.ts")
 const { claudeCodeCheck, openaiCheck } = await import("../src/checkers.ts")
 const { exaLive, exaSearch } = await import("../src/exa.ts")
-const { Jev } = await import("../src/jev.ts")
+const { FirstPass } = await import("../src/triage.ts")
 const { buildModels } = await import("../src/models.ts")
 const { statusBody } = await import("../src/glhf/doctor.ts")
 const { sessionToken, startTracker, stopTracker } = await import("../src/glhf/routes.ts")
@@ -47,7 +46,6 @@ const { PaidCallsOff, PAID_KEYS } = paid
 
 // From here on: no real key in this process, and the switch on. Tests that need it off turn it off and on again.
 for (const key of PAID_KEYS) process.env[key] = "fake-key-for-tests"
-process.env.TYPESAFE_API_KEY = "fake-key-for-tests"
 const on = () => { process.env.NO_PAID_CALLS = "1" }
 const off = () => { process.env.NO_PAID_CALLS = "0" }
 on()
@@ -116,6 +114,8 @@ after(async () => {
   await stopTracker()
   rmSync(runs, { recursive: true, force: true }); rmSync(boardDir, { recursive: true, force: true })
 })
+/** The dashboard's page after a person has given it the token. */
+const AUTH = { origin: DASH, "x-glhf-token": sessionToken() }
 const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = { origin: DASH }) => {
   const res = await realFetch(base + path, { method, headers: { ...headers, ...(body !== undefined && { "content-type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) })
   return { status: res.status, body: (await res.json()) as any }
@@ -134,11 +134,13 @@ test("the switch is on unless NO_PAID_CALLS is exactly 0", () => {
 
 test("the drug board is in mock mode while the switch is on, whatever keys are set", () => {
   assert.equal(MOCK, false, "this file loaded the board as an engine with paid calls allowed would")
-  assert.equal(mockMode({ OPENROUTER_API_KEY: "k" }), true)
-  assert.equal(mockMode({ OPENROUTER_API_KEY: "k", NO_PAID_CALLS: "1" }), true)
-  assert.equal(mockMode({ OPENROUTER_API_KEY: "k", NO_PAID_CALLS: "0" }), false)
-  assert.equal(mockMode({ OPENROUTER_API_KEY: "k", NO_PAID_CALLS: "0", DRUG_BOARD_MOCK: "1" }), true)
-  assert.equal(mockMode({ NO_PAID_CALLS: "0" }), true, "no key: scripted, as before")
+  const keys = { ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }
+  assert.equal(mockMode(keys), true)
+  assert.equal(mockMode({ ...keys, NO_PAID_CALLS: "1" }), true)
+  assert.equal(mockMode({ ...keys, NO_PAID_CALLS: "0" }), false)
+  assert.equal(mockMode({ ...keys, NO_PAID_CALLS: "0", DRUG_BOARD_MOCK: "1" }), true)
+  // A missing key does not make a run scripted: the run is refused at its start instead (test/board-direct.test.ts).
+  assert.equal(mockMode({ NO_PAID_CALLS: "0" }), false, "no key: still real, so that it fails loudly instead of looking real while scripted")
 })
 
 test("glhf: a run with a real model, a cloud run and Exa are refused, with the field", async () => {
@@ -179,16 +181,21 @@ test("glhf: a run with a real model, a cloud run and Exa are refused, with the f
 
 test("glhf: the runner gets blank keys, and the scripted run still works", async () => {
   process.env.GLHF_STUB_MS = "150"
-  const sent = await call("POST", "/api/glhf/runs", { mode: "local", solver: "glhf", model: "mock", memory: true })
+  const body = { mode: "local", solver: "glhf", model: "mock", memory: true }
+  assert.equal((await call("POST", "/api/glhf/runs", body)).status, 401, "shared memory needs the token, also for a scripted run")
+  const sent = await call("POST", "/api/glhf/runs", body, AUTH)
   assert.equal(sent.status, 201, JSON.stringify(sent.body))
   await until("the run to finish", () => isSettled(sent.body.id))
   assert.equal(run(sent.body.id).phase, "done")
   const env = JSON.parse(readFileSync(join(runs, sent.body.id, "env.json"), "utf8"))
-  assert.deepEqual(env, { NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OPENROUTER_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "" },
+  assert.deepEqual(env, { NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
     "blank, not absent: Inspect reads an absent key back from .env; past.dev is out of reach without PAST_API_KEY")
+  assert.equal(process.env.OPENROUTER_API_KEY, "fake-key-for-tests", "a stray key IS in the engine's own environment ...")
+  assert.equal(env.OPENROUTER_API_KEY, "", "... and is blank in the spawned runner: blanked defensively, although no provider uses it")
+  assert.equal(env.TYPESAFE_API_KEY, "")
 
   const child = paid.childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "a", HF_TOKEN: "h", VSCODE_PID: "1", VSCODE_CWD: "/x", TERM_PROGRAM: "vscode", UV_ENV_FILE: ".env", OTHER: "kept" })
-  assert.deepEqual(child, { PATH: "/bin", OTHER: "kept", NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OPENROUTER_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "" },
+  assert.deepEqual(child, { PATH: "/bin", OTHER: "kept", NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
     "and nothing that makes Inspect or uv load .env over them")
   const open = { NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "a" }
   assert.equal(paid.childEnv(open), open, "with paid calls allowed the environment is passed on as it is")
@@ -199,7 +206,7 @@ test("glhf: a paid run that was accepted before the switch came on is stopped, a
   process.env.GLHF_STUB_MS = "60000"
   let ids: string[]
   try {
-    const sent = await call("POST", "/api/glhf/runs", { mode: "local", model: "anthropic/claude-sonnet-5-5", maxTokens: 50_000, solvers: ["glhf", "single"] })
+    const sent = await call("POST", "/api/glhf/runs", { mode: "local", model: "anthropic/claude-sonnet-5-5", maxTokens: 50_000, solvers: ["glhf", "single"] }, AUTH)
     assert.equal(sent.status, 201, JSON.stringify(sent.body))
     ids = sent.body.ids
     await until("the first run to be going (it is the stub: nothing is spent)", () => run(ids[0]).phase === "running")
@@ -274,12 +281,12 @@ function fakeModels() {
   return { models: models as never, used }
 }
 
-test("board: Jev, the OpenAI checker and the Claude Code checker are refused before any call", async () => {
-  const jev = fakeModels()
-  await refused(() => new Jev(jev.models, config, false).check(["a claim"], "evidence"), /Jev/)
-  await refused(() => new Jev(jev.models, config, false).triage({ url: "u", title: "t", text: "x" }, "question"), /Jev/)
-  assert.deepEqual(jev.used, [], "the model collection was not touched")
-  assert.equal((await new Jev(jev.models, config, true).check(["a claim"], "evidence")).length, 1, "scripted Jev still answers")
+test("board: the first-pass checker, the OpenAI checker and the Claude Code checker are refused before any call", async () => {
+  const first = fakeModels()
+  await refused(() => new FirstPass(first.models, config, false).check("anthropic/claude-sonnet-5-5", ["a claim"], "evidence"), /first-pass checker/)
+  await refused(() => new FirstPass(first.models, config, false).triage([{ url: "u", title: "t", text: "x" }], "question"), /first-pass checker/)
+  assert.deepEqual(first.used, [], "the model collection was not touched")
+  assert.equal((await new FirstPass(first.models, config, true).check("anthropic/claude-sonnet-5-5", ["a claim"], "evidence")).length, 1, "the scripted first pass still answers")
 
   const openai = fakeModels()
   await refused(() => openaiCheck(openai.models, config, "a claim", "evidence", false), /OpenAI checker/)
@@ -325,7 +332,7 @@ test("board: real models are not registered, and a run started with real models 
   assert.deepEqual(started, [], "no run was started"); assert.deepEqual(ran, [], "no run was continued")
   assert.deepEqual(seen.fetches, [])
   addBoardRun("mock-paused", { mock: true })
-  assert.equal((await call("POST", "/api/runs/mock-paused/resume", {})).status, 202, "a scripted run may continue")
+  assert.equal((await call("POST", "/api/runs/mock-paused/resume", {}, AUTH)).status, 202, "a scripted run may continue")
   assert.deepEqual(ran, ["mock-paused"])
 })
 

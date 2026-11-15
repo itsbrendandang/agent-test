@@ -4,7 +4,7 @@
 import { ENGINE } from "@/board/api"
 import { engineFetch } from "@/lib/token"
 
-export type ProviderId = "anthropic" | "openai" | "openrouter"
+export type ProviderId = "anthropic" | "openai"
 export interface Provider { id: ProviderId; keyPresent: boolean; models: string[] }
 export interface CatalogAgent { name: string; title: string; source: "board" | "specialist"; role: string; tools: string[]; trigger?: string; deliverable?: string }
 export interface CatalogSkill { name: string; description: string; installed: boolean }
@@ -18,7 +18,8 @@ export interface Effort {
 export interface Catalog {
   paidCalls: boolean
   providers: Provider[]
-  search: { exa: { keyPresent: boolean } }
+  /** usedUsd / ceilingUsd: what the engine has recorded as spent on Exa, and the lifetime ceiling it enforces. */
+  search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
   /** Absent on an engine without effort levels: then no selector is shown and no effort is sent. */
@@ -52,10 +53,6 @@ export interface ChatReply { reply: string; mode: ChatMode; note?: string; runs?
 export interface ChatRequest { messages: ChatMessage[]; provider?: ProviderId; model?: string; effort?: EffortId }
 export interface StartRequest { confirm: true; effort?: EffortId; limits?: PlanLimits; agents?: string[] }
 
-export type SearchKind = "swarm" | "board" | "agent" | "skill"
-export interface SearchResult { kind: SearchKind; id: string; title: string; excerpt: string; status?: string; score?: number; startedAt?: number }
-/** GET /api/chat/search: a word search over runs, agents and skills. No model is involved. */
-export interface SearchReply { results: SearchResult[]; mode: "keyword" }
 export interface Started { kind: "board"; id: string }
 
 /** The engine said no, or could not be reached (status 0). `field`: the control a 400 is about. `run`: on 409, the run the plan already started, when the engine names it. */
@@ -74,6 +71,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const run = typeof b.id === "string" ? b.id : typeof b.run === "string" ? b.run : undefined
   throw new ChatRefused(typeof b.error === "string" ? b.error : `The engine answered ${r.status}.`, r.status, typeof b.field === "string" ? b.field : undefined, run)
 }
+/** The engine is running but has no chat routes: it was started before they existed. Not the same as "not running". */
+export const NO_CHAT_ROUTES = "This engine is running, but it has no chat routes yet. Restart it from the repo root with npm run engine."
+const routeMissing = (error: unknown): never => { throw error instanceof ChatRefused && error.status === 404 ? new ChatRefused(NO_CHAT_ROUTES, 404) : error }
 const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
 
 const isRuns = (x: unknown): x is CitedRun[] => Array.isArray(x) && x.every((r) => r && (r.kind === "swarm" || r.kind === "board") && typeof r.id === "string")
@@ -89,14 +89,14 @@ export function isCatalog(x: unknown): x is Catalog {
 }
 
 export async function getCatalog(): Promise<Catalog> {
-  const body = await call<unknown>("/api/chat/catalog")
+  const body = await call<unknown>("/api/chat/catalog").catch(routeMissing)
   if (!isCatalog(body)) throw new ChatRefused("The engine sent a catalog this page cannot read.", 200)
   return body
 }
 
 /** Sends the conversation. Rejects with ChatRefused; a 2xx reply that is not a chat reply is refused too. */
 export async function sendChat(request: ChatRequest): Promise<ChatReply> {
-  const body = await call<Partial<ChatReply>>("/api/chat", json(request))
+  const body = await call<Partial<ChatReply>>("/api/chat", json(request)).catch(routeMissing)
   if (!body || typeof body.reply !== "string" || (body.mode !== "ai" && body.mode !== "keyword" && body.mode !== "scripted")) {
     throw new ChatRefused("The engine sent a reply this page cannot read.", 200)
   }
@@ -113,20 +113,4 @@ export async function startPlan(id: string, request: StartRequest): Promise<Star
   const body = await call<Partial<Started>>(`/api/chat/plans/${encodeURIComponent(id)}/start`, json(request))
   if (!body || typeof body.id !== "string") throw new ChatRefused("The engine started something but did not say what.", 200)
   return { kind: "board", id: body.id }
-}
-
-const KINDS: readonly string[] = ["swarm", "board", "agent", "skill"]
-/** Searches existing runs, agents and skills. Results the page cannot read are left out. */
-export async function searchAll(q: string, kind: SearchKind | "all", limit = 20, signal?: AbortSignal): Promise<SearchResult[]> {
-  let r: Response
-  try { r = await fetch(`${ENGINE}/api/chat/search?q=${encodeURIComponent(q)}&kind=${kind}&limit=${limit}`, { signal }) }
-  catch (error) {
-    if ((error as Error)?.name === "AbortError") throw error
-    throw new ChatRefused("The engine cannot be reached. Start it from the repo root with npm run engine.", 0)
-  }
-  const body = (await r.json().catch(() => undefined)) as Partial<SearchReply> & { error?: unknown } | undefined
-  if (!r.ok) throw new ChatRefused(typeof body?.error === "string" ? body.error : `The engine answered ${r.status}.`, r.status)
-  if (!body || !Array.isArray(body.results)) throw new ChatRefused("The engine sent search results this page cannot read.", 200)
-  return body.results.filter((x) => x && KINDS.includes(x.kind) && typeof x.id === "string" && typeof x.title === "string")
-    .map((x) => ({ ...x, excerpt: typeof x.excerpt === "string" ? x.excerpt : "" }))
 }

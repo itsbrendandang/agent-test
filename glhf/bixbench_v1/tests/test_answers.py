@@ -40,6 +40,12 @@ from bixbench_v1.solvers import (
         ("B", "b", "agree"),
         ("B", "C", "unclear"),
         ("3 genes", "3", "unclear"),
+        # Numbers are compared as numbers: normalising would drop the sign and the point.
+        ("-4.96", "4.96", "differ"),
+        ("-4.96", "49.6", "differ"),
+        ("1.5", "-15", "differ"),
+        ("1.5", "15", "differ"),
+        ("-4.96", "-4.960", "agree"),
     ],
 )
 def test_compare(a: str, b: str, expected: str) -> None:
@@ -189,3 +195,60 @@ def test_phase_budgets() -> None:
     assert allowance("reconciler", total, 2 * spent) == pytest.approx(total - 2 * spent)
     assert allowance("reconciler", total, 2 * spent) >= total * RECONCILE_RESERVE - 1
     assert allowance("critic", total, total) < 0  # nothing left: the phase is skipped
+
+
+def test_specification_sensitive_when_a_roles_own_alternative_differs() -> None:
+    book = AnswerLedger({"q1": "?", "q2": "?", "q3": "?"}, "single", primary="single", checker=None)
+    # q1: the role also ran another defensible reading and got a different value.
+    book.submit("q1", "0.031", "r", "e", "single", ["0.21 | without the outlier sample"])
+    # q2: its alternative is the same value within the tolerance (1%) or by rounding.
+    book.submit("q2", "1.52", "r", "e", "single", ["1.526 | Welch instead of Student", "1.5"])
+    # q3: text alternatives cannot be compared by code and do not count; nor does none.
+    book.submit("q3", "CDKN1A", "r", "e", "single", ["TP53 | ranked by p instead of fold change"])
+    assert book.final("q1").status == "specification-sensitive"
+    assert "0.21 | without the outlier sample" in book.final("q1").note
+    assert book.final("q2").status == "unchecked" and book.final("q2").note == ""
+    assert book.final("q3").status == "unchecked"
+    assert book.answers()["answers"]["q1"]["status"] == "specification-sensitive"
+    assert book.answers()["answers"]["q1"]["answer"] == "0.031"  # flagged, not replaced
+    assert "## Specification-sensitive answers" in book.findings_markdown()
+    assert json.loads(book.to_json())["derivations"][0]["alternatives"] == [
+        "0.21 | without the outlier sample"
+    ]
+    # Integers must match exactly, as in `compare`.
+    book.submit("q2", "166", "r", "e", "single", ["167 | padj <= 0.05 instead of < 0.05"])
+    assert book.final("q2").status == "specification-sensitive"
+    # A later answer without the alternative clears it: only the standing derivation counts.
+    book.submit("q2", "166", "r", "e", "single")
+    assert book.final("q2").status == "unchecked"
+
+
+def test_specification_sensitivity_in_the_swarm() -> None:
+    book = AnswerLedger({"q1": "?", "q2": "?"}, "glhf")
+    cross = CrossCheck()
+    book.submit("q1", "12", "r", "e", "analyst", ["15 | counting both strands"])
+    book.submit("q1", "12", "r", "e", "critic")
+    # Two derivations agree, but one of them says the answer hangs on a choice: not
+    # "replicated", and the reconciler is asked to check it like any weak agreement.
+    assert book.final("q1").status == "specification-sensitive"
+    assert [book.verdict(d) for d in book.derivations] == ["replicated", "replicated"]
+    assert cross.weak_agreement(book, "q1") is True
+    text = review_text(book, cross)
+    assert "## 2. Agreements that are not independent" in text
+    assert "alternative result differs: analyst: 15 | counting both strands" in text
+    # A disagreement keeps its own status (and resolution); the note still says it.
+    book.submit("q2", "3", "r", "e", "analyst", ["9 | all samples"])
+    book.submit("q2", "4", "r", "e", "critic")
+    assert (
+        book.final("q2").status == "disputed" and "specification-sensitive" in book.final("q2").note
+    )
+    book.resolve("q2", "B", "4", "A dropped a sample", "s.py", "reconciler")
+    assert book.final("q2").status == "reconciled"
+    assert [book.verdict(d) for d in book.derivations][2:] == ["rejected", "upheld"]
+
+
+def test_a_forced_answer_is_marked_in_the_single_agents_record() -> None:
+    book = AnswerLedger({"q1": "?"}, "single", primary="single", checker=None)
+    book.submit("q1", "5", "r", "e", "single", forced=True)
+    assert book.final("q1").status == "unchecked"
+    assert "forced estimate" in book.final("q1").note

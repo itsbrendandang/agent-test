@@ -286,3 +286,20 @@ def test_review_converges_only_when_the_critic_finished_looking() -> None:
     assert solver.review_step(cut, 0) == "again"
     assert solver.review_step(cut, 1) == "revise"
     assert solver.review_step(skipped, 0) == "stop" and solver.review_step(skipped, 3) == "stop"
+
+
+def test_the_budget_plan_is_what_the_settings_and_the_catalog_describe() -> None:
+    from bixbench3.inspect_harness.swarm import catalog
+
+    text = baseline.TOKEN_SEMANTICS["glhf"]
+    for said in ("budget plan", "floor", "reserves", "smaller plan", "final turn"):
+        assert said in text, said
+    assert "phases are skipped once max_tokens minus a 10% reserve" not in text  # the old rule
+    described = catalog.catalog()
+    assert all(name in str(described["budget_plan"]) for name, _ in solver.LADDER)
+    budgets = {r["key"]: r["budget"] for r in described["roles"]}  # type: ignore[attr-defined]
+    assert set(budgets) == set(solver.PHASE_ORDER)
+    for kind in ("scout", "propose", "pilot", "experiment", "audit", "critique", "revise"):
+        assert f"floor {solver.NEEDS[kind].seconds} s" in budgets[kind], kind
+    assert "45% of the time and 40% of the tokens" in budgets["experiment"]
+    assert "1.2 times" in budgets["critique"] and "always runs" in budgets["report"]

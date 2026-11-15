@@ -10,7 +10,7 @@ import pytest
 from conftest import Synthetic, docker_running
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import ModelOutput, ModelUsage
-from test_e2e import AWK, DONE, PANDAS, SUM_A, rederive, run, sanswer, shell, write
+from test_e2e import ATTACK, AWK, DONE, PANDAS, SUM_A, rederive, run, sanswer, shell, write
 
 from bixbench_v1 import solvers
 from bixbench_v1.runner import grade_run
@@ -249,6 +249,69 @@ def test_the_critic_does_not_run_if_the_sandbox_is_not_blind(
     assert [(p["phase"], p["reason"]) for p in skipped] == [("critic", "not blind")]
     assert "/tmp/scratch_a.txt" in summary["blind_check"]["visible_to_critic"]
     assert summary["answer_statuses"] == {"syn-1-q1": "unchecked"}
+
+
+def test_a_surviving_process_queue_or_ipc_object_stops_the_critic(
+    synthetic: Synthetic, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The seal as it was before the red-team: files only, and processes killed by name (the
+    # upstream helper, which spares anything called inspect-sandbox-tools).
+    real = solvers.user_processes
+
+    async def list_only(users: list[str], kill: bool, user: str = "root") -> list[dict]:  # type: ignore[type-arg]
+        return [] if kill else await real(users, False, user)
+
+    monkeypatch.setattr(solvers, "user_processes", list_only)
+    monkeypatch.setattr(solvers, "_BLIND", "true")
+    monkeypatch.setattr(solvers, "_IPC_REMOVE", "true")
+    script = [ATTACK, sanswer(1, "5", PANDAS), DONE]
+    summary = run(synthetic, tmp_path / "run", "glhf", script, question_ids=Q1)
+    assert summary["status"] == "done", summary["error"]
+    # All three channels are in the blind check, so the critic does not run on any of them.
+    visible = summary["blind_check"]["visible_to_critic"]
+    assert "message queue: /dev/mqueue/A-ANSWER_q1_is_five" in visible
+    assert any(v.startswith("sysv ipc: shm id ") for v in visible)
+    assert any(v.startswith("sysv ipc: msg id ") for v in visible)
+    assert any(v.startswith("process of deriv_a: pid ") for v in visible), visible
+    assert list(phases(summary, "started")) == ["analyst"]
+    assert summary["answer_statuses"] == {"syn-1-q1": "unchecked"}
+
+
+def test_an_answer_submitted_in_the_call_that_crosses_a_swarm_limit_is_kept(
+    synthetic: Synthetic, tmp_path: Path
+) -> None:
+    policy = {
+        "derivation_base": 6000,
+        "derivation_per_question": 0,
+        "reconciler_base": 1000,
+        "reconciler_per_question": 0,
+        "final_reserve": 3500,
+    }
+    script = [
+        # analyst works up to 5,500: its sixth call crosses the limit, and it is its answer
+        *costing(1000, [*[shell("echo working")] * 5, sanswer(1, "4", PANDAS)]),
+        *costing(500, [sanswer(1, "4", AWK), DONE]),  # critic
+        *costing(500, [DONE]),  # reconciler
+    ]
+    out = tmp_path / "run"
+    summary = run(
+        synthetic, out, "glhf", script, max_tokens=16_000, budget_policy=policy, question_ids=Q1
+    )
+    assert summary["status"] == "done", summary["error"]
+    finished = phases(summary, "finished")
+    assert finished["analyst"]["limit"] == "token" and finished["analyst"]["phase_tokens"] == 6000
+    # Recorded as the analyst's own finished answer: no forced turn, not a forced estimate.
+    assert finished["analyst"]["forced_answers"] == [] and finished["analyst"]["unanswered"] == []
+    row = summary["questions"][0]
+    assert (row["analyst_answer"], row["analyst_forced"], row["analyst_method"]) == (
+        "4",
+        False,
+        PANDAS,
+    )
+    assert summary["answer_statuses"] == {"syn-1-q1": "replicated"}
+    ledger = json.loads((out / "outputs" / "glhf" / "ledger.json").read_text())
+    kinds = [e["kind"] for e in ledger["events"]]
+    assert "pending_submits.executed" in kinds and "forced_final.started" not in kinds
 
 
 def test_equal_and_extended_swarm_budgets_are_recorded(

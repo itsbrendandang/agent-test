@@ -51,6 +51,7 @@ LOCAL_COMPOSE = Path(__file__).parents[2] / "sandbox" / "local-compose.yaml"
 MOCK = "mockllm/model"
 ROLES = ("planner", "experimenter", "critic", "reporter")
 GRADED_DIR = "graded"  # under --out; never mounted into the sandbox
+UNTRUSTED = "sandbox-copy-untrusted"  # in graded/glhf/: ledger.<this>.json, FINDINGS.<this>.md
 MAX_OUTPUT_FILE_BYTES = 2 * 1024**3
 MAX_OUTPUT_TOTAL_BYTES = 8 * 1024**3
 # The agent names of solver.py and the instructions that identify each in a model call.
@@ -80,16 +81,20 @@ def _done(answer: str) -> ModelOutput:
     return _call("submit", answer=answer)
 
 
-def mock_script(
-    solver: str,
+def role_script(
     truths: dict[str, str],
     review_rounds: int = 3,
     exa: bool = False,
     memory: bool = False,
-) -> list[ModelOutput]:
-    """A fixed script for `--model mock`. `truths` maps each required sandbox path to correct content.
+) -> dict[str, list[ModelOutput]]:
+    """The swarm's fixed script for `--model mock`, keyed by role. `truths` maps each required
+    sandbox path to correct content.
 
-    Swarm story: the first pass leaves the first artifact with a header and no rows; the critic
+    Each role plays its own lines, in order, whenever it is called (the auditor's and the
+    critic's lists cover round 1, then round 2). A role that is skipped or cut off therefore
+    cannot hand its lines to the next role, which is what a script kept by position did.
+
+    Story: the first pass leaves the first artifact with a header and no rows; the critic
     rejects it and refutes the claim that the first pass was complete; the reviser fixes it; the
     second review finds nothing; the reporter writes METHODS.md.
     """
@@ -112,109 +117,285 @@ def mock_script(
             "before review.\n",
         )
     ]
-    if solver == "single":
-        return [*correct, methods, _done("done")]
+    reporter = [methods, *(lessons if memory else []), _done("reported")]
     first_path, first_text = next(iter(truths.items()))
     header = first_text.splitlines()[0] + "\n"
     artifact = Path(first_path).stem
     if review_rounds == 0:
         # No review: the first pass leaves one artifact missing, so the finisher has to rescue it.
         # (A header with no rows is only a warning: it can be a correct, empty result.)
-        return [
-            _done("inputs listed"),  # scout
-            _done("planned"),  # proposer
-            _done("pilot skipped in the scripted run"),  # pilot
-            *correct[1:],  # experimenter: the first artifact is never written
+        return {
+            "scout": [_done("inputs listed")],
+            "planner": [_done("planned")],
+            "pilot": [_done("pilot skipped in the scripted run")],
+            # the first artifact is never written
+            "experimenter": [*correct[1:], _done("first pass written")],
+            "finisher": [correct[0], _done("rescued")],
+            "reporter": reporter,
+        }
+    return {
+        "scout": [
+            _call("bash_session", action="type_submit", input="ls -la /data"),
+            *(search if exa else []),
+            _done("inputs listed"),
+        ],
+        "planner": [
+            _call(
+                "propose_claim",
+                text="Every required output is derived from all listed samples.",
+                artifact_ids=[artifact],
+                null_hypothesis="At least one listed sample is missing from the outputs.",
+            ),
+            _call(
+                "propose_claim",
+                text="The first pass of the outputs is complete.",
+                artifact_ids=[artifact],
+                null_hypothesis="At least one output is incomplete after the first pass.",
+            ),
+            _done("planned"),
+        ],
+        "pilot": [_done("pilot skipped in the scripted run")],
+        # first pass is wrong (header only)
+        "experimenter": [
+            _call("bash_session", action="type_submit", input="ls /data"),
+            _write(first_path, header),
+            *correct[1:],
             _done("first pass written"),
-            correct[0],  # finisher
-            _done("rescued"),
-            methods,  # reporter
-            *(lessons if memory else []),
-            _done("reported"),
+        ],
+        "auditor": [_done("no undisclosed deviations"), _done("no undisclosed deviations")],
+        "critic": [
+            # round 1
+            _call(
+                "raise_issue",
+                severity="blocking",
+                artifact_ids=[artifact],
+                problem=f"{Path(first_path).name} has a header and no rows.",
+                evidence=f"wc -l {first_path} -> 1",
+            ),
+            _call(
+                "register_falsification_test",
+                claim_id="C2",
+                test_name="row count",
+                method="Count data rows of every output; an output with none contradicts the claim.",
+            ),
+            _call(
+                "record_falsification_test",
+                claim_id="C2",
+                test_name="row count",
+                p_value=0.01,
+                contradicts=True,
+                note=f"{first_path} has 0 data rows",
+            ),
+            _done("1 issue raised"),
+            # round 2
+            _call(
+                "register_falsification_test",
+                claim_id="C1",
+                test_name="label permutation",
+                method="Permute sample labels 10000 times; a p-value near 1 contradicts the claim.",
+            ),
+            _call(
+                "record_falsification_test",
+                claim_id="C1",
+                test_name="label permutation",
+                p_value=0.0004,
+                contradicts=False,
+                note="scripts/perm.py, 10000 permutations",
+            ),
+            _done("no issues"),
+        ],
+        "reviser": [
+            correct[0],
+            _call(
+                "resolve_issue",
+                issue_id="I1",
+                status="fixed",
+                resolution="Reran the counting script; rows present.",
+            ),
+            _done("fixed"),
+        ],
+        "finisher": [*correct, _done("rescued")],  # plays only if an artifact is missing
+        "reporter": reporter,
+    }
+
+
+def mock_script(
+    solver: str,
+    truths: dict[str, str],
+    review_rounds: int = 3,
+    exa: bool = False,
+    memory: bool = False,
+) -> list[ModelOutput]:
+    """The single agent's fixed script. (For the swarm, the lines of `role_script` in the order
+    of an undisturbed run; the run itself plays them by role, see `by_role`.)"""
+    if solver == "single":
+        return [
+            *(_write(path, text) for path, text in truths.items()),
+            _write(
+                "/outputs/METHODS.md",
+                "# Methods\n\nScripted mock run. No analysis was performed.\n",
+            ),
+            _done("done"),
         ]
-    return [
-        # scout
-        _call("bash_session", action="type_submit", input="ls -la /data"),
-        *(search if exa else []),
-        _done("inputs listed"),
-        # proposer
-        _call(
-            "propose_claim",
-            text="Every required output is derived from all listed samples.",
-            artifact_ids=[artifact],
-            null_hypothesis="At least one listed sample is missing from the outputs.",
-        ),
-        _call(
-            "propose_claim",
-            text="The first pass of the outputs is complete.",
-            artifact_ids=[artifact],
-            null_hypothesis="At least one output is incomplete after the first pass.",
-        ),
-        _done("planned"),
-        # pilot
-        _done("pilot skipped in the scripted run"),
-        # experimenter: first pass is wrong (header only)
-        _call("bash_session", action="type_submit", input="ls /data"),
-        _write(first_path, header),
-        *correct[1:],
-        _done("first pass written"),
-        # methods auditor, round 1
-        _done("no undisclosed deviations"),
-        # critic, round 1
-        _call(
-            "raise_issue",
-            severity="blocking",
-            artifact_ids=[artifact],
-            problem=f"{Path(first_path).name} has a header and no rows.",
-            evidence=f"wc -l {first_path} -> 1",
-        ),
-        _call(
-            "register_falsification_test",
-            claim_id="C2",
-            test_name="row count",
-            method="Count data rows of every output; an output with none contradicts the claim.",
-        ),
-        _call(
-            "record_falsification_test",
-            claim_id="C2",
-            test_name="row count",
-            p_value=0.01,
-            contradicts=True,
-            note=f"{first_path} has 0 data rows",
-        ),
-        _done("1 issue raised"),
-        # reviser
-        correct[0],
-        _call(
-            "resolve_issue",
-            issue_id="I1",
-            status="fixed",
-            resolution="Reran the counting script; rows present.",
-        ),
-        _done("fixed"),
-        # methods auditor, round 2
-        _done("no undisclosed deviations"),
-        # critic, round 2
-        _call(
-            "register_falsification_test",
-            claim_id="C1",
-            test_name="label permutation",
-            method="Permute sample labels 10000 times; a p-value near 1 contradicts the claim.",
-        ),
-        _call(
-            "record_falsification_test",
-            claim_id="C1",
-            test_name="label permutation",
-            p_value=0.0004,
-            contradicts=False,
-            note="scripts/perm.py, 10000 permutations",
-        ),
-        _done("no issues"),
-        # reporter
-        methods,
-        *(lessons if memory else []),
-        _done("reported"),
-    ]
+    script = role_script(truths, review_rounds, exa, memory)
+    return [output for lines in script.values() for output in lines]
+
+
+def role_of(messages: list[ChatMessage]) -> str | None:
+    """Which role a model call belongs to, from its system message (the role's instructions).
+    Several instructions extend the experimenter's, so the longest one that is present wins."""
+    system = "\n".join(m.text for m in messages if m.role == "system")
+    found = [(len(text), name) for name, text in ROLE_PROMPTS.items() if text.strip() in system]
+    return max(found)[1] if found else None
+
+
+def by_role(
+    script: dict[str, list[ModelOutput]],
+) -> Callable[[list[ChatMessage], list[ToolInfo], ToolChoice, GenerateConfig], ModelOutput]:
+    """A scripted model that answers each call with the next line of the calling role. A role
+    with no line left submits; a hand-off turn (no tools) gets a one-line note."""
+    left = {name: list(lines) for name, lines in script.items()}
+
+    def answer(
+        messages: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+    ) -> ModelOutput:
+        del tool_choice, config
+        role = role_of(messages)
+        if role == "handoff" or not tools:
+            return ModelOutput.from_content(MOCK, "Scripted run: no hand-off note.")
+        lines = left.get(role or "", [])
+        if lines:
+            return lines.pop(0)
+        return _done(f"scripted run: nothing left for {role or 'this role'}")
+
+    return answer
+
+
+@contextlib.contextmanager
+def offline_search() -> Iterator[None]:
+    """For the scripted run: search_docs works, and nothing can reach Exa.
+
+    The scripted scout makes one search_docs call. It is answered here with an empty reply, and
+    the runner's real key (if there is one) is taken out of the environment for the run, so a
+    scripted run costs nothing even where a key is set. It called Exa once; never again."""
+    real_search, real_key = swarm_tools.exa_docs, os.environ.get("EXA_API_KEY")
+
+    async def canned(query: str, objective: str, api_key: str) -> dict[str, Any]:
+        del query, objective, api_key
+        return {"results": []}
+
+    swarm_tools.exa_docs = canned
+    os.environ["EXA_API_KEY"] = "scripted-run-no-key"
+    try:
+        yield
+    finally:
+        swarm_tools.exa_docs = real_search
+        if real_key is None:
+            os.environ.pop("EXA_API_KEY", None)
+        else:
+            os.environ["EXA_API_KEY"] = real_key
+
+
+class UnsafeOutputs(RuntimeError):
+    """The outputs folder holds something that is not a plain file. Nothing was graded."""
+
+
+def _copy_regular_file(source: Path, target: Path, expected: os.stat_result, limit: int) -> int:
+    """Copy one file that lstat said is regular. Opened without following a link, and checked
+    again on the open descriptor, so what is copied is the file that was looked at."""
+    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+    copied = 0
+    try:
+        actual = os.fstat(descriptor)
+        if not stat.S_ISREG(actual.st_mode) or (actual.st_dev, actual.st_ino) != (
+            expected.st_dev,
+            expected.st_ino,
+        ):
+            raise UnsafeOutputs("changed while it was being read")
+        with os.fdopen(os.dup(descriptor), "rb") as reader, open(target, "xb") as writer:
+            while chunk := reader.read(1024 * 1024):
+                copied += len(chunk)
+                if copied > limit:
+                    raise UnsafeOutputs(f"larger than {limit} bytes")
+                writer.write(chunk)
+    finally:
+        os.close(descriptor)
+    return copied
+
+
+def collect_outputs(
+    outputs: Path,
+    target: Path,
+    *,
+    max_file_bytes: int = MAX_OUTPUT_FILE_BYTES,
+    max_total_bytes: int = MAX_OUTPUT_TOTAL_BYTES,
+) -> list[dict[str, str]]:
+    """Copy the regular files under `outputs` (which the sandbox could write) into `target`, a
+    fresh folder the sandbox never saw, and return what was refused, as {path, reason}.
+
+    Refused: symbolic links (to files or folders), files with more than one hard link, devices,
+    pipes and sockets, files over `max_file_bytes`, and everything once `max_total_bytes` is
+    reached. Nothing is followed and nothing outside `outputs` is read: every entry is examined
+    with lstat and opened with O_NOFOLLOW."""
+    if target.is_symlink() or target.exists():
+        raise UnsafeOutputs(f"{target} already exists; it must be a fresh folder")
+    refused: list[dict[str, str]] = []
+    total = 0
+    root = os.lstat(outputs)
+    if not stat.S_ISDIR(root.st_mode):
+        return [{"path": ".", "reason": "the outputs folder is not a folder (a link?)"}]
+    target.mkdir(parents=True)
+    pending = [Path()]
+    while pending:
+        folder = pending.pop()
+        for name in sorted(os.listdir(outputs / folder)):
+            relative = folder / name
+            source = outputs / relative
+            try:
+                info = os.lstat(source)
+                if stat.S_ISLNK(info.st_mode):
+                    raise UnsafeOutputs("symbolic link")
+                if stat.S_ISDIR(info.st_mode):
+                    (target / relative).mkdir()
+                    pending.append(relative)
+                    continue
+                if not stat.S_ISREG(info.st_mode):
+                    raise UnsafeOutputs("not a regular file (device, pipe or socket)")
+                if info.st_nlink > 1:
+                    raise UnsafeOutputs(f"hard link ({info.st_nlink} names for one file)")
+                if info.st_size > max_file_bytes:
+                    raise UnsafeOutputs(f"larger than {max_file_bytes} bytes")
+                if total + info.st_size > max_total_bytes:
+                    raise UnsafeOutputs(f"the outputs exceed {max_total_bytes} bytes in total")
+                total += _copy_regular_file(source, target / relative, info, max_file_bytes)
+            except (UnsafeOutputs, OSError) as error:
+                (target / relative).unlink(missing_ok=True)
+                reason = str(error) if isinstance(error, UnsafeOutputs) else f"unreadable: {error}"
+                refused.append({"path": str(relative), "reason": reason})
+    return refused
+
+
+def trusted_ledger(out_dir: Path, sample_store: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The swarm's ledger as the solver process kept it: from the sample's store, else from the
+    host file the solver wrote during the run. Never from the sandbox's folders. Written to
+    <out>/ledger.json and <out>/FINDINGS.md."""
+    stored = sample_store or {}
+    text = stored.get(swarm_tools.LEDGER_STORE_KEY)
+    findings = stored.get(swarm_tools.FINDINGS_STORE_KEY)
+    ledger_file = out_dir / swarm_tools.HOST_LEDGER_FILE
+    if isinstance(text, str):
+        swarm_tools.write_host_file(ledger_file, text)
+        if isinstance(findings, str):
+            swarm_tools.write_host_file(out_dir / swarm_tools.HOST_FINDINGS_FILE, findings)
+    elif ledger_file.is_file() and not ledger_file.is_symlink():
+        text = ledger_file.read_text(encoding="utf-8")
+    else:
+        return None
+    loaded: dict[str, Any] = json.loads(text)
+    return loaded
 
 
 def load_case(case_dir: Path) -> RuntimeCase:
@@ -247,13 +428,29 @@ def run_local(
     for directory in (workspace, outputs):
         directory.mkdir(parents=True, exist_ok=True)
     data.mkdir(exist_ok=True)
+    grading_spec = case_dir / "grader" / "artifacts_grading.json"
+    # Only the case's data folder is mounted, never a folder that holds grader/. (Its host path
+    # still shows in the sandbox's /proc/self/mountinfo, and grader/ is next to it: that is why
+    # nothing the sandbox writes is followed as a link, see collect_outputs.)
+    for mounted in (data, workspace, outputs):
+        if grading_spec.parent.resolve().is_relative_to(mounted.resolve()):
+            raise ValueError(f"{mounted} would put the grader's files inside the sandbox")
+    graded = out_dir / GRADED_DIR
+    for stale in (graded, out_dir / "artifact_grades"):
+        if stale.is_symlink() or stale.is_file():
+            stale.unlink()
+        elif stale.exists():
+            shutil.rmtree(stale)
+    for name in (swarm_tools.HOST_LEDGER_FILE, swarm_tools.HOST_FINDINGS_FILE, "grade.json"):
+        (out_dir / name).unlink(missing_ok=True)
     os.environ.update(
         BIXBENCH3_INSPECT_SANDBOX_COMPOSE=str(LOCAL_COMPOSE),
         BIXBENCH3_WORKSPACE_DIR=str(workspace),
         BIXBENCH3_OUTPUTS_DIR=str(outputs),
         BIXBENCH3_DATA_DIR=str(data),
     )
-    grading_spec = case_dir / "grader" / "artifacts_grading.json"
+    # Where the solver process keeps the swarm's ledger during the run (swarm/tools.py).
+    os.environ[swarm_tools.HOST_LEDGER_ENV] = str(out_dir)
     if model == "mock":
         if role_models:
             raise ValueError("role models cannot be combined with --model mock")
@@ -264,10 +461,11 @@ def run_local(
             for a in spec["artifacts"]
         }
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
+        scripted: Any = mock_outputs
+        if scripted is None and solver == "glhf":
+            scripted = by_role(role_script(truths, review_rounds, exa, memory_dir is not None))
         resolved: Model = get_model(
-            MOCK,
-            custom_outputs=mock_outputs
-            or mock_script(solver, truths, review_rounds, exa, memory_dir is not None),
+            MOCK, custom_outputs=scripted if scripted is not None else mock_script(solver, truths)
         )
     else:
         resolved = get_model(model)
@@ -320,22 +518,41 @@ def run_local(
             "exa": exa,
             "memory_dir": str(memory_dir.resolve()) if memory_dir else None,
         }
-    logs = inspect_eval(
-        bixbench3_cases(
-            dataset_path=str(case_dir),
-            case_ids=[case.task_id],
-            solver=solver,
-            review_rounds=review_rounds,
-            time_limit_seconds=time_limit_seconds,
-            **task_args,
-        ),
-        model=resolved,
-        log_dir=str(out_dir / "logs"),
-        display="none",
-    )
+    # A scripted run never reaches a search engine, key or no key.
+    with offline_search() if model == "mock" else contextlib.nullcontext():
+        logs = inspect_eval(
+            bixbench3_cases(
+                dataset_path=str(case_dir),
+                case_ids=[case.task_id],
+                solver=solver,
+                review_rounds=review_rounds,
+                time_limit_seconds=time_limit_seconds,
+                **task_args,
+            ),
+            model=resolved,
+            log_dir=str(out_dir / "logs"),
+            display="none",
+        )
     log = logs[0]
-    result = grade(grading_spec, outputs)
-    (out_dir / "grade.json").write_text(json.dumps(result, indent=2, default=str))
+    os.environ.pop(swarm_tools.HOST_LEDGER_ENV, None)
+    sample = log.samples[0] if log.samples else None
+    # The sandbox is gone. Its outputs are copied, plain files only, to a folder it never saw,
+    # and the grader reads the copy: a link under outputs/ is never followed on the host.
+    refused = collect_outputs(outputs, graded)
+    result: dict[str, Any] | None = None
+    unsafe: str | None = None
+    if refused:
+        shown = "; ".join(f"{r['path']} ({r['reason']})" for r in refused[:5])
+        unsafe = (
+            f"outputs rejected, nothing was graded: {len(refused)} entr"
+            f"{'y is' if len(refused) == 1 else 'ies are'} not plain files: {shown}"
+        )
+        (out_dir / "grade.json").write_text(
+            json.dumps({"score": None, "error": unsafe, "outputs_rejected": refused}, indent=2)
+        )
+    else:
+        result = dict(grade(grading_spec, graded))
+        (out_dir / "grade.json").write_text(json.dumps(result, indent=2, default=str))
     usage = {
         name: {
             "input_tokens": u.input_tokens,
@@ -344,23 +561,57 @@ def run_local(
         }
         for name, u in (log.stats.model_usage or {}).items()
     }
-    ledger_file = outputs / "glhf" / "ledger.json"
-    if swarm and ledger_file.exists():
-        for event in json.loads(ledger_file.read_text(encoding="utf-8")).get("events", []):
+    ledger = trusted_ledger(out_dir, dict(sample.store) if sample else None) if swarm else None
+    if ledger is not None:
+        if refused:
+            ledger.setdefault("events", []).append(
+                {"kind": "outputs.rejected", "entries": refused[:50], "count": len(refused)}
+            )
+            swarm_tools.write_host_file(
+                out_dir / swarm_tools.HOST_LEDGER_FILE, json.dumps(ledger, indent=2, default=str)
+            )
+        for event in ledger.get("events", []):
             if event.get("kind") == "settings":
                 settings["memory_source"] = event.get("memory_source")
-    sample = log.samples[0] if log.samples else None
+            if event.get("kind") == UNREVIEWED:
+                summary["unreviewed"] = True  # shown with the score: no critic pass finished
+        summary["ledger"] = swarm_tools.HOST_LEDGER_FILE
+        summary["findings"] = swarm_tools.HOST_FINDINGS_FILE
+        summary["claims"] = [
+            {key: claim.get(key) for key in ("id", "text", "verdict", "e_value", "threshold")}
+            for claim in ledger.get("claims", [])
+        ]
+        # The roles' working copy, for comparison only. A difference means a role rewrote it.
+        copy = graded / "glhf" / "ledger.json"
+        if not refused and copy.is_file():
+            try:
+                same = json.loads(copy.read_text(encoding="utf-8")).get("claims") == ledger.get(
+                    "claims"
+                )
+            except (ValueError, AttributeError):
+                same = False
+            summary["sandbox_ledger_differs"] = not same
+        # In the copy, the sandbox's versions carry a name that says what they are.
+        for name in ("ledger.json", "FINDINGS.md"):
+            sandbox_copy = graded / "glhf" / name
+            if sandbox_copy.is_file() and not sandbox_copy.is_symlink():
+                stem, _, suffix = name.rpartition(".")
+                sandbox_copy.rename(sandbox_copy.with_name(f"{stem}.{UNTRUSTED}.{suffix}"))
     if sample is not None and "token_budget" in (sample.metadata or {}):
         settings["token_budget"] = sample.metadata["token_budget"]
     summary.update(
-        status="done" if log.status == "success" else "failed",
-        error=str(log.error.message) if log.error else None,
+        status="done" if log.status == "success" and not refused else "failed",
+        error=unsafe if refused else (str(log.error.message) if log.error else None),
+        outputs_rejected=refused,
+        graded_outputs=GRADED_DIR,
         finished_at=time.time(),
         seconds=round(time.time() - started, 1),
-        score=result["score"],
+        score=result["score"] if result else None,
         artifacts=[
             {"artifact_id": a["artifact_id"], "score": a["score"]} for a in result["artifacts"]
-        ],
+        ]
+        if result
+        else [],
         usage=usage,
         messages=len(log.samples[0].messages) if log.samples else 0,
     )

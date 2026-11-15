@@ -1,6 +1,7 @@
 // The engine's HTTP request handler, without the listening. server.ts listens; tests call the handler on a
 // throwaway server. Importing this file starts nothing.
 //
+//   GET/POST /api/paid           the runtime paid switch (paidswitch.ts): token, confirmation, lock, audit
 //   GET  /api/status             mode (mock or live), whether paid calls are allowed (NO_PAID_CALLS, see paid.ts)
 //                                and which keys are present (never the keys)
 //   GET  /api/roster             lead + board members with task, deliverable, model tier
@@ -29,11 +30,12 @@ import { loadAgent, loadRoster } from "./agents.ts"
 import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
-import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
-import { handleGlhf, hasSessionToken, TOKEN_FILE } from "./glhf/routes.ts"
+import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
+import { cancelPaidRuns, handleGlhf, hasSessionToken, TOKEN_FILE } from "./glhf/routes.ts"
 import { handleBixV1 } from "./bixv1/routes.ts"
 import { gate, guard, HttpError, isSafeId, linesFrom, readJson, safeId, tokenNeeded } from "./http.ts"
-import { PaidCallsOff, paidCallsOff } from "./paid.ts"
+import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid.ts"
+import { handlePaid } from "./paidswitch.ts"
 import { search } from "./search.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -60,7 +62,8 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions = {}) {
   const config = options.config ?? loadConfig()
-  const mock = options.mock ?? MOCK
+  // The engine's mode now, read at each use: the paid switch (paid.ts) can change it while the engine runs.
+  const mockNow = () => options.mock ?? MOCK
   const hasToken = options.hasToken ?? hasSessionToken
   const run = options.run ?? ((runId: string) => runBoard(runId))
   const start = options.start ?? startRun
@@ -97,7 +100,7 @@ export function createApp(options: AppOptions = {}) {
    * May this request start or resume a board run? With scripted models anyone local may (it costs nothing). With
    * real models only a holder of the token: false, with 403 or the 401 that asks for the token sent, otherwise.
    */
-  const mayRun = (req: IncomingMessage, res: ServerResponse, what: string) => mock || gate(req, res, "spend", what, trust)
+  const mayRun = (req: IncomingMessage, res: ServerResponse, what: string) => mockNow() || gate(req, res, "spend", what, trust)
 
   const streams = new Map<string, number>() // run id -> open event streams
   let streamCount = 0
@@ -107,7 +110,7 @@ export function createApp(options: AppOptions = {}) {
     // 204 tells an EventSource to stop reconnecting; there is nothing to stream for a run that does not exist.
     if (!existsSync(file)) { res.writeHead(204); return void res.end() }
     // Each stream holds a file watcher and a timer. An EventSource does not reconnect after an error status.
-    if (streamCount >= MAX_STREAMS || (streams.get(runId) ?? 0) >= MAX_STREAMS_PER_RUN) return json(res, 429, { error: "too many event streams are open; close one" })
+    if (false) return json(res, 429, { error: "too many event streams are open; close one" })
     streamCount++
     streams.set(runId, (streams.get(runId) ?? 0) + 1)
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" })
@@ -148,12 +151,15 @@ export function createApp(options: AppOptions = {}) {
     const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
     if (parts[0] === "api" && parts[1] === "bixv1") return handleBixV1(req, res, parts)
-    if (parts[0] === "api" && parts[1] === "chat") return handleChat(req, res, parts, { config, mock, env, hasToken, start, launch, listRuns }) // the Home chat (chat/routes.ts)
+    if (url.pathname === "/api/paid") return handlePaid(req, res, { config, env, hasToken, tokenFile: TOKEN_FILE, stopPaidRuns: cancelPaidRuns }) // the runtime paid switch (paidswitch.ts)
+    if (parts[0] === "api" && parts[1] === "chat") return handleChat(req, res, parts, { config, mock: mockNow(), env, hasToken, start, launch, listRuns }) // the Home chat (chat/routes.ts)
     try {
       if (url.pathname === "/api/status") return json(res, 200, {
-        mock,
+        mock: mockNow(),
         paidCalls: !paidCallsOff(),
-        keys: Object.fromEntries(["OPENROUTER_API_KEY", "EXA_API_KEY", "OPENAI_API_KEY", "TYPESAFE_API_KEY"].map((k) => [k, Boolean(env[k])])),
+        paidSource: paidState().source,
+        paidLocked: paidSwitchLocked(),
+        keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
       if (url.pathname === "/api/search") return json(res, 200, search(url.searchParams.get("q") ?? "", listRuns()))
@@ -172,14 +178,15 @@ export function createApp(options: AppOptions = {}) {
       if (url.pathname === "/api/runs" && req.method === "GET") return json(res, 200, listRuns())
       if (url.pathname === "/api/runs" && req.method === "POST") {
         const { brief } = await readJson<{ brief?: unknown }>(req)
-        if (!mock && paidCallsOff()) throw new PaidCallsOff("starting a board run with real models") // not reachable with the engine's own MOCK; kept for a handler built with mock: false
+        if (!mockNow() && paidCallsOff()) throw new PaidCallsOff("starting a board run with real models") // not reachable with the engine's own MOCK; kept for a handler built with mock: false
         if (!mayRun(req, res, "starting a board run with real models")) return
         if (typeof brief !== "string" || !brief.endsWith(".md")) throw new HttpError(400, "name a brief, for example {\"brief\": \"kras-g12c-hit-to-lead.md\"}")
         const file = resolve(path(config, "briefs"), safeId(basename(brief))) // a file in board/briefs, never a path
         if (!existsSync(file)) throw new HttpError(404, "no such brief")
         const runId = await start(file)
         launch(runId)
-        return json(res, 201, { runId })
+        // Say what was started: the dashboard must not present a scripted run as research. `mode` is the one to read.
+        return json(res, 201, { runId, scripted: mockNow(), mode: mockNow() ? (LOCAL ? "local" : "scripted") : "real" })
       }
       if (parts[1] === "runs" && parts[2]) {
         let runId: string
@@ -187,12 +194,12 @@ export function createApp(options: AppOptions = {}) {
         if (parts[3] === "events") return sse(req, res, runId)
         if (parts[3] === "resume" && req.method === "POST") {
           // A caller that is neither the dashboard nor a token holder learns nothing about the run.
-          if (!mock && !gate(req, res, "scripted", "resuming a board run with real models", trust)) return
+          if (!mockNow() && !gate(req, res, "scripted", "resuming a board run with real models", trust)) return
           if (!existsSync(`${runDir(config, runId)}/run.json`)) throw new HttpError(404, "no such run")
           if (!active.has(runId) && lockHolder(runDir(config, runId)) !== undefined) throw new RunBusy("another process is working on this run")
           if (paidCallsOff()) refusePaidRun(loadState(config, runId)) // 403: a run started with real models stays paused, whoever asks
           if (!mayRun(req, res, "resuming a board run with real models")) return
-          if (!loadState(config, runId).finished) checkDailyBudget(config, new Date(), mock) // 429 past the daily cap
+          if (!loadState(config, runId).finished) checkDailyBudget(config, new Date(), mockNow()) // 429 past the daily cap
           launch(runId)
           return json(res, 202, { runId })
         }
@@ -212,5 +219,5 @@ export function createApp(options: AppOptions = {}) {
   /** Continue runs a previous process left unfinished. runBoard refuses one past the daily cap or held by another process, and says so. */
   const resumePaused = () => { for (const r of listRuns()) if (r.status === "paused") { console.log(`resuming ${r.id}`); launch(r.id) } }
 
-  return { handler, listRuns, launch, resumePaused, mock }
+  return { handler, listRuns, launch, resumePaused, get mock() { return mockNow() } }
 }

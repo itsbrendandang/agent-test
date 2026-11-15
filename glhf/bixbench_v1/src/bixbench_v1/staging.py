@@ -63,7 +63,9 @@ ARCHIVE_ONLY_SUFFIXES = frozenset(
     }
 )  # fmt: skip
 # Files without a suffix in a BUSCO lineage database. No other bare name is accepted.
-ARCHIVE_BARE_NAMES = frozenset({"lengths_cutoff", "scores_cutoff", "ancestral", "ancestral_variants"})
+ARCHIVE_BARE_NAMES = frozenset(
+    {"lengths_cutoff", "scores_cutoff", "ancestral", "ancestral_variants"}
+)
 NOTEBOOK_SUFFIXES = frozenset({".ipynb", ".rmd", ".qmd"})
 REPORT_SUFFIXES = frozenset({".html", ".htm", ".pdf", ".md", ".docx", ".nbconvert"})
 SCRIPT_SUFFIXES = frozenset({".py", ".r", ".jl"})

@@ -489,7 +489,7 @@ def grade_run(
         rows = [g.to_dict() for g in grades]
         result["profiles"][profile] = {
             # Multiple choice is a letter match: no judge is asked whatever was configured.
-            "judge": judge_record(profile, name if answer_mode == "open" else None, temperature)
+            "judge": judge_record(profile, name, temperature)
             if answer_mode == "open"
             else {"model": None, "temperature": None, "deviations": [], "letter_match": True},
             "summary": summarise(rows),

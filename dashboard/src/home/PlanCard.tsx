@@ -4,9 +4,12 @@
 import { useId, useState } from "react"
 import { Streamdown } from "streamdown"
 import { useRunEvents } from "@/board/api"
-import { RunId, StatusPill } from "@/components/Shared"
+import { Loading, Mascots } from "@/components/Crew"
+import { ModeLabel, RunId, StatusPill } from "@/components/Shared"
 import { fmtDuration } from "@/lib/format"
 import { HOW_TO_TURN_ON } from "@/lib/paid"
+import { boardFacts } from "@/lib/verdict"
+import { verdictCount } from "@/lib/words"
 import { ChatRefused, startPlan, type Effort, type EffortId, type Plan } from "./api"
 import { EffortPicker } from "./EffortPicker"
 import { controlOf, editsOf, estimateText, startBlock, startRequest, type Edits, type PlanState, type StartControl, type StartErrors } from "./chat"
@@ -81,10 +84,10 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
   return (
     <section className="home-plan card-surface" aria-labelledby={`${uid}-title`} data-state={state.state}>
       <header className="home-plan-head">
-        <span className="swarm-eyebrow">Research plan · board review · nothing has started</span>
-        <span className="pill" data-kind={plan.paid ? "warning" : "neutral"}>{plan.paid ? "Paid: uses paid models or search" : "Scripted: costs nothing"}</span>
+        <span className="swarm-eyebrow">Plan · board review · nothing has started</span>
+        <span className="pill" data-kind={plan.paid ? "warning" : "neutral"}>{plan.paid ? "Paid: uses paid models or search" : "Practice run: costs nothing"}</span>
       </header>
-      <h3 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h3>
+      <h2 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h2>
       <p className="home-plan-question">“{plan.question}”</p>
 
       {plan.warnings.length > 0 && (
@@ -95,11 +98,11 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
         <>
           <div className="home-plan-grid">
             <div>
-              <h4>Agents ({plan.agents.length})</h4>
+              <h3>Agents ({plan.agents.length})</h3>
               <ul className="home-why">{plan.agents.map((a) => <li key={a.name}><b>{a.title}</b><span className="muted small">{a.why}</span></li>)}</ul>
             </div>
             <div>
-              <h4>Skills ({plan.skills.length})</h4>
+              <h3>Skills ({plan.skills.length})</h3>
               {plan.skills.length === 0 ? <p className="muted small">None.</p>
                 : <ul className="home-why">{plan.skills.map((s) => <li key={s.name}><b>{s.name}</b><span className="muted small">{s.why}</span></li>)}</ul>}
             </div>
@@ -129,7 +132,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
           <p className={plan.paid ? "newrun-cost" : "muted"}>
             {plan.paid
               ? <><b>This may spend money.</b> It can cost up to the limit below (estimated: {estimateText(plan)}). It stops at the first limit it reaches.</>
-              : <>This runs with scripted models. It costs nothing and does no real research.</>}
+              : <>This is a practice run: fixed text instead of models. It costs nothing and does no real research.</>}
           </p>
           <dl className="home-facts">
             {level && <><dt>Effort</dt><dd>{level.label}</dd></>}
@@ -171,46 +174,55 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
       {state.state === "open" && step === "view" && (
         <footer className="newrun-foot">
           <button type="button" className="btn" onClick={() => onState({ state: "discarded" })}>Discard</button>
-          <button type="button" className="btn btn-primary" disabled={paidOff || !!replanning} onClick={() => { setAgreed(false); setRefused(""); setErrors({}); setStep("confirm") }}>Start research</button>
+          <button type="button" className="btn btn-primary" disabled={paidOff || !!replanning} onClick={() => { setAgreed(false); setRefused(""); setErrors({}); setStep("confirm") }}>{plan.paid ? "Start research" : "Start practice run (not research)"}</button>
         </footer>
       )}
       {state.state === "open" && step !== "view" && (
         <footer className="newrun-foot">
           <button type="button" className="btn" disabled={step === "sending"} onClick={() => { setStep("view"); setAgreed(false) }}>Back</button>
           <button type="button" className="btn btn-primary" disabled={step === "sending" || !!block} onClick={() => void start()}>
-            {step === "sending" ? "Starting…" : plan.paid ? "Start paid research" : "Start scripted run"}
+            {step === "sending" ? "Starting…" : plan.paid ? "Start paid research" : "Start practice run (not research)"}
           </button>
         </footer>
       )}
       {state.state === "discarded" && <p className="muted small" role="status">Discarded. Nothing was started. <button type="button" className="link-btn" onClick={() => onState({ state: "open" })}>Bring it back</button></p>}
       {state.state === "expired" && <p className="home-paidoff" role="status">This plan has expired, so it can no longer be started. Ask the question again to get a new plan.</p>}
-      {state.state === "started" && <RunFollow runId={state.runId} onOpen={() => onOpenRun(state.runId)} />}
+      {state.state === "started" && <RunFollow runId={state.runId} maxRounds={Number(edits.maxRounds) || plan.limits.maxRounds} onOpen={() => onOpenRun(state.runId)} />}
     </section>
   )
 }
 
-/** The board review a plan started: one status line that follows the run's event stream, and a way to open it. */
-export function RunFollow({ runId, onOpen }: { runId: string; onOpen: () => void }) {
+/**
+ * The board review a plan started. While it runs: the app's waiting look with one plain progress line. When it is
+ * done: the decision and a way to see it. The characters beside it are decoration; the label says whether this
+ * was a practice run, from the run's own first event.
+ */
+export function RunFollow({ runId, onOpen, maxRounds }: { runId: string; onOpen: () => void; maxRounds?: number }) {
   const events = useRunEvents(runId)
-  const rounds = new Set(events.flatMap((e) => (e.type === "round.started" ? [e.round] : []))).size
+  const f = boardFacts(events)
   const replies = events.filter((e) => e.type === "member.replied").length
-  const claims = events.filter((e) => e.type === "claim.checked").length
-  const failed = events.find((e) => e.type === "run.failed")
   const done = events.find((e) => e.type === "run.finished")
-  const memo = events.find((e) => e.type === "memo.written")
-  const state = failed ? "failed" : done ? "done" : "running"
+  const progress = events.length === 0 ? "Starting the review…"
+    : f.rounds === 0 ? "The team is getting ready…"
+    : `The team is discussing: round ${f.rounds}${maxRounds ? ` of ${Math.max(maxRounds, f.rounds)}` : ""} · ${replies} repl${replies === 1 ? "y" : "ies"} so far, ${f.claims.length} statement${f.claims.length === 1 ? "" : "s"} checked`
   return (
-    <div className="home-run" role="status">
-      <p>
-        <StatusPill state={state} /> Board review <RunId id={runId} />
-        <span className="muted small">
-          {events.length === 0 ? " · waiting for its first event" : ` · round ${rounds} · ${replies} repl${replies === 1 ? "y" : "ies"} · ${claims} claim${claims === 1 ? "" : "s"} checked`}
-          {done?.type === "run.finished" && ` · took ${fmtDuration(done.minutes * 60_000)} · cost $${done.usd.toFixed(2)}`}
-        </span>
-      </p>
-      {memo?.type === "memo.written" && <p className="home-decision">Decision: {memo.decision}</p>}
-      {failed?.type === "run.failed" && <p className="newrun-error">{failed.error}</p>}
-      <button type="button" className="btn" onClick={onOpen}>Open in the Board view</button>
+    <div className="home-run" role="group" aria-label="The review this plan started">
+      <p><StatusPill state={f.state} /> Board review <RunId id={runId} /> <ModeLabel scripted={f.scripted} /></p>
+      {f.state === "running" && <Loading>{progress}</Loading>}
+      {f.state === "done" && (
+        <>
+          <p role="status">
+            The review is finished. {f.claims.length} statement{f.claims.length === 1 ? "" : "s"} checked: {verdictCount("holds", f.verified)}, {verdictCount("fails", f.contradicted)}, {verdictCount("unknown", f.unsupported + f.unchecked)}.
+            {done?.type === "run.finished" && <span className="muted small"> Took {fmtDuration(done.minutes * 60_000)} · cost ${done.usd.toFixed(2)}</span>}
+          </p>
+          {f.decision && <p className="home-decision">Decision: {f.decision}</p>}
+        </>
+      )}
+      {f.error && <p className="newrun-error" role="alert">{f.error}</p>}
+      <span className="home-run-open">
+        {f.state === "done" && <Mascots mood="happy" size={32} />}
+        <button type="button" className={f.state === "done" ? "btn btn-primary" : "btn"} onClick={onOpen}>{f.state === "done" ? "See what they found" : "Watch the discussion"}</button>
+      </span>
     </div>
   )
 }

@@ -1,0 +1,193 @@
+{
+ "recorded_at": "2026-11-14T23:48:11Z",
+ "registry": {
+  "rhea": {
+   "name": "Rhea reaction",
+   "description": "Rhea is an expert-curated knowledgebase of chemical and transport reactions of biological interest. Enzyme-catalyzed and spontaneously occurring reactions are curated from peer-reviewed literature and represented in a computationally tractable manner by using the ChEBI (Chemical Entities of Biological Interest) ontology to describe reaction participants.\n\nRhea covers the reactions described by the IUBMB Enzyme Nomenclature as well as many additional reactions and can be used for enzyme annotation, genome-scale metabolic modeling and omics-related analyses. Rhea is the standard for enzyme and transporter annotation in UniProtKB.",
+   "homepage": "https://www.rhea-db.org/",
+   "license": "CC-BY-4.0",
+   "keywords": [
+    "annotation",
+    "biochemistry",
+    "biocuration",
+    "biopax",
+    "chemical entity",
+    "chemical formula",
+    "curated information",
+    "enzymatic reaction",
+    "interaction/pathway",
+    "life science",
+    "metabolite",
+    "ontology",
+    "protein",
+    "reaction",
+    "reaction data",
+    "small molecule",
+    "transport"
+   ],
+   "publications": [
+    {
+     "doi": "10.1093/nar/gkab1016"
+    },
+    {
+     "doi": "10.1093/bioinformatics/btz817"
+    }
+   ],
+   "mappings": {},
+   "download_owl": "https://w3id.org/biopragmatics/resources/rhea/rhea.owl.gz"
+  },
+  "civic.aid": {
+   "name": "CIViC Assertion",
+   "description": "A CIViC assertion classifies the clinical significance of a variant-disease relationship under recognized guidelines. The CIViC Assertion (AID) summarizes a collection of Evidence Items (EIDs) that covers predictive/therapeutic, diagnostic, prognostic or predisposing clinical information for a variant in a specific cancer context. CIViC currently has two main types of Assertions: those based on variants of primarily somatic origin (predictive/therapeutic, prognostic, and diagnostic) and those based on variants of primarily germline origin (predisposing). When the number and quality of Predictive, Prognostic, Diagnostic or Predisposing Evidence Items (EIDs) in CIViC sufficiently cover what is known for a particular variant and cancer type, then a corresponding assertion be created in CIViC.",
+   "homepage": "https://civicdb.org/",
+   "license": "CC0-1.0",
+   "keywords": [
+    "civic"
+   ],
+   "mappings": {},
+   "publications": []
+  },
+  "civic.eid": {
+   "name": "CIViC Evidence",
+   "description": "Evidence Items are the central building block of the Clinical Interpretation of Variants in Cancer (CIViC) knowledgebase. The clinical Evidence Item is a piece of information that has been manually curated from trustable medical literature about a Variant or genomic ‘event’ that has implications in cancer Predisposition, Diagnosis (aka molecular classification), Prognosis, Predictive response to therapy, Oncogenicity or protein Function. For example, an Evidence Item might describe a line of evidence supporting the notion that tumors with a somatic BRAF V600 mutation generally respond well to the drug dabrafenib. A Variant may be a single nucleotide substitution, a small insertion or deletion, an RNA gene fusion, a chromosomal rearrangement, an RNA expression pattern (e.g. over-expression), etc. Each clinical Evidence statement corresponds to a single citable Source (a publication or conference abstract).",
+   "homepage": "https://civicdb.org/",
+   "license": "CC0-1.0",
+   "keywords": [
+    "civic"
+   ],
+   "mappings": {},
+   "publications": []
+  },
+  "go": {
+   "name": "Gene Ontology",
+   "description": "The Gene Ontology project provides a controlled vocabulary to describe gene and gene product attributes in any organism.",
+   "homepage": "http://geneontology.org/",
+   "license": "CC-BY-4.0",
+   "keywords": [
+    "annotation",
+    "biocuration",
+    "biological_process",
+    "cellular_component",
+    "dataplant",
+    "expression data",
+    "function",
+    "gene",
+    "gene functional annotation",
+    "genome/gene",
+    "go-term enrichment data",
+    "knowledge representation",
+    "life science",
+    "life sciences, biology",
+    "medicine",
+    "molecular_function",
+    "obo",
+    "omics",
+    "ontologies",
+    "ontology",
+    "ontology/terminology/nomenclature",
+    "protein",
+    "rna",
+    "sequence annotation",
+    "transcript"
+   ],
+   "publications": [
+    {
+     "doi": "10.1093/nar/gkaf1292"
+    },
+    {
+     "doi": "10.1093/genetics/iyad031"
+    }
+   ],
+   "mappings": {
+    "obofoundry": "go"
+   },
+   "download_owl": "http://purl.obolibrary.org/obo/go.owl"
+  },
+  "kegg.pathway": {
+   "name": "KEGG pathway",
+   "description": "KEGG PATHWAY is a collection of manually drawn pathway maps representing our knowledge on the molecular interaction and reaction networks.",
+   "homepage": "https://www.genome.jp/kegg/pathway.html",
+   "keywords": [
+    "kegg",
+    "pathway"
+   ],
+   "publications": [
+    {
+     "doi": "10.1002/0471250953.bi0112s38"
+    }
+   ],
+   "mappings": {}
+  },
+  "drugbank": {
+   "name": "DrugBank",
+   "description": "The DrugBank database is a bioinformatics and chemoinformatics resource that combines detailed drug (i.e. chemical, pharmacological and pharmaceutical) data with comprehensive drug target (i.e. sequence, structure, and pathway) information. This collection references drug information.",
+   "homepage": "http://www.drugbank.ca",
+   "license": "http://www.drugbank.ca/about",
+   "keywords": [
+    "chemical structure",
+    "chemistry databases",
+    "drug",
+    "interaction/pathway",
+    "protein",
+    "sequence"
+   ],
+   "publications": [
+    {
+     "doi": "10.1093/nar/gkad976"
+    },
+    {
+     "doi": "10.1093/nar/gkt1068"
+    }
+   ],
+   "mappings": {}
+  },
+  "efo": {
+   "name": "Experimental Factor Ontology",
+   "description": "The Experimental Factor Ontology (EFO) provides a systematic description of many experimental variables available in EBI databases. It combines parts of several biological ontologies, such as anatomy, disease and chemical compounds. The scope of EFO is to support the annotation, analysis and visualization of data handled by the EBI Functional Genomics Team.",
+   "homepage": "http://www.ebi.ac.uk/efo",
+   "license": "Apache-2.0",
+   "keywords": [
+    "assay",
+    "dataplant",
+    "earth sciences",
+    "ess",
+    "experimental condition",
+    "experimental measurement",
+    "genome-wide association study",
+    "genomics",
+    "life sciences, biology",
+    "medicine",
+    "nfdi4chem",
+    "omics",
+    "ontology",
+    "proteomics",
+    "study design",
+    "study design independent variable"
+   ],
+   "publications": [
+    {
+     "doi": "10.1093/bioinformatics/btq099"
+    }
+   ],
+   "mappings": {},
+   "download_owl": "http://www.ebi.ac.uk/efo/efo.owl"
+  },
+  "worldavatar.kin": {
+   "name": "WorldAvatar ontology for chemical kinetic reaction mechanisms",
+   "description": "Represents chemical kinetic reaction mechanisms.",
+   "homepage": "https://theworldavatar.io",
+   "license": "MIT",
+   "keywords": [
+    "chemical and environmental engineering",
+    "chemistry",
+    "nfdi4cat",
+    "nfdi4chem",
+    "ontology",
+    "worldavatar"
+   ],
+   "mappings": {},
+   "download_owl": "https://github.com/TheWorldAvatar/ontology/raw/refs/heads/main/ontology/ontokin/OntoKin.owl",
+   "publications": []
+  }
+ }
+}

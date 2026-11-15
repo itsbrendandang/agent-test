@@ -16,7 +16,7 @@
 //   sycophancy cascades.
 // - Peers see each other's arguments with checker verdicts attached, never a vote tally ("the room is
 //   4 to 1"), and the lead is told not to reveal its leaning early, against deference.
-// - Evidence is screened by Jev before it enters the shared pool, and contradicted claims are marked
+// - Evidence is screened by a cheap model before it enters the shared pool, and contradicted claims are marked
 //   in every later digest, against error propagation.
 // - One budget for the whole run, not per agent. Spend is saved in run.json as it accrues. A model that
 //   reports tokens but no cost is charged at meeting.fallback_usd_per_mtok and the run is marked
@@ -30,12 +30,14 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { type AgentDef, instructionsFor, loadAgent, loadRoster } from "./agents.ts"
 import { type Brief, loadBrief } from "./brief.ts"
 import { type Claim, parseClaims, stripClaims } from "./claims.ts"
-import { claudeCodeCheck, openaiCheck } from "./checkers.ts"
+import { claudeCodeCheck, computedCanRun, literatureCheck, NOT_RERUN, openaiCheck } from "./checkers.ts"
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
-import { refusePaid } from "./paid.ts"
+import { assertBoardKeys, escalationModel } from "./providers.ts"
+import { paidCallsOff, refusePaid } from "./paid.ts"
 import { type Checker, EventLog, type EvidenceItem, type Verdict } from "./events.ts"
-import { exaSearch, OBJECTIVE_DESCRIPTION } from "./exa.ts"
-import { Jev } from "./jev.ts"
+import { exaSearch, OBJECTIVE_DESCRIPTION, type SearchResult } from "./exa.ts"
+import { exaAssumed, maxSearches, reserveSearch, settleSearch } from "./exaledger.ts"
+import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "./models.ts"
 import { holder, take } from "./runlock.ts"
 
@@ -49,11 +51,16 @@ export interface RunState {
   rounds: number
   lastRound: { member: string; reply: string; verdicts: string[] }[]
   evidence: Record<string, EvidenceItem>
-  ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string }[]
+  ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }[]
   escalations: number
   checkerUsd: number
-  jevUsd?: number // Jev spend, kept here because the Jev client's own counter restarts with the process
-  usd?: number // running total for the run: models + Jev + escalation checkers
+  firstPassUsd?: number // first-pass checker spend, kept here because the checker's own counter restarts with the process
+  jevUsd?: number // the same figure in runs recorded before Jev was removed; read as a fallback, never written
+  /** Exa searches this run made, by tool call id: what came back and what it cost. A replayed call reads this and does not search (or pay) again. Scripted runs store nothing here. */
+  searched?: Record<string, { items: EvidenceItem[]; notices: string[]; usd: number; basis: "reported" | "assumed" }>
+  lastRoundUsd?: number // what the last round cost; the next round is refused when it would not fit under max_usd
+  droppedKeys?: string[] // search results the triage dropped (url + key question), so no member's repeat search pays to screen them again
+  usd?: number // running total for the run: models + first-pass checker + escalation checkers
   day?: string // the local day (YYYY-MM-DD) the run last worked on, and what it had spent before that day,
   dayBase?: number // so the daily cap counts only today's part of a run that started on an earlier day
   costEstimated?: boolean // true once a model reported tokens with no cost and the fallback price was used
@@ -223,17 +230,18 @@ export type Memo = <T extends string | number>(name: string, candidate: T) => Pr
  * memoised (`memo` returns the stored value on a replay), so a replay after a crash runs the same round
  * again instead of counting it as used and refusing it. Returns the refusal text, "" when the round runs.
  * - After a round that asked for final positions, no round may follow.
- * - Past a limit (rounds, minutes, dollars), only one round with final=true may still run.
+ * - Past a limit (rounds, minutes, dollars), only one round with final=true may still run. The dollar limit counts the
+ *   last round's cost as the cost of the next one, so a run is wrapped up BEFORE the round that would pass max_usd.
  */
 export async function gateRound(
-  state: Pick<RunState, "rounds" | "startedAt" | "finalRound">, config: BoardConfig, final: boolean, memo: Memo, spend: () => Promise<number>,
+  state: Pick<RunState, "rounds" | "startedAt" | "finalRound"> & { lastRoundUsd?: number }, config: BoardConfig, final: boolean, memo: Memo, spend: () => Promise<number>,
   onLimit?: (round: number, limit: NonNullable<ReturnType<typeof overLimit>>) => void,
 ): Promise<{ round: number; refusal: string }> {
   const round = await memo<number>("round", state.rounds + 1)
   const fresh = round > state.rounds
   let refusal = ""
   if (fresh) {
-    const limit = overLimit(config, round - 1, state.startedAt, await spend())
+    const limit = overLimit(config, round - 1, state.startedAt, await spend(), state.lastRoundUsd ?? 0)
     if (state.finalRound !== undefined) refusal = `Final positions are in (round ${state.finalRound}). No further rounds: call write_memo now.`
     else if (limit && !final) refusal = `WRAP UP: ${limit.detail}. Call converse once with final=true to ask for final positions, then write_memo.`
     if (refusal && limit) onLimit?.(round, limit)
@@ -242,22 +250,30 @@ export async function gateRound(
   return { round, refusal }
 }
 
+const PAID_OFF_NOTE = "paid calls were switched off: not checked"
+
 /** What claim checking needs from the run. The checkers are passed in, so tests can count their calls. */
 export interface ClaimDeps {
   state: Pick<RunState, "ledger" | "escalations" | "checkerUsd">
   maxEscalations: number
-  /** Jev rules on several claims against one piece of evidence. */
-  jevCheck: (claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; p?: number }[]>
-  computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number }>
-  literatureCheck: (claim: Claim, evidence: string) => Promise<{ verdict: Verdict; note: string; usd: number }>
+  /** The first-pass checker rules on several of one member's claims against one piece of evidence (a model from another vendor than the member's). */
+  firstPass: (member: string, claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; quote?: string; quoteFound?: boolean; reason?: string; checkedBy?: string; p?: number }[]>
+  computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number; checkedBy?: string }>
+  literatureCheck: (claim: Claim, evidence: string, member: string) => Promise<{ verdict: Verdict; note: string; usd: number; checkedBy?: string }>
+  /** True when paid calls were switched off while this real run was working (read live at each call): no further paid check, and the claim is recorded as unchecked. */
+  paidOff?: () => boolean
+  /** True once the run has spent max_usd: no further paid check is made, and the claim is recorded as unchecked. Checked before every first-pass and escalation call. */
+  capReached?: () => Promise<boolean>
+  /** False when the Claude Code checker cannot re-execute code (computedCanRun): computed claims are then recorded as unchecked, with no call and no escalation used. Default true. */
+  computedCanRun?: boolean
   /** The screened evidence text for a source ("brief" for the brief), or undefined when it is not in the pool. */
   evidenceFor: (source: string) => string | undefined
   save: () => void
-  emit: (key: string, event: { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string }) => void
+  emit: (key: string, event: { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }) => void
 }
 
 /**
- * Rule on a member's claims: Jev first, the expensive checkers only for what Jev leaves undecided (and for
+ * Rule on a member's claims: the first-pass checker first, the expensive checkers only for what it leaves undecided (and for
  * computed claims). Returns one "[verdict] claim" line per claim. Each ruling is one ledger row under a
  * stable key, saved as soon as it is made. A row that exists is a ruling already made (and paid for): a
  * replay after a crash reuses it instead of calling a checker again.
@@ -271,42 +287,109 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
     if (row && !lines.includes(`[${row.verdict}] ${claim.text}`)) lines.push(`[${row.verdict}] ${claim.text}`)
     return Boolean(row)
   }
-  const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string) => {
+  const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string, checkedBy?: string, quoteFound?: boolean) => {
     const key = keyOf(claim)
     if (state.ledger.some((e) => e.key === key)) return // the same claim twice in one reply
-    state.ledger.push({ key, round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
+    // `source` is what the member cited: a URL for a literature claim (written by a model: untrusted), "brief", or a description of the computation.
+    state.ledger.push({ key, round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}), ...(quoteFound === undefined ? {} : { quoteFound }), source: claim.source })
     deps.save()
-    deps.emit(`claim:${key}`, { type: "claim.checked", round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note })
+    deps.emit(`claim:${key}`, { type: "claim.checked", round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}), ...(quoteFound === undefined ? {} : { quoteFound }), source: claim.source })
     lines.push(`[${verdict}] ${claim.text}`)
   }
-  const escalate = async (claim: Claim, evidence: string) => {
-    if (state.escalations >= deps.maxEscalations) return record(claim, "unchecked", "jev", undefined, "escalation budget used up")
+  const claimHash = (claim: Claim) => createHash("sha1").update(`${claim.kind}\n${claim.text}\n${claim.source}`).digest("hex").slice(0, 16)
+  // The same member making the same claim from the same source in a LATER round is not checked again: the earlier
+  // ruling is copied into this round's ledger row (the row key keeps the round, so a crash-replay still finds it).
+  // Not carried: unchecked, a checker's own failure, and "not in the evidence pool" (the pool may have grown since).
+  const carry = (claim: Claim) => {
+    const hash = claimHash(claim)
+    const prior = state.ledger.find((e) => e.round < round && e.key === `${e.round}:${member}:${hash}` &&
+      (e.verdict === "verified" || e.verdict === "contradicted" || (e.verdict === "unsupported" && !/^(source is not in|checker failed|checker gave no clear verdict)/.test(e.note ?? ""))))
+    if (!prior) return false
+    record(claim, prior.verdict, prior.checker, prior.p, `${prior.note ?? ""} [ruling carried over from round ${prior.round}; not checked again]`.trim(), prior.checkedBy, prior.quoteFound)
+    return true
+  }
+  const escalate = async (claim: Claim, evidence: string, why?: string) => {
+    if (deps.paidOff?.()) return record(claim, "unchecked", claim.kind === "computed" ? "claude-code" : "first-pass", undefined, PAID_OFF_NOTE)
+    if (await deps.capReached?.()) return record(claim, "unchecked", claim.kind === "computed" ? "claude-code" : "first-pass", undefined, "spend cap reached (max_usd): not checked")
+    if (state.escalations >= deps.maxEscalations) return record(claim, "unchecked", "first-pass", undefined, `escalation budget used up${why ? ` (first pass: ${why})` : ""}`)
     state.escalations++
     deps.save()
-    const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence)
+    const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence, member)
     state.checkerUsd += ruling.usd
-    record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, ruling.note)
+    const by = claim.kind === "computed" ? "claude-code" : ruling.checkedBy?.startsWith("anthropic/") ? "anthropic" : "openai"
+    record(claim, ruling.verdict, by, undefined, why ? `${ruling.note} [first pass escalated: ${why}]` : ruling.note, ruling.checkedBy)
   }
 
-  // Group claims by the evidence they cite, so Jev reads each piece of evidence once.
+  // Group claims by the evidence they cite, so the first-pass checker reads each piece of evidence once.
   const groups = new Map<string, Claim[]>()
   for (const claim of claims) {
-    if (ruled(claim)) continue
-    if (claim.kind === "computed") { await escalate(claim, ""); continue } // Jev is not a calculator
+    if (ruled(claim) || carry(claim)) continue
+    if (claim.kind === "computed" && deps.computedCanRun === false) { record(claim, "unchecked", "claude-code", undefined, NOT_RERUN); continue }
+    if (claim.kind === "computed") { await escalate(claim, ""); continue } // a cheap model is not a calculator
     const key = claim.kind === "brief" ? "brief" : claim.source
     groups.set(key, [...(groups.get(key) ?? []), claim])
   }
   for (const [source, group] of groups) {
     const evidence = deps.evidenceFor(source)
-    if (!evidence) { for (const c of group) record(c, "unsupported", "jev", undefined, "source is not in the screened evidence pool"); continue }
-    const results = await deps.jevCheck(group.map((c) => c.text), evidence)
-    for (const [i, r] of results.entries()) {
-      if (r.verdict === "escalate") await escalate(group[i], evidence)
-      else record(group[i], r.verdict, "jev", r.p)
+    if (!evidence) { for (const c of group) record(c, "unsupported", "first-pass", undefined, "source is not in the screened evidence pool"); continue }
+    if (deps.paidOff?.()) { for (const c of group) record(c, "unchecked", "first-pass", undefined, PAID_OFF_NOTE); continue }
+    if (await deps.capReached?.()) { for (const c of group) record(c, "unchecked", "first-pass", undefined, "spend cap reached (max_usd): not checked"); continue }
+    const results = await deps.firstPass(member, group.map((c) => c.text), evidence)
+    for (const [i, claim] of group.entries()) {
+      // A missing or unknown ruling is never a verdict: it escalates.
+      const r = results[i]
+      if (!r || (r.verdict !== "verified" && r.verdict !== "contradicted" && r.verdict !== "unsupported")) await escalate(claim, evidence, r?.reason)
+      else record(claim, r.verdict, "first-pass", r.p, r.quote ? `quoted: "${r.quote.replace(/\s+/g, " ").slice(0, 300)}"` : undefined, r.checkedBy, r.quoteFound)
     }
   }
   deps.save()
   return lines
+}
+
+/** Exa spend of a run, from the searches it stored (scripted runs store none). */
+export const exaUsdOf = (state: Pick<RunState, "searched">): number => Object.values(state.searched ?? {}).reduce((sum, r) => sum + r.usd, 0)
+
+/** The run's whole spend: models, the first-pass checker, the escalation checkers and Exa. What max_usd and daily_usd count. */
+export const totalUsd = (state: Pick<RunState, "searched" | "firstPassUsd" | "checkerUsd">, modelsUsd: number): number =>
+  modelsUsd + (state.firstPassUsd ?? 0) + state.checkerUsd + exaUsdOf(state)
+
+export interface SearchDeps {
+  state: Pick<RunState, "runId" | "searched">
+  config: BoardConfig
+  /** Scripted run: fixture papers, nothing counted, nothing written to the Exa ledger. */
+  mock: boolean
+  search: (query: string, objective: string) => Promise<SearchResult>
+  /** True once the run has spent max_usd. */
+  capReached: () => Promise<boolean>
+  /** True when paid calls were switched off (read live at each call). No search is started then. */
+  paidOff?: () => boolean
+}
+
+/**
+ * One Exa search for a tool call, with the three Exa caps (see exaledger.ts). Returns the results, or `refused`
+ * with the words the member is told (and `limit` when the run should record a constraint). A call id that already
+ * has a stored result (a crash replay) returns it: no second search, no second charge. Refusals never fall back to
+ * fixture papers; only a scripted run sees those.
+ */
+export async function searchOnce(deps: SearchDeps, callId: string, args: { query: string; objective: string }): Promise<{ result?: SearchResult; refused?: string; limit?: boolean }> {
+  const { state, config } = deps
+  if (deps.mock) return { result: await deps.search(args.query, args.objective) }
+  const stored = state.searched?.[callId]
+  if (stored) return { result: { items: stored.items, notices: stored.notices } }
+  const used = Object.keys(state.searched ?? {}).length, cap = maxSearches(config)
+  if (deps.paidOff?.()) return { refused: "Paid calls were switched off: no more searches in this run. Work from what you have and say so.", limit: true }
+  if (used >= cap) return { refused: `Search budget used up: ${used} of ${cap} searches for this run. Work from what you have and say so.`, limit: true }
+  if (await deps.capReached()) return { refused: `Spend cap reached ($${config.meeting.max_usd}): no more searches in this run. Work from what you have and say so.`, limit: true }
+  const reservation = reserveSearch(config, state.runId, callId)
+  if (!reservation.ok) return { refused: reservation.message, limit: true }
+  let result: SearchResult
+  try { result = await deps.search(args.query, args.objective) } catch (error) {
+    settleSearch(config, state.runId, callId, reservation.reserved, { failed: true }) // a search that failed is not charged
+    throw error
+  }
+  const cost = settleSearch(config, state.runId, callId, reservation.reserved, { reported: result.costUsd })
+  state.searched = { ...state.searched, [callId]: { items: result.items, notices: result.notices, usd: cost.usd, basis: cost.basis } }
+  return { result }
 }
 
 const MEMORY_MARK = "## From earlier runs"
@@ -349,14 +432,17 @@ export function rememberRun(config: BoardConfig, runId: string, ledger: { member
   return written
 }
 
-export async function startRun(briefFile: string): Promise<string> {
-  const config = loadConfig()
+/** `options` replace the config file, the mock switch and the environment (for tests). */
+export async function startRun(briefFile: string, options: { config?: BoardConfig; mock?: boolean; env?: NodeJS.ProcessEnv } = {}): Promise<string> {
+  const config = options.config ?? loadConfig()
+  const mock = options.mock ?? MOCK
   const brief = loadBrief(briefFile, config.brief.required_sections) // throws BriefRejected before anything runs
-  checkDailyBudget(config)
+  if (!mock) assertBoardKeys(config, options.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // MissingTierKey: a real run never starts, and is never made scripted, for want of a key
+  checkDailyBudget(config, new Date(), mock)
   const runId = newRunDir(config, `${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}-${brief.id}`)
-  const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, jevUsd: 0, usd: 0, mock: MOCK }
+  const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, firstPassUsd: 0, usd: 0, mock }
   saveState(config, state)
-  new EventLog(`${runDir(config, runId)}/events.jsonl`).emit("run", { type: "run.started", runId, brief: brief.id, title: brief.title, mock: MOCK })
+  new EventLog(`${runDir(config, runId)}/events.jsonl`).emit("run", { type: "run.started", runId, brief: brief.id, title: brief.title, mock })
   return runId
 }
 
@@ -377,14 +463,42 @@ export function newRunDir(config: BoardConfig, base: string): string {
  */
 export async function runBoard(runId: string, onLog?: (log: EventLog) => void, options: { config?: BoardConfig; mock?: boolean } = {}): Promise<void> {
   const config = options.config ?? loadConfig()
-  if (loadState(config, runId).finished) return
-  refusePaidRun(loadState(config, runId))
-  checkDailyBudget(config, new Date(), options.mock ?? MOCK) // also on resume, so a restart cannot spend past the cap
+  const first = loadState(config, runId)
+  if (first.finished) return
+  refusePaidRun(first)
+  // A run keeps the mode it started in (scripted or real), whatever the engine's mode is now: the paid switch can
+  // change the engine's mode at any time, and a real run must never turn scripted (or the reverse) half-way.
+  const mock = options.mock ?? first.mock ?? MOCK
+  if (!mock) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
+  checkDailyBudget(config, new Date(), mock) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
-  try { await runLocked(config, runId, onLog) } finally { release() }
+  try { await runLocked(config, runId, mock, onLog) } finally { release() }
 }
 
-async function runLocked(config: BoardConfig, runId: string, onLog?: (log: EventLog) => void): Promise<void> {
+/** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
+export const RUN_OVERRIDES = true
+
+/** A run started from a chat plan carries its own members and limits. They can only narrow the config, never widen it. */
+export function applyOverrides(config: BoardConfig, runId: string): BoardConfig {
+  const file = `${runDir(config, runId)}/overrides.json`
+  if (!existsSync(file)) return config
+  let raw: unknown
+  try { raw = JSON.parse(readFileSync(file, "utf8")) } catch { return config }
+  if (!raw || typeof raw !== "object") return config
+  const o = raw as { board?: unknown; meeting?: Record<string, unknown> }
+  const names = Array.isArray(o.board) ? o.board.filter((n): n is string => typeof n === "string") : null
+  const board = names ? config.board.filter((n) => names.includes(n)) : config.board
+  const cap = (limit: number, v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(limit, v) : limit)
+  const m = o.meeting ?? {}
+  return {
+    ...config,
+    board: board.length ? board : config.board,
+    meeting: { ...config.meeting, max_usd: cap(config.meeting.max_usd, m.max_usd), max_minutes: cap(config.meeting.max_minutes, m.max_minutes), max_rounds: cap(config.meeting.max_rounds, m.max_rounds) },
+  }
+}
+
+async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?: (log: EventLog) => void): Promise<void> {
+  const config = applyOverrides(base, runId)
   const state = loadState(config, runId) // read under the lock
   if (state.finished) return
   refusePaidRun(state)
@@ -393,9 +507,10 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
   const roster = loadRoster(config)
   const log = new EventLog(`${runDir(config, runId)}/events.jsonl`)
   onLog?.(log)
-  const models = buildModels([lead, ...roster])
-  const jev = new Jev(models, config)
-  const jevBefore = state.jevUsd ?? 0
+  const models = buildModels([lead, ...roster], mock)
+  const firstPass = new FirstPass(models, config, mock)
+  const firstPassBefore = state.firstPassUsd ?? state.jevUsd ?? 0 // jevUsd: a run recorded before Jev was removed
+  const memberModel = (member: string) => { const a = roster.find((r) => r.name === member); return a ? config.models[a.model] : undefined }
   const save = () => saveState(config, state)
   rollDay(state) // from here on the run counts against today's cap
   save()
@@ -412,10 +527,22 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
     replay: "safe",
     execute: async (args, api) => {
       const member = memberOf(api)
-      const found = await exaSearch(args.query, args.objective)
-      const triaged = await Promise.all(found.items.map((item) => jev.triage(item, args.key_question)))
-      const kept = triaged.filter((t) => t.keep).map((t) => t.item)
+      const out = await searchOnce({ state, config, mock, search: (q, o) => exaSearch(q, o, mock), capReached: async () => (await spend()) >= config.meeting.max_usd, paidOff: () => paidCallsOff() }, api.callId, args)
+      if (out.refused) {
+        if (out.limit) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })
+        save()
+        return { output: [{ type: "text", text: out.refused }] }
+      }
+      const found = out.result as SearchResult
+      // A result already in the pool, or already dropped for this key question, is not screened (and paid for) again.
+      const dropKey = (url: string) => createHash("sha1").update(`${url}\n${args.key_question}`).digest("hex").slice(0, 16)
+      const known = found.items.filter((i) => state.evidence[i.url] || state.droppedKeys?.includes(dropKey(i.url)))
+      const fresh = found.items.filter((i) => !known.includes(i))
+      const triaged = await firstPass.triage(fresh, args.key_question)
+      for (const t of triaged) if (!t.keep) state.droppedKeys = [...(state.droppedKeys ?? []), dropKey(t.item.url)]
+      const kept = [...known.filter((i) => state.evidence[i.url]).map((i) => state.evidence[i.url]), ...triaged.filter((t) => t.keep).map((t) => t.item)]
       for (const item of kept) state.evidence[item.url] = item
+      state.firstPassUsd = firstPassBefore + firstPass.usd
       save()
       log.emit(`evidence:${api.callId}`, { type: "evidence.triaged", member, query: args.query, kept: kept.length, dropped: found.items.length - kept.length, items: kept })
       const results = kept.length
@@ -443,6 +570,7 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
         (r, limit) => log.emit(`constraint:${r}`, { type: "constraint", reason: limit.reason, detail: limit.detail }))
       if (refusal) { save(); return { output: [{ type: "text", text: refusal }] } }
       state.rounds = Math.max(state.rounds, round)
+      const usdAtStart = await spend()
       if (args.final) state.finalRound = round // one final round may pass the limits; nothing runs after it
       save()
       log.emit(`round:${round}`, { type: "round.started", round, message: args.message, final: args.final })
@@ -472,7 +600,9 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
         const verdicts = await checkClaims(claimDeps, round, agent.name, parseClaims(reply))
         state.lastRound.push({ member: modeOf(agent) ? `${agent.title}, as ${agent.modes?.[modeOf(agent)!]}` : agent.title, reply: stripClaims(reply), verdicts })
       }
-      const after = overLimit(config, state.rounds, state.startedAt, await spend())
+      const usdNow = await spend()
+      state.lastRoundUsd = Math.max(0, usdNow - usdAtStart)
+      const after = overLimit(config, state.rounds, state.startedAt, usdNow, state.lastRoundUsd)
       save()
       const status = args.final ? "\n\nFinal positions are in. Call write_memo now."
         : after ? `\n\nWRAP UP: ${after.detail}. Ask for final positions with final=true.` : ""
@@ -496,15 +626,24 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
     },
   })
 
-  // ── Claim checking: Jev first, escalate only the uncertain band (see checkClaims) ─────────────────
+  // ── Claim checking: the first-pass checker first, escalate only what it leaves open (see checkClaims) ──────
   const claimDeps: ClaimDeps = {
     state,
     maxEscalations: config.meeting.max_escalations ?? 12,
-    jevCheck: (claims, evidence) => jev.check(claims, evidence),
-    computedCheck: (claim) => claudeCodeCheck(config, claim.text, claim.source),
-    literatureCheck: (claim, evidence) => openaiCheck(models, config, claim.text, evidence),
+    firstPass: (member, claims, evidence) => firstPass.check(memberModel(member), claims, evidence),
+    computedCheck: (claim) => claudeCodeCheck(config, claim.text, claim.source, mock),
+    literatureCheck: async (claim, evidence, member) => {
+      if (mock) return openaiCheck(models, config, claim.text, evidence, true)
+      const { model, independent } = escalationModel(config, memberModel(member))
+      // No checker from another vendor than the author: the claim is left unchecked rather than graded by its own vendor.
+      if (!independent) return { verdict: "unchecked" as const, note: "no escalation checker from another vendor than the claim's author is configured", usd: 0 }
+      return literatureCheck(models, config, claim.text, evidence, model, false)
+    },
+    capReached: async () => (await spend()) >= config.meeting.max_usd,
+    computedCanRun: mock || computedCanRun(config),
+    paidOff: () => !mock && paidCallsOff(), // a real run whose paid calls were switched off: no further paid check; claims are recorded unchecked
     evidenceFor: (source) => (source === "brief" ? briefEvidence(brief) : state.evidence[source]?.text),
-    save: () => { state.jevUsd = jevBefore + jev.usd; save() },
+    save: () => { state.firstPassUsd = firstPassBefore + firstPass.usd; save() },
     emit: (key, event) => log.emit(key, event),
   }
 
@@ -520,22 +659,22 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
   // cost is charged at the fallback price, so it cannot run under the budget for free.
   const spend = async () => {
     const usage = await harness.usage(ctx)
-    const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, MOCK)
+    const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, mock)
     if (models.estimated) state.costEstimated = true
     rollDay(state) // before the total changes: a run that works past midnight starts a new day's count
-    state.jevUsd = jevBefore + jev.usd
-    state.usd = models.usd + state.jevUsd + state.checkerUsd
+    state.firstPassUsd = firstPassBefore + firstPass.usd
+    state.usd = totalUsd(state, models.usd)
     return state.usd
   }
 
   const leadConversation = await harness.root(ctx, {
-    agent: { model: modelFor(config, lead), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: config.meeting.lead_turns ?? 20 },
+    agent: { model: modelFor(config, lead, mock), instructions: instructionsFor(config, lead, brief, roster), tools: [converseTool, memoTool], maxTurns: config.meeting.lead_turns ?? 20 },
   })
   for (const agent of roster) {
     if (state.members[agent.name]) continue
     const c = await harness.createConversation({
       ownership: { kind: "ownerless" },
-      agent: { model: modelFor(config, agent), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
+      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
     }, ctx)
     state.members[agent.name] = c.id
     save()
@@ -552,7 +691,7 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
     // between repeats these three steps on resume, and each is safe to repeat.
     const usd = await spend()
     save()
-    rememberRun(config, runId, state.ledger, MOCK ? `${runDir(config, runId)}/expertise` : undefined)
+    rememberRun(config, runId, state.ledger, mock ? `${runDir(config, runId)}/expertise` : undefined)
     log.emit("finished", { type: "run.finished", usd, minutes: (Date.now() - state.startedAt) / 60_000 })
     state.finished = true
     save()
@@ -567,11 +706,13 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────────────────────
 /** The limit reached after `rounds` completed rounds, if any. */
-export function overLimit(config: BoardConfig, rounds: number, startedAt: number, usd: number) {
+export function overLimit(config: BoardConfig, rounds: number, startedAt: number, usd: number, reserve = 0) {
   const minutes = (Date.now() - startedAt) / 60_000
   if (rounds >= config.meeting.max_rounds) return { reason: "rounds" as const, detail: `${rounds} of ${config.meeting.max_rounds} rounds used` }
   if (minutes >= config.meeting.max_minutes) return { reason: "time" as const, detail: `${minutes.toFixed(1)} of ${config.meeting.max_minutes} minutes used` }
   if (usd >= config.meeting.max_usd) return { reason: "budget" as const, detail: `$${usd.toFixed(2)} of $${config.meeting.max_usd} spent` }
+  // `reserve`: what one more round is expected to cost (the last round's cost). Wrap up before it, not after it.
+  if (reserve > 0 && usd + reserve >= config.meeting.max_usd) return { reason: "budget" as const, detail: `$${usd.toFixed(2)} spent, and another round is expected to cost about $${reserve.toFixed(2)}, which would pass the $${config.meeting.max_usd} cap` }
   return undefined
 }
 

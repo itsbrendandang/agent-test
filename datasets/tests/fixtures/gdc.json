@@ -1,0 +1,212 @@
+{
+ "recorded_at": "2026-11-14T23:51:19Z",
+ "projects": [
+  {
+   "id": "TARGET-AML",
+   "summary": {
+    "file_count": 52213,
+    "data_categories": [
+     {
+      "data_category": "Simple Nucleotide Variation"
+     },
+     {
+      "data_category": "Sequencing Reads"
+     },
+     {
+      "data_category": "Combined Nucleotide Variation"
+     },
+     {
+      "data_category": "Biospecimen"
+     },
+     {
+      "data_category": "Clinical"
+     },
+     {
+      "data_category": "Copy Number Variation"
+     },
+     {
+      "data_category": "Transcriptome Profiling"
+     },
+     {
+      "data_category": "DNA Methylation"
+     },
+     {
+      "data_category": "Somatic Structural Variation"
+     },
+     {
+      "data_category": "Structural Variation"
+     }
+    ],
+    "experimental_strategies": [
+     {
+      "experimental_strategy": "RNA-Seq"
+     },
+     {
+      "experimental_strategy": "miRNA-Seq"
+     },
+     {
+      "experimental_strategy": "WGS"
+     },
+     {
+      "experimental_strategy": "WXS"
+     },
+     {
+      "experimental_strategy": "Targeted Sequencing"
+     },
+     {
+      "experimental_strategy": "Genotyping Array"
+     },
+     {
+      "experimental_strategy": "Methylation Array"
+     }
+    ],
+    "case_count": 2492
+   },
+   "primary_site": [
+    "Unknown",
+    "Hematopoietic and reticuloendothelial systems"
+   ],
+   "project_id": "TARGET-AML",
+   "disease_type": [
+    "Myeloid Leukemias",
+    "Not Applicable"
+   ],
+   "name": "Acute Myeloid Leukemia",
+   "state": "open",
+   "program": {
+    "name": "TARGET"
+   },
+   "released": true
+  },
+  {
+   "id": "TCGA-BRCA",
+   "summary": {
+    "file_count": 71423,
+    "data_categories": [
+     {
+      "data_category": "Simple Nucleotide Variation"
+     },
+     {
+      "data_category": "Sequencing Reads"
+     },
+     {
+      "data_category": "Biospecimen"
+     },
+     {
+      "data_category": "Clinical"
+     },
+     {
+      "data_category": "Copy Number Variation"
+     },
+     {
+      "data_category": "Transcriptome Profiling"
+     },
+     {
+      "data_category": "DNA Methylation"
+     },
+     {
+      "data_category": "Proteome Profiling"
+     },
+     {
+      "data_category": "Somatic Structural Variation"
+     },
+     {
+      "data_category": "Structural Variation"
+     }
+    ],
+    "experimental_strategies": [
+     {
+      "experimental_strategy": "RNA-Seq"
+     },
+     {
+      "experimental_strategy": "WXS"
+     },
+     {
+      "experimental_strategy": "miRNA-Seq"
+     },
+     {
+      "experimental_strategy": "WGS"
+     },
+     {
+      "experimental_strategy": "ATAC-Seq"
+     },
+     {
+      "experimental_strategy": "Genotyping Array"
+     },
+     {
+      "experimental_strategy": "Methylation Array"
+     },
+     {
+      "experimental_strategy": "Reverse Phase Protein Array"
+     },
+     {
+      "experimental_strategy": "Diagnostic Slide"
+     },
+     {
+      "experimental_strategy": "Tissue Slide"
+     }
+    ],
+    "case_count": 1098
+   },
+   "primary_site": [
+    "Breast"
+   ],
+   "project_id": "TCGA-BRCA",
+   "disease_type": [
+    "Cystic, Mucinous and Serous Neoplasms",
+    "Adenomas and Adenocarcinomas",
+    "Fibroepithelial Neoplasms",
+    "Basal Cell Neoplasms",
+    "Ductal and Lobular Neoplasms",
+    "Epithelial Neoplasms, NOS",
+    "Squamous Cell Neoplasms",
+    "Complex Epithelial Neoplasms",
+    "Adnexal and Skin Appendage Neoplasms"
+   ],
+   "name": "Breast Invasive Carcinoma",
+   "state": "open",
+   "program": {
+    "name": "TCGA"
+   },
+   "released": true
+  },
+  {
+   "id": "BEATAML1.0-CRENOLANIB",
+   "summary": {
+    "file_count": 547,
+    "data_categories": [
+     {
+      "data_category": "Simple Nucleotide Variation"
+     },
+     {
+      "data_category": "Sequencing Reads"
+     }
+    ],
+    "experimental_strategies": [
+     {
+      "experimental_strategy": "WXS"
+     }
+    ],
+    "case_count": 56
+   },
+   "primary_site": [
+    "Hematopoietic and reticuloendothelial systems"
+   ],
+   "project_id": "BEATAML1.0-CRENOLANIB",
+   "disease_type": [
+    "Myeloid Leukemias"
+   ],
+   "name": "Clinical Resistance to Crenolanib in Acute Myeloid Leukemia Due to Diverse Molecular Mechanisms",
+   "state": "open",
+   "program": {
+    "name": "BEATAML1.0"
+   },
+   "released": true
+  }
+ ],
+ "open_files": {
+  "TARGET-AML": 10479,
+  "TCGA-BRCA": 27931,
+  "BEATAML1.0-CRENOLANIB": 0
+ }
+}

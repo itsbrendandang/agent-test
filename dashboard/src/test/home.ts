@@ -12,13 +12,12 @@ export const CATALOG_ON: Catalog = {
   providers: [
     { id: "anthropic", keyPresent: true, models: ["claude-sonnet-5-5", "claude-haiku-5-5"] },
     { id: "openai", keyPresent: false, models: ["gpt-5.5"] },
-    { id: "openrouter", keyPresent: false, models: [] },
   ],
   search: { exa: { keyPresent: false } },
   agents: [
-    { name: "lead", title: "Lead Scientist", source: "board", role: "Runs the board and writes the memo", tools: [] },
-    { name: "toxicologist", title: "Toxicologist", source: "board", role: "Judges safety margins", tools: ["exa_search"], deliverable: "A safety card" },
-    { name: "pk-modeller", title: "PK Modeller", source: "specialist", role: "Fits exposure models", tools: ["python"], trigger: "the question is about dose or exposure" },
+    { name: "lead-scientist", title: "Lead Scientist", source: "board", role: "lead", tools: ["converse", "write_memo"] },
+    { name: "critic", title: "Critic (Scientific Reviewer)", source: "board", role: "member", tools: [], deliverable: "A list of problems, each with evidence" },
+    { name: "toxicologist", title: "Toxicologist", source: "specialist", role: "Judges safety margins", tools: ["python"], trigger: "the question is about a safety margin" },
   ],
   skills: [
     { name: "herg-triage", description: "How to read hERG patch-clamp data.", installed: true },
@@ -33,8 +32,8 @@ export const PLAN: Plan = {
   id: "plan-1", question: "Should we advance CMP-0423?", kind: "board", briefTitle: "KRAS G12C hit-to-lead", effort: "standard",
   brief: "# Brief\n\nDecide whether **CMP-0423** advances.\n\n- hERG IC50 6 uM",
   agents: [
-    { name: "toxicologist", title: "Toxicologist", why: "The question is about a hERG liability." },
-    { name: "med-chem", title: "Medicinal Chemist", why: "Potency is below the criterion." },
+    { name: "critic", title: "Critic (Scientific Reviewer)", why: "Every review gets one voice against." },
+    { name: "experimenter", title: "Experimenter (Data Scientist)", why: "The brief has data to analyse." },
   ],
   skills: [{ name: "herg-triage", why: "Patch-clamp data is in the brief." }],
   search: { exa: true },

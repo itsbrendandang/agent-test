@@ -14,7 +14,7 @@ const ms = Number(process.env.GLHF_STUB_MS ?? 300)
 
 log("start")
 // Which of the keys that can spend reached this process: "" (blank), "set" or null (absent). Never a value.
-const KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "HF_TOKEN", "TINKER_API_KEY"]
+const KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "HF_TOKEN", "TINKER_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"]
 writeFileSync(`${out}/env.json`, JSON.stringify({ NO_PAID_CALLS: process.env.NO_PAID_CALLS ?? null, ...Object.fromEntries(KEYS.map((k) => [k, process.env[k] === undefined ? null : process.env[k] === "" ? "" : "set"])) }))
 writeFileSync(`${out}/run.json`, JSON.stringify({ status: "running" }))
 // Something the runner started (the real one starts a sandbox client): a cancel must stop it too.

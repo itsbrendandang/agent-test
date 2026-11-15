@@ -1,4 +1,4 @@
-# Continuous integration for the drug board / GLHF repository.
+# Continuous integration for the AI Scientist Bot / GLHF repository.
 #
 # Runs on every pull request and on every push to main. It uses NO secrets: nothing here reads
 # `secrets.*`, the provider keys are set to empty strings, and DRUG_BOARD_MOCK / NO_PAID_CALLS keep
@@ -39,12 +39,12 @@ env:
   # NO_PAID_CALLS (anything but "0") is the kill switch for every paid step.
   DRUG_BOARD_MOCK: "1"
   NO_PAID_CALLS: "1"
+  # The engine's runtime paid switch (POST /api/paid) is locked in CI.
+  PAID_SWITCH_LOCKED: "1"
   # Empty on purpose, so no step can inherit a key from anywhere.
   ANTHROPIC_API_KEY: ""
   OPENAI_API_KEY: ""
-  OPENROUTER_API_KEY: ""
   EXA_API_KEY: ""
-  TYPESAFE_API_KEY: ""
   PAST_API_KEY: ""
   TINKER_API_KEY: ""
   HF_TOKEN: ""
@@ -230,7 +230,7 @@ jobs:
           # matching text is never printed.
           PATTERNS=(
             'Anthropic key::(^|[^A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}'
-            'OpenRouter key::(^|[^A-Za-z0-9])sk-or-v1-[A-Za-z0-9]{32,}'
+            'Gateway key (sk-or-v1 shape)::(^|[^A-Za-z0-9])sk-or-v1-[A-Za-z0-9]{32,}'
             'OpenAI key::(^|[^A-Za-z0-9])sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}'
             'OpenAI key (old format)::(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{32,}'
             'Hugging Face token::(^|[^A-Za-z0-9])hf_[A-Za-z0-9]{30,}'
