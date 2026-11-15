@@ -32,7 +32,7 @@
 .swarm-claim p, .swarm-issue p { overflow-wrap: anywhere; }
 .swarm-claim code, .swarm-issue code, .swarm-settings code { font-size: 12px; overflow-wrap: anywhere; }
 .swarm-tests { list-style: none; padding: 0; margin: 2px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
-.swarm-tests li { background: #f6f3ea; border-radius: 8px; padding: 5px 8px; overflow-wrap: anywhere; }
+.swarm-tests li { background: var(--dark-subtle, #f6f3ea); border-radius: 8px; padding: 5px 8px; overflow-wrap: anywhere; }
 .swarm-settings { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; }
 .swarm-settings dt { color: var(--text-muted); white-space: nowrap; }
 .swarm-settings dd { margin: 0; overflow-wrap: anywhere; }
@@ -51,7 +51,7 @@
 .swarm-cell { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .swarm-cell:hover b, .swarm-cell:focus-visible b { text-decoration: underline; }
 .swarm-cell b { font-variant-numeric: tabular-nums; }
-.swarm-rownote { font-size: 12px; color: #a35200; margin-top: 2px; }
+.swarm-rownote { font-size: 12px; color: var(--dark-warning, #a35200); margin-top: 2px; }
 
 /* the comparison comes first */
 .swarm-board { gap: 10px; padding: 16px 24px; }
@@ -82,7 +82,7 @@
 .newrun-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 0; padding: 0; margin: 0; }
 .newrun-field > label, .newrun-field > legend { font-size: 12px; font-weight: 650; padding: 0; margin-bottom: 2px; }
 .newrun fieldset:disabled { opacity: .5; }
-.newrun select, .newrun input[type="text"], .newrun input[type="number"] { width: 100%; padding: 8px 10px; font: inherit; font-size: 13px; border: 1px solid var(--edge); border-radius: 10px; background: #fff; color: inherit; }
+.newrun select, .newrun input[type="text"], .newrun input[type="number"] { width: 100%; padding: 8px 10px; font: inherit; font-size: 13px; border: 1px solid var(--edge); border-radius: 10px; background: var(--dark-surface, #fff); color: inherit; }
 .newrun [aria-invalid="true"] { border-color: var(--destructive); }
 .newrun-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .newrun-choices { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 13px; }
@@ -107,11 +107,11 @@
 .swarm-idfull { font-size: 12px; overflow-wrap: anywhere; }
 .swarm-elapsed { font-variant-numeric: tabular-nums; }
 .newrun-body { display: flex; flex-direction: column; gap: 14px; padding: 20px 24px; font-size: 13px; line-height: 1.5; }
-.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 550; }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: var(--dark-text, #fff); font-weight: 550; }
 .btn-danger:hover:not(:disabled) { background: var(--danger); opacity: .85; }
 .newrun-refused .link-btn { color: inherit; font-size: inherit; overflow-wrap: anywhere; }
 .newrun-check[data-off] { opacity: .5; cursor: default; }
-.swarm-tests li[data-pending] { background: #fff4e5; }
+.swarm-tests li[data-pending] { background: var(--dark-subtle, #fff4e5); }
 .swarm-pendingnote { font-size: 12px; line-height: 1.45; color: var(--warning); }
 /* A scripted or demo score is never the biggest thing on screen. */
 .swarm-score[data-demo] strong { font-size: 20px; font-weight: 600; color: var(--text-muted); }

@@ -4,7 +4,7 @@ import { GROUP_WORD, KIND_TECH, KIND_WHAT, kindLabel, LEGEND_SENTENCES } from ".
 
 /** A small drawing of a node shape, in the node's colour. Decorative: the text next to it carries the meaning. */
 export function ShapeIcon({ shape, colour, size = 16 }: { shape: Shape; colour: string; size?: number }) {
-  const common = { fill: colour, stroke: "#1b1a17", strokeWidth: 1 }
+  const common = { fill: colour, stroke: "var(--dark-text, #1b1a17)", strokeWidth: 1 }
   const body = {
     sphere: <circle cx="8" cy="8" r="6" {...common} />,
     cube: <rect x="2.5" y="2.5" width="11" height="11" {...common} />,

@@ -19,13 +19,16 @@ export interface Palette {
 const cssVar = (name: keyof typeof FALLBACK): string => {
   try { return getComputedStyle(document.documentElement).getPropertyValue(`--${name === "muted" ? "text-muted" : name}`).trim() || FALLBACK[name] } catch { return FALLBACK[name] }
 }
+const graphVar = (name: string, fallback: string): string => {
+  try { return getComputedStyle(document.documentElement).getPropertyValue(`--graph-${name}`).trim() || fallback } catch { return fallback }
+}
 export function palette(): Palette {
   const [brand, ink, surface, muted, success, warning, danger, pink] = (["brand", "ink", "surface", "muted", "success", "warning", "danger", "pink"] as const).map(cssVar)
   const verdict = { holds: success, fails: danger, unknown: warning }
   return {
     verdict,
-    kind: { run: brand, agent: ink, checker: "#3f7cc4", phase: "#b9b2a0", claim: success, source: "#8a909c", test: muted, issue: pink, artifact: "#8a6d3b" },
-    background: surface, line: muted, lineDim: "#e6e0d0", lineHot: ink, lineRefuted: danger, label: ink, labelBg: "rgba(255,253,246,0.88)", dim: "#d9d3c2",
+    kind: { run: brand, agent: ink, checker: graphVar("checker", "#3f7cc4"), phase: "#b9b2a0", claim: success, source: "#8a909c", test: muted, issue: pink, artifact: graphVar("artifact", "#8a6d3b") },
+    background: surface, line: muted, lineDim: graphVar("line", "#e6e0d0"), lineHot: ink, lineRefuted: danger, label: ink, labelBg: graphVar("label-bg", "rgba(255,253,246,0.88)"), dim: graphVar("dim", "#d9d3c2"),
   }
 }
 

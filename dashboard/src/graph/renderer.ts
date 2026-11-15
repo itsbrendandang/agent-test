@@ -107,7 +107,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   const ensureLabel = (s: Sim) => {
     if (s.label || !s.holder) return s.label
     const big = s.node.kind === "agent" || s.node.kind === "run"
-    const t = new SpriteText(labelText(s.node), big ? 5.5 : 4.2, s.node.attention === 2 ? "#9c1414" : pal.label)
+    const t = new SpriteText(labelText(s.node), big ? 5.5 : 4.2, s.node.attention === 2 ? pal.verdict.fails : pal.label)
     t.fontFace = '"Geist Variable", ui-sans-serif, system-ui, sans-serif'
     t.fontWeight = s.node.kind === "agent" || s.node.kind === "run" ? "600" : "400"
     t.material.depthWrite = false
