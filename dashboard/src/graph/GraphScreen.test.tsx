@@ -7,6 +7,7 @@ import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
 import { graphLink } from "@/lib/links"
 import { claimNodeId, sourceNodeId } from "./model"
+import { EXAMPLE_ID, SOURCES } from "./examples/pembrolizumab"
 
 // jsdom has no WebGL: the renderer is replaced by a recorder, and WebGL support is switched per test.
 const fake = vi.hoisted(() => ({
@@ -47,6 +48,14 @@ const boardRun = { id: "r1", brief: "kras.md", startedAt: T + 10, status: "done"
 const swarmRun = { ...SWARM_DETAIL.run, startedAt: T }
 const lists = { "GET /api/runs": { status: 200, body: [boardRun] }, "GET /api/glhf/runs": { status: 200, body: [swarmRun] }, "GET /api/roster": { status: 200, body: ROSTER } }
 const swarmRoutes = { "GET /api/glhf/runs/s1": { status: 200, body: SWARM_DETAIL }, "GET /api/glhf/runs/s2": { status: 200, body: SINGLE_DETAIL } }
+const EXAMPLE = "board:example:pembrolizumab"
+/** Pick from the run picker, as a person would, once the runs are listed. */
+const pick = async (value: string) => {
+  const picker = await screen.findByRole("combobox", { name: /run/i })
+  await waitFor(() => expect(within(picker).getAllByRole("option").length).toBeGreaterThan(1))
+  expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain(value)
+  if ((picker as HTMLSelectElement).value !== value) fireEvent.change(picker, { target: { value } })
+}
 const streamBoard = async (events = BOARD_EVENTS) => {
   await waitFor(() => expect(FakeEventSource.all.length).toBeGreaterThan(0))
   act(() => { for (const e of events) FakeEventSource.all.at(-1)!.emit(e) })
@@ -67,6 +76,113 @@ beforeEach(() => {
   location.hash = ""
 })
 afterEach(() => { vi.unstubAllGlobals() })
+
+describe("Graph view: the built-in example", () => {
+  it("puts the cancer-drug example first in the picker; picked, it is labelled as an example and drawn in stages", async () => {
+    routes(lists)
+    render(<WorldsView />)
+    expect(screen.getByText("Loading your runs…")).toBeInTheDocument()
+    expect(screen.queryByTestId("example-banner")).toBeNull() // nothing is open while the runs load: the example does not flash
+    const picker = await screen.findByRole("combobox", { name: /run/i })
+    await waitFor(() => expect(within(picker).getAllByRole("option").length).toBe(3))
+    expect(picker).toHaveValue("board:r1")
+    expect(within(picker).getAllByRole("option")[0]).toHaveTextContent(/^Example · a cancer drug from biomanufacturing to FDA approval/)
+    await pick(EXAMPLE)
+    expect(picker).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toHaveTextContent(/assembled by hand from public records retrieved on 2026-11-15\. No model was called/)
+    expect(screen.getByTestId("example-label")).toHaveTextContent("Example · public records · $0")
+    expect(screen.queryByTestId("scripted-banner")).toBeNull()
+    expect(screen.queryByText("Live research")).toBeNull()
+    expect(screen.queryByRole("button", { name: /Open this run in/ })).toBeNull() // not a run
+    expect(FakeEventSource.all.every((s) => s.closed)).toBe(true) // the example asks nothing of the engine
+    await waitFor(() => expect(fake.data.at(-1)?.nodes.length).toBeGreaterThan(90)) // everything: stages, statements, sources
+    expect(screen.getByRole("button", { name: "Everything" })).toHaveAttribute("aria-pressed", "true")
+    expect(fake.data.at(-1)!.nodes.filter((n) => (n as { kind?: string }).kind === "phase").every((n) => typeof (n as { lane?: number }).lane === "number")).toBe(true)
+    expect(screen.getByTestId("headline")).toHaveTextContent(/1 contradicted/)
+    expect(screen.getByText("one column per stage, left to right")).toBeInTheDocument()
+    expect(screen.getByText(/source retracted or corrected/)).toBeInTheDocument()
+  })
+
+  it("works with no engine at all: says the engine is off and still shows the example", async () => {
+    routes({})
+    render(<WorldsView />)
+    expect(await screen.findByText("The app's engine isn't running")).toBeInTheDocument()
+    expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+    await waitFor(() => expect(fake.calls).toContain("create"))
+  })
+
+  it("keeps the example open when the engine comes back with a run, until the person picks it", async () => {
+    routes({ "GET /api/runs": [{ status: 500, body: {} }, { status: 200, body: [boardRun] }], "GET /api/glhf/runs": [{ status: 500, body: {} }, { status: 200, body: [] }], "GET /api/roster": { status: 200, body: ROSTER } })
+    render(<WorldsView />)
+    expect(await screen.findByText("The app's engine isn't running")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    const picker = screen.getByRole("combobox", { name: /run/i })
+    await waitFor(() => expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain("board:r1"))
+    expect(picker).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+    await pick("board:r1")
+    await streamBoard()
+    expect(screen.queryByTestId("example-banner")).not.toBeInTheDocument()
+  })
+
+  it("keeps the example open when a run appears at a later poll", async () => {
+    routes({ "GET /api/runs": [{ status: 200, body: [] }, { status: 200, body: [boardRun] }], "GET /api/glhf/runs": { status: 200, body: [] }, "GET /api/roster": { status: 200, body: ROSTER } })
+    render(<WorldsView />)
+    expect(await screen.findByText(/No runs yet/)).toBeInTheDocument()
+    const hide = (hidden: boolean) => { Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (hidden ? "hidden" : "visible") }); document.dispatchEvent(new Event("visibilitychange")) }
+    act(() => hide(true))
+    act(() => hide(false))
+    Reflect.deleteProperty(document, "visibilityState")
+    const picker = screen.getByRole("combobox", { name: /run/i })
+    await waitFor(() => expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain("board:r1"))
+    expect(picker).toHaveValue(EXAMPLE)
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+  })
+
+  it("shows a retracted source's notice, what was wrong and a link to it, in the list and the panel", async () => {
+    routes(lists)
+    render(<WorldsView />)
+    await pick(EXAMPLE)
+    listMode()
+    const table = await screen.findByRole("table", { name: /nodes of the graph/i })
+    expect(within(table).getAllByText(/⚑ retracted/)).toHaveLength(4)
+    expect(within(table).getAllByText(/⚑ corrected/)).toHaveLength(2)
+    fireEvent.click(within(table).getByRole("button", { name: /^SBRT plus pembrolizumab and trametinib versus SBRT/ }))
+    const panel = await screen.findByTestId("node-panel")
+    expect(within(panel).getByRole("note")).toHaveTextContent(/Retracted \(2022-03\).*14\.9 versus 12\.8 months/)
+    expect(within(panel).getByRole("link", { name: "Open the notice" })).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/35241252/")
+    expect(within(panel).getByRole("link", { name: "Open the source" })).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/34237249/")
+    expect(within(panel).queryByRole("button", { name: /Open this run in/ })).toBeNull()
+  })
+
+  it("leaves the example when the person picks a run", async () => {
+    routes(lists)
+    render(<WorldsView />)
+    await pick(EXAMPLE)
+    expect(await screen.findByTestId("example-banner")).toBeInTheDocument()
+    await pick("board:r1")
+    await streamBoard()
+    expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:r1")
+    expect(screen.queryByTestId("example-banner")).toBeNull()
+    expect(await screen.findByTestId("scripted-banner")).toBeInTheDocument()
+  })
+
+  it("does not carry the example's own line and detail defaults over to a run", async () => {
+    routes(lists)
+    render(<WorldsView />)
+    await pick(EXAMPLE)
+    const lines = () => within(screen.getByRole("group", { name: "Lines" }))
+    expect(lines().getByRole("checkbox", { name: "checked" })).not.toBeChecked() // the example leaves out the checker's lines
+    fireEvent.click(lines().getByRole("checkbox", { name: "said" }))
+    fireEvent.click(within(screen.getByRole("group", { name: "Show" })).getAllByRole("checkbox").find((c) => !(c as HTMLInputElement).disabled)!)
+    await pick("board:r1")
+    await streamBoard()
+    await waitFor(() => expect(lines().getByRole("checkbox", { name: "checked" })).toBeChecked())
+    expect(lines().getByRole("checkbox", { name: "said" })).toBeChecked()
+    expect(screen.getByRole("button", { name: "Team members and statements" })).toHaveAttribute("aria-pressed", "true")
+  })
+})
 
 describe("Graph view", () => {
   it("opens the newest run, here the board run, and draws it", async () => {
@@ -522,10 +638,11 @@ describe("Graph view", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument()
   })
 
-  it("handles no runs at all", async () => {
+  it("handles no runs at all: says so, and shows the example meanwhile", async () => {
     routes({ "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] } })
     render(<WorldsView />)
     expect(await screen.findByText(/No runs yet/)).toBeInTheDocument()
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
   })
 
   it("handles a run with nothing recorded yet", async () => {
@@ -557,6 +674,17 @@ describe("Graph view: addresses and links to the other views", () => {
     expect(panel).toHaveTextContent("hERG of acrylamides") // a source: hidden in the calm first picture, shown for the link
     expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:r1")
     expect(location.hash).toBe(graphLink("board", "r1", sourceNodeId("https://example.org/a")))
+  })
+  it("opens the built-in example and the node an address names, and keeps that address", async () => {
+    routes(lists)
+    const at = graphLink("board", EXAMPLE_ID, sourceNodeId(SOURCES.letter2014.url))
+    location.hash = at
+    render(<WorldsView />)
+    const panel = await screen.findByTestId("node-panel")
+    expect(panel).toHaveTextContent(SOURCES.letter2014.title)
+    expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:example:pembrolizumab")
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+    expect(location.hash).toBe(at)
   })
   it("puts the run and the selected node in the address, and follows an address that changes", async () => {
     routes({ ...lists, ...swarmRoutes })

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { Hero } from "@/overview/Hero"
-import { STARTERS } from "@/overview/starters"
+import { CANCER_DRUG, STARTERS } from "@/overview/starters"
 import { routes, to } from "@/test/engine"
 import { TryAsking } from "./TryAsking"
 import type { TryAskingReply } from "./trending"
@@ -27,6 +27,34 @@ describe("Try asking", () => {
     await userEvent.click(chip)
     expect(onPick).toHaveBeenCalledWith(TRENDING.items[0].question)
     expect(to(sent, "GET", "/api/trending")).toHaveLength(1)
+  })
+
+  it("puts the cancer-drug example first, with the engine's questions and with the fixed ones", async () => {
+    routes({ "GET /api/trending": { status: 200, body: TRENDING } })
+    const onPick = vi.fn()
+    const first = render(<TryAsking onPick={onPick} />)
+    await screen.findByRole("button", { name: TRENDING.items[0].question })
+    const chips = screen.getAllByRole("button")
+    expect(chips.map((c) => c.textContent)).toEqual([CANCER_DRUG.question, ...TRENDING.items.map((q) => q.question)])
+    await userEvent.click(chips[0])
+    expect(onPick).toHaveBeenCalledWith(CANCER_DRUG.question) // the same click as any other chip
+    first.unmount()
+
+    const sent = routes({})
+    render(<TryAsking onPick={() => {}} fallback={["Fixed example one?"]} />)
+    await waitFor(() => expect(sent.length).toBe(1))
+    expect(screen.getAllByRole("button").map((c) => c.textContent)).toEqual([CANCER_DRUG.question, "Fixed example one?"])
+  })
+
+  it("puts the cancer-drug example first on the Overview, and fills the box with it", async () => {
+    routes({ "GET /api/trending": { status: 200, body: TRENDING }, "GET /api/chat/catalog": { status: 503, body: {} } })
+    render(<Hero onOpen={() => {}} />)
+    await screen.findByRole("button", { name: TRENDING.items[0].question })
+    const starters = screen.getByRole("group", { name: "Example questions" }).querySelectorAll("button")
+    expect(starters).toHaveLength(3)
+    expect(starters[0]).toHaveAccessibleName(CANCER_DRUG.question)
+    await userEvent.click(starters[0])
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(CANCER_DRUG.question)
   })
 
   it("curated questions are not called trending", async () => {

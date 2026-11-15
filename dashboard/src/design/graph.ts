@@ -33,7 +33,9 @@ export function palette(): Palette {
 }
 
 export const shapeOf = (n: GraphNode): Shape => (n.verdict && (n.kind === "claim" || n.kind === "test") ? VERDICT_SHAPE[n.verdict.cls] : KIND_SHAPE[n.kind])
-export const colourOf = (n: GraphNode, p: Palette): string => (n.verdict && (n.kind === "claim" || n.kind === "test") ? p.verdict[n.verdict.cls] : p.kind[n.kind])
+/** A source with a published notice is drawn in the warning colours: red for a retraction, amber for a correction or an expression of concern. */
+export const flagColour = (flag: NonNullable<GraphNode["flag"]>, p: Palette): string => (flag.type === "retraction" ? p.verdict.fails : p.verdict.unknown)
+export const colourOf = (n: GraphNode, p: Palette): string => (n.verdict && (n.kind === "claim" || n.kind === "test") ? p.verdict[n.verdict.cls] : n.flag ? flagColour(n.flag, p) : p.kind[n.kind])
 
 const SIZE: Record<NodeKind, number> = { run: 7, agent: 3.6, checker: 3, phase: 3.2, claim: 2, source: 2, test: 1.6, issue: 2.4, artifact: 2.6 }
 /**

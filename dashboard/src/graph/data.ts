@@ -5,7 +5,7 @@ import { ENGINE, get, type BoardEvent, type RosterMember, type RunSummary } from
 import { settled, type GlhfRun, type RunDetail } from "@/swarm/api"
 import type { RunKind } from "./types"
 
-export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string; /** What the run is about, for the picker: a board run's brief, a team-of-nine run's task. */ title: string; /** A team-of-nine run, or one agent working alone. */ solver?: "glhf" | "single" }
+export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string; /** What the run is about, for the picker: a board run's brief, a team-of-nine run's task. */ title: string; /** A team-of-nine run, or one agent working alone. */ solver?: "glhf" | "single"; /** The built-in example: not a run, no engine needed. */ example?: boolean }
 
 const subscribeVisible = (cb: () => void) => { document.addEventListener("visibilitychange", cb); return () => document.removeEventListener("visibilitychange", cb) }
 /** false while the tab is in the background. */

@@ -40,6 +40,8 @@ describe("the graph's address", () => {
     expect(graphOfHash(graphLink("swarm", "s-1"))).toEqual({ kind: "swarm", id: "s-1" })
     for (const bad of ["#Graph", "#Graph/answer/a-1", "#Graph/board", "#Graph/board/a b", "#Lab/board/r-1"]) expect(graphOfHash(bad)).toBeUndefined()
     expect(graphOfHash("#Graph/board/r-1?node=a%20b")).toEqual({ kind: "board", id: "r-1" }) // a node id has no spaces
+    expect(graphOfHash(graphLink("board", "example:pembrolizumab", "agent:lead"))).toEqual({ kind: "board", id: "example:pembrolizumab", node: "agent:lead" })
+    for (const bad of ["#Graph/swarm/example%3Apembrolizumab", "#Graph/board/example%3Aother"]) expect(graphOfHash(bad)).toBeUndefined()
     expect([hasGraph("board"), hasGraph("swarm"), hasGraph("answer")]).toEqual([true, true, false])
   })
 })

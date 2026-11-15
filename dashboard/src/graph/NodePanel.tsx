@@ -4,14 +4,14 @@ import { agentLink, logLink } from "@/lib/links"
 import { LABEL } from "@/nav"
 import { safeUrl } from "./model"
 import { connectionsOf } from "./view"
-import type { GraphLink, GraphModel, GraphNode } from "./types"
+import { FLAG, type GraphLink, type GraphModel, type GraphNode } from "./types"
 import { VerdictPill } from "./VerdictPill"
 import { KIND_TECH, KIND_WHAT, kindLabel } from "./words"
 
 /** Details of the selected node. All run text is rendered as text. */
 export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onClose }: {
   node: GraphNode; nodes: readonly GraphNode[]; links: readonly GraphLink[]; model: GraphModel
-  onSelect: (id: string) => void; onOpenRun: () => void; onClose: () => void
+  onSelect: (id: string) => void; /** Absent for the built-in example, which is not a run. */ onOpenRun?: () => void; onClose: () => void
 }) {
   const conns = useMemo(() => connectionsOf(node.id, nodes, links), [node.id, nodes, links])
   const href = node.url ? safeUrl(node.url) : undefined
@@ -28,6 +28,13 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
       </header>
       <h2>{node.verdict && (node.kind === "claim" || node.kind === "test") && <VerdictPill verdict={node.verdict} />}{" "}{node.label}</h2>
       {node.text && node.text !== node.label && <p className="graph-text">{node.text}</p>}
+      {node.flag && (
+        <div className="graph-flag" data-kind={node.flag.type === "retraction" ? "danger" : "warning"} role="note">
+          <b><span aria-hidden="true">{FLAG} </span>{node.flag.type === "retraction" ? "Retracted" : node.flag.type === "correction" ? "Corrected" : "Expression of concern"}{node.flag.date ? ` (${node.flag.date})` : ""}</b>
+          <p>{node.flag.what}</p>
+          {node.flag.url && <p className="small"><a href={node.flag.url} target="_blank" rel="noreferrer noopener">Open the notice</a></p>}
+        </div>
+      )}
       {href && <p className="small"><a href={href} target="_blank" rel="noreferrer noopener">Open the source</a> <span className="muted">({href})</span></p>}
       {node.facts.length > 0 && (
         <dl className="graph-facts">
@@ -47,14 +54,14 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
         ))}
         {conns.length === 0 && <li className="muted">No recorded connections at this step.</li>}
       </ul>
-      {member && (
+      {member && !model.example && (
         <p className="graph-agent-links">
           <a href={logLink({ kind: "board", id: model.runId }, member)}>{node.label}'s messages in the Agent Log</a>
           {hasCard(member) && <> · <a href={agentLink(member, "board")}>About this agent</a></>}
         </p>
       )}
-      <button type="button" className="btn btn-primary" onClick={onOpenRun}>Open this run in {where}</button>
-      <a className="btn" href={logLink({ kind: model.kind, id: model.runId })}>Open in the Agent Log</a>
+      {onOpenRun && <button type="button" className="btn btn-primary" onClick={onOpenRun}>Open this run in {where}</button>}
+      {onOpenRun && <a className="btn" href={logLink({ kind: model.kind, id: model.runId })}>Open in the Agent Log</a>}
     </aside>
   )
 }

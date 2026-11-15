@@ -56,6 +56,10 @@ export interface GraphNode {
   round?: number
   /** A step that did not run: drawn faded, and its panel says why. Its label stays the plain name. */
   muted?: boolean
+  /** A source with a published retraction, correction or expression of concern: drawn in the warning colours, with the notice in its panel. */
+  flag?: { type: "retraction" | "correction" | "expression of concern"; url?: string; date?: string; what: string }
+  /** The lane (stage) the node is drawn in, left to right, when the model has lanes. */
+  lane?: number
 }
 
 export interface GraphLink {
@@ -117,6 +121,12 @@ export interface GraphModel {
   score?: number
   /** Nodes left out because of the size cap. */
   hidden: number
+  /** Stage names, left to right: the picture puts each round and what happened in it in its own lane. */
+  lanes?: string[]
+  /** A built-in example, not a run: assembled by hand from public records on this date. No model was called. */
+  example?: { retrievedOn: string }
 }
 
 export const MAX_NODES = 600
+/** The flag before the name of a source with a published retraction, correction or expression of concern. */
+export const FLAG = "⚑"

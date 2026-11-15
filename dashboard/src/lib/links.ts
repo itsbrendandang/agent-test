@@ -17,6 +17,8 @@ const KINDS: readonly RunKind[] = ["answer", "board", "swarm"]
 const ID = /^[\w.-]{1,200}$/
 /** What an agent's name can hold: the engine's names, a specialist's "specialist:" prefix, a character id. */
 const NAME = /^[\w.:-]{1,120}$/
+/** The Graph view's built-in example (graph/examples/pembrolizumab.ts). Its colon keeps it apart from every run id. */
+export const GRAPH_EXAMPLE_ID = "example:pembrolizumab"
 /** A graph node id: "agent:<name>", "claim:<member>:<code>", "source:<url>". Anything printable without spaces, but not too long. */
 const NODE = { test: (s: string) => s.length > 0 && s.length <= 600 && ![...s].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127) }
 
@@ -65,7 +67,7 @@ export function graphOfHash(hash: string): GraphAddress | undefined {
   const h = split(hash)
   if (!h || h.view !== "Graph") return undefined
   const [kind, id, ...rest] = h.path
-  if (rest.length || (kind !== "board" && kind !== "swarm") || !id || !ID.test(id)) return undefined
+  if (rest.length || (kind !== "board" && kind !== "swarm") || !id || !(ID.test(id) || (kind === "board" && id === GRAPH_EXAMPLE_ID))) return undefined
   const node = h.params.get("node") ?? undefined
   return { kind, id, ...(node && NODE.test(node) && { node }) }
 }

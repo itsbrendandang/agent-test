@@ -11,7 +11,7 @@ import { Mascot } from "@/lab/Mascot"
 import { readEngine } from "@/lib/engine"
 import { setAsk } from "@/lib/open"
 import type { View } from "@/nav"
-import { STARTERS } from "@/overview/starters"
+import { CANCER_DRUG, STARTERS } from "@/overview/starters"
 import type { Catalog, EffortId } from "@/home/api"
 import { effortInEffect } from "@/home/chat"
 import { AskBox } from "@/research/AskBox"
@@ -43,9 +43,9 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
     return () => { stopped = true }
   }, [])
   const limit = answerLimitLine(catalog, effort)
-  // Biology questions from what is trending on Google now (or curated ones); the fixed starters when the engine is not there.
+  // The cancer-drug example first, then biology questions from what is trending on Google now (or curated ones); the fixed starters when the engine is not there.
   const trending = useTryAsking()
-  const starters = trending?.items.slice(0, 3) ?? STARTERS
+  const starters = trending ? [CANCER_DRUG, ...trending.items.filter((q) => q.question !== CANCER_DRUG.question).slice(0, 2)] : STARTERS.slice(0, 3)
   const note = tryAskingNote(trending)
   const eager = focused || text.trim().length > 0
   const ask = (asked: string) => {

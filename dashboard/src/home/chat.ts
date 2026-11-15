@@ -5,6 +5,7 @@ import type { RunSummary } from "@/board/api"
 import { plainDuration } from "@/lib/format"
 import type { ScoreRow } from "@/swarm/api"
 import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
+import { CANCER_DRUG } from "@/overview/starters"
 
 /** The plain label on every assistant reply: did a model write this? */
 /** The three kinds of reply, named for what they are. They must never be mistaken for each other. */
@@ -27,6 +28,7 @@ export function sourcesWords(mode: string): { heading: string; about: string; la
 }
 
 export const EXAMPLES = [
+  CANCER_DRUG.question,
   "Should we advance a KRAS G12C hit with a hERG risk?",
   "What did past reviews decide about hERG risk?",
   "Which statements were contradicted, and why?",

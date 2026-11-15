@@ -22,10 +22,12 @@ export interface Status { mock: boolean; paidCalls?: boolean; keys: Record<strin
 
 // Mirrors engine/src/events.ts
 /** A source a search kept. `relevance` and `studyType` are what the engine recorded; the title and URL are untrusted. */
-export interface EvidenceItem { url: string; title: string; studyType?: string; relevance?: number; provider?: SearchProvider; /** The query that found it (newer runs). */ query?: string }
+export interface EvidenceItem { url: string; title: string; studyType?: string; relevance?: number; provider?: SearchProvider; /** The query that found it (newer runs). */ query?: string; /** What the source says, as kept. */ text?: string; /** A published retraction, correction or expression of concern about this article. Only the Graph view's built-in example sets it; the engine does not record one yet. */ notice?: SourceNotice }
+/** A notice published about an article: what kind, where, when, and what was wrong (in the notice's own terms, or a plain statement that the free record does not say). */
+export interface SourceNotice { type: "retraction" | "correction" | "expression of concern"; url: string; date?: string; what: string }
 export type BoardEvent = { key: string; at: number } & (
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
-  | { type: "round.started"; round: number; message: string; final: boolean }
+  | { type: "round.started"; round: number; message: string; final: boolean; /** The round's subject, when the run names one (the Graph view's built-in example names its stages). */ title?: string }
   /** Who took part in this run, in speaking order. Runs recorded before this event existed have none. */
   | { type: "run.roster"; members: { name: string; title: string; role: "lead" | "member"; source?: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }[] }
   | { type: "member.replied"; round: number; member: string; text: string; /** What this reply cost. */ usd?: number; /** The sentence after "In short:", when the member wrote one. */ summary?: string }

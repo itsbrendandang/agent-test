@@ -141,7 +141,7 @@ Benchmarks and Compare are not in the sidebar. They open only by their address (
 | Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: the recommendation, how each statement was checked, and the sources. Its discussion is the Agent Log's group chat for that review, with a link "Open in Agent Log". |
 | Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
-| Graph | One run as a picture of who said what. |
+| Graph | One run as a picture of who said what. It opens on the newest run. First in the run picker, and open by default when there is no run to show, is a built-in example: a cancer drug (pembrolizumab) from biomanufacturing to FDA approval, with its interactions, the articles about it that were retracted or corrected, and possible clinical trials. It is built by hand from public records, with no model and no cost, and each statement links to its record. |
 | Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs (research answers, team reviews and task runs), next to Follow newest. A team review shows a "Round n" line where each round begins, the lead and the members as messages, and each statement check as a quiet note with its mark (✓ supported, ✕ contradicted, ? insufficient evidence, ○ not checked). No room picture here; the Lab stays on Overview. |
 | Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
@@ -200,7 +200,8 @@ of an answer in progress.
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
 only the biology word, never a person in the search. When none is about biology, or the feed
-cannot be read, curated biology questions are shown. On Overview and on Research a click fills
+cannot be read, curated biology questions are shown. The cancer-drug question of the Graph
+example always comes first. On Overview and on Research a click fills
 the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
@@ -282,6 +283,12 @@ nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
 **Team review.** The decision first, then how many statements were checked and how each one did.
 
 ![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
+
+**Graph.** The built-in example, first in the run picker: a cancer drug from biomanufacturing to FDA approval. One column
+per stage, left to right. Red and amber flags mark articles that were retracted or corrected. It
+is built by hand from public records, not by a run.
+
+![The Graph screen with the pembrolizumab example: eight stages plus a summary column, the team between them, and flagged sources](docs/images/graph-example.png)
 
 **Overview's Agent Lab.** The same run as a scene: who is working and who fetched what.
 This earlier picture shows the room art, not the current three-column layout or the Agent Log.

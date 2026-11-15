@@ -11,6 +11,7 @@ import { useBoardRun, useRunList, useSwarmRun, useVisible, type RunRef } from ".
 import { useReducedMotion } from "./env"
 import { GraphList } from "./GraphList"
 import { FullKey, Key } from "./Legend"
+import { EXAMPLE_EVENTS, EXAMPLE_ID, EXAMPLE_ROSTER, EXAMPLE_TITLE, RETRIEVED_ON } from "./examples/pembrolizumab"
 import { buildBoardGraph, buildSwarmGraph, statsOf } from "./model"
 import { NodePanel } from "./NodePanel"
 import { Scrubber } from "./Scrubber"
@@ -28,6 +29,10 @@ const storedMode = (): "graph" | "list" | null => { try { const v = localStorage
 const when = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 
 const ABOUT = "Who said what in one run, and what each check found. Contradicted statements are the easiest to find."
+/** The built-in example: first in the picker, and open while there is no run to show. It needs no engine and costs nothing. */
+const EXAMPLE_REF: RunRef = { kind: "board", id: EXAMPLE_ID, startedAt: 0, state: "example", title: EXAMPLE_TITLE, example: true }
+const isExample = (r: Pick<RunRef, "kind" | "id"> | undefined) => r?.kind === "board" && r.id === EXAMPLE_ID
+const EXAMPLE_NOTE = `Example, assembled by hand from public records retrieved on ${RETRIEVED_ON}. No model was called and nothing was paid. Each statement links to the record it was checked against.`
 
 const toggle = <T,>(set: ReadonlySet<T>, v: T): Set<T> => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n }
 const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((x) => b.has(x))
@@ -55,24 +60,34 @@ export function GraphScreen() {
     return () => window.removeEventListener("hashchange", sync)
   }, [])
   // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
+  // With no run listed when they first load (none yet, or no engine), the built-in example is open, and stays open when runs appear later. While the lists load, nothing is open.
   const [auto, setAuto] = useState<RunRef>()
-  if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
-  const current = picked ?? auto
-  const board = useBoardRun(current?.kind === "board" ? current.id : undefined)
-  const swarm = useSwarmRun(current?.kind === "swarm" ? current.id : undefined)
-  const source = current?.kind === "board" ? board : swarm
+  const offline = !list.runs && list.failed.length === 2
+  if (!auto && !picked && (list.runs || offline)) setAuto(list.runs?.[0] ?? EXAMPLE_REF)
+  const waiting = !picked && !list.runs && !offline
+  const current: Pick<RunRef, "kind" | "id"> = picked ?? auto ?? EXAMPLE_REF
+  const example = isExample(current)
+  const board = useBoardRun(current.kind === "board" && !example ? current.id : undefined)
+  const swarm = useSwarmRun(current.kind === "swarm" ? current.id : undefined)
+  const source = example ? { error: false, loading: false, reload: () => undefined } : current.kind === "board" ? board : swarm
+  const runs = useMemo(() => [EXAMPLE_REF, ...(list.runs ?? [])], [list.runs])
 
   const full = useMemo<GraphModel | undefined>(() => {
-    if (!current) return undefined
+    if (waiting) return undefined
+    if (example) return capGraph(buildBoardGraph({ runId: EXAMPLE_ID, events: EXAMPLE_EVENTS, roster: EXAMPLE_ROSTER, example: { retrievedOn: RETRIEVED_ON } }))
     if (current.kind === "board") return board.data ? capGraph(buildBoardGraph({ runId: current.id, ...board.data })) : undefined
     return swarm.data ? capGraph(buildSwarmGraph(swarm.data)) : undefined
-  }, [current, board.data, swarm.data])
+  }, [current, example, waiting, board.data, swarm.data])
 
   // null: the person has not chosen yet, so a run with claims starts calm and a run without any (a single agent) shows everything.
+  // A picture in stages (the example) shows everything too: the stages, and the sources found in them, are what it is about.
   const [chosenKinds, setChosenKinds] = useState<ReadonlySet<NodeKind> | null>(null)
-  const hiddenKinds = useMemo<ReadonlySet<NodeKind>>(() => chosenKinds ?? new Set(full && full.totals.claims > 0 ? DETAIL[0].hidden : []), [chosenKinds, full])
+  const hiddenKinds = useMemo<ReadonlySet<NodeKind>>(() => chosenKinds ?? new Set(full && full.totals.claims > 0 && !full.lanes ? DETAIL[0].hidden : []), [chosenKinds, full])
   const [hiddenVerdicts, setHiddenVerdicts] = useState<ReadonlySet<Outcome>>(new Set())
-  const [hiddenLinks, setHiddenLinks] = useState<ReadonlySet<LinkKind>>(new Set(QUIET_LINKS))
+  // null: not chosen yet. A picture in stages also leaves out the lines from the one checker and from the run to each member,
+  // which cross every column; they are still named in each node's connections.
+  const [chosenLinks, setChosenLinks] = useState<ReadonlySet<LinkKind> | null>(null)
+  const hiddenLinks = useMemo<ReadonlySet<LinkKind>>(() => chosenLinks ?? new Set<LinkKind>(full?.lanes ? [...QUIET_LINKS, "ruled", "involves"] : QUIET_LINKS), [chosenLinks, full])
   const [step, setStep] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
   const [emphasis, setEmphasis] = useState(true)
@@ -88,10 +103,10 @@ export function GraphScreen() {
   const visibleTab = useVisible()
   const reduced = useReducedMotion()
 
-  const key = current ? `${current.kind}:${current.id}` : ""
+  const key = `${current.kind}:${current.id}`
   // Another run starts from the beginning (state is reset while rendering, which React allows, rather than in an effect).
   const [seenKey, setSeenKey] = useState(key)
-  if (seenKey !== key) { setSeenKey(key); setStep(null); setPlaying(false); setSelected(null); setQuery("") }
+  if (seenKey !== key) { setSeenKey(key); setStep(null); setPlaying(false); setSelected(null); setQuery(""); setChosenKinds(null); setChosenLinks(null) }
 
   const state = useMemo(() => ({ hiddenKinds, hiddenVerdicts, hiddenLinks, step }), [hiddenKinds, hiddenVerdicts, hiddenLinks, step])
   // The layout works on everything that passes the filters; the replay only reveals it, so nodes keep their places.
@@ -128,9 +143,9 @@ export function GraphScreen() {
   }
   // The address says which run is shown and which node is selected, so it can be copied and Back returns here.
   useEffect(() => {
-    if (!current || pending || !/^#Graph\b/.test(window.location.hash)) return
+    if (waiting || pending || !/^#Graph\b/.test(window.location.hash)) return
     replaceAddress(graphLink(current.kind, current.id, selected ?? undefined))
-  }, [current, selected, pending])
+  }, [current, selected, pending, waiting])
   const stepBy = useCallback((by: 1 | -1) => {
     if (order.length === 0) return
     const i = order.findIndex((n) => n.id === selected)
@@ -148,7 +163,7 @@ export function GraphScreen() {
     select(matches[next].id)
   }
   const openRun = () => {
-    if (!current) return
+    if (example) return
     window.location.hash = runLink(current.kind, current.id)
   }
   const play = () => {
@@ -160,23 +175,14 @@ export function GraphScreen() {
   const mode = chosenMode ?? (full && firstPicture < SMALL_RUN ? "list" : "graph")
   const useList = mode === "list" || unavailable !== undefined
 
-  // ── States before there is a graph ──
-  if (!list.runs && list.failed.length === 2) {
-    return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
-      <EngineOffline needs="Runs come from the engine." onRetry={list.reload} /></div>
-  }
-  if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading runs…</Loading></div>
-  if (!current) {
-    return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
-      <p className="graph-empty card-surface">No runs yet. Start one in {LABEL.Board}, and its graph appears here.</p></div>
-  }
+  if (waiting) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading your runs…</Loading></div>
 
   const status = full?.status
   const kindsPresent = new Set((full?.nodes ?? []).map((n) => n.kind))
   const kindsShown = new Set(shown.nodes.map((n) => n.kind))
   const noun = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`
-  const runName = (r: Pick<RunRef, "kind" | "solver">) => (r.kind === "board" ? "Review" : r.solver === "single" ? "Single agent" : "Team of nine")
-  const optionText = (r: RunRef) => `${runName(r)} · ${r.title} · ${when(r.startedAt)} · ${r.state}`
+  const runName = (r: Pick<RunRef, "kind" | "solver" | "example">) => (r.example ? "Example" : r.kind === "board" ? "Review" : r.solver === "single" ? "Single agent" : "Team of nine")
+  const optionText = (r: RunRef) => (r.example ? `${runName(r)} · ${r.title.replace(/^Example: /, "")}` : `${runName(r)} · ${r.title} · ${when(r.startedAt)} · ${r.state}`)
   const bigRun = firstPicture >= SMALL_RUN
   const hasStatements = (full?.totals.claims ?? 0) > 0
   const detail = DETAIL.find((d) => sameSet(hiddenKinds, new Set(d.hidden)))?.key
@@ -194,20 +200,24 @@ export function GraphScreen() {
   return (
     <div className="page graph-page" data-wide>
       <PageHead title="Graph" about={ABOUT} />
+      {offline && <EngineOffline needs="Your own runs come from the engine. The built-in example below works without it." onRetry={list.reload} />}
 
       <section className="card-surface graph-story" aria-label="What happened">
         <div className="graph-row">
           <label className="graph-field"><span>Run</span>
             <select value={`${current.kind}:${current.id}`} onChange={(e) => { const [kind, ...rest] = e.target.value.split(":"); setPicked({ kind: kind as RunRef["kind"], id: rest.join(":") }) }}>
-              {!list.runs.some((r) => r.kind === current.kind && r.id === current.id) && <option value={`${current.kind}:${current.id}`} title={current.id}>{runName(current)}</option>}
-              {list.runs.map((r) => <option key={`${r.kind}:${r.id}`} value={`${r.kind}:${r.id}`} title={r.id}>{optionText(r)}</option>)}
+              {!runs.some((r) => r.kind === current.kind && r.id === current.id) && <option value={`${current.kind}:${current.id}`} title={current.id}>{runName(current)}</option>}
+              {runs.map((r) => <option key={`${r.kind}:${r.id}`} value={`${r.kind}:${r.id}`} title={r.example ? "Built-in example: public records, no model, $0" : r.id}>{optionText(r)}</option>)}
             </select>
           </label>
-          {/* A practice run is stated once, by the banner over the picture. A live run, a demo task and an unknown mode get a small label. */}
-          {full && <span data-testid="scripted-label"><ModeLabel scripted={full.scripted === true ? undefined : full.scripted} demo={full.demo} /></span>}
-          {full && full.scripted === undefined && !full.demo && <span className="pill" data-kind="warning" data-testid="scripted-label">how it was made: not recorded</span>}
+          {/* A practice run is stated once, by the banner over the picture. A live run, a demo task and an unknown mode get a small label. The example says what it is. */}
+          {full?.example && <span className="pill" data-kind="outline" data-testid="example-label" title={EXAMPLE_NOTE}>Example · public records · $0</span>}
+          {full && !full.example && <span data-testid="scripted-label"><ModeLabel scripted={full.scripted === true ? undefined : full.scripted} demo={full.demo} /></span>}
+          {full && !full.example && full.scripted === undefined && !full.demo && <span className="pill" data-kind="warning" data-testid="scripted-label">how it was made: not recorded</span>}
           {status && status !== "done" && <span className="pill" data-kind={status === "failed" ? "danger" : "info"}>{status === "running" ? "running: the picture grows as events arrive" : status}</span>}
         </div>
+        {!list.runs && !offline && <p className="muted small" role="status">Loading your runs…</p>}
+        {list.runs?.length === 0 && <p className="muted small graph-empty-note">No runs yet. Start one in {LABEL.Board}, and its graph appears here. Until then, the built-in example is shown.</p>}
         {full && <h2 className="graph-title" title={full.runId}>{full.title}</h2>}
         {full && <p className={hasStatements ? "graph-headline" : "graph-quiet"} role="status" data-testid="headline">{said}</p>}
         {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), contradicted statements first. The headline above still counts the whole run.</p>}
@@ -259,7 +269,7 @@ export function GraphScreen() {
             </fieldset>
             <fieldset className="graph-filter"><legend>Lines</legend>
               {LINK_KINDS.filter((k) => full?.links.some((l) => l.kind === k)).map((k) => (
-                <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenLinks.has(k)} onChange={() => setHiddenLinks((s) => toggle(s, k))} /><span>{LINK_VERB[k]}</span></label>
+                <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenLinks.has(k)} onChange={() => setChosenLinks(toggle(hiddenLinks, k))} /><span>{LINK_VERB[k]}</span></label>
               ))}
             </fieldset>
           </div>
@@ -275,33 +285,35 @@ export function GraphScreen() {
           <div className="graph-main">
             <div className="graph-view" data-scripted={full.scripted === true || undefined}>
               {full.scripted === true && <div className="graph-badge" data-testid="scripted-banner">{PRACTICE}. Nothing in this picture is a research result.</div>}
+              {full.example && <div className="graph-badge" data-kind="example" data-testid="example-banner">{EXAMPLE_NOTE}</div>}
               {unavailable !== undefined && <p className="graph-fallback" role="status">The 3D view is not available here ({unavailable}) so the list is shown instead. It has the same information.</p>}
               <div className="graph-body">
                 {!useList && (
                   <Suspense fallback={<Loading className="loading-block">Loading the 3D view…</Loading>}>
                     <GraphCanvas nodes={layout.nodes} links={layout.links} revealed={revealed} runKind={full.kind} style={style} fitKey={`${key}|${[...hiddenKinds]}|${[...hiddenVerdicts]}|${[...hiddenLinks]}`} focus={focus} paused={!visibleTab}
                       onSelect={select} onStep={stepBy} onUnavailable={(r) => setUnavailable(r)}
-                      summary={`3D graph of a ${current.kind === "swarm" ? "team-of-nine run" : "review"}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
+                      summary={`3D graph of ${example ? "the built-in example" : current.kind === "swarm" ? "a team-of-nine run" : "a review"}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
                   </Suspense>
                 )}
                 {useList && <GraphList runKind={full.kind} nodes={shown.nodes} links={shown.connections} selected={selectedNode?.id ?? null} onSelect={select} order={order} />}
-                {!useList && <div className="graph-keybox"><Key kinds={kindsShown} runKind={full.kind} open={fullKey} onToggle={() => setFullKey((v) => !v)} /></div>}
+                {!useList && <div className="graph-keybox"><Key kinds={kindsShown} runKind={full.kind} flagged={shown.nodes.some((n) => n.flag)} lanes={full.lanes} open={fullKey} onToggle={() => setFullKey((v) => !v)} /></div>}
                 {!useList && caption && <p className="graph-caption" aria-hidden="true" data-testid="caption">{caption}</p>}
               </div>
             </div>
             {selectedNode
-              ? <NodePanel node={selectedNode} nodes={shown.nodes} links={shown.connections} model={full} onSelect={select} onOpenRun={openRun} onClose={() => select(null)} />
+              ? <NodePanel node={selectedNode} nodes={shown.nodes} links={shown.connections} model={full} onSelect={select} onOpenRun={full.example ? undefined : openRun} onClose={() => select(null)} />
               : <aside className="graph-panel" aria-label="About this graph">
                   <h2>About this picture</h2>
                   <p className="muted small">Select a node to see its details and to light up what it is connected to.</p>
-                  <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? LABEL.Compare : LABEL.Board}</button>
-                  <a className="btn" href={logLink({ kind: current.kind, id: current.id })}>Open in the Agent Log</a>
-                  <details><summary>Run details</summary><p className="muted small">{full.kind === "board" ? "Review" : "Team-of-nine run"} <code>{full.runId}</code></p></details>
+                  {!full.example && <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? LABEL.Compare : LABEL.Board}</button>}
+                  {!full.example && <a className="btn" href={logLink({ kind: current.kind, id: current.id })}>Open in the Agent Log</a>}
+                  {full.lanes && <p className="muted small">The picture reads left to right: one column per stage ({full.lanes.length}), with what was found in it below. Team members work across stages, so they sit between them.</p>}
+                  <details><summary>Run details</summary><p className="muted small">{full.example ? "Built-in example" : full.kind === "board" ? "Review" : "Team-of-nine run"} <code>{full.runId}</code></p></details>
                   <details><summary>What this graph cannot show</summary><ul className="graph-notes">{full.notes.map((n) => <li key={n}>{n}</li>)}</ul></details>
                 </aside>}
           </div>
           <Scrubber model={full} step={step} onStep={setStep} playing={playing} onPlaying={setPlaying} />
-          {fullKey && <FullKey kinds={kindsPresent} runKind={full.kind} />}
+          {fullKey && <FullKey kinds={kindsPresent} runKind={full.kind} flagged={full.nodes.some((n) => n.flag)} lanes={full.lanes} />}
         </>
       )}
     </div>

@@ -262,3 +262,33 @@ describe("swarm graph", () => {
     expect(h.nodes.every((n) => n.order <= h.maxOrder)).toBe(true)
   })
 })
+
+describe("board graph: stage titles, notices and lanes (optional fields)", () => {
+  const titled: BoardEvent[] = BOARD_EVENTS.map((e) => {
+    if (e.type === "round.started" && e.round === 1) return { ...e, title: "Preclinical" }
+    if (e.type === "evidence.triaged" && e.member === "critic") return { ...e, items: [{ url: "https://example.org/a", title: "hERG of acrylamides", notice: { type: "retraction", url: "javascript:alert(1)", date: "2024", what: "Peer review was manipulated." } }] } as BoardEvent
+    return e
+  })
+  it("names a round by its title when the run gives one, and keeps the plain name otherwise", () => {
+    const g = buildBoardGraph({ runId: "r1", events: titled, roster: ROSTER })
+    expect(find(g, "phase:1").label).toBe("Round 1: Preclinical")
+    expect(find(g, "phase:2").label).toBe("Round 2")
+    expect(g.marks.map((m) => m.label)).toEqual(["1. Preclinical", "Round 2"])
+  })
+  it("flags a source with a published notice, and never links an unsafe notice address", () => {
+    const g = buildBoardGraph({ runId: "r1", events: titled, roster: ROSTER })
+    const s = find(g, "source:https://example.org/a")
+    expect(s.flag).toEqual({ type: "retraction", what: "Peer review was manipulated.", url: undefined, date: "2024" })
+    expect(s.attention).toBe(2)
+    expect(s.facts.find((f) => f.label === "What was wrong")?.value).toBe("Peer review was manipulated.")
+    expect(s.facts.some((f) => f.label === "Notice")).toBe(false)
+  })
+  it("draws no lanes, keeps the clock and the run's own label for a run (lanes are the built-in example's)", () => {
+    const g = board()
+    expect(g.lanes).toBeUndefined()
+    expect(g.example).toBeUndefined()
+    expect(g.nodes.every((n) => n.lane === undefined && n.flag === undefined)).toBe(true)
+    expect(g.steps.some((s) => s.at !== undefined)).toBe(true)
+    expect(g.scripted).toBe(true)
+  })
+})
