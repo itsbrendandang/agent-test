@@ -10,6 +10,7 @@ import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, Pro
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { HeaderSlot } from "@/components/HeaderSlot"
+import { Provenance } from "@/components/Provenance"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type EffortId, type ProviderId } from "@/home/api"
@@ -25,8 +26,8 @@ import { InspectorPane, InspectorToggle } from "@/research/InspectorPane"
 import { loadInspector, saveInspector, tabsOf, useNarrow, type InspectorTab } from "@/research/inspectorState"
 import { foldAnswer } from "@/research/model"
 import { Working } from "@/research/Working"
+import { provenanceOf } from "@/lib/provenance"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
-import { PRACTICE_SHORT } from "@/lib/words"
 import { linkTo, setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
 import { openHelp } from "@/lib/shell"
 
@@ -416,8 +417,10 @@ function SourceRows({ runs, onOpen, label = "Saved research this answer used" }:
                 <span className="source-n" aria-hidden="true">{i + 1}</span>
                 <span className="source-what">
                   <b>{title}</b>
-                  <span className="muted small">
-                    {[r.kind === "swarm" ? "One agent or a team" : "Review", row?.startedAt !== undefined && plainWhen(row.startedAt), scripted === true ? PRACTICE_SHORT : scripted === false ? "real model" : undefined].filter(Boolean).join(" · ")}
+                  <span className="muted small source-meta">
+                    <span>{[r.kind === "swarm" ? "One agent or a team" : "Review", row?.startedAt !== undefined && plainWhen(row.startedAt)].filter(Boolean).join(" · ")}</span>
+                    {/* How this run was made, from its own record: it stays Practice whatever the Next run switch says. */}
+                    <Provenance kind={provenanceOf(scripted === undefined ? undefined : { scripted })} compact />
                   </span>
                   {r.why && <span className="muted small source-why">{r.why}</span>}
                 </span>

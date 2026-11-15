@@ -88,3 +88,9 @@ export const BOARD_JOB: Record<string, string> = {
   finisher: "makes sure no required result is missing",
   reporter: "writes up what was found, and what was rejected",
 }
+
+/** The first sentence, and what follows it. A full stop inside a number or an abbreviation ("1.8x", "e.g. x") does not end it. */
+export function leadSentence(text: string): [string, string] {
+  const end = /[.!?](?=\s+[A-Z(])/.exec(text)
+  return end ? [text.slice(0, end.index + 1), text.slice(end.index + 1).trim()] : [text, ""]
+}
