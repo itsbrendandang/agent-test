@@ -1,5 +1,8 @@
 # AI Scientist Bot
 
+**Ask a science question. A team of AI agents researches it. You see what they found, what they
+checked, and what is still uncertain.**
+
 AI Scientist Bot (GLHF) is a research aid for scientists and developers who want to test how
 teams of AI agents work. It runs drug candidate team reviews and compares a swarm with a single
 agent on biology data-analysis tasks. You can inspect the sources, checks and uncertain claims.
@@ -65,8 +68,8 @@ npm run demo    # free demo case in Docker; not a benchmark result
 | [glhf/bixbench_v1/](glhf/bixbench_v1/) | The adapter and three-role swarm for BixBench v1.5. |
 | [docs/](docs/) | Setup, design, results and reference guides. |
 
-See [the codebase map](docs/codebase.md) for more detail. The desktop shell is still in
-this branch, but is paused; use the browser app. See [the developer guide](docs/developers.md).
+See [the codebase map](docs/codebase.md) for more detail. The desktop shell is paused;
+use the browser app. See [the developer guide](docs/developers.md).
 
 ## Running a review
 
@@ -383,14 +386,11 @@ npm run check -- --all     # also runs the Python suites
 
 It prints one line per part, `ok` or `FAIL`. All five parts should print `ok`: no
 merge-conflict markers, both type checks clean, engine tests and dashboard tests pass.
-Prefer this report to `npm test`: that command runs the harness tests, type checks and engine
-tests, but not the dashboard tests. It has no per-file time limit. The health report runs each
-engine test file with a time limit. An older note says `app.test.ts` hangs; it now exits when
-run on its own, so that note is not a reliable description of the current code.
-The default check does not run the Python suites; use `--all` for those.
+Prefer this report to `npm test`. `npm test` runs the harness tests, type checks and engine
+tests, but not the dashboard tests, and has no time limit per test file. The default check does
+not run the Python suites; use `--all` for those.
 If a line says `FAIL`, read its detail; run `npm run setup` again if dependencies are missing.
-More about the tests is in
-[docs/developers.md](docs/developers.md#tests).
+More about the tests is in [docs/developers.md](docs/developers.md#tests).
 
 ## Docs index
 
