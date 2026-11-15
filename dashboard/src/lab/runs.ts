@@ -28,13 +28,13 @@ const briefTitle = (brief: string) => { const t = brief.replace(/\.md$/, "").rep
 export const boardRuns = (reply: unknown): RunRef[] => list(reply).flatMap((r) => {
   const id = str(r.id); if (!id) return []
   const status = str(r.status) ?? ""
-  return [{ kind: "board" as const, id, title: briefTitle(str(r.brief) ?? id), startedAt: num(r.startedAt), live: status === "running", status: status === "running" ? "in progress" : status === "failed" ? "failed" : status === "paused" ? "paused" : "finished" }]
+  return [{ kind: "board" as const, id, title: briefTitle(str(r.brief) ?? id), startedAt: num(r.startedAt), live: status === "running", status: status === "running" ? "in progress" : status === "failed" ? "failed" : status === "paused" ? "paused" : "finished", provenance: r.example === true ? "example" as const : undefined }]
 })
 /** GET /api/research: research answers ({items: [...]}). */
 export const answerRuns = (reply: unknown): RunRef[] => list((reply as Rec | undefined)?.items ?? reply).flatMap((r) => {
   const id = str(r.id); if (!id) return []
   const status = str(r.status) ?? ""
-  return [{ kind: "answer" as const, id, title: clip(str(r.question) ?? id, 140), startedAt: num(r.startedAt), live: status === "running" || status === "queued", status: status === "running" ? "in progress" : status === "queued" ? "waiting" : status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "finished", provenance: provenanceOf({ mode: r.mode }) }]
+  return [{ kind: "answer" as const, id, title: clip(str(r.question) ?? id, 140), startedAt: num(r.startedAt), live: status === "running" || status === "queued", status: status === "running" ? "in progress" : status === "queued" ? "waiting" : status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "finished", provenance: provenanceOf({ mode: r.mode, example: r.example }) }]
 })
 /** GET /api/glhf/runs: swarm and single-agent runs. */
 export const swarmRuns = (reply: unknown): RunRef[] => list(reply).flatMap((r) => {

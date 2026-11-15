@@ -191,7 +191,13 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const copy = (turnId: number, answer: string) => { void navigator.clipboard.writeText(answer).then(() => { setCopied(turnId); window.setTimeout(() => setCopied((c) => (c === turnId ? undefined : c)), 2000) }, () => setCopied(undefined)) }
   const canCopy = typeof navigator !== "undefined" && !!navigator.clipboard?.writeText
 
-  const composer = (
+  const answers = turns.flatMap((t) => (t.role === "assistant" && "research" in t ? [t.research.id] : []))
+  const inspected = inspect.id && answers.includes(inspect.id) ? inspect.id : answers[answers.length - 1]
+  const seenEvents = useSeenEvents(inspected)
+  const seenState = useMemo(() => (seenEvents.length ? foldAnswer(seenEvents) : undefined), [seenEvents])
+  const composer = seenState?.example ? (
+    <div className="empty-note"><p>This example is read-only. Start a new question to do your own research.</p><button type="button" className="btn" onClick={clear}>Start a new question</button></div>
+  ) : (
     <AskBox id="home-box" textareaRef={box} rows={empty ? 2 : 1} value={text} autoFocus placeholder={empty ? "Ask a research question…" : "Ask a follow-up…"}
       onChange={(next) => { setText(next); if (problem?.control === "box") setProblem(undefined) }} onSubmit={(asked) => void send(asked)}
       efforts={efforts} effort={effort} onEffort={pickEffort} name="home-effort" busy={sending !== undefined}
@@ -233,10 +239,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   )
 
   // The inspector shows one answer: the one asked for, else the latest. It reads the events that answer received.
-  const answers = turns.flatMap((t) => (t.role === "assistant" && "research" in t ? [t.research.id] : []))
-  const inspected = inspect.id && answers.includes(inspect.id) ? inspect.id : answers[answers.length - 1]
-  const seenEvents = useSeenEvents(inspected)
-  const seenState = useMemo(() => (seenEvents.length ? foldAnswer(seenEvents) : undefined), [seenEvents])
   const canInspect = !!inspected && tabsOf(seenState, seenEvents).length > 0
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }

@@ -205,10 +205,10 @@ export function BoardView() {
           <select aria-label="Review to show" value={runId ?? ""} title={runId} onChange={(e) => setRunId(e.target.value || undefined)}>
             {runs.length === 0 && <option value="">No reviews yet</option>}
             {runId && !known && runs.length > 0 && <option value={runId}>{plainTitle(runId)}</option>}
-            {runs.map((r) => <option key={r.id} value={r.id}>{clip(plainTitle(r.brief), 44)} · {stamp(r.startedAt)}{r.status === "done" ? "" : ` · ${runState(r.status)}`}</option>)}
+            {runs.map((r) => <option key={r.id} value={r.id}>{clip(plainTitle(r.brief), 44)} · {stamp(r.startedAt)}{r.example ? " · Example · practice, $0" : ""}{r.status === "done" ? "" : ` · ${runState(r.status)}`}</option>)}
           </select>
         </label>
-        {(runRow?.status === "paused" || runRow?.status === "failed") && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
+        {!runRow?.example && (runRow?.status === "paused" || runRow?.status === "failed") && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
         <span className="board-new">
           <select aria-label="Question for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
             {briefs.map((b) => <option key={b} value={b}>{plainTitle(b)}</option>)}
@@ -227,7 +227,7 @@ export function BoardView() {
             <p className="story-facts">
               <StatusPill state={state} />
               {startedAs !== undefined && (
-                <span data-testid="run-mode" className="story-mode"><Provenance kind={provenanceOf({ scripted: startedAs })} /></span>
+                <span data-testid="run-mode" className="story-mode"><Provenance kind={provenanceOf({ scripted: startedAs, example: runRow?.example })} /></span>
               )}
               <span className="muted small">
                 {runRow && <>Started {plainWhen(runRow.startedAt)}</>}

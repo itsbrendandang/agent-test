@@ -23,6 +23,7 @@ export interface Totals {
 }
 
 export function totalsOf(runs: readonly RunRef[]): Totals {
+  runs = runs.filter((r) => r.provenance !== "example")
   const byKind = Object.fromEntries(KINDS.map((k) => [k, { all: 0, research: 0, practice: 0 }])) as Totals["byKind"]
   const totals: Totals = { all: runs.length, research: 0, practice: 0, unknown: 0, inProgress: 0, failed: 0, byKind }
   for (const run of runs) {

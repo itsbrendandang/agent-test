@@ -1,0 +1,306 @@
+{
+ "id": "a-20261115081826-5a52df21",
+ "thread": "t-4f661394e8",
+ "kind": "answer",
+ "question": "What GLP-1s are working in the market right now?",
+ "effort": "quick",
+ "mode": "demo",
+ "status": "done",
+ "startedAt": 1794759506419,
+ "caps": {
+  "maxUsd": 0,
+  "maxSeconds": 120
+ },
+ "models": {
+  "planner": "scripted",
+  "writer": "scripted",
+  "checker": "scripted",
+  "critic": "scripted"
+ },
+ "steps": [
+  {
+   "step": "prepare",
+   "kind": "prepare",
+   "label": "Preparing the searches",
+   "agent": "planner",
+   "input": {
+    "model": "scripted",
+    "level": "quick",
+    "webSearches": 1,
+    "literatureQueries": 2,
+    "databaseLookups": 0
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "Example sources only."
+  },
+  {
+   "step": "search:fixture:1",
+   "kind": "search",
+   "label": "Loading example sources",
+   "provider": "fixture",
+   "query": "What GLP-1s are working in the market right now?",
+   "agent": "searcher",
+   "input": {
+    "provider": "Example sources (demo)",
+    "query": "What GLP-1s are working in the market right now?",
+    "note": "Example sources. Nothing is searched in a demo."
+   },
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "summary": "4 results."
+  },
+  {
+   "step": "evaluate:fixture:1",
+   "kind": "evaluate",
+   "label": "Screening 4 results",
+   "provider": "fixture",
+   "agent": "searcher",
+   "input": {
+    "results": 4,
+    "model": "scripted",
+    "question": "KRAS G12C inhibitors: response, hERG and resistance (demo)"
+   },
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "kept": 3,
+   "summary": "3 of 4 kept."
+  },
+  {
+   "step": "write",
+   "kind": "write",
+   "agent": "writer",
+   "label": "Writing the answer from 3 sources",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 2000,
+    "words": 220
+   },
+   "status": "completed",
+   "ms": 3,
+   "summary": "68 words, 3 cited sentences."
+  },
+  {
+   "step": "check",
+   "kind": "check",
+   "agent": "checker",
+   "label": "Checking 3 statements against their sources",
+   "input": {
+    "statements": 3,
+    "checker": "scripted",
+    "rule": "the checker must quote a passage; a program must find it in the source, with the statement's numbers"
+   },
+   "status": "completed",
+   "ms": 4,
+   "summary": "2 hold up, 1 contradicted."
+  },
+  {
+   "step": "review",
+   "kind": "review",
+   "agent": "critic",
+   "label": "Reviewing the whole draft",
+   "input": {
+    "model": "scripted",
+    "looksFor": "overreach, missing caveats, weight on preprints or reviews, sources that disagree, parts of the question that were skipped"
+   },
+   "status": "completed",
+   "ms": 2,
+   "found": 1,
+   "summary": "1 note: 1 blocking."
+  },
+  {
+   "step": "revise",
+   "kind": "revise",
+   "agent": "writer",
+   "label": "Revising the answer once",
+   "input": {
+    "model": "scripted",
+    "failedStatements": 1,
+    "criticNotes": 1
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "2 cited sentences kept, 0 new or changed, 1 removed or rewritten."
+  },
+  {
+   "step": "review:2",
+   "kind": "review",
+   "agent": "critic",
+   "label": "Reading the revision against 1 note of the reviewer",
+   "input": {
+    "model": "scripted",
+    "notes": 1
+   },
+   "status": "completed",
+   "ms": 1,
+   "found": 1,
+   "summary": "1 of 1 resolved."
+  },
+  {
+   "step": "save",
+   "kind": "save",
+   "label": "Saving the answer and its files",
+   "status": "completed",
+   "ms": 0,
+   "summary": "The record and three result files."
+  }
+ ],
+ "searches": [
+  {
+   "provider": "fixture",
+   "query": "What GLP-1s are working in the market right now?",
+   "ran": true,
+   "found": 4,
+   "kept": 3
+  }
+ ],
+ "sources": [
+  {
+   "n": 1,
+   "url": "https://example.org/mock/kras-g12c-clinical-review",
+   "title": "KRAS G12C inhibitors in NSCLC: clinical review (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients. Acquired resistance through secondary KRAS mutations and bypass signaling is common within a year.",
+   "studyType": "clinical",
+   "relevance": 1,
+   "cited": true
+  },
+  {
+   "n": 2,
+   "url": "https://example.org/mock/herg-acrylamide",
+   "title": "hERG liability of piperazine acrylamides (mock)",
+   "provider": "fixture",
+   "note": "example source, in vitro",
+   "text": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+   "studyType": "in_vitro",
+   "relevance": 1,
+   "cited": true
+  },
+  {
+   "n": 3,
+   "url": "https://example.org/mock/resistance-mechanisms",
+   "title": "Resistance mechanisms to KRAS G12C inhibition (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "text": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification. Compounds binding a different pocket region retained activity against Y96D in cell assays.",
+   "studyType": "clinical",
+   "relevance": 1,
+   "cited": false
+  }
+ ],
+ "statements": [
+  {
+   "stage": "final",
+   "index": 0,
+   "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients.",
+   "sources": [
+    1
+   ],
+   "verdict": "verified",
+   "quote": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients.",
+   "quoteSource": 1,
+   "quoteFound": true,
+   "checker": "scripted",
+   "carried": true
+  },
+  {
+   "stage": "final",
+   "index": 1,
+   "text": "Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations.",
+   "sources": [
+    2
+   ],
+   "verdict": "verified",
+   "quote": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+   "quoteSource": 2,
+   "quoteFound": true,
+   "checker": "scripted",
+   "carried": true
+  }
+ ],
+ "recommendations": [
+  {
+   "label": "Recommended next step",
+   "text": "Demo: look at how the example source on hERG is quoted.",
+   "why": "Demo text: the example sentence that cites it passed its check.",
+   "basis": [
+    2
+   ],
+   "does": "It shows what a checked sentence looks like. Nothing is searched."
+  }
+ ],
+ "usd": 0,
+ "review": {
+  "checker": "scripted",
+  "critic": "scripted",
+  "revised": true,
+  "notes": [
+   {
+    "index": 0,
+    "reviewer": "critic",
+    "severity": "blocking",
+    "text": "Demo note (fixed text): the third cited sentence says the opposite of its example source, which reports resistance mutations. Remove it.",
+    "statement": 2,
+    "resolved": true,
+    "how": "the reviewer read the revision and judged it resolved: Demo text: the sentence is no longer in the answer.",
+    "by": "reviewer"
+   }
+  ]
+ },
+ "workStartedAt": 1794759506431,
+ "workedMs": 39,
+ "opening": "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked.",
+ "selection": {
+  "counts": {
+   "results": 4,
+   "unique": 4,
+   "selected": 3
+  },
+  "criteria": "Kept: results that the screening model judged to help answer the question and that report findings of their own, or are reviews. At most 6 are numbered at the quick level, the most relevant first, with the searches taking turns so that one search cannot fill the list. \"Relevant\" is the screening model's yes, partly or no. It is not a calibrated score.",
+  "selected": [
+   {
+    "n": 1,
+    "why": "Screened as answering the question; study type: clinical.",
+    "limitation": "An example source, not a real one."
+   },
+   {
+    "n": 2,
+    "why": "Screened as answering the question; study type: in vitro.",
+    "limitation": "An example source, not a real one."
+   },
+   {
+    "n": 3,
+    "why": "Screened as answering the question; study type: clinical.",
+    "limitation": "An example source, not a real one."
+   }
+  ],
+  "notSelected": [
+   {
+    "title": "Top 10 biotech stocks to watch (mock)",
+    "url": "https://example.org/mock/marketing-blog",
+    "provider": "fixture",
+    "reason": "Screened as not about the question."
+   }
+  ]
+ },
+ "draft": "**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.**\n\nApproved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1]. Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2]. No resistance mutations were found in patients progressing on KRAS G12C inhibitors [3].\n\nSwitch to Real to ask your question for real.",
+ "answer": {
+  "markdown": "**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.**\n\nApproved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1]. Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2].\n\nSwitch to Real to ask your question for real.",
+  "direct": "Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked."
+ },
+ "counts": {
+  "sources": 3,
+  "statements": 2,
+  "verified": 2,
+  "contradicted": 0,
+  "unsupported": 0,
+  "unchecked": 0
+ },
+ "missing": [],
+ "finishedAt": 1794759506470,
+ "seconds": 0
+}

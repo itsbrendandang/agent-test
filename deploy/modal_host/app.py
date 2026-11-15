@@ -60,6 +60,7 @@ def build_image() -> modal.Image:
         .add_local_dir(repo / "dashboard", "/build/dashboard", copy=True, ignore=[*never, "dist", "docs", "*.md"])
         .run_commands("cd /build/dashboard && VITE_ENGINE_URL= npx vite build --outDir /srv/dashboard --emptyOutDir && test -f /srv/dashboard/index.html && ! grep -rl 'localhost:8787' /srv/dashboard && rm -rf /build")
         .add_local_dir(repo / "engine/src", "/app/engine/src", copy=True, ignore=never)
+        .add_local_dir(repo / "examples", "/app/examples", copy=True, ignore=never)
         # What the board reads: its settings, members, shared context, briefs, and the notes it starts with. Not board/runs.
         .add_local_file(repo / "board/config.yaml", "/app/board/config.yaml", copy=True)
         .add_local_dir(repo / "board/agents", "/app/board/agents", copy=True, ignore=never)

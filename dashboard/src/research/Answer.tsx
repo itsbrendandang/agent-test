@@ -100,7 +100,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
   return (
     <>
       <p className="answer-kind">
-        <Provenance kind={provenanceOf({ mode: s.mode })} />
+        <Provenance kind={provenanceOf({ mode: s.mode, example: s.example })} />
         <span className="muted small">
           {demo ? "Example text and example sources. Nothing was searched and no AI model was asked."
             : s.mode === "real" ? "Written by an AI model from the sources below. A second model, from another company, checked the cited statements." : ""}
@@ -280,7 +280,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
       {!working && (
         <div className="answer-actions">
           {canCopy && s.markdown && <button type="button" className="link-btn" onClick={copy}>{copied ? "Copied" : "Copy answer"}</button>}
-          {latest && onAgain && (s.status === "done" || s.status === "cancelled") && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}
+          {!s.example && latest && onAgain && (s.status === "done" || s.status === "cancelled") && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}
           {onReview && s.status === "done" && <button type="button" className="link-btn" onClick={onReview}>Have a team review this</button>}
           {onInspect && (s.sources.length > 0 || s.statements.length > 0) && <button type="button" className="link-btn" onClick={() => onInspect("evidence")}>Inspect the evidence</button>}
         </div>

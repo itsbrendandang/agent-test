@@ -139,10 +139,10 @@ export function filterRows(rows: readonly EventRow[], filter: LogFilter): EventR
 }
 
 export function logDownload(rows: readonly EventRow[], run: { id: string; kind: RunKind; provenance?: Provenance }, format: "json" | "csv"): string {
-  if (format === "json") return JSON.stringify({ run, rows }, null, 2)
+  if (format === "json") return JSON.stringify({ run: run.provenance === "example" ? { ...run, example: true, provenanceLabel: "Example · practice, $0" } : run, rows }, null, 2)
   const cell = (v: unknown) => {
     const text = String(v ?? "")
     return `"${(/^\s*[=+@-]|^[\t\r]/.test(text) ? "'" : "") + text.replaceAll('"', '""')}"`
   }
-  return [["Run", "Run kind", "Provenance", "Time (ISO)", "Agent", "Step kind", "What happened", "USD", "Cost scope", "Sources"], ...rows.map((r) => [run.id, run.kind, run.provenance ?? "unknown", r.at !== undefined && Number.isFinite(new Date(r.at).getTime()) ? new Date(r.at).toISOString() : "", r.agent, r.kind, r.text, r.usd, r.costScope, r.sources.map((s) => `${s.title}: ${s.url}`).join("; ")])].map((r) => r.map(cell).join(",")).join("\r\n")
+  return [["Run", "Run kind", "Provenance", "Time (ISO)", "Agent", "Step kind", "What happened", "USD", "Cost scope", "Sources"], ...rows.map((r) => [run.id, run.kind, run.provenance === "example" ? "Example · practice, $0" : run.provenance ?? "unknown", r.at !== undefined && Number.isFinite(new Date(r.at).getTime()) ? new Date(r.at).toISOString() : "", r.agent, r.kind, r.text, r.usd, r.costScope, r.sources.map((s) => `${s.title}: ${s.url}`).join("; ")])].map((r) => r.map(cell).join(",")).join("\r\n")
 }

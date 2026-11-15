@@ -199,7 +199,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
       case "run.started":
         m.status = "running"; m.startedAt = at ?? m.startedAt
         m.title = str(e.title)
-        m.provenance = provenanceOf({ scripted: typeof e.mock === "boolean" ? e.mock : undefined })
+        m.provenance = provenanceOf({ scripted: typeof e.mock === "boolean" ? e.mock : undefined, example: e.example })
         m.runId ??= str(e.runId)
         b.set("navigator", "working", "Framing the question for the team.", at)
         b.log(at, `The review started${m.provenance === "practice" ? " (practice run: fixed text, not research)" : ""}.`)
@@ -430,7 +430,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "research.resumed": b.log(at, "The answer went on after the engine restarted."); break
       case "research.started":
         m.title = str(e.question)
-        m.provenance = provenanceOf({ mode: e.mode })
+        m.provenance = provenanceOf({ mode: e.mode, example: e.example })
         m.runId ??= str(e.id) ?? str(e.run)
         m.startedAt = at ?? m.startedAt
         b.log(at, `The answer started${m.provenance === "practice" ? " (practice: fixed example text, nothing is searched)" : ""}.`)

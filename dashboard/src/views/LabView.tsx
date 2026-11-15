@@ -3,7 +3,7 @@ import { EngineOffline } from "@/components/Shared"
 import { Provenance } from "@/components/Provenance"
 import { readEngine, problemOf, type Problem } from "@/lib/engine"
 import { plainWhen } from "@/lib/format"
-import { provenanceOf } from "@/lib/provenance"
+import { provenanceOf, PROVENANCE_WORD } from "@/lib/provenance"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { answerLab, answerOrder, boardLab, boardOrder, swarmLab, type LabEvent } from "@/lab/adapter"
 import { EventLog } from "@/lab/EventLog"
@@ -86,7 +86,7 @@ export function LabView() {
   const boardIds = useMemo(() => [...new Set([...(chosen?.kind === "board" ? [chosen.id] : []), ...listed.filter((r) => r.kind === "board").slice(0, 8).map((r) => r.id)])], [listed, chosen])
   const scripted = useBoardScripted(boardIds)
   const titles = boardTitles(boardIds)
-  const known = useMemo(() => listed.map((r) => (r.kind === "board" ? { ...r, title: titles[r.id] ?? r.title, provenance: provenanceOf({ scripted: scripted[r.id] }) } : r)), [listed, scripted, titles])
+  const known = useMemo(() => listed.map((r) => (r.kind === "board" ? { ...r, title: titles[r.id] ?? r.title, provenance: r.provenance ?? provenanceOf({ scripted: scripted[r.id] }) } : r)), [listed, scripted, titles])
 
   // The run that is shown. Without a choice: the newest run in progress; else the run that was last shown in
   // progress (so the view does not jump away from a run the moment it ends); else the newest run.
@@ -112,7 +112,7 @@ export function LabView() {
           {target && !known.some((r) => `${r.kind}/${r.id}` === key) && <option value={key}>{target.title}</option>}
           {known.map((r) => (
             <option key={`${r.kind}/${r.id}`} value={`${r.kind}/${r.id}`}>
-              {r.title.length > 80 ? `${r.title.slice(0, 79)}…` : r.title} · {KIND_WORD[r.kind]} · {plainWhen(r.startedAt)}{r.provenance ? ` · ${r.provenance === "practice" ? "Practice" : r.provenance === "live" ? "Live research" : "Local model"}` : ""}{r.status ? ` · ${r.status}` : ""}
+              {r.title.length > 80 ? `${r.title.slice(0, 79)}…` : r.title} · {KIND_WORD[r.kind]} · {plainWhen(r.startedAt)}{r.provenance ? ` · ${PROVENANCE_WORD[r.provenance]}` : ""}{r.status ? ` · ${r.status}` : ""}
             </option>
           ))}
         </select>
