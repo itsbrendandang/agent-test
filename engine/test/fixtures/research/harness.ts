@@ -28,6 +28,8 @@ export interface Net {
   exa: ((body: Record<string, unknown>) => Response | Promise<Response>)[]
   /** The answer of Europe PMC for a query. */
   europepmc: (query: string) => Response | Promise<Response>
+  /** The answer of OpenAlex for a query; by default it finds nothing. */
+  openalex?: (query: string) => Response | Promise<Response>
 }
 export const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
@@ -50,8 +52,9 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
     return (net.exa[Math.min(n, net.exa.length) - 1])(body ?? {})
   }
   if (url.startsWith("https://www.ebi.ac.uk/europepmc/webservices/rest/search?")) return net.europepmc(new URL(url).searchParams.get("query") ?? "")
-  // The other free literature indexes (scholarly.ts) find nothing here, so every answer's papers are Europe PMC's.
-  if (url.startsWith("https://api.openalex.org/works?")) return jsonResponse({ results: [] })
+  // The other free literature indexes (scholarly.ts) find nothing here unless a test gives OpenAlex an answer,
+  // so by default every answer's papers are Europe PMC's.
+  if (url.startsWith("https://api.openalex.org/works?")) return net.openalex ? net.openalex(new URL(url).searchParams.get("search") ?? "") : jsonResponse({ results: [] })
   if (url.startsWith("https://api.semanticscholar.org/graph/v1/paper/search?")) return jsonResponse({ data: [] })
   if (url.startsWith("https://export.arxiv.org/api/query?")) return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 })
   throw new Error(`a test tried to reach ${url}`)
