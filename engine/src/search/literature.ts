@@ -61,9 +61,12 @@ export function parseEuropePmcPapers(body: unknown): FoundPaper[] {
     const preprint = r.source === "PPR"
     const url = r.source === "MED" && /^\d+$/.test(r.pmid ?? "") ? `https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/` : `https://europepmc.org/article/${encodeURIComponent(r.source ?? "MED")}/${r.id}`
     const where = [preprint ? "preprint" : r.journalInfo?.journal?.title, /^\d{4}$/.test(r.pubYear ?? "") ? r.pubYear : undefined].filter(Boolean).join(", ")
-    const review = (r.pubTypeList?.pubType ?? []).some((t) => /review/i.test(t))
+    const types = r.pubTypeList?.pubType ?? []
+    const review = types.some((t) => /review/i.test(t))
+    // A retracted paper, or the notice that retracts one, is marked so: the evidence verifier checks that a source is not retracted.
+    const retraction = types.some((t) => /^retracted publication$/i.test(t)) ? " [retracted]" : types.some((t) => /^retraction of publication$/i.test(t)) ? " [retraction notice]" : ""
     const doi = cleanDoi(r.doi)
-    items.push({ item: { url, title: `${title}${where ? ` (${where})` : ""}${preprint ? " [preprint]" : review ? " [review]" : ""}`.slice(0, 300), text, provider: "europepmc" }, ...(doi ? { doi } : {}) })
+    items.push({ item: { url, title: `${`${title}${where ? ` (${where})` : ""}${preprint ? " [preprint]" : review ? " [review]" : ""}`.slice(0, 300 - retraction.length)}${retraction}`, text, provider: "europepmc" }, ...(doi ? { doi } : {}) })
   }
   return items
 }

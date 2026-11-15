@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import * as board from "../board/board.ts"
 import { BriefRejected, loadBrief } from "../brief.ts"
-import { type BoardConfig, path } from "../config.ts"
+import { type BoardConfig, path, VERIFIER } from "../config.ts"
 import { writeWhole } from "../fsx.ts"
 import { HttpError, isSafeId } from "../http.ts"
 import { clean, loadSpecialists, matchSpecialists, MAX_METHODS, methodsFor, namesOrigin, type Specialist, SPECIALIST_TIER } from "../specialists.ts"
@@ -114,7 +114,8 @@ function checkedSpecialist(a: PlanAgent, specialists: Specialist[], members: Mem
 
 /**
  * The agents for an effort level: the lead, then the members.
- * - Always: the member that gathers evidence (the one with the search tool) and a member that makes checkable statements
+ * - Always: the member that gathers evidence (the one with the web search), the evidence verifier that rechecks it
+ *   (config.ts VERIFIER: board.ts keeps it on every run anyway), and a member that makes checkable statements
  *   (one whose deliverable is claims to test, else the first other member). Without them a run has nothing to check a
  *   claim against, or nothing to check. At standard and deep also the Critic.
  * - The other places, up to memberLimit, go to the ranked board members and the ranked specialists. Specialists get at
@@ -127,11 +128,13 @@ export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, mem
   const invited = ranked.filter((a) => a.source === "specialist").map((a) => checkedSpecialist(a, specialists, members)).filter((a): a is PlanAgent => Boolean(a))
     .filter((a, i, all) => all.findIndex((x) => x.name === a.name) === i)
   const gatherer = members.find((m) => m.tools.includes("exa_search"))
-  const claimMaker = members.find((m) => m !== gatherer && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer)
+  const verifier = members.find((m) => m.name === VERIFIER)
+  const claimMaker = members.find((m) => m !== gatherer && m !== verifier && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer && m !== verifier)
   const critic = effort.id === "quick" ? undefined : members.find((m) => m.name === "critic")
   const required: PlanAgent[] = []
   const need = (m: Member | undefined, why: string) => { if (m && !required.some((r) => r.name === m.name)) required.push(board.find((a) => a.name === m.name) ?? { name: m.name, title: m.title, why }) }
-  need(gatherer, "Added at every effort level: the only member that can search, so the others have sources to cite.")
+  need(gatherer, "Added at every effort level: the member that gathers the sources, so the others have sources to cite.")
+  need(verifier, "Added at every effort level: rechecks the Scout's sources and searches for what it missed, before the lead decides.")
   need(claimMaker, "Added at every effort level: makes statements that can be checked, and proven wrong, against the evidence.")
   need(critic, "Added at standard and deep effort: tries to disprove the claims the board makes, on the other vendor's model.")
   const free = Math.max(0, memberLimit(effort, members) - required.length)

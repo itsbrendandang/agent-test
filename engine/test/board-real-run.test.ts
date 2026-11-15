@@ -100,12 +100,14 @@ test("evidence events and the run summary say where the sources came from; the c
 test("the member that searches replies first; the others get the sources in their prompt, escaped, and can cite them", async () => {
   const config = loadConfig(), roster = loadRoster(config)
   const phases = replyPhases(roster)
-  assert.equal(phases.length, 2)
+  assert.equal(phases.length, 3, "the scout, then the evidence verifier, then the rest")
   assert.deepEqual(phases[0].map((a) => a.name), roster.filter((a) => a.tools.includes("exa_search")).map((a) => a.name))
-  assert.ok(phases[0].some((a) => a.name === "scout") && phases[1].every((a) => !a.tools.includes("exa_search")), "the scout, who searches, speaks before the members who need what it found")
-  assert.equal(phases[0].length + phases[1].length, roster.length)
-  assert.equal(replyPhases(roster.filter((a) => !a.tools.includes("exa_search"))).length, 1, "no searcher: one phase")
-  assert.equal(replyPhases(roster.filter((a) => a.tools.includes("exa_search"))).length, 1, "only searchers: one phase")
+  assert.deepEqual(phases[1].map((a) => a.name), ["evidence-verifier"])
+  assert.ok(phases[0].some((a) => a.name === "scout") && phases[2].every((a) => !a.tools.includes("exa_search")), "the scout, who searches, speaks before the members who need what it found")
+  assert.equal(phases.flat().length, roster.length)
+  const plain = roster.filter((a) => !a.verifies)
+  assert.equal(replyPhases(plain.filter((a) => !a.tools.includes("exa_search"))).length, 1, "no searcher: one phase")
+  assert.equal(replyPhases(plain.filter((a) => a.tools.includes("exa_search"))).length, 1, "only searchers: one phase")
 
   const pool: Record<string, EvidenceItem> = {}
   for (let i = 0; i < 14; i++) pool[`https://x.example/${i}`] = { url: `https://x.example/${i}`, title: `Paper ${i} <b>bold</b>`, text: `Finding ${i}: IC50 was ${i} nM. ${"y".repeat(900)}`, studyType: "in_vitro", provider: i === 0 ? "fixture" : "exa" }

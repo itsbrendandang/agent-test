@@ -47,6 +47,12 @@ export function loadConfig(file = resolve(ROOT, "board/config.yaml"), env: NodeJ
 /** A board/config.yaml that cannot be used as it is. The message names the file and the key. */
 export class ConfigError extends Error {}
 
+/**
+ * The member that rechecks the scout's report in every review (board/agents/evidence-verifier.md). It is always on: the
+ * config must list it, and a run's plan (overrides.json) cannot take it off the team (board.ts applyOverrides).
+ */
+export const VERIFIER = "evidence-verifier"
+
 /** Limits every run reads. A value that is not a number is never reached (`spent >= "$5"` is false), so it is refused. */
 const REQUIRED_LIMITS = ["max_minutes", "max_usd", "max_rounds", "daily_usd"] as const
 /** Limits with a default in the code: absent or empty is fine, anything else must be a number. */
@@ -55,7 +61,7 @@ const OPTIONAL_LIMITS = ["lead_turns", "member_turns", "max_literature_searches"
 
 /**
  * Refuses a config whose limits or team list would not hold: every `meeting` limit must be a number of 0 or more, and
- * the `board:` list must name the scout (the only member that searches, AGENTS.md). Called on every load, so a typo
+ * the `board:` list must name the scout (the member that gathers the sources, AGENTS.md) and the evidence verifier. Called on every load, so a typo
  * made before a paid run stops the engine or the run at its start, naming the key, instead of switching a cap off.
  */
 export function checkConfig(raw: unknown, file = "board/config.yaml"): BoardConfig {
@@ -67,7 +73,8 @@ export function checkConfig(raw: unknown, file = "board/config.yaml"): BoardConf
   for (const key of REQUIRED_LIMITS) if (!limit(meeting[key])) say(key, meeting[key])
   for (const key of OPTIONAL_LIMITS) if (meeting[key] !== undefined && meeting[key] !== null && !limit(meeting[key])) say(key, meeting[key])
   if (!Array.isArray(config.board) || !config.board.every((n) => typeof n === "string")) fail("board: must be a list of member names")
-  if (!config.board.includes("scout")) fail("board: must include scout, the only member that searches. Without it a review gathers no sources")
+  if (!config.board.includes("scout")) fail("board: must include scout, the member that gathers the sources. Without it a review gathers no sources")
+  if (!config.board.includes(VERIFIER)) fail(`board: must include ${VERIFIER}, which rechecks the scout's sources in every review. Without it one wrong source reaches every member unchecked`)
   return config
 }
 

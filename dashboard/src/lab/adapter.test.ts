@@ -164,6 +164,29 @@ describe("a team review (boardLab)", () => {
     expect(states(m)).toMatchObject({ pilot: "handing-off", reviser: "handing-off" })
     expect(CHARACTER_IDS.filter((id) => !m.characters[id].inRun)).toEqual(["librarian"]) // no team list: no member is ruled out
   })
+
+  it("shows the evidence verifier as the Librarian: on the team, captioned with its title, its own searches and its reply", () => {
+    const at = (s: number) => T0 + s * 1000
+    const events: LabEvent[] = [
+      { key: "run", at: at(0), type: "run.started", title: "x", mock: true },
+      { key: "roster", at: at(0.1), type: "run.roster", members: [
+        { name: "lead-scientist", title: "Lead Scientist", role: "lead", source: "board" },
+        { name: "scout", title: "Scout (Data and Evidence)", role: "member", source: "board" },
+        { name: "evidence-verifier", title: "Evidence Verifier (Second Check on the Scout)", role: "member", source: "board" },
+      ] },
+      { key: "round:1", at: at(1), type: "round.started", round: 1, message: "Round 1.", final: false },
+      { key: "evidence:a", at: at(2), type: "evidence.triaged", member: "scout", query: "web", kept: 3, dropped: 0, provider: "exa", items: [] },
+      { key: "evidence:b", at: at(3), type: "evidence.triaged", member: "evidence-verifier", query: "recheck", kept: 2, dropped: 1, provider: "europepmc", items: [] },
+      { key: "reply:1:evidence-verifier", at: at(4), type: "member.replied", round: 1, member: "evidence-verifier", text: "In short: checked." },
+    ]
+    const m = boardLab(events)
+    expect(m.characters.librarian).toMatchObject({ inRun: true, label: "Evidence Verifier" })
+    expect(m.characters.librarian.standsFor).toMatch(/rechecks each of the Scout's sources/)
+    expect(trips(m, "librarian").filter((t) => t.kind === "fetch").map((t) => t.provider)).toEqual(["europepmc"]) // its own search, not the scout's
+    expect(trips(m, "scout").filter((t) => t.kind === "fetch").map((t) => t.provider)).toEqual(["exa"])
+    expect(trips(m, "librarian").some((t) => t.kind === "handoff" && t.to === "navigator")).toBe(true) // its reply goes to the lead
+    expect(m.visitors).toEqual([]) // a board member, not a visiting specialist
+  })
 })
 
 describe("a research answer (answerLab)", () => {

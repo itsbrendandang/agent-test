@@ -119,10 +119,11 @@ const markLabel = (verdict: unknown, text: string) => { const m = markOf(verdict
 const BOARD_MEMBER: Record<string, CharacterId> = {
   "lead-scientist": "navigator", scout: "scout", proposer: "proposer", experimenter: "experimenter", pilot: "pilot",
   "methods-auditor": "auditor", auditor: "auditor", critic: "critic", reviser: "reviser", finisher: "finisher", reporter: "reporter",
+  "evidence-verifier": "librarian", // board/agents/evidence-verifier.md: rechecks the scout with the literature and the databases, the Librarian's work
 }
 const BOARD_STANDS: Partial<Record<CharacterId, string>> = {
   navigator: "The lead scientist: runs the discussion and writes the decision memo.",
-  scout: "The scout: the one member that searches (the web through Exa, the literature, the public databases). In a practice run it gets example sources instead.",
+  scout: "The scout: gathers the team's sources (the web through Exa, the literature, the public databases). In a practice run it gets example sources instead.",
   proposer: "The proposer: plans the research and names the statements to test.",
   experimenter: "The experimenter in its full-run mode.",
   pilot: "The experimenter in its Pilot mode: a first try on a small part of the data. The lead names the mode each round.",
@@ -133,7 +134,9 @@ const BOARD_STANDS: Partial<Record<CharacterId, string>> = {
   reporter: "The reporter, and the decision memo.",
   finisher: "The memo's completeness check: code refuses a memo with a required section missing.",
 }
-const BOARD_ABSENT = "A team review's searches are all made by the Scout. The Librarian works in research answers."
+const BOARD_ABSENT = "Without the evidence verifier on the team, a review's searches are all made by the Scout. The Librarian works in research answers."
+/** What the Librarian stands for in a review whose team has the evidence verifier. */
+const BOARD_VERIFIER = "The evidence verifier: rechecks each of the Scout's sources right after it, in every round, and searches the literature and the public databases for what the Scout missed."
 /** Captions before the team list arrives: each agent's own name, made readable. The team list brings the engine's titles. */
 const BOARD_LABELS: Partial<Record<CharacterId, string>> = {
   navigator: agentIdentity("lead-scientist").label, auditor: agentIdentity("methods-auditor").label, guardian: agentIdentity("checker").label, finisher: "Memo check",
@@ -228,7 +231,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         // Who is in this run: the members the roster names, and the two steps code does (the checks, the memo's check).
         const has = (n: string) => roster!.has(n)
         const present: Record<CharacterId, boolean> = {
-          navigator: has("lead-scientist"), scout: has("scout"), librarian: false, proposer: has("proposer"),
+          navigator: has("lead-scientist"), scout: has("scout"), librarian: has("evidence-verifier"), proposer: has("proposer"),
           experimenter: has("experimenter"), pilot: has("experimenter") || has("pilot"), reviser: has("experimenter") || has("reviser"),
           auditor: has("methods-auditor") || has("auditor"), critic: has("critic"), reporter: has("reporter"), guardian: true, finisher: true,
         }
@@ -236,6 +239,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
           const a = b.who(id)
           a.inRun = present[id] || b.touched.has(id)
           if (!a.inRun) { a.state = "idle"; a.doing = ""; a.standsFor = BOARD_STANDS[id] ? `${BOARD_STANDS[id]} That member is not on this review's team.` : BOARD_ABSENT }
+          else if (id === "librarian" && present.librarian) { a.standsFor = BOARD_VERIFIER; if (!a.doing) a.doing = "At its desk. Nothing to do yet." }
         }
         break
       }
@@ -248,14 +252,15 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         for (const [member, id] of Object.entries(BOARD_MEMBER)) {
           if (id === "navigator" || id === "pilot" || id === "reviser" || id === "finisher") continue // modes and code steps are not asked by name
           if (roster ? !roster.has(member) : !b.who(id).inRun) continue
-          b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : what, at)
+          b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : id === "librarian" && !final ? `Round ${round}: rechecking the Scout's sources, then writing its reply.` : what, at)
         }
         for (const v of visitors.values()) { v.state = "working"; v.doing = what; v.since = at }
         b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, b.name("navigator"), undefined, { did: final ? "asked for final positions." : `started round ${round}.` })
         break
       }
       case "evidence.triaged": {
-        const provider = str(e.provider), who: CharacterId = "scout" // every search of a review is the scout's: one agent, one face
+        // The scout's searches are the scout's face; the evidence verifier's own searches are the Librarian's (BOARD_MEMBER).
+        const provider = str(e.provider), who: CharacterId = str(e.member) === "evidence-verifier" ? "librarian" : "scout"
         const kept = num(e.kept) ?? 0, dropped = num(e.dropped) ?? 0
         const place = placeOf(provider), query = str(e.query)
         const label = kept > 0 ? `${fromPlace(kept, provider)}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`

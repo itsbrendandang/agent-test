@@ -358,7 +358,7 @@ flowchart TB
     subgraph engine["The engine · 127.0.0.1:8787 · on your machine"]
         gate{"Access check and<br/>spending limits"}
         answer["<b>Direct answer</b><br/>search, screen, write,<br/>hypotheses"]
-        board["<b>Team review</b><br/>lead scientist + 6 members,<br/>method specialists when they fit"]
+        board["<b>Team review</b><br/>lead scientist + 7 members,<br/>method specialists when they fit"]
         tracker["<b>Run tracker</b><br/>starts and follows<br/>benchmark runs"]
         check["<b>Statement checker</b><br/>the quoted passage must be<br/>in the source"]
     end
@@ -396,8 +396,8 @@ flowchart TB
 ```
 
 Solid arrows stay on your machine. Dotted arrows leave it, and only the engine sends them: the
-red box costs money and is refused in Demo mode; the green box is free. In a team review only one
-member, the scout, searches. The swarm's sandbox has no network at all. A direct answer written
+red box costs money and is refused in Demo mode; the green box is free. In a team review the scout
+gathers the sources, and the evidence verifier rechecks them in every round with its own free searches. The swarm's sandbox has no network at all. A direct answer written
 by real models is built but still switched off (see "Where things stand").
 
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is
