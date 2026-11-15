@@ -614,3 +614,47 @@ def test_cli_runs_both_solvers_with_the_scripted_model_and_respects_the_cap(
     grade = json.loads((out / "syn-1_11111111" / "single" / "grade.json").read_text())
     assert grade["judge_model"] is None
     assert "no judge" in grade["profiles"]["per-mode"]["judge"]["deviations"][0]
+
+
+def test_cli_jobs_runs_both_solvers_at_once_in_child_processes(
+    synthetic: Synthetic,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data = synthetic.hub.parent
+    out = tmp_path / "set"
+    argv = ["bixbench-v1", "--data", str(data), "run", "--capsules", "syn-1", "--model", "mock"]
+    argv += ["--image", IMAGE, "--out", str(out), "--time-limit", "300", "--max-tokens", "400000"]
+    monkeypatch.setattr(sys, "argv", [*argv, "--jobs", "2"])
+    assert cli.main() == 0
+    printed = capsys.readouterr().out
+    assert "--jobs 2" in printed
+    runs = {
+        solver: json.loads((out / "syn-1_11111111" / solver / "run.json").read_text())
+        for solver in ("single", "glhf")
+    }
+    assert {r["status"] for r in runs.values()} == {"done"}
+    assert {r["settings"]["jobs"] for r in runs.values()} == {2}
+    # The two runs overlapped in time: each started before the other finished.
+    single, glhf = runs["single"], runs["glhf"]
+    assert single["started_at"] < glhf["finished_at"] and glhf["started_at"] < single["finished_at"]
+    for solver in ("single", "glhf"):
+        assert (out / "syn-1_11111111" / solver / "grade.json").exists()
+    budget = json.loads((out / "budget.json").read_text())
+    assert sorted(r["run"] for r in budget["runs"]) == [
+        "syn-1_11111111/glhf",
+        "syn-1_11111111/single",
+    ]
+    assert budget["spent"] == sum(r["total_tokens"] for r in runs.values())
+    report = json.loads((out / "report.json").read_text())
+    assert set(report["solvers"]) == {"single", "glhf"}
+    # The child's files are kept for reading, and none of them looks like a run to the report.
+    assert sorted(p.name for p in (out / "_jobs").iterdir() if p.suffix == ".log") == [
+        "syn-1_11111111__glhf.log",
+        "syn-1_11111111__single.log",
+    ]
+    assert not list((out / "_jobs").rglob("run.json"))
+    # A second command skips both: nothing is run again.
+    assert cli.main() == 0
+    assert capsys.readouterr().out.count("skip ") == 2

@@ -54,7 +54,8 @@ code does), `--answer-mode mcq|mcq-refusal`, `--role-model critic=openai/gpt-5.5
 `--repeats N` (N runs of each unit per solver; repeat k uses seed + k and the folder
 `<solver>-rk`), `--sandbox modal` (the analysis runs in a Modal Sandbox and not in local Docker;
 billed, another image, not comparable: see "The sandbox on Modal"), `--judge-model`, `--judge-temperature` (a number, or `default` for the
-provider's default), `--no-judge`, `--seed`, `--image`, `--force`. `--critic-hints` is still
+provider's default), `--no-judge`, `--seed`, `--image`, `--force`, `--jobs N` (N runs at once,
+each in its own process: see "Several runs at once"). `--critic-hints` is still
 accepted and is ignored: the critic is never shown anything of the analyst's. `report` takes
 `--model` when a folder holds runs of several models; they are never pooled.
 
@@ -412,9 +413,76 @@ NO_PAID_CALLS=0 uv run --group modal bixbench-v1 modal-sandboxes   # is anything
 Options: `--modal-cpu` (default 4 cores), `--modal-memory-gib` (default 16), `--modal-usd-cap`
 (default 5: a run does not start if the folder's sandbox spend plus the most this run could
 cost would pass it). `--sandbox modal` is a paid call: it is refused unless `NO_PAID_CALLS` is
-exactly `0`, like a real model. The image is built once with
-`uv run --group modal python -m bixbench_v1.modal_image build` (10 minutes); it is already
-published in the owner's workspace.
+exactly `0`, like a real model. The image is already published in the owner's workspace. On
+another Modal account, build it there and check it (next section).
+
+### The same environment on any Modal account
+
+The analysis environment (R 4.3.3 with 333 R packages, 843 conda packages, the BUSCO image) is
+defined by files in this repository:
+
+| File | What it fixes |
+|---|---|
+| `src/bixbench_v1/modal_image.py` | the build steps; the base image by digest; apt from a dated Debian snapshot; the Modal image builder version (`IMAGE_BUILDER_VERSION`) |
+| `src/bixbench_v1/modal_env/explicit-linux-64.txt` | every conda package (R and Bioconductor packages included) by URL and md5; no solver runs |
+| `src/bixbench_v1/modal_env/finish_env.py` | the build fails if any package differs from that list |
+| `image/amd64-modal.inventory.json` | what the published image holds, read inside it |
+| `src/bixbench_v1/modal_env/expected-env.json` | hashes of that inventory: conda packages, R packages, BUSCO layers |
+
+Every sandbox of our image is checked when it starts. It prints its conda packages, its R
+packages and its BUSCO layers; the run is refused (the sandbox is terminated) unless their
+hashes equal `expected-env.json`. So a run uses the repository's environment, or it does not
+run. `run.json` records `settings.modal.environment_check` (`passed`) and the hashes. An image
+under another name (`--image`) is recorded and not checked. The check adds a few seconds to
+each sandbox.
+
+On your own Modal account (each command is billed; the first takes about 10 minutes):
+
+```bash
+modal token new                                                  # once
+uv sync --group modal
+NO_PAID_CALLS=0 uv run --group modal python -m bixbench_v1.modal_image build
+NO_PAID_CALLS=0 uv run --group modal python -m bixbench_v1.modal_image verify
+```
+
+`verify` starts one small sandbox, reads what the image holds and compares it with
+`expected-env.json`. It prints `same` for each part, or writes the image's inventory to
+`image/` to diff. The image id differs between builds and accounts; the contents must not.
+`expected-env.json` is made from the inventory with `python -m bixbench_v1.modal_image
+fingerprint` (free). Do not edit it by hand: a test checks that it matches the inventory and
+the explicit list.
+
+What is not fixed by the repository, and is checked by `verify` and at every run instead: the
+BUSCO image is pulled by its tag (`ezlabgva/busco:v5.8.0_cv1`), and the conda, Anaconda and
+Debian snapshot servers must still serve the same files.
+
+### Several runs at once (`--jobs N`)
+
+`--jobs N` runs up to N runs at the same time, each in its own process (`bixbench-v1
+solve-one`, internal). It works with Docker and with Modal. With Modal, each run has its own
+sandboxes, so the time of a full set drops about N times and the sandbox cost stays about the
+same.
+
+```bash
+NO_PAID_CALLS=0 uv run --group modal bixbench-v1 run --all --solvers single,glhf \
+    --model anthropic/claude-sonnet-5-5 --sandbox modal --jobs 4 --out runs/modal-full
+```
+
+- Only the main process grades, writes `budget.json` and writes the report. A run's own
+  output (what it prints) is in `<out>/_jobs/<capsule>__<solver>.log`.
+- The caps reserve the worst case of every running run. A run starts only if
+  `spent + reserved + its worst case` is under `--total-token-cap`, and the same for Modal
+  dollars and `--modal-usd-cap`. A run that does not fit waits; STOP comes only when nothing
+  runs and the next run still does not fit. So `--jobs 1` stops where it always did.
+- The main process stages every capsule before any run starts. On Modal, the first run of a
+  capsule uploads its data alone; the other runs of that capsule start after it.
+- Ctrl+C (or `kill`) is passed to every run. Each run ends its sandboxes; after 2 minutes a
+  run is stopped. Runs that did not finish are charged their worst case and run again next
+  time; finished runs are skipped.
+- **Rate limits.** Each run waits on the provider's rate limit with its own clock, so the
+  waiting is taken from the run's time and can change an answer. Start with `--jobs 4`, look
+  in the eval logs for retried calls, and raise N only if there are none. Compare solvers only
+  between runs made with the same N: `run.json` records `settings.jobs`.
 
 What goes to Modal: the staged data files of the capsules you run (the same files Docker
 mounts at `/data`), once per capsule, into the Volume `bixbench-v1-staged-f8cc3bdc` under a

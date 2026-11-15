@@ -111,7 +111,7 @@ sample.
 | Tool | Status |
 |---|---|
 | past.dev memory | Sending lessons (ingest) and recalling them are tested against the live API (`swarm/past_memory.py`). Lessons are now sent only when a person approves them (`approve` command). Not used inside a full swarm run yet. |
-| Modal | In use for two things. The app is hosted there in Demo mode behind a sign-in (`deploy/modal_host/`). One open model (Qwen3.6 35B) was served there and ran the 20-dataset, 82-question BixBench v1.5 grid, graded by code rules only (`glhf/openmodels/`). Real mode in the cloud is designed, not deployed. |
+| Modal | In use for two things. The app is hosted there in Demo mode behind a sign-in (`deploy/modal_host/`). One open model (Qwen3.6 35B) was served there and ran the 20-dataset, 82-question BixBench v1.5 grid, graded by code rules only (`glhf/openmodels/`). Real mode in the cloud is designed, not deployed. The BixBench v1 adapter can also run its analysis sandbox there (`--sandbox modal`, `glhf/bixbench_v1` README "The sandbox on Modal"); it ran with the scripted model and in the billed opt-in cloud tests. Two newer parts are tested with Docker and fakes only, not yet on Modal: `--jobs N` (several runs at once) and the environment check (every sandbox's conda packages, R packages and BUSCO layers must equal `modal_env/expected-env.json`). |
 
 ## Engine and dashboard
 
