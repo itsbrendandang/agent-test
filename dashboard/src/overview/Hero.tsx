@@ -1,8 +1,7 @@
 // The welcome at the top of the home page: a few of the agents, eager to start, around a question box. The
 // characters here are a greeting and move by themselves (they stand still when the system asks for less motion);
 // they are not a picture of work being done. Real work is shown in Agent Lab, where nothing moves without an event.
-// Pressing the send button starts the answer from this page (the same engine call, token prompt and limits as Research;
-// the answer itself is shown in Research),
+// Pressing the send button starts the answer on this page (the same engine call, token prompt and limits as Research),
 // or, when the page gives no `onAsk`, hands the question to Research. The line under the box says what that may
 // cost before the press. A starter question only fills the box: biology questions trending on Google now
 // (research/trending.ts), else the fixed STARTERS.

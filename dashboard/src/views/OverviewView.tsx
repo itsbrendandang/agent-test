@@ -1,11 +1,9 @@
-// The Overview: the question box, then the Agent Lab. The answer is not written on this page. A question asked here
-// shows one short line that the agents are thinking, then the person is sent to Research, where the answer is written
-// and follow-ups continue its thread (it is Research's conversation); the live Agent Lab of that answer is on Research
-// too. The lab here is idle at its desks, except for an example opened by its address. One quiet line
+// The Overview: the question box, the answer asked from here right under it, then the Agent Lab. The team is idle at
+// its desks until a question is sent from this page; then the lab follows that answer's own events (nothing moves
+// without one). That answer is also Research's conversation, so Research shows it and continues it. One quiet line
 // keeps the counts: a practice run is counted apart and is never added to research.
 // Spend and limits are in Settings (Usage and limits), not on this page.
 import { useEffect, useMemo, useState } from "react"
-import { Loader } from "@/components/ai-elements/loader"
 import { EngineOffline } from "@/components/Shared"
 import { answerLab, boardLab, emptyLab, Lab, type LabEvent } from "@/lab"
 import { useLabEvents } from "@/lab/useLabModel"
@@ -18,11 +16,9 @@ import type { View } from "@/nav"
 import { startConversation } from "@/home/chat"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
-import { ResearchRefused, startResearch, useResearchEvents } from "@/research/api"
+import { ResearchAnswer } from "@/research/Answer"
+import { ResearchRefused, startResearch, useSeenEvents } from "@/research/api"
 import "@/design/overview.css"
-
-/** How long the "thinking" line shows before the person is sent to Research. */
-const HANDOFF_MS = 1200
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
 function useRuns() {
@@ -63,18 +59,14 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
     return () => window.removeEventListener("hashchange", open)
   }, [])
   const [refused, setRefused] = useState<string>()
-  // A question asked here is answered in Research: after one short beat, open it there.
-  const handoff = asked && !asked.example && asked.kind !== "board" ? asked.id : undefined
-  useEffect(() => {
-    if (!handoff) return
-    const timer = window.setTimeout(() => onOpen("Home"), HANDOFF_MS)
-    return () => window.clearTimeout(timer)
-  }, [handoff]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { events } = useResearchEvents(asked?.kind === "board" ? undefined : asked?.id) // the lab follows the answer's events; the answer itself is not shown here
+  const events = useSeenEvents(asked?.kind === "board" ? undefined : asked?.id)
   const board = useLabEvents(asked?.kind === "board" ? "board" : undefined, asked?.kind === "board" ? asked.id : undefined)
   const lab = useMemo(() => (asked ? asked.kind === "board" ? boardLab(board.events, asked.id) : answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events, board.events])
+  const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
+  // An answer that ended is counted at once: the line of counts is read again.
+  useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
-    : lab.status === "done" ? "The team finished your question. The answer is in Research."
+    : lab.status === "done" ? "The team finished your question. The answer is above."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
     : lab.status === "cancelled" ? "The answer was stopped."
     : "The team is working on your question. Nothing here moves unless the engine reports it."
@@ -100,12 +92,12 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <Hero onOpen={onOpen} onAsk={ask} />
       {refused && <p className="newrun-error" role="alert">{refused}</p>}
 
-      {/* Not the answer: one line that the agents are thinking, and the way to Research, where the answer is written. */}
+      {/* The answer comes first, so it is in view without scrolling past the lab. */}
       {asked && asked.kind !== "board" && (
         <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
           <h2 id="ov-answer-title">{asked.question}</h2>
-          {!asked.example && <div className="ov-answer-status" role="status"><Loader size={14} aria-hidden="true" /> The agents are thinking. Opening Research…</div>}
-          <button type="button" className="ov-link" onClick={() => { if (asked.example) setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Open in Research"}</button>
+          <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
+          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Ask a follow-up in Research"}</button>
         </section>
       )}
 

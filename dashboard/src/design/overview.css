@@ -138,12 +138,11 @@
 .ov-credits .ov-tile span { font-size: 13.5px; }
 .ov-credits .ov-track { margin-top: 6px; height: 6px; }
 
-/* The lab under the question box, the card of a question asked from this page (not its answer), and the one line of counts. */
+/* The lab under the question box, the answer asked from this page, and the one line of counts. */
 .ov-lab { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .ov-page > .ov-lab { width: min(1100px, 100%); max-width: none; }
 .ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
 .ov-answer { min-width: 0; }
-.ov-answer-status { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); }
 .ov-counts { font-size: 13px; color: var(--text-muted); }
 .ov-counts b { color: var(--text); font-weight: 650; }
 /* Under the question box the lab keeps one screen's height: its side panel (and the activity list in it) scrolls. */
