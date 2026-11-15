@@ -139,8 +139,8 @@ Start small.
 
 ```bash
 # The swarm, then the single agent, with the same settings:
-npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --seed 7 --follow
-npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --seed 7 --follow
+npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --seed 7 --follow
+npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --seed 7 --follow
 
 npm run glhf -- list
 npm run glhf -- show <run-id>

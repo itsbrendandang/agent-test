@@ -101,14 +101,14 @@ Example: run the Critic and the Methods Auditor on a second vendor.
 
 ```bash
 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 \
-    --role-model critic=openai/gpt-5.5 --max-tokens 4000000 --follow
+    --role-model critic=openai/gpt-5.5 --max-tokens 400000 --follow
 ```
 
 ### Budgets
 
 ```bash
 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 \
-    --time-limit 2400 --max-tokens 4000000 --max-messages-per-role 300 \
+    --time-limit 2400 --max-tokens 400000 --max-messages-per-role 300 \
     --exa --memory --seed 7 --follow
 ```
 
@@ -248,7 +248,7 @@ it starts, so a change needs a restart (with Docker: stop and `docker compose up
 | A paid run that was accepted earlier (a queued partner, or a run left by an engine that allowed paid calls) | Not launched. It ends as `failed` with `not launched: ...`. | `paidRun` in `engine/src/glhf/task.ts` |
 | Ask (`POST /api/ask`) | No model call. The answer is the word search, and it says why. | `engine/src/ask.ts` |
 | Drug board models | The board runs on scripted models, also when keys are set. A board run that was started with real models is not continued (HTTP 403 on resume). | `mockMode` in `engine/src/config.ts`, `refusePaidRun` in `engine/src/board.ts`, `engine/src/models.ts` |
-| Drug board checkers: Jev, OpenAI, Claude Code | Refused before any call or process. | `engine/src/jev.ts`, `engine/src/checkers.ts` |
+| Drug board checkers: the first-pass checker, OpenAI, Claude Code | Refused before any call or process. | `engine/src/triage.ts`, `engine/src/checkers.ts` |
 | Drug board Exa search | Refused before the request. | `engine/src/exa.ts` |
 
 The CLI goes through the same checks: `npm run glhf -- run --model <real model> ...` prints
@@ -258,7 +258,7 @@ the refusal and ends with status 1.
 
 While the switch is on, every process that the engine starts (the local runner, `bixbench3`,
 `uv`) gets an environment in which these keys are empty: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`OPENROUTER_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`. It also gets
+`EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`. It also gets
 `NO_PAID_CALLS=1` (`childEnv` in `engine/src/paid.ts`). So if something further down tries a
 paid call by mistake, it has no key.
 
@@ -338,7 +338,7 @@ These limits are real. Know them before you trust the switch.
 |---|---|
 | `inspect eval` on `glhf/bixbench/src/bixbench3/inspect_harness/tasks.py` | It starts the task without our command line, so the check at the start does not run. (A `search_docs` call and a past.dev call inside it are still refused.) |
 | A script that calls `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly | These functions and classes have no check of their own. Only the command lines and the tools above do. |
-| Credentials other than the seven named keys | Only `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN` and `TINKER_API_KEY` are blanked. Google, AWS and Azure credentials pass through. A saved Hugging Face login (from `hf auth login`) also passes through, because it is a file, not the `HF_TOKEN` variable. |
+| Credentials other than the six named keys | Only `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN` and `TINKER_API_KEY` are blanked. Google, AWS and Azure credentials pass through. A saved Hugging Face login (from `hf auth login`) also passes through, because it is a file, not the `HF_TOKEN` variable. |
 | A cloud run that is already on its virtual machine | It is not stopped. Its keys are on the machine. Stop it yourself with `uv run bixbench3 cancel --run <cloud-run-id> --project <project>`. |
 | A coding agent (Pi, Claude Code) and its own model use | A separate program with its own account. |
 | The desktop app's Settings view (it tests provider keys that you type in) | It does not go through the engine. |

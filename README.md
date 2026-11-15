@@ -135,8 +135,8 @@ For real models, copy `.env.example` to `.env`, add your keys, and set `NO_PAID_
 
 ```bash
 # Demo case with a real model, swarm and single agent. Needs NO_PAID_CALLS=0 in .env and a token budget.
-npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
-npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 4000000 --follow
+npm run glhf -- run --mode local --solver glhf   --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --follow
+npm run glhf -- run --mode local --solver single --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --follow
 
 npm run glhf -- list            # all runs
 npm run glhf -- show <run-id>   # one run: phase, score, claims, issues
