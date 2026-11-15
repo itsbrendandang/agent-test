@@ -20,6 +20,12 @@ run, scripted or real, has used them.**
 Residents (experimenters) and nurses (plain-code data checks) are the existing swarm roles and are not
 repeated here.
 
+## Skill agents (draft, instructions only)
+
+`skills/` groups the 100 Biomni Skill Hub skills into 19 role agents (`skills/README.md`, `skills/skills-map.json`). **Status: the skill
+packages (scripts, references, assets) are not installed, 38 of the 100 skills have no Overview text at all, these agents are instructions
+only and are not wired into any solver, and nothing routes work to them yet.** The nine profiles above are separate and unchanged.
+
 ## When a specialist is called
 
 By rule, in code, never because an agent says it is stuck (in the pilot every agent was confident and
