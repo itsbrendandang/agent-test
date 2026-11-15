@@ -656,16 +656,18 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
 /**
  * The numbered sources: the candidates that passed screening, each address once, the most relevant first, the
  * providers taking turns inside one relevance level (so web pages cannot push every paper out), cut to `max`.
+ * A lab protocol belongs to no one hypothesis's search, so it serves every hypothesis.
  */
 export function numberSources(candidates: Candidate[], max: number, hypotheses: string[] = []): StoredSource[] {
   // Each address once. One that several hypotheses' searches found serves each of them.
   const byKey = new Map<string, Candidate & { serves: string[] }>()
   const unique: (Candidate & { serves: string[] })[] = []
+  const servesOf = (c: Candidate): string[] => (c.hypothesis ? [c.hypothesis] : c.provider === "protocols" ? hypotheses : [])
   for (const c of [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
     const keys = sourceKeys(c.item, c.provider), first = keys.map((k) => byKey.get(k)).find(Boolean)
-    if (!first) { const entry = { ...c, serves: c.hypothesis ? [c.hypothesis] : [] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
+    if (!first) { const entry = { ...c, serves: [...servesOf(c)] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
     for (const k of keys) if (!byKey.has(k)) byKey.set(k, first)
-    if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
+    for (const id of servesOf(c)) if (!first.serves.includes(id)) first.serves.push(id)
   }
   const tier = (c: Candidate) => (c.item.relevance === 1 ? 0 : c.item.relevance === 0.5 ? 2 : 1) // screened "yes", not screened, screened "partly"
   /** The most relevant first; inside one relevance level the searches take turns. */
@@ -1021,7 +1023,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const cutNote = set.cut.length ? `${plural(set.cut.length, "more hypothesis", "more hypotheses")} ${set.cut.length === 1 ? "was" : "were"} proposed and not tested, because ${set.cut[0].reason}.` : ""
       if (!tested.length || cutNote) record.hypothesesNote = [tested.length ? "" : set.reason ?? "No hypotheses were needed.", cutNote].filter(Boolean).join(" ")
       cut = set.cut
-      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top${plan.protocols.length ? ", except the lab protocol searches" : ""}.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
+      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top${plan.protocols.length ? ", except the lab protocol searches, whose protocols every hypothesis may cite" : ""}.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
       emit("hypotheses", { type: "hypotheses", items: record.hypotheses, needed: set.needed, ...(tested.length ? {} : { reason: set.reason }), ...(set.cut.length ? { cut: set.cut } : {}) })
       save()
     }
@@ -1153,7 +1155,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         ...(db && deps.database ? [search(db.source, db.query, { text: "database records" }, new Set(chain), () => deps.database!(db.source, db.query), undefined, tag(2, sameBefore + 1))] : []),
       ])
     }
-    /** The lab protocol searches, when the plan has them. They belong to no hypothesis. */
+    /** The lab protocol searches, when the plan has them. They belong to no one hypothesis: what they find serves every hypothesis (numberSources). */
     const protocolSearches = (known: Set<string>) => (deps.protocols ? plan.protocols.map((q) => search("protocols", q, { maxResults: MAX_PROTOCOLS, text: "abstracts" }, known, () => deps.protocols!(q))) : [])
     if (tested.length) await together([...tested.map((h, at) => chainOf(h, at)), ...protocolSearches(new Set())]) // every hypothesis at the same time, each opened by its web search
     else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))

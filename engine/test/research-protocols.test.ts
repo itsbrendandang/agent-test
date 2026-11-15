@@ -114,7 +114,7 @@ for (const question of ["What is the Kyoto Protocol?", "What is the TCP protocol
   })
 }
 
-test("with hypotheses, the protocol search still runs beside their searches, and its protocols are numbered after theirs", async () => {
+test("with hypotheses, the protocol search still runs beside their searches, and every investigator may cite its protocols", async () => {
   const hypotheses = [
     { text: "Two-step collagenase perfusion gives more viable mouse hepatocytes than tissue digestion.", supportIf: "A protocol reports a higher yield with perfusion.", contradictIf: "A protocol reports a lower yield with perfusion.", web: { query: "hepatocyte yield perfusion", objective: "Protocols first." }, literature: "hepatocyte perfusion yield" },
     { text: "Mouse hepatocytes stay viable in culture for a week.", supportIf: "A protocol keeps them for seven days.", contradictIf: "A protocol loses them within days.", web: { query: "hepatocyte culture days", objective: "Protocols first." }, literature: "hepatocyte culture viability" },
@@ -130,7 +130,15 @@ test("with hypotheses, the protocol search still runs beside their searches, and
     assert.match(of(events, "step.finished").find((s) => s.step === "hypotheses")!.summary!, /except the lab protocol searches/)
     assert.equal(record.searches.filter((s) => s.provider === "protocols").length, 1)
     assert.ok(!record.searches.find((s) => s.provider === "protocols")!.hypothesis)
-    assert.ok(record.sources.some((s) => s.provider === "protocols" && s.note === "protocol" && !s.hypotheses))
+    const protocols = record.sources.filter((s) => s.provider === "protocols" && s.note === "protocol")
+    assert.ok(protocols.length)
+    for (const s of protocols) assert.deepEqual(s.hypotheses, ["h1", "h2"], "a protocol serves every hypothesis")
+    // Each investigator can cite a protocol: its marker survives in that hypothesis's section.
+    for (const id of ["h1", "h2"]) {
+      const write = e.calls.find((c) => c.role === "section" && c.system.includes(`Yours is ${id.toUpperCase()}.`))!
+      assert.ok(protocols.some((p) => write.user.includes(p.text)), `${id}'s investigator is given the protocols`)
+      assert.ok(record.statements.some((st) => st.hypothesis === id && st.sources.some((n) => protocols.some((p) => p.n === n))), `${id} cites a protocol`)
+    }
   } finally { await e.close() }
 })
 
