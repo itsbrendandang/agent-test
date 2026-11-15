@@ -31,11 +31,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import paid
+from . import modal_boundary, paid
 from .modal_boundary import MODAL_ADDED_ENV, clean_env_command
 
 if TYPE_CHECKING:  # the `modal` package is in the optional dependency group "modal"
@@ -45,6 +46,10 @@ APP_NAME = "bixbench-v1-sandbox"
 IMAGE_NAME = "bixbench-v1-env"
 IMAGE_TAG = "amd64-1"
 PUBLISHED = f"{IMAGE_NAME}:{IMAGE_TAG}"
+# Modal's image builder version (`modal config`, MODAL_IMAGE_BUILDER_VERSION) changes how each
+# step is built; without a pin a build uses the workspace's default, which differs between
+# accounts. `build` sets this one. The contents are checked anyway (modal_env/expected-env.json).
+IMAGE_BUILDER_VERSION = "2025.06"
 OFFICIAL_IMAGE = "futurehouse/bixbench:aviary-notebook-env"
 
 # The official image's base, by tag and by the digest of the multi-platform index.
@@ -119,6 +124,14 @@ def definition() -> modal.Image:
 def build(publish: bool = True) -> str:
     """Build the image on Modal and publish it as `bixbench-v1-env:amd64-1`. Returns its id."""
     paid.refuse_modal(f"building the sandbox image {PUBLISHED}")
+    chosen = os.environ.get("MODAL_IMAGE_BUILDER_VERSION")
+    if chosen not in (None, IMAGE_BUILDER_VERSION):
+        sys.exit(
+            f"MODAL_IMAGE_BUILDER_VERSION is {chosen}; this image is built with "
+            f"{IMAGE_BUILDER_VERSION} (modal_image.IMAGE_BUILDER_VERSION). Unset it, or change "
+            "the constant and check the result with `verify`."
+        )
+    os.environ["MODAL_IMAGE_BUILDER_VERSION"] = IMAGE_BUILDER_VERSION  # read by Modal at build
     import modal
 
     app = modal.App.lookup(APP_NAME, create_if_missing=True)
@@ -154,6 +167,49 @@ def inventory(
         return document
     finally:
         sandbox.terminate()
+
+
+def write_fingerprint(
+    inventory_file: Path | None = None, target: Path = modal_boundary.EXPECTED_ENV_FILE
+) -> dict[str, Any]:
+    """modal_env/expected-env.json from the committed inventory. Free: reads one file."""
+    source = inventory_file or EVIDENCE / "amd64-modal.inventory.json"
+    document = json.loads(source.read_text())
+    expected = {
+        "about": (
+            "What a sandbox of our image must hold, as hashes. Made by `python -m "
+            "bixbench_v1.modal_image fingerprint` from image/amd64-modal.inventory.json; do not "
+            "edit. Every Modal run checks it (modal_boundary.fingerprint_problems)."
+        ),
+        "image": document["modal_image"]["name"],
+        "image_id_when_made": document["modal_image"]["id"],
+        **modal_boundary.fingerprint_of_inventory(document),
+    }
+    target.write_text(json.dumps(expected, indent=1) + "\n")
+    return expected
+
+
+def verify(image_name: str = PUBLISHED) -> list[str]:
+    """Inventory a published image (billed: one small sandbox for a few minutes) and compare its
+    fingerprint with the repository's. Empty = the same environment. Run it after every build,
+    on any account: the image id differs between builds, the contents must not."""
+    document = inventory(image_name)
+    found = modal_boundary.fingerprint_of_inventory(document)
+    expected = modal_boundary.expected_env()
+    problems = []
+    names = {"conda": "conda packages", "r": "R packages", "busco_layers": "BUSCO image layers"}
+    for part, name in names.items():
+        if found[part] != expected[part]:
+            problems.append(f"{name}: found {found[part]}, expected {expected[part]}")
+    print(f"{image_name} ({document['modal_image']['id']}):")
+    for part, name in names.items():
+        mark = "same" if found[part] == expected[part] else "DIFFERENT"
+        print(f"  {name:20} {found[part]['count']:4}  {mark}")
+    if problems:
+        target = EVIDENCE / f"verify-{image_name.replace(':', '-')}.inventory.json"
+        target.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n")
+        print(f"wrote {target}: diff it with amd64-modal.inventory.json")
+    return problems
 
 
 def equivalence(
@@ -503,11 +559,26 @@ def main() -> int:
     sub = commands.add_parser("equivalence", help="run the fixed analysis on Modal (billed)")
     sub.add_argument("--image", default=PUBLISHED)
     commands.add_parser("compare-equivalence", help="write image/equivalence.json and .md (free)")
+    commands.add_parser(
+        "fingerprint", help="write modal_env/expected-env.json from the inventory (free)"
+    )
+    sub = commands.add_parser(
+        "verify", help="check a published image against expected-env.json (billed, small)"
+    )
+    sub.add_argument("--image", default=PUBLISHED)
     arguments = parser.parse_args()
     paid.enforce()
     try:
         if arguments.command == "build":
             print(f"built {PUBLISHED}: {build(publish=not arguments.no_publish)}")
+            print("now check it: python -m bixbench_v1.modal_image verify")
+        elif arguments.command == "fingerprint":
+            written = write_fingerprint()
+            print(f"wrote {modal_boundary.EXPECTED_ENV_FILE} for {written['image']}")
+        elif arguments.command == "verify":
+            problems = verify(arguments.image)
+            print("the same environment as the repository" if not problems else "\n".join(problems))
+            return 1 if problems else 0
         elif arguments.command == "inventory":
             document = inventory(arguments.image)
             target = EVIDENCE / "amd64-modal.inventory.json"

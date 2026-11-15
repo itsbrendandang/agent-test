@@ -99,7 +99,7 @@ def _config(config: SandboxEnvironmentConfigType | None) -> BixModalConfig:
 
 
 @sandboxenv(name=PROVIDER)
-class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):  # type: ignore[misc]
+class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):  # type: ignore[misc, unused-ignore]
     """One run's sandbox. `self.sandbox` is the current Modal sandbox; `fresh_sandbox`
     replaces it."""
 
@@ -164,6 +164,7 @@ class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):  # type: ignore[mi
             problems = boundary.probe_problems(result, config)
             if problems:
                 raise staging.IntegrityError("Modal sandbox refused: " + "; ".join(problems))
+            result["environment"] = await _check_environment(sandbox, config)
         except BaseException:
             cls._finish(sandbox, config, started, "refused at start", ok=False)
             raise
@@ -241,7 +242,7 @@ class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):  # type: ignore[mi
         are carried on the host and added to the outputs at the end; the old sandbox, with
         everything in it, is terminated before the new one is used."""
         context = RUNS.get(self.bix.run_tag)
-        old, old_started = self.sandbox, self._started  # type: ignore[has-type]
+        old, old_started = self.sandbox, self._started  # type: ignore[has-type, unused-ignore]
         if context is not None:
             for path in keep:
                 try:
@@ -514,3 +515,23 @@ __all__ = [
     "terminate_run",
     "upstream",
 ]
+
+
+async def _check_environment(sandbox: Any, config: BixModalConfig) -> dict[str, Any]:
+    """Our image must hold the environment in the repository (modal_env/expected-env.json):
+    its conda packages, R packages and BUSCO layers, hashed. Another image is recorded only."""
+    printed = await _raw_exec(sandbox, ["python3", "-c", boundary.FINGERPRINT], timeout=600)
+    if printed[0] != 0:
+        raise staging.IntegrityError(f"the environment check failed: {printed[2][-300:]}")
+    document = boundary.parse_probe(printed[1])
+    found = boundary.fingerprint_of_sandbox(document)
+    if not boundary.checks_environment(config.image):
+        return {"check": "not run: not our image", **found}
+    problems = boundary.fingerprint_problems(document, boundary.expected_env())
+    if problems:
+        raise staging.IntegrityError(
+            "Modal sandbox refused: the analysis environment is not the repository's: "
+            + "; ".join(problems)
+            + ". Rebuild the image or run `python -m bixbench_v1.modal_image verify`."
+        )
+    return {"check": "passed", **found}

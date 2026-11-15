@@ -27,6 +27,17 @@ GOOD = {
     "listing_sha256": "1" * 64, "content_sha256": "2" * 64, "data_writable_by_others": False,
     "volume_visible_to_others": False, "machine": "x86_64", "kernel": "4.19.0-gvisor",
 }  # fmt: skip
+# What FINGERPRINT prints in a sandbox of our image: the committed inventory's lists.
+_INVENTORY = json.loads(
+    (Path(boundary.__file__).parents[2] / "image" / "amd64-modal.inventory.json").read_text()
+)
+SAME_ENV: dict[str, Any] = {
+    "errors": [],
+    "conda": [[p["name"], p["version"], p["build"]] for p in _INVENTORY["conda"]],
+    "r": [[p["name"], p["version"]] for p in _INVENTORY["r"]["packages"]],
+    "r_version": _INVENTORY["r"]["rversion"],
+    "busco_layers": _INVENTORY["udocker_layers"],
+}
 
 
 def config(tag: str = "a" * 32) -> BixModalConfig:
@@ -80,10 +91,13 @@ def tgz(files: dict[str, bytes], link: str | None = None) -> bytes:
 class FakeSandbox:
     count = 0
 
-    def __init__(self, probe: dict[str, Any], outputs: bytes) -> None:
+    def __init__(
+        self, probe: dict[str, Any], outputs: bytes, environment: dict[str, Any] | None = None
+    ) -> None:
         FakeSandbox.count += 1
         self.object_id = f"sb-fake-{FakeSandbox.count}"
         self.probe, self.outputs = probe, outputs
+        self.environment = SAME_ENV if environment is None else environment
         self.commands: list[list[str]] = []
         self.tags: dict[str, str] = {}
         self.alive = True
@@ -99,6 +113,8 @@ class FakeSandbox:
         text = " ".join(cmd)
         if boundary.PROBE in cmd:
             return Process(0, json.dumps(self.probe) + "\n")
+        if boundary.FINGERPRINT in cmd:
+            return Process(0, json.dumps(self.environment) + "\n")
         if "tar -C" in text:
             return Process(0, f"{len(self.outputs)}\n")
         return Process(0, "")
@@ -123,6 +139,7 @@ class World:
         self.created: list[tuple[list[str], dict[str, Any]]] = []
         self.sandboxes: list[FakeSandbox] = []
         self.probes: list[dict[str, Any]] = []  # one per sandbox to come; default GOOD
+        self.environments: list[dict[str, Any]] = []  # one per sandbox; default SAME_ENV
         self.outputs: list[bytes] = []
         self.mounts: list[dict[str, Any]] = []
         self.context = RunContext(
@@ -136,7 +153,8 @@ class World:
             world.created.append((command, kwargs))
             probe = world.probes.pop(0) if world.probes else GOOD
             outputs = world.outputs.pop(0) if world.outputs else tgz({"./answers.json": b"{}"})
-            world.sandboxes.append(FakeSandbox(probe, outputs))
+            environment = world.environments.pop(0) if world.environments else None
+            world.sandboxes.append(FakeSandbox(probe, outputs, environment))
             return world.sandboxes[-1]
 
         async def lookup(name: str) -> Any:
@@ -368,3 +386,40 @@ def test_only_a_typed_config_starts_a_sandbox(world: World) -> None:
         with pytest.raises(ValueError, match="BixModalConfig"):
             asyncio.run(BixModalSandbox.sample_init("task", bad, {}))  # type: ignore[arg-type]
     assert world.created == [] and BixModalSandbox.config_files() == []
+
+
+def test_a_sandbox_is_checked_against_the_repositorys_environment(world: World) -> None:
+    start()
+    sandbox = world.sandboxes[0]
+    assert boundary.FINGERPRINT in sandbox.commands[2]  # after placing the data and the probe
+    recorded = world.context.probes[0]["environment"]
+    assert recorded["check"] == "passed"
+    assert recorded["conda"] == boundary.expected_env()["conda"]
+
+
+@pytest.mark.parametrize(
+    ("change", "says"),
+    [
+        (lambda e: e["conda"].pop(), "conda packages differ"),
+        (lambda e: e["r"][0].__setitem__(1, "0.0.1"), "R packages differ"),
+        (lambda e: e["busco_layers"].pop(), "BUSCO image layers differ"),
+    ],
+)
+def test_a_sandbox_with_another_environment_is_refused_and_terminated(
+    world: World, change: Any, says: str
+) -> None:
+    environment = json.loads(json.dumps(SAME_ENV))
+    change(environment)
+    world.environments.append(environment)
+    with pytest.raises(staging.IntegrityError, match=says):
+        start()
+    assert world.sandboxes[0].alive is False
+    lines = modal_cost.read(world.context.ledgers[0])
+    assert len(lines) == 1 and lines[0]["ok"] is False
+
+
+def test_another_image_is_recorded_not_checked(world: World) -> None:
+    world.environments.append(SAME_ENV | {"conda": []})
+    cfg = config().model_copy(update={"image": "my-own-image:1"})
+    start(cfg)
+    assert world.context.probes[0]["environment"]["check"] == "not run: not our image"
