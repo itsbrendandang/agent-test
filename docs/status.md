@@ -88,7 +88,7 @@ Known limits:
 
 | Tool | Status |
 |---|---|
-| Exa search | Tested live. Used by the drug board's literature search (`engine/src/exa.ts`) and by the swarm's `search_docs` tool (`swarm/tools.py`). Details for the swarm's tool are in the next table. |
+| Exa search | Tested live. Used by the swarm's `search_docs` tool (`swarm/tools.py`). Also wired into the drug board (`engine/src/exa.ts`), but no board member has the tool since the nine-role roster. Details for the swarm's tool are in the next table. |
 
 Live test of the swarm's documentation search (the guard in `swarm/tools.py`, with the 9-site
 list):
@@ -140,5 +140,6 @@ sample.
 | Feature | Status |
 |---|---|
 | Full run with scripted models | Works (`npm run board` without `OPENROUTER_API_KEY`). |
+| Board roster: the nine roles of our own swarm (`board/agents/`), plus the Lead Scientist | Prompts only. Ran with scripted models only (`DRUG_BOARD_MOCK=1 npm run board`). Members reply all at once, not in order, and have no tools (no code, no search). Never run with a real model. |
 | Full run with real models | Not verified. The repository holds no record of a finished live run. |
 | Watch mode (`watch:` in `board/config.yaml`) | Not implemented. The key is read but no code uses it. |

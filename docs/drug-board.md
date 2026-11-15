@@ -11,8 +11,8 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 > **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` and `NO_PAID_CALLS=0` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
-brief.md ──▶ Lead Scientist ──converse──▶ 8 board members (parallel, each its own durable conversation)
-                 ▲                            │ Literature Scout searches Exa; Jev screens results
+brief.md ──▶ Lead Scientist ──converse──▶ 9 board members (parallel, each its own durable conversation)
+                 ▲                            │ no member searches today (tools: [])
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: Jev first ─(uncertain)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
@@ -60,17 +60,30 @@ Claude Code (the checker for computed claims) uses your existing `claude` login.
 
 ## The board (`board/agents/*.md`)
 
+The board now holds the nine roles of our own swarm. It will compete with the BixBench swarm, which is
+the baseline. **Status: prompts only, scripted runs only.** Two limits:
+
+- Every member gets every round **at the same time**. The engine does not run the roles in order yet, and
+  it has no review loop of its own. The lead asks for the order and for at most three review rounds in
+  its messages.
+- Members have **no tools**: no code, no file access, no search. Pilot, Experimenter, Reviser and Finisher
+  describe work they cannot run, and they mark it "not run". No member has open web search, because
+  benchmark agents get none (see `AGENTS.md`).
+
 | Member | Task | Deliverable | Model tier |
 |---|---|---|---|
-| Lead Scientist | Frames the decision, runs rounds, pushes on disagreement | Memo | lead (Opus) |
-| Literature Scout | Exa searches per key question | Screened evidence list | cheap |
-| Target Biologist | Is the target worth drugging? | Target validation card | strong |
-| Medicinal Chemist | SAR, liabilities, tractability | SAR summary | strong |
-| ADMET / DMPK | Each candidate vs. the criteria | Pass / risk / unknown table | cheap |
-| Toxicologist | hERG, reactive metabolites, off-targets | Safety risk register | strong |
-| Competitive / IP | Competing programs, stage, FTO concerns | Landscape map | cheap |
-| Skeptic | The strongest case to kill each candidate | Kill list | rival (second vendor) |
-| Moonshot | One alternative bet (modality, repurposing) | One argued idea | strong |
+| Lead Scientist | Frames the question, gives each role its task by name, writes the memo | Memo | lead (Opus) |
+| Scout | Inspects the data: files, damage, sample groups, software | Data report | cheap |
+| Proposer | Writes the analysis plan and 3 to 8 claims to test | Research plan | strong |
+| Pilot | Tests the analysis on part of the data | Tested scripts | cheap |
+| Experimenter | Runs the analysis on the full data | Results, tables, output files | strong |
+| Methods Auditor | Checks the methods against the study instructions | Methods report | strong |
+| Critic | Tries to disprove the claims | Supported / rejected / not yet established | rival (second vendor) |
+| Reviser | Fixes what the Auditor and the Critic flagged | Corrected analyses and a change log | strong |
+| Finisher | Checks that each required output exists and opens; never makes up results | Final list of output files | cheap |
+| Reporter | Writes the methods, findings, rejected claims and limits | Report and rejection ledger | strong |
+
+The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
 
 To add or bench a member, add or remove a line under `board:` in `board/config.yaml` and add an agent file. Tiers map to OpenRouter model IDs in `models:`, so changing a model is a one-line edit.
 
@@ -101,7 +114,7 @@ These come from the failure-mode probes in [acyclic-labs/sdk `research/experimen
 | Failure mode | Guard here |
 |---|---|
 | Sycophancy cascade (claimed consensus moves agents to a wrong answer) | Round 1 is blind: members answer independently (fan-out, not chain). Later digests show arguments with verdicts, never vote tallies. |
-| Orchestrator deference | The lead assigns tasks and doesn't reveal its leaning before final positions. The Skeptic runs on a different vendor. |
+| Orchestrator deference | The lead assigns tasks and doesn't reveal its leaning before final positions. The Critic runs on a different vendor. |
 | Error propagation (one wrong seed spreads) | Evidence is screened before it enters the shared pool. Contradicted claims are marked in every later digest. |
 | Budget scaling | One aggregate budget per run, not per agent. Unknown cost is recorded as unknown, not zero. |
 
@@ -121,7 +134,9 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Add keys; run the example brief live; tune Jev questions on real Exa results.
 - [ ] Watch mode: scheduled Exa searches reopen a run when new evidence changes a verdict. The `watch:` keys exist in the config, but no code uses them yet.
 - [x] Members' checked claims are written to their `expertise/` files after each run (see Memory).
-- [ ] RDKit tool for the Medicinal Chemist and ADMET members (computed claims from code, not the model). Today the Claude Code checker does not run code by default.
+- [ ] Run the nine roles in order (Scout, Proposer, Pilot, Experimenter, then review, Finisher, Reporter) instead of all at once.
+- [ ] A code tool for Pilot, Experimenter, Reviser and Finisher, in a sandbox, with `refusePaid()` and replay keys. Today no member can run code, and the Claude Code checker does not run code by default.
+- [ ] Brief sections for research tasks. `brief.required_sections` in `board/config.yaml` still asks for drug sections (Candidates, Target and Indication).
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
 - [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.
 - [ ] Add OpenRouter, Exa and TypeSafe keys to the dashboard Settings (keychain) instead of `.env`.

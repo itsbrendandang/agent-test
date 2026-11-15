@@ -57,7 +57,7 @@ export function efforts(config: BoardConfig): Effort[] {
       limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 3, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
     { id: "standard", label: "Standard", description: "The lead and every member that matches the question, each on the model tier in its own file, about half the rounds the config allows.",
       limits: { maxUsd: round2(usd * 0.6), maxMinutes: Math.max(1, Math.ceil(m.max_minutes * 2 / 3)), maxRounds: Math.max(1, Math.ceil(m.max_rounds / 2)) }, agents: "all", modelTier: "per agent", search: { exa: true, maxSearches: 12 } },
-    { id: "deep", label: "Deep", description: "Every member that matches plus the Skeptic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",
+    { id: "deep", label: "Deep", description: "Every member that matches plus the Critic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",
       limits: { maxUsd: round2(usd), maxMinutes: m.max_minutes, maxRounds: m.max_rounds }, agents: "all", modelTier: "strong", search: { exa: true, maxSearches: 30 } },
   ]
 }
@@ -70,7 +70,7 @@ const stems = (text: string) => new Set(text.toLowerCase().split(/[^a-z0-9]+/).f
 
 /**
  * Members whose profile shares words with the question, best first. A word that most members share says nothing
- * and is not counted. With fewer than two matches the Literature Scout and the Skeptic fill in, and say why.
+ * and is not counted. With fewer than two matches the Scout and the Critic fill in, and say why.
  */
 export function rankAgents(question: string, members: Member[]): PlanAgent[] {
   const asked = [...new Set(question.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !STOP.has(w)))]
@@ -78,7 +78,7 @@ export function rankAgents(question: string, members: Member[]): PlanAgent[] {
   const hits = members.map((m, i) => ({ m, i, words: asked.filter((w) => vocab[i].has(w.slice(0, 5)) && vocab.filter((v) => v.has(w.slice(0, 5))).length <= members.length / 2) }))
   const ranked: PlanAgent[] = hits.filter((h) => h.words.length).sort((a, b) => b.words.length - a.words.length || a.i - b.i)
     .map((h) => ({ name: h.m.name, title: h.m.title, why: `Its profile shares words with the question: ${h.words.slice(0, 5).join(", ")}.` }))
-  for (const [name, why] of [["literature-scout", "Added by default: finds sources for whatever the question asks."], ["skeptic", "Added by default: argues against the answer the board prefers."]] as const) {
+  for (const [name, why] of [["scout", "Added by default: checks the data before any research begins."], ["critic", "Added by default: tries to disprove the claims the board makes."]] as const) {
     const m = members.find((x) => x.name === name)
     if (ranked.length < 2 && m && !ranked.some((r) => r.name === name)) ranked.push({ name, title: m.title, why })
   }
@@ -88,8 +88,8 @@ export function rankAgents(question: string, members: Member[]): PlanAgent[] {
 /** The agents for an effort level: the lead, then the ranked members cut or extended as the level says. */
 export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, members: Member[]): PlanAgent[] {
   let chosen = effort.agents === "all" ? [...ranked] : ranked.slice(0, effort.agents)
-  const skeptic = members.find((m) => m.name === "skeptic")
-  if (effort.id === "deep" && skeptic && !chosen.some((a) => a.name === "skeptic")) chosen.push({ name: "skeptic", title: skeptic.title, why: "Deep effort always adds the Skeptic, which runs on the other vendor's model." })
+  const critic = members.find((m) => m.name === "critic")
+  if (effort.id === "deep" && critic && !chosen.some((a) => a.name === "critic")) chosen.push({ name: "critic", title: critic.title, why: "Deep effort always adds the Critic, which runs on the other vendor's model." })
   chosen = chosen.filter((a) => members.some((m) => m.name === a.name))
   return [{ name: lead.name, title: lead.title, why: "Leads every board run and writes the memo." }, ...chosen]
 }
@@ -195,7 +195,7 @@ export function derive(ctx: PlanContext, effort: Effort, agents: PlanAgent[], me
   const cap = config.meeting.max_usd
   const warnings: string[] = []
   const tiers = effort.modelTier === "per agent" ? [...new Set(chosen.map((m) => config.models[m.tier as keyof BoardConfig["models"]]).filter(Boolean))]
-    : chosen.map((m) => (effort.id === "deep" && m.name === "skeptic" ? config.models.rival : config.models[effort.modelTier as keyof BoardConfig["models"]])).filter((v, i, all) => all.indexOf(v) === i)
+    : chosen.map((m) => (effort.id === "deep" && m.name === "critic" ? config.models.rival : config.models[effort.modelTier as keyof BoardConfig["models"]])).filter((v, i, all) => all.indexOf(v) === i)
   if (mock) warnings.push("Scripted mode: the board's models are scripted. Its replies are fixed text written in advance, not research, and its search returns fixture papers.")
   else {
     if (searchers.length && !env.EXA_API_KEY) warnings.push("No EXA_API_KEY is set: members with the search tool get fixture papers, not live search results.")

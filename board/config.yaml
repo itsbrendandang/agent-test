@@ -21,7 +21,7 @@ memory:
   max_notes: 40            # newest notes kept per member; the file is read into that member's next run
 
 watch:
-  enabled: false           # rerun the Literature Scout's queries on a schedule
+  enabled: false           # rerun the board's searches on a schedule (no member searches today)
   every_hours: 24          # new evidence that changes a verdict reopens the debate
 
 brief:
@@ -56,7 +56,7 @@ models:
   lead: "anthropic/claude-sonnet-5-5"
   strong: "anthropic/claude-sonnet-5-5"  # the members that reason about chemistry, targets and toxicity
   cheap: "anthropic/claude-haiku-5-5"    # search-driven members, and the first-pass checker for claims made by an OpenAI member
-  # rival: the Skeptic. It MUST stay on a different vendor from `lead`: that is what stops it sharing the lead's
+  # rival: the Critic. It MUST stay on a different vendor from `lead`: that is what stops it sharing the lead's
   # blind spots. Change lead and rival together, never to the same vendor. A stronger option: "openai/gpt-5.5".
   rival: "openai/gpt-5-mini"
 
@@ -87,11 +87,12 @@ checkers:
   timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member
-  - literature-scout
-  - target-biologist
-  - medicinal-chemist
-  - admet
-  - toxicologist
-  - competitive-ip
-  - skeptic
-  - moonshot
+  - scout                    # members still reply in parallel each round; the order is the intended pipeline
+  - proposer
+  - pilot
+  - experimenter
+  - methods-auditor
+  - critic
+  - reviser
+  - finisher
+  - reporter
