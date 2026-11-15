@@ -352,5 +352,7 @@ A stopped app costs nothing. The Volumes cost storage until they are deleted.
   seed, for one) is known only after a first call. Start the vendor run with one capsule.
 - An unauthenticated request cannot wake a GPU. A request with a valid key can, so keep the
   key private. While an app is deployed and idle it costs nothing.
-- Requests are sent one at a time. A GPU could serve several runs at once for almost the same
-  price; the harness has no `--jobs` option yet. That is the largest saving left.
+- The adapter runs experiments in tandem on Modal with `bixbench-v1 run --jobs N` (see
+  `../bixbench_v1/README.md`, "Several runs at once"). The grid runner here does not pass
+  `--jobs` through yet, so its requests to the GPU go one at a time. Passing it through would let
+  one GPU serve several runs at once for almost the same price. That is the largest saving left.
