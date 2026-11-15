@@ -1167,7 +1167,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (team.length) {
         const share = Math.max(60, Math.floor(level.words / 3))
         const wSystem = writerSystem(level.words), wUser = writerUser({ question: record.question, thread, searches: record.searches, sources })
-        const needed = brain.worstCase("write", wSystem.length + wUser.length) + brain.worstCase("critic", wSystem.length + wUser.length) + brain.worstCase("revise", wSystem.length + wUser.length)
+        // The critic also reads the draft, and the reviser the draft and its review: both are counted at their longest
+        // (the writer's whole output plus every specialist's section), so the estimate errs on the side of not asking.
+        const base = wSystem.length + wUser.length, longest = (level.maxOutputTokens + team.length * sectionTokens(level)) * CHARS_PER_TOKEN
+        const needed = brain.worstCase("write", base) + brain.worstCase("critic", base + longest) + brain.worstCase("revise", base + 2 * longest)
         const drafted = await Promise.allSettled(team.map(async (who): Promise<string> => {
           const step = `specialist:${who.name}`, heading = `### Method view: ${who.title}`
           const sSystem = specialistSystem(share, who.title), sUser = specialistUser({ question: record.question, why: who.why, notes: notesOf.get(who.name) ?? "", searches: record.searches, sources })
