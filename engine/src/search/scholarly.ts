@@ -13,7 +13,7 @@
 // - Each source has its own time limit. A source that fails, answers with an error or runs out of time is skipped and
 //   named in a notice; the others are still used. Only when every source fails does the search fail.
 // - A paper found by two sources is listed once: same DOI, or the same title once case, accents and punctuation are
-//   set aside. Europe PMC's copy wins (its PubMed address), then the order of SOURCES.
+//   set aside. Europe PMC's copy wins (its PubMed address), then the order of SCHOLARLY_SOURCES.
 // - A paper with no abstract is left out: there is nothing to check a statement against.
 // - The sources take turns in the merged list, which holds at most MAX_MERGED papers, so the screening that follows
 //   (a paid model step) reads about as much as before.
