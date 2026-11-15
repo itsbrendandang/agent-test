@@ -188,11 +188,11 @@ test("glhf: the runner gets blank keys, and the scripted run still works", async
   await until("the run to finish", () => isSettled(sent.body.id))
   assert.equal(run(sent.body.id).phase, "done")
   const env = JSON.parse(readFileSync(join(runs, sent.body.id, "env.json"), "utf8"))
-  assert.deepEqual(env, { NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "" },
+  assert.deepEqual(env, { NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
     "blank, not absent: Inspect reads an absent key back from .env; past.dev is out of reach without PAST_API_KEY")
 
   const child = paid.childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "a", HF_TOKEN: "h", VSCODE_PID: "1", VSCODE_CWD: "/x", TERM_PROGRAM: "vscode", UV_ENV_FILE: ".env", OTHER: "kept" })
-  assert.deepEqual(child, { PATH: "/bin", OTHER: "kept", NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "" },
+  assert.deepEqual(child, { PATH: "/bin", OTHER: "kept", NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
     "and nothing that makes Inspect or uv load .env over them")
   const open = { NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "a" }
   assert.equal(paid.childEnv(open), open, "with paid calls allowed the environment is passed on as it is")

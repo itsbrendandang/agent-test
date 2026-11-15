@@ -62,6 +62,10 @@ PAID_KEYS = (
     "PAST_API_KEY",
     "HF_TOKEN",
     "TINKER_API_KEY",
+    # Blanked defensively: no provider here uses these any more, but a stray one in .env must not reach a child
+    # while paid calls are off. They are not keys a run needs.
+    "OPENROUTER_API_KEY",
+    "TYPESAFE_API_KEY",
 )
 # Inside VS Code, Inspect loads .env over variables that are already set, which would put the
 # keys back. These are what make it think it is in VS Code.

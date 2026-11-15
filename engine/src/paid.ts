@@ -66,8 +66,12 @@ export const paidCallsLine = (env: NodeJS.ProcessEnv = process.env): string => p
   ? "Paid calls: OFF (NO_PAID_CALLS). Paid models, Exa, the checkers and cloud runs are refused; scripted (mock) runs and local models (ollama/<name> on this machine) work. To allow the rest, set NO_PAID_CALLS=0 in .env."
   : "Paid calls: ON (NO_PAID_CALLS=0). Runs with real models, Exa, the checkers and cloud runs can spend API credits."
 
-/** The keys that can spend, or that open a paid or gated service. */
-export const PAID_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "HF_TOKEN", "TINKER_API_KEY"] as const
+/**
+ * The keys that can spend, or that open a paid or gated service. OPENROUTER_API_KEY and TYPESAFE_API_KEY are
+ * blanked defensively: no provider in this project uses them any more, but a stray one in someone's .env must not
+ * reach a child process while paid calls are off. They are NOT a key a run needs and are not in any status or catalog report.
+ */
+export const PAID_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "HF_TOKEN", "TINKER_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY"] as const
 
 // Inspect, which the Python runner is built on, loads the nearest .env above its working folder, and that is this
 // repo's .env. It does not replace a variable that is already set, so the keys are set to "" here rather than
