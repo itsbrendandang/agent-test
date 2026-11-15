@@ -160,6 +160,10 @@ We say only what was really done.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
 
+- **Local shakedown (2026-11-15):** a fresh clone was set up, the test suite, the scripted demo
+  (score 1.000), and the web UI all ran on macOS. The full write-up, including what did not work,
+  is in [TEST-FINDINGS.md](TEST-FINDINGS.md).
+
 ## The brief: Track 3, AI Scientist Swarms
 
 The hackathon's instructions for the track we entered, as given:
