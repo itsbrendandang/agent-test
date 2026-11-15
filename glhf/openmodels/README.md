@@ -5,7 +5,7 @@ This folder serves open-weight models on Modal GPUs and runs the BixBench v1 ada
 
 | Contestant | Where it runs | Inspect model id | State |
 |---|---|---|---|
-| Qwen3.6-35B-A3B (FP8) | our own endpoint on a Modal GPU | `openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8` | **smoke-tested**; the grid was started on 2026-11-14 |
+| Qwen3.6-35B-A3B (FP8) | our own endpoint on a Modal GPU | `openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8` | **grid run finished** 2026-11-15: 40 of 40 runs done, code rules only, judge pass not done |
 | Claude Opus 5.5 | Anthropic's API, the owner's key | `anthropic/claude-opus-5-5` | prepared, never run |
 | OpenAI Sol | OpenAI's API, the owner's key | `openai/gpt-6.1-sol` | prepared, never run |
 | Kimi K3.1 Pro | hosted: Tinker, or Moonshot's API | `openai-api/tinker/moonshotai/Kimi-K3.1-Pro:peft:262144` or `openai-api/moonshot/kimi-k3.1-pro` | prepared, never run |
@@ -18,8 +18,9 @@ Each contestant runs with both solvers (single agent, three-role swarm) on the s
 The question: which models can do real bioinformatics analysis, at what cost, and does a
 checking swarm help a weaker model more than a strong one?
 
-**No benchmark result exists yet.** One open model ran one small capsule as a smoke test. That
-is not a score. Read the run folders for the grid's own results when it ends.
+**There is no finished comparison yet.** Only the Qwen cells have run, and they are graded by
+code rules only: 42 of the 82 questions need the LLM judge and are still ungraded. The vendor
+and Kimi cells have not been started. Do not quote a score from this.
 
 ## What is in this folder
 
@@ -148,7 +149,7 @@ the tool-call check gets no benchmark run. One model is served at a time.
   the session is refused.
 - `NO_PAID_CALLS` covers Modal. With it on (the default) nothing deploys and no request is sent.
 
-Spent before the grid: 0.56 USD by this ledger (see `uv run openmodels ledger`).
+Spent so far: 6.70 USD by this ledger; 6.68 USD by Modal's own report (see `uv run openmodels ledger`).
 
 ## The capsule list
 
@@ -228,12 +229,29 @@ Both solvers gave -4.96 and -4.10, and code rules graded all four answers correc
 pilot took 26 s and 42 s on the same capsule with 37,504 and 76,351 tokens: Qwen used about
 five times the tokens (more, smaller steps) and two to three times the seconds.
 
-Projection for the grid: 82 x 27.1 s x 0.000665 = 1.48 USD (single) and 82 x 71.9 s x 0.000665
-= 3.92 USD (swarm), **5.40 USD for both cells**, plus about 0.25 USD for the cold start and
-checks. bix-46 is the smallest capsule; the pilot's other capsules took about 1.5 times as
-long per question, which gives about 8 USD. The ceiling is every run ending at its 1800 s
-limit: 49.50 USD. The guard reserves 60.28 USD. The real figure is in the ledger when the grid
-ends.
+**The Qwen grid, measured** (`runs/grid1-qwen3.6-35b-a3b`, 20 capsules, 82 questions, one L40S,
+2026-11-15). All 40 runs ended with status done; none failed.
+
+| | single | swarm |
+|---|---|---|
+| Seconds in runs | 3,534 (43.1 a question) | 5,432 (66.2 a question) |
+| Tokens | 8,402,862 (102,474 a question) | 10,010,107 (122,074 a question) |
+| GPU cost of the runs | 2.35 USD (0.029 a question) | 3.61 USD (0.044 a question) |
+| Runs that used 95% or more of their token budget | 15 of 20 | 18 of 20 |
+| Graded by code rules | 40 of 82 | 40 of 82 |
+| Correct among those 40 | 15 | 19 |
+| Not graded (need the judge) | 42 | 42 |
+
+- The whole session, with cold start and checks: 9,228 s, **6.14 USD** by the ledger. Modal's
+  own report for the app, all three sessions of the day: 6.65 USD (L40S 5.41, CPU 0.53,
+  memory 0.71).
+- The token budget is what stopped Qwen, not the time limit: no run came near 1800 s, most
+  ran out of tokens, and many answers are forced estimates from the final turn. Qwen takes
+  more, smaller steps than the Sonnet pilot did (about 2.6 times the tokens a question).
+- 15 and 19 of 40 are counts over the questions code rules can grade. They are not accuracy
+  over 82. With 42 questions ungraded, one model and one repeat, this supports no claim about
+  the swarm. Run the judge pass, then read `report.md`.
+- The earlier projection from the smoke test was 5.40 USD for both cells; the runs cost 5.96.
 
 ## Kimi
 
@@ -304,7 +322,7 @@ Cheapest path that credits can pay, first.
 
 | Model | First choice | Why | Second choice |
 |---|---|---|---|
-| Qwen3.6-35B-A3B | **Modal GPU** (one L40S), Modal credit | Smoke-tested, tool calls work, about 5 to 8 USD for both cells (measured basis) | Tinker: 0.45 / 0.09 / 1.335. With Qwen's own measured tokens: 2.48 USD if every input token is cached, 9.89 USD if none is. Not cheaper for sure, and tool calls are unverified there. |
+| Qwen3.6-35B-A3B | **Modal GPU** (one L40S), Modal credit | Done: tool calls work, 6.14 USD measured for both cells | Tinker: 0.45 / 0.09 / 1.335. With Qwen's own measured tokens: 2.48 USD if every input token is cached, 9.89 USD if none is. Not cheaper for sure, and tool calls are unverified there. |
 | Kimi K3.1 Pro | **Tinker**, if `toolcheck` passes and credits pay: about 23 USD for both cells (58 with no cache) | The only path the owner's credits might pay | Moonshot's API or Modal Shared Endpoint: about 7 USD (20 with no cache), real money. Cheaper per token than Tinker, so if credits do not pay on Tinker, use Moonshot. |
 
 ## How to shut everything down
@@ -321,11 +339,11 @@ A stopped app costs nothing. The Volumes cost storage until they are deleted.
 
 ## Limits and what is not verified
 
-- One open model was served and ran ONE small capsule. Nothing here is a benchmark result.
+- One open model ran the 20 capsules once. Its answers are graded by code rules only.
 - The lock was tested on the model's own app: 8 paths answered 401 without the key and with a
   wrong key, 200 with it.
-- Qwen's tool calls were checked with one scripted request and one capsule. Long runs on
-  larger capsules are what the grid itself shows.
+- Whether the two bix-61 capsules and the large ones ran well inside Docker's memory was not
+  looked at run by run; all 40 runs report status done.
 - Hosted models (Tinker, Moonshot) were never called. Their wiring is tested with a scripted
   server only.
 - Inspect builds a model object for `anthropic/claude-opus-5-5` and `openai/gpt-6.1-sol`

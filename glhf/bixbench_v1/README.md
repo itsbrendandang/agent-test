@@ -128,7 +128,7 @@ uv run bixbench-v1 run --capsules bix-46 --solvers single,glhf --no-judge \
   kept when the other keys are blanked. Hosted services were never called; tests use a
   scripted server.
 - State: Qwen3.6-35B-A3B was served on one Modal L40S and ran one small capsule (bix-46) with
-  both solvers as a smoke test. That is not a benchmark result.
+  both solvers as a smoke test, then the 20-capsule grid (code rules only; see the openmodels README).
 
 ## Integrity boundary
 

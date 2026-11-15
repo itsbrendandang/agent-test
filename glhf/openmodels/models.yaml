@@ -52,7 +52,8 @@ models:
       First cold start 285 s; 105 output tokens a second; a real tool-call round trip works
       (parsed call, right value, text answer after the tool result). One capsule (bix-46, 2
       questions): single agent 54 s and 187,051 tokens; swarm 144 s and 326,262 tokens; all four
-      answers graded correct by code rules. 35B parameters, 3B active per token; thinking on.
+      answers graded correct by code rules. Grid (20 capsules, 82 questions, both solvers):
+      40 of 40 runs done in 9,228 s, 6.14 USD; see README. 35B parameters, 3B active; thinking on.
       Modal's own example serves it with SGLang on 2 H100 (7.90 USD an hour) for low latency;
       one L40S (1.95) is the cheapest Modal GPU that holds it.
 
