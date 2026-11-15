@@ -201,7 +201,9 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
   const writer = parseModelId(config.models.strong, "board/config.yaml models.strong")
   const checker = firstPassModel(config, writer.qualified)
   const critic = criticModel(config, writer)
-  const specialist = level.specialistTier === "cheap" ? planner : writer
+  // A specialist's sentences are checked by the writer's checker, which is on another vendor than the writer. So the
+  // cheap tier is used only when it is the writer's vendor; otherwise the specialist runs on the writer's model.
+  const specialist = level.specialistTier === "cheap" && planner.vendor === writer.vendor ? planner : writer
   const get = (id: ModelId) => {
     const model = models.getModel(id.vendor, id.id)
     if (!model) throw new Error(`Model ${id.qualified} is not in the model catalog`)
