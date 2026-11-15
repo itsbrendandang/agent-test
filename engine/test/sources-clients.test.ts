@@ -8,7 +8,7 @@ import { test } from "node:test"
 import type { EvidenceItem } from "../src/events.ts"
 import { activityItems, activityUrl, CHEMBL_ID, compoundItem, mechanismUrl, moleculeUrl, parseChemblQuery, targetItem, targetUrl } from "../src/sources/chembl.ts"
 import { clinicalTrialsSearch, FIELDS as CT_FIELDS, NCT_ID, searchUrl as ctSearchUrl, studyItem, studyUrl } from "../src/sources/clinicaltrials.ts"
-import { createHttp, databaseLive, MAX_ITEMS, MAX_TEXT_CHARS, ServiceError, SOURCES, type DatabaseSource } from "../src/sources/index.ts"
+import { createHttp, databaseLive, LOOKUP_TIMEOUT_MS, MAX_ITEMS, MAX_TEXT_CHARS, ServiceError, SOURCES, type DatabaseSource } from "../src/sources/index.ts"
 import { DRUG_NAME, eventItem, labelItems, labelUrl, reactionCountUrl, SECTIONS, seriousCountUrl, SET_ID, UNII } from "../src/sources/openfda.ts"
 import { DISEASE_ID, ENSG_ID, GRAPHQL, SEARCH_QUERY, TARGET_QUERY, targetItems } from "../src/sources/opentargets.ts"
 import { CID, compoundItem as pubchemItem, experimentalItem, experimentalUrl, experimentalValues, openLicence, propertyUrl } from "../src/sources/pubchem.ts"
@@ -241,10 +241,7 @@ test("openfda: when the report counts cannot be fetched the label is still retur
 test("opentargets: the target's record (tractability, safety liabilities) and its disease associations, scores with every digit", async () => {
   const { http, sent } = service("opentargets")
   const out = await databaseLive("opentargets", "KRAS lung", http)
-  assert.deepEqual(sent, [
-    { url: GRAPHQL, method: "POST", post: { query: SEARCH_QUERY, variables: { q: "kras" } } },
-    { url: GRAPHQL, method: "POST", post: { query: TARGET_QUERY, variables: { id: "ENSG00000133703", filter: "lung", size: 7 } } },
-  ])
+  assert.deepEqual(sent, [{ url: GRAPHQL, method: "POST", post: { query: SEARCH_QUERY, variables: { q: "kras", filter: "lung", size: 7 } } }], "one request: the search carries the target's record")
   assert.equal(GRAPHQL, "https://api.platform.opentargets.org/api/v4/graphql")
   checkItems("opentargets", out.items, [/^https:\/\/platform\.opentargets\.org\/target\/ENSG\d{11}$/, /^https:\/\/platform\.opentargets\.org\/evidence\/ENSG\d{11}\/[A-Za-z]+_\w+$/])
   assert.equal(out.items.length, 8)
@@ -257,7 +254,7 @@ test("opentargets: the target's record (tractability, safety liabilities) and it
 
   const herg = service("opentargets")
   const kcnh2 = await databaseLive("opentargets", "KCNH2", herg.http)
-  assert.deepEqual(herg.sent[1].post, { query: TARGET_QUERY, variables: { id: "ENSG00000055118", filter: null, size: 7 } })
+  assert.deepEqual(herg.sent, [{ url: GRAPHQL, method: "POST", post: { query: SEARCH_QUERY, variables: { q: "kcnh2", filter: null, size: 7 } } }])
   assert.match(kcnh2.items[0].text, /Safety liabilities \(reported events\): receptor binding \(source: ToxCast\); Increased Mortality \(source: AOP-Wiki\); Reduced, survival \(effect: Inhibition\/Decrease\/Downregulation; source: AOP-Wiki\); Torsades de Point \(source: ClinPGx\); prolongation of QT interval of ECG \(effect: Inhibition\/Decrease\/Downregulation, general; in cardiovascular system; source: Bowes et al\. \(2012\)\)\. Function: /)
   assert.equal(kcnh2.notices.length, 1)
 })
@@ -265,7 +262,7 @@ test("opentargets: the target's record (tractability, safety liabilities) and it
 test("opentargets: an Ensembl id skips the search; ids, a wrong match and hostile records", async () => {
   const { http, sent } = service("opentargets")
   await databaseLive("opentargets", "ensg00000055118", http)
-  assert.equal(sent.length, 1, "one request")
+  assert.deepEqual(sent, [{ url: GRAPHQL, method: "POST", post: { query: TARGET_QUERY, variables: { id: "ENSG00000055118", filter: null, size: 7 } } }], "one request")
   for (const bad of ["ENSG0000013370", "ENSG000001337033", "ENSG00000133703/../x", "ENST00000133703", "ensg00000133703"]) assert.doesNotMatch(bad, ENSG_ID)
   for (const bad of ["MONDO", "MONDO_", "MONDO_0005233/x", "../MONDO_1", "MONDO 1", "M_1", "MONDO_0005233?x"]) assert.doesNotMatch(bad, DISEASE_ID)
   for (const ok of ["MONDO_0005233", "EFO_0004269", "HP_0001657", "Orphanet_101016", "OTAR_0000018"]) assert.match(ok, DISEASE_ID)
@@ -430,4 +427,47 @@ test("the fixtures are real answers from the six services and hold no key", () =
     for (const e of all) assert.equal(new URL(e.url).host, HOSTS[source])
     assert.doesNotMatch(raw(source), /api[_-]?key|authorization|bearer /i)
   }
+})
+
+test("a lookup has a time limit: past it the member is told, nothing more is sent, and other databases are not held up", async () => {
+  assert.equal(LOOKUP_TIMEOUT_MS, 45_000)
+  const sent: string[] = []
+  const pubchem = fixtures("pubchem")
+  // PubChem answers its first request late; UniProt never answers; Open Targets answers at once.
+  const http = createHttp({ minGapMs: 0, fetch: (async (url: string, init: RequestInit) => {
+    sent.push(new URL(url).host)
+    if (new URL(url).host === HOSTS.uniprot) return new Promise<Response>(() => {})
+    if (new URL(url).host === HOSTS.pubchem) {
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      const hit = pubchem.find((e) => e.url === url)
+      return new Response(JSON.stringify(hit?.body ?? {}), { status: hit?.status ?? 404 })
+    }
+    const post = JSON.parse(String(init.body))
+    const hit = fixtures("opentargets").find((e) => (e.post as { variables: { q?: string } }).variables.q === post.variables.q)
+    return new Response(JSON.stringify(hit?.body ?? {}))
+  }) as unknown as typeof fetch })
+  const started = Date.now()
+  const [uniprot, opentargets, pc] = await Promise.allSettled([
+    databaseLive("uniprot", "KRAS", http, 60), databaseLive("opentargets", "KRAS lung", http, 60), databaseLive("pubchem", "aspirin", http, 60),
+  ])
+  assert.ok(Date.now() - started < 1_000, "nobody waited for the 15-second request limit")
+  assert.equal(uniprot.status, "rejected")
+  assert.ok(uniprot.status === "rejected" && uniprot.reason instanceof ServiceError && /^UniProt did not finish in \d+ seconds$/.test(uniprot.reason.message))
+  assert.ok(pc.status === "rejected" && /^PubChem did not finish in/.test(pc.reason.message))
+  assert.ok(opentargets.status === "fulfilled" && opentargets.value.items.length === 8, "a slow database does not hold up another one")
+  await new Promise((resolve) => setTimeout(resolve, 200)) // PubChem's late first answer arrives: its second request is not sent
+  assert.equal(sent.filter((h) => h === HOSTS.pubchem).length, 1)
+})
+
+test("uniprot: an entry whose gene is the word asked for comes first, whatever UniProt's order", async () => {
+  // As UniProt answered "TP53" on 2026-11-15: TP53TG5 first, TP53 second (trimmed to the fields the client reads).
+  const entry = (accession: string, gene: string, synonyms: string[] = []) => ({ primaryAccession: accession, entryType: "UniProtKB reviewed (Swiss-Prot)", proteinDescription: { recommendedName: { fullName: { value: `${gene} protein` } } },
+    genes: [{ geneName: { value: gene }, synonyms: synonyms.map((value) => ({ value })) }], organism: { scientificName: "Homo sapiens" }, comments: [{ commentType: "FUNCTION", texts: [{ value: `${gene} function.` }] }] })
+  const answer = { results: [entry("Q9Y2B4", "TP53TG5", ["C20orf10"]), entry("P04637", "TP53", ["P53"]), entry("Q12888", "TP53BP1")] }
+  const http = createHttp({ minGapMs: 0, fetch: (async () => new Response(JSON.stringify(answer))) as unknown as typeof fetch })
+  const out = await databaseLive("uniprot", "TP53", http)
+  assert.equal(out.items[0].url, "https://www.uniprot.org/uniprotkb/P04637/entry#function")
+  assert.match(out.notices[0], /^UniProt's best match is P04637 TP53 protein \(TP53\)\. Other matches: Q9Y2B4 TP53TG5 protein \(TP53TG5\), Homo sapiens; Q12888 /)
+  assert.equal((await databaseLive("uniprot", "p53", http)).items[0].url, "https://www.uniprot.org/uniprotkb/P04637/entry#function", "a synonym counts")
+  assert.equal((await databaseLive("uniprot", "tumor suppressor", http)).items[0].url, "https://www.uniprot.org/uniprotkb/Q9Y2B4/entry#function", "no exact gene: UniProt's order stands")
 })
