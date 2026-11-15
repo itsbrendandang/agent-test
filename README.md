@@ -88,15 +88,31 @@ anything is spent.
 
 | Screen | What it is for |
 |---|---|
-| Research | The chat. Ask a question here. |
+| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
 | Saved research | Everything that was run before. You can search it and open any result. |
-| Compare | A team of agents against one agent alone, on the same task. |
+| Compare | A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
+| Lab | The agents as characters in a lab. They walk only when the engine reports real work. |
 | Settings | Demo or Real, spending limits, how it works. |
 
-We are reworking the screens this week, so a name on your screen may differ a little.
+The pictures below are from **Demo mode**. Every one shows a practice run: fixed example text,
+not research. The app labels such runs "Practice" itself.
+
+**Research.** You ask; the answer is split into hypotheses, each with the sources for and against
+it.
+
+![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
+
+**Team review.** The decision first, then how many statements were checked and how each one did.
+
+![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
+
+**Lab.** The same run as a scene: who is working, who fetched what, and a log of every step.
+The lab's look is by Anh Lam.
+
+![The Lab screen: six rooms with the agents as characters, and a side panel for the selected one](docs/images/lab.png)
 
 ## Where things stand
 
@@ -113,9 +129,14 @@ We say only what was really done.
   evidence, 105 not checked (75 of those are calculations, which the checker cannot re-run), none
   contradicted. It cost $1.31 and took 8 minutes. One run is not evidence that the reviews are
   good.
-- **Being built now:** a direct answer in the chat with numbered sources and visible steps, a
-  simpler screen layout, an animated "lab" that shows the agents at work, and open models on
-  Modal.
+- **Built, and tested in Demo mode only:** the direct answer in the chat (numbered sources,
+  visible steps, hypotheses with sources for and against), and the Lab. No real AI model has
+  written a direct answer yet; a real one stays switched off until we turn it on.
+- **Being built now:** open models and a sandbox on Modal, and a shared store for what the
+  agents find. Today each run keeps its own folder of files; there is no database yet.
+- **Memory between runs (past.dev):** wired into the nine-agent swarm only, and a person must
+  approve each lesson before it is saved. It has not been used in a full real run. The team
+  review and the chat do not use it.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
 
@@ -201,47 +222,52 @@ holds the keys, enforces the spending limits, and is the only part that reaches 
 ```mermaid
 flowchart TB
     you(["You, in a browser"])
+    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Research · Saved research · Compare · Team review<br/>Agents · Graph · Lab · Settings"]
 
-    subgraph mac["Your machine"]
-        app["The app (dashboard)<br/>127.0.0.1:5317<br/>Research chat, Saved research, Compare,<br/>Team review, Agents, Graph, Settings"]
-        subgraph engine["The engine, 127.0.0.1:8787"]
-            gate{"Access check<br/>and spending limits"}
-            chat["Chat and planner<br/>answers from saved research<br/>or drafts a plan"]
-            board["Team review<br/>lead scientist + 6 members"]
-            tracker["Run tracker<br/>starts and follows swarm runs"]
-            check["Statement checker<br/>the quote must be in the source"]
-        end
-        store[("Saved research<br/>run folders: events, record of<br/>every check, memo, outputs")]
-        sandbox["Docker sandbox, no network<br/>the swarm (9 roles) or one single agent<br/>then the benchmark's own grader"]
+    subgraph engine["The engine · 127.0.0.1:8787 · on your machine"]
+        gate{"Access check and<br/>spending limits"}
+        answer["<b>Direct answer</b><br/>search, screen, write,<br/>hypotheses"]
+        board["<b>Team review</b><br/>lead scientist + 6 members,<br/>method specialists when they fit"]
+        tracker["<b>Run tracker</b><br/>starts and follows<br/>benchmark runs"]
+        check["<b>Statement checker</b><br/>the quoted passage must be<br/>in the source"]
     end
 
-    subgraph outside["Outside services"]
-        anthropic["Anthropic<br/>lead, members, first check"]
-        openai["OpenAI<br/>critic and second check"]
-        exa["Exa<br/>web search, paid"]
-        pmc["Europe PMC<br/>PubMed and preprints, free"]
-    end
+    sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
+    store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
+    paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
+    free["<b>Free public sources</b><br/>Europe PMC: papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
 
     you --> app
-    app -- "questions, plans, start, cancel" --> gate
-    gate --> chat
+    app -- "questions, starts, cancels" --> gate
+    gate --> answer
     gate --> board
     gate --> tracker
-    chat -- "plan you confirm" --> board
-    chat -- "plan you confirm" --> tracker
+    answer --> check
     board --> check
     tracker --> sandbox
-    board --> store
     check --> store
     sandbox --> store
     store -- "live events" --> app
-    board -.-> anthropic
-    board -.-> openai
-    check -.-> anthropic
-    check -.-> openai
-    board -. "scout only" .-> exa
-    board -. "scout only" .-> pmc
+    answer -.-> free
+    board -.-> free
+    answer -.-> paid
+    board -.-> paid
+    check -.-> paid
+
+    classDef local fill:#f4f1e8,stroke:#8a8371,color:#1b1a17
+    classDef core fill:#fffdf6,stroke:#8a8371,color:#1b1a17
+    classDef paidc fill:#fdecec,stroke:#c0504d,color:#1b1a17
+    classDef freec fill:#e9f5ec,stroke:#17824d,color:#1b1a17
+    class you,app,store,sandbox local
+    class gate,answer,board,tracker,check core
+    class paid paidc
+    class free freec
 ```
+
+Solid arrows stay on your machine. Dotted arrows leave it, and only the engine sends them: the
+red box costs money and is refused in Demo mode; the green box is free. In a team review only one
+member, the scout, searches. The swarm's sandbox has no network at all. A direct answer written
+by real models is built but still switched off (see "Where things stand").
 
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is
 saved as it happens. A review that is interrupted, for example by a crash or a restart, continues
@@ -267,8 +293,9 @@ a practice review in the middle.
 npm run check    # about 3 minutes; never spends money
 ```
 
-It prints one line per part, `ok` or `FAIL`. Today the "engine tests" line shows `FAIL` on `main`:
-a few known failures and one test file that does not finish. The details are in
+It prints one line per part, `ok` or `FAIL`. On `main` today all five parts print `ok`: no
+merge-conflict markers, both type checks clean, 452 engine tests and 798 dashboard tests pass.
+If a line says `FAIL` on your copy, run `npm run setup` again first. More about the tests is in
 [docs/developers.md](docs/developers.md#tests).
 
 ## Read more
