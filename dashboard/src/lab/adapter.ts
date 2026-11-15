@@ -99,7 +99,7 @@ const PLACE: Record<string, string> = {
 const NOUN: Record<string, string> = { exa: "result", europepmc: "paper", fixture: "example source" }
 /** One or two words for the tag over a parcel: where it came from. */
 const TAG: Record<string, string> = { exa: "Exa", europepmc: "PubMed", fixture: "examples", chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem" }
-/** A research answer's literature step asks four indexes at once, though it carries the provider "europepmc"; a board review's asks Europe PMC only. */
+/** A research answer's literature step asks six sources at once (searchPlace names them), though it carries the provider "europepmc"; a board review's asks Europe PMC only. */
 const literature = (provider: string | undefined, research: boolean) => research && provider === "europepmc"
 const tagOf = (n: number, provider: string | undefined, research = false) => `${plural(n, nounOf(provider))}${literature(provider, research) ? " · literature" : provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
 const placeOf = (provider: string | undefined, research = false) => (!provider ? "a search" : literature(provider, research) ? searchPlace(provider) : PLACE[provider] ?? provider)
