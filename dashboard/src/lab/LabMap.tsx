@@ -2,7 +2,7 @@
 // plate, an accent line, an open doorway, two desks with a screen, a bench and a plant. Drawn as Anh drew it, with
 // the app's colours through CSS variables (lab.css). It holds no characters and nothing in it moves. The room names are text over the map (LabScene), so they stay readable when the map is small.
 import { memo, useId } from "react"
-import { MAP, ROOMS } from "./model"
+import { MAP, ROOMS, SEARCH_SPOTS, roomOf } from "./model"
 
 export const LabMap = memo(function LabMap() {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "")
@@ -48,6 +48,19 @@ export const LabMap = memo(function LabMap() {
           </g>
         )
       })}
+      {/* Not in Anh's map: where real searches are picked up. A screen by the door for the web, a shelf for papers and databases. */}
+      {(() => {
+        const d = roomOf("discovery"), web = SEARCH_SPOTS.web, papers = SEARCH_SPOTS.papers
+        return (
+          <g data-spots="search">
+            <rect x={d.x + web.dx - 15} y={d.y + web.dy - 62} width="30" height="22" rx="4" fill="var(--lab-plate)" stroke="var(--lab-wall)" />
+            <rect x={d.x + web.dx - 11} y={d.y + web.dy - 58} width="22" height="14" rx="2" fill={`url(#${screen})`} />
+            <circle cx={d.x + web.dx} cy={d.y + web.dy - 51} r="4.5" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+            <rect x={d.x + papers.dx - 16} y={d.y + papers.dy - 62} width="32" height="22" rx="4" fill="var(--lab-plate)" stroke="var(--lab-wall)" />
+            {["#edb7cb", "#9ccc8f", "#7496e8", "#f2b35e"].map((c, i) => <rect key={c} x={d.x + papers.dx - 12 + i * 6.5} y={d.y + papers.dy - 58} width="5" height="14" rx="1.5" fill={c} />)}
+          </g>
+        )
+      })()}
     </svg>
   )
 })

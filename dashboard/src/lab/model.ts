@@ -20,6 +20,19 @@ export const ROOMS: readonly Room[] = [
 ]
 export const roomOf = (id: RoomId): Room => ROOMS.find((r) => r.id === id)!
 
+/**
+ * Two pick-up points in Discovery for real searches: the web by the door, papers and databases by the far wall. They
+ * are an addition to Anh's map, so a search is a walk across the room that can be told apart at a glance.
+ * `dx`, `dy`: where a teammate stands, from the room's corner.
+ */
+export const SEARCH_SPOTS = {
+  web: { dx: 384, dy: 158, sign: "Web", about: "Web search" },
+  papers: { dx: 42, dy: 158, sign: "Papers", about: "Literature and public databases" },
+} as const
+/** Which pick-up point a search uses. A practice run's example sources, and anything that is not a search, use the middle of the room. */
+export const searchSpot = (provider: string | undefined): keyof typeof SEARCH_SPOTS | undefined =>
+  provider === "exa" ? "web" : provider && provider !== "fixture" ? "papers" : undefined
+
 export type Shape = "bunny" | "tree" | "mushroom" | "flame" | "mountain" | "fuzzy" | "acorn" | "owl"
 export type CharacterId =
   | "scout" | "librarian" | "proposer" | "navigator" | "experimenter" | "pilot"
@@ -76,6 +89,8 @@ export interface Trip {
   outcome?: "carried" | "empty" | "failed"
   /** A handoff: who it is for. */
   to?: CharacterId
+  /** A search: where it looked ("exa", "europepmc", "fixture", a database), as the engine recorded it. */
+  provider?: string
 }
 
 export interface Activity {
@@ -98,7 +113,7 @@ export interface Activity {
   /** Its walks, oldest first. Only the last few are kept. */
   trips: Trip[]
   /** The last thing it brought back. */
-  lastFetched?: { label: string; room: RoomId; at: number }
+  lastFetched?: { label: string; room: RoomId; at: number; provider?: string }
   /** A step of its own that failed. Kept to the end of the run, also when it works again afterwards. */
   problem?: { text: string; at: number }
 }
@@ -129,6 +144,8 @@ export interface LabModel {
   at?: number
   /** True when the times are estimates (a swarm's notes record time only when a step ends). */
   roughTimes?: boolean
+  /** The searches the run has reported so far, counted by where they looked. Only what an event said. */
+  searches?: Record<string, number>
   characters: Record<CharacterId, Activity>
   visitors: Visitor[]
   /** Oldest first. */

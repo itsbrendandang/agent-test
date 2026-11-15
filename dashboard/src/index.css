@@ -266,7 +266,9 @@ td { border-bottom: 1px solid var(--line); }
 .team-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
 .team-facts dt { color: var(--text-muted); }
 .team-facts dd { margin: 0; overflow-wrap: anywhere; }
-.team-prompt summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.team-prompt summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); width: fit-content; }
+.team-prompt .team-facts { margin-top: var(--space-2); }
+.team-state { color: var(--text-muted); }
 .team-prompt pre { margin: 8px 0 0; white-space: pre-wrap; font-size: 12px; line-height: 1.5; max-height: 320px; overflow: auto; }
 .team-shared { padding: 14px 18px; }
 
@@ -312,6 +314,10 @@ td { border-bottom: 1px solid var(--line); }
 .page .engine-offline h2 { font-size: 16px; font-weight: 650; text-transform: none; letter-spacing: 0; color: var(--text); }
 
 .engine-how { grid-column: 1 / -1; max-width: 80ch; }
+details.technical > summary { cursor: pointer; font-size: 16px; font-weight: 600; width: fit-content; border-radius: 4px; }
+details.technical > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+details.technical[open] > summary { margin-bottom: var(--space-2); }
+details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .board-scripted { max-width: 70ch; }
 .token-row { display: flex; align-items: center; gap: 10px; }
 .token-why { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
@@ -474,6 +480,18 @@ td { border-bottom: 1px solid var(--line); }
   .engine-notice { margin: var(--space-2) var(--space-3) 0; }
 }
 @media (max-width: 479px) { .app-header-title { visibility: hidden; } }
+
+/* targets: a disclosure line is at least 28 px high; on a touch-size window every control in the shell's views is 44 px */
+.page:not(.search) summary, dialog summary { padding-block: 4px; min-height: 28px; }
+.page:not(.search) summary:focus-visible, dialog summary:focus-visible, .page:not(.search) a:focus-visible, .page:not(.search) .link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+@media (max-width: 767px) {
+  .page:not(.search) .btn, dialog .btn, .page:not(.search) select, .page:not(.search) input[type="search"], .page:not(.search) input[type="number"], dialog select, dialog input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+  .page:not(.search) summary, dialog summary { padding-block: 11px; }
+  .page:not(.search) .link-btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .newrun-check { min-height: 44px; display: flex; align-items: center; gap: var(--space-2); }
+  .mode:not([data-header]) .mode-switch label { padding: 12px 16px; }
+  .thread-chip .pill, .swarm-cell { min-height: 40px; }
+}
 @media (prefers-reduced-motion: reduce) { [data-slot^="sidebar"], [data-slot^="sheet"], [data-slot^="tooltip"], .nav-item { transition-duration: 0s !important; animation-duration: 0s !important; } }
 
 /* the view: one landmark, one content width, the same left edge on every view */
@@ -765,7 +783,7 @@ dialog.how { margin: auto; }
 .mode-switch[data-state="on"] label[data-on] { background: var(--paid); color: #fff; }
 .mode-switch:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (max-width: 767px) { .mode[data-header] .mode-switch label { padding: 10px 11px; } .next-run-label { padding: 10px 2px; } }
-.mode-switch:has(input:disabled) label:not([data-on]) { color: #8a8983; }
+.mode-switch:has(input:disabled) label:not([data-on]) { color: var(--text-muted); }
 .mode-switch:has(input:disabled) label, .mode-switch:has(input:disabled) input { cursor: not-allowed; }
 .mode-words { font-size: 12px; color: var(--text-muted); }
 .mode-note { font-size: 12px; font-weight: 600; flex-basis: 100%; }

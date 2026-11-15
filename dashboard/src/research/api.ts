@@ -67,6 +67,23 @@ export function useResearchEvents(id: string | undefined): { events: ResearchEve
   return useMemo(() => (got && got.id === id ? { events: got.events, lost: got.lost } : { events: [], lost: false }), [got, id])
 }
 
+/** One answer of a thread, as the engine lists it. */
+export interface ThreadAnswer { id: string; thread: string; question: string }
+const asAnswers = (body: unknown): ThreadAnswer[] => {
+  const items = (body as { items?: unknown } | undefined)?.items
+  return (Array.isArray(items) ? items : []).flatMap((r: { id?: unknown; thread?: unknown; question?: unknown } | null) =>
+    r && typeof r.id === "string" && /^[\w.-]{1,120}$/.test(r.id) && typeof r.thread === "string" && typeof r.question === "string" ? [{ id: r.id, thread: r.thread, question: r.question }] : [])
+}
+/** The answers of one conversation, oldest first, as the engine holds them. Empty when it cannot be read. */
+export async function threadAnswers(thread: string): Promise<ThreadAnswer[]> {
+  try { const r = await fetch(`${ENGINE}/api/research?thread=${encodeURIComponent(thread)}`); return r.ok ? asAnswers(await r.json()) : [] } catch { return [] }
+}
+/** The conversation one answer belongs to: its thread id, from the engine's record of it. */
+export async function threadOf(id: string): Promise<string | undefined> {
+  try { const r = await fetch(`${ENGINE}/api/research/${encodeURIComponent(id)}`); if (!r.ok) return undefined; const body = (await r.json()) as { thread?: unknown; record?: { thread?: unknown } }; const t = body.thread ?? body.record?.thread; return typeof t === "string" ? t : undefined }
+  catch { return undefined }
+}
+
 /** Stop an answer that is being made or is waiting. Resolves to the engine's plain message. */
 export async function cancelResearch(id: string): Promise<string> {
   try {

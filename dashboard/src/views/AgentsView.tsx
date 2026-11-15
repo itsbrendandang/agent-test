@@ -77,7 +77,7 @@ function SwarmTeam({ filter }: { filter: string }) {
           if (!hasWords(roleText(r), filter)) return null
           const spec = catalog?.roles.find((x) => x.key === r.key)
           const model = spec && run ? run.roleModels?.[spec.model_group] ?? run.model : undefined
-          const state = active === r.key ? "working now" : started.has(r.key) ? "ran in the latest run" : run ? "did not run in the latest run" : "no runs yet"
+          const state = active === r.key ? "● Working now" : started.has(r.key) ? "✓ Ran in the latest run" : run ? "○ Did not run in the latest run" : "○ No run yet"
           return (
             <article key={r.key} className="cast-card card-surface team-card" data-active={active === r.key || undefined}>
               <div className="team-top">
@@ -87,14 +87,14 @@ function SwarmTeam({ filter }: { filter: string }) {
                   <p className="small">{r.does}.</p>
                 </div>
               </div>
-              <dl className="team-facts">
-                <dt>Time</dt><dd>{spec?.budget ?? "–"}</dd>
-                <dt>Model</dt><dd>{spec ? <>{model ?? "the run's model"} <span className="muted">({spec.model_group} group)</span></> : "–"}</dd>
-                <dt>Status</dt><dd>{state}</dd>
-              </dl>
+              <p className="small team-state" data-testid="role-state">{state}</p>
               {spec && (
                 <details className="team-prompt">
-                  <summary>Instructions</summary>
+                  <summary>Budget, model and instructions</summary>
+                  <dl className="team-facts">
+                    <dt>Budget</dt><dd>{spec.budget}</dd>
+                    <dt>Model</dt><dd>{model ?? "the run's model"} <span className="muted">({spec.model_group} group)</span></dd>
+                  </dl>
                   <pre>{spec.instructions}</pre>
                 </details>
               )}

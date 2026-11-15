@@ -34,7 +34,7 @@ export type PlanState = { state: "open" } | { state: "discarded" } | { state: "e
 export type Turn = { id: number; role: "user"; content: string }
   | { id: number; role: "assistant"; content: string; reply: ChatReply; plan?: PlanState; /** The effort the question was asked with. */ effort?: EffortId }
   /** A direct, sourced answer: the engine keeps it; the page follows its events by id. `content` is its text once finished. */
-  | { id: number; role: "assistant"; content: string; research: { id: string; question: string } }
+  | { id: number; role: "assistant"; content: string; research: { id: string; question: string; thread?: string } }
 export type ReplyTurn = Extract<Turn, { reply: ChatReply }>
 export interface Choice { provider?: ProviderId; model?: string; effort?: EffortId }
 

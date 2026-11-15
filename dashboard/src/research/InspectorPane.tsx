@@ -18,7 +18,8 @@ export function InspectorPane({ narrow, width, onWidth, onClose, children }: { n
   const drag = useRef<{ x: number; w: number } | undefined>(undefined)
   if (narrow) return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
-      <SheetContent side="right" id="research-inspector" className="inspector-sheet">
+      <SheetContent side="right" id="research-inspector" className="inspector-sheet"
+        onCloseAutoFocus={(e) => { const back = document.querySelector<HTMLElement>('[aria-controls="research-inspector"]'); if (back) { e.preventDefault(); back.focus() } }}>
         <SheetHeader className="inspector-sheethead"><SheetTitle>Inspector</SheetTitle><SheetDescription className="sr-only">Evidence, files and activity of the answer.</SheetDescription></SheetHeader>
         {children}
       </SheetContent>

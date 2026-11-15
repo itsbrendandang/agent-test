@@ -117,6 +117,23 @@ describe("the lab's walking", () => {
     expect(active(sim)).toBe(false)
   })
 
+  it("takes along a finished fetch for the room it is already walking to", () => {
+    const sim = createSim()
+    syncTrips(sim, withTrips({ guardian: [fetch("t0", "review", 0)] }), all)
+    for (let i = 0; i < 20; i++) advance(sim, 0.05)
+    syncTrips(sim, withTrips({ guardian: [fetch("t0", "review", 0), fetch("t1", "review", 0), fetch("t2", "review", 0)] }), all)
+    expect(sim.walkers.guardian.queue).toHaveLength(0) // one walk for the three
+    const tags = new Set<string>()
+    for (let t = 0; t < 3000 && advance(sim, 0.05); t++) tags.add(sim.walkers.guardian.tag)
+    expect([...tags]).toContain("s-t0 +2 more")
+    // once the parcel is in hand a new one waits for the next walk
+    const again = createSim()
+    syncTrips(again, withTrips({ guardian: [fetch("t0", "review", 0)] }), all)
+    while (!again.walkers.guardian.carrying) advance(again, 0.05)
+    syncTrips(again, withTrips({ guardian: [fetch("t0", "review", 0), fetch("t1", "review", 0)] }), all)
+    expect(again.walkers.guardian.queue.map((t) => t.id)).toEqual(["t1"])
+  })
+
   it("only notes a trip it is told not to walk (history, or reduced motion)", () => {
     const sim = createSim()
     const model = withTrips({ guardian: [fetch("t1", "review", 0)] })

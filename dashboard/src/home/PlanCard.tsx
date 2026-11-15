@@ -1,6 +1,7 @@
 // A plan proposed in a reply. It starts nothing by being shown. "Start research" opens a confirm step that restates
 // what will run and what it may cost; only the Start button of that step calls the engine, and for a paid plan it
 // stays disabled until a box is ticked. While the engine's paid-calls switch is off a paid plan cannot start.
+import { Provenance } from "@/components/Provenance"
 import { type ReactNode, useId, useState } from "react"
 import { Streamdown } from "streamdown"
 import { useRunEvents } from "@/board/api"
@@ -97,7 +98,8 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
     <section className="home-plan card-surface" aria-labelledby={`${uid}-title`} data-state={state.state}>
       <header className="home-plan-head">
         <span className="swarm-eyebrow">{state.state === "started" ? "The plan that was started" : "A plan for a review. Nothing has started."}</span>
-        <span className="pill" data-kind={plan.paid ? "warning" : "neutral"}>{plan.paid ? "Costs money: uses paid models or paid search" : "Practice run: fixed text, not real research"}</span>
+        {plan.paid ? <span className="pill" data-kind="warning">Costs money: uses paid models or paid search</span>
+          : <><Provenance kind="practice" /><span className="muted small">Fixed text, not real research</span></>}
       </header>
       <h2 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h2>
       {plan.question.trim() !== (plan.briefTitle || "").trim() && <p className="home-plan-question">“{plan.question}”</p>}

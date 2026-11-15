@@ -91,7 +91,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         s.selection = {
           criteria: str(e.criteria) ?? "",
           selected: Array.isArray(e.selected) ? (e.selected as Record<string, unknown>[]).flatMap((x) => (num(x?.n) !== undefined ? [{ n: num(x.n)!, why: str(x.why) ?? "", limitation: str(x.limitation) }] : [])) : [],
-          notSelected: Array.isArray(e.notSelected) ? (e.notSelected as Record<string, unknown>[]).flatMap((x) => (str(x?.title) !== undefined || str(x?.url) ? [{ title: str(x.title) ?? "", url: str(x.url) ?? "", provider: str(x.provider) ?? "", reason: str(x.reason) ?? "" }] : [])) : [],
+          notSelected: Array.isArray(e.notSelected) ? (e.notSelected as Record<string, unknown>[]).flatMap((x) => (str(x?.title) !== undefined || str(x?.url) ? [{ title: plainTitle(str(x.title) ?? ""), url: str(x.url) ?? "", provider: str(x.provider) ?? "", reason: str(x.reason) ?? "" }] : [])) : [],
         }
         break
       case "sources.cited": if (Array.isArray(e.n)) s.cited = (e.n as unknown[]).filter((n): n is number => typeof n === "number"); break
@@ -115,7 +115,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "sources":
-        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: str(i.title) ?? "", provider: str(i.provider) ?? "", note: str(i.note) }] : []))
+        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note) }] : []))
         break
       case "answer.delta": deltas += str(e.text) ?? ""; break
       case "answer.written": written = str(e.markdown); break
@@ -189,6 +189,19 @@ export function progressLine(s: AnswerState): string {
   return `Found ${last.found ?? 0} in ${providerPlace(last.provider)}, kept ${last.kept ?? 0}.`
 }
 
+/** Markdown read as plain text: emphasis marks, code ticks and "[n]" citation markers left out. `at[i]` is where plain character i sits in the Markdown. */
+export function plainReading(markdown: string): { plain: string; at: number[] } {
+  let plain = ""; const at: number[] = []
+  for (let i = 0; i < markdown.length; i++) {
+    const c = markdown[i]
+    if (c === "*" || c === "`" || (c === "_" && (markdown[i + 1] === "_" || markdown[i - 1] === "_"))) continue
+    const cite = /^\s*\[\d+\]/.exec(markdown.slice(i, i + 12))
+    if (cite && (c === "[" || /\s/.test(c))) { i += cite[0].length - 1; continue }
+    plain += c; at.push(i)
+  }
+  return { plain, at }
+}
+
 /**
  * The answer's Markdown with its citation markers and check marks turned into private links the renderer knows:
  * "[2]" becomes a citation chip, and each checked statement gets a mark after its sentence. The private address
@@ -200,17 +213,23 @@ export function withMarks(markdown: string, statements: Statement[], sources: So
   const unplaced: Statement[] = []
   const known = new Set(sources.map((s) => s.n))
   // statements first, from the end of the text, so earlier positions stay valid
+  // The engine's statement is the sentence as plain text: without the emphasis marks and citation markers the
+  // answer's Markdown has around and inside it. So it is looked for in a plain reading of the Markdown, and the
+  // place found is carried back to the Markdown.
+  const read = plainReading(text)
   const found = statements.map((st) => {
-    const plain = st.text.trim()
-    let at = text.indexOf(plain)
-    let len = plain.length
-    if (at < 0 && /[.!?]$/.test(plain)) { at = text.indexOf(plain.slice(0, -1)); len = plain.length - 1 }
-    return { st, at, len }
+    const plain = plainReading(st.text.trim()).plain
+    let at = plain ? read.plain.indexOf(plain) : -1
+    let size = plain.length
+    if (at < 0 && /[.!?]$/.test(plain)) { at = read.plain.indexOf(plain.slice(0, -1)); size = plain.length - 1 }
+    if (at < 0) return { st, at: -1, len: 0 }
+    const end = read.at[at + size - 1] + 1
+    return { st, at: read.at[at], len: end - read.at[at] }
   })
   for (const f of found.filter((x) => x.at < 0)) unplaced.push(f.st)
   for (const { st, at, len } of found.filter((x) => x.at >= 0).sort((a, b) => b.at - a.at)) {
     const rest = text.slice(at + len)
-    const tail = /^[.!?]?(?:\s*\[\d+\])*[.!?]?/.exec(rest)?.[0] ?? "" // after its citations and the full stop
+    const tail = /^[*_`]*[.!?]?[*_`]*(?:\s*\[\d+\])*[.!?]?/.exec(rest)?.[0] ?? "" // after its citations and the full stop
     const end = at + len + tail.length
     text = `${text.slice(0, end)} [check](#${key}-check-${st.index})${text.slice(end)}`
   }
@@ -228,6 +247,9 @@ export const preparation = (s: AnswerState): { running: boolean; ms?: number; fa
   return p ? { running: p.status === "running", ms: p.ms, failed: p.status === "failed" } : undefined
 }
 /** Found, selected and cited are three different things. Counts only what the engine reported. */
+/** A title as text: a database title can carry markup ("<i>KRAS</i>"), which is never rendered and reads badly as text. */
+export function plainTitle(title: string): string { return title.replace(/<\/?(?:i|b|em|strong|sub|sup|u)>/gi, "").replace(/\s+/g, " ").trim() }
+
 export const sourceCounts = (s: AnswerState): { found?: number; selected: number; cited?: number } => {
   const searches = s.steps.filter((x) => x.kind === "search" && x.found !== undefined)
   return { found: searches.length ? searches.reduce((n, x) => n + (x.found ?? 0), 0) : s.selection ? s.selection.selected.length + s.selection.notSelected.length : undefined, selected: s.sources.length, cited: s.cited?.length }

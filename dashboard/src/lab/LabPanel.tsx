@@ -1,6 +1,8 @@
 // Agent Lab design by Anh Lam. The side panel of the lab: the selected teammate (who it is, which real agent or step
 // it stands for, what it is doing now, since when, what it last fetched) and the activity log. Both are read from
 // the same activity model the scene draws, so the words and the picture cannot disagree about what was reported.
+import { SearchCredit } from "@/components/Shared"
+import type { SearchProvider } from "@/board/api"
 import { Mascot } from "./Mascot"
 import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
 import "./lab.css"
@@ -27,9 +29,18 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
         {a.standsFor && <div><dt>Stands for</dt><dd>{a.standsFor}</dd></div>}
         {a.inRun && a.doing && <div><dt>Doing now</dt><dd>{a.doing}</dd></div>}
         {a.inRun && a.since !== undefined && model.status !== "empty" && <div><dt>Since</dt><dd><time dateTime={new Date(a.since).toISOString()}>{clockTime(a.since)}</time></dd></div>}
-        {a.lastFetched && <div><dt>Last fetched</dt><dd>{a.lastFetched.label} <span className="muted">(in {roomOf(a.lastFetched.room).name}, {clockTime(a.lastFetched.at)})</span></dd></div>}
+        {a.lastFetched && <div><dt>Last fetched</dt><dd>{a.lastFetched.label} <span className="muted">(in {roomOf(a.lastFetched.room).name}, {clockTime(a.lastFetched.at)})</span>{a.lastFetched.provider && <><br /><SearchCredit provider={a.lastFetched.provider as SearchProvider} /></>}</dd></div>}
         {a.problem && <div><dt>A step of its own failed</dt><dd data-tone="bad">✕ {a.problem.text}</dd></div>}
       </dl>
+      {model.searches && (
+        <>
+          <hr />
+          <h3>Searches reported so far</h3>
+          <ul className="lab-visitors">
+            {Object.entries(model.searches).map(([provider, n]) => <li key={provider}>{n} {n === 1 ? "search" : "searches"}: <SearchCredit provider={provider as SearchProvider} /></li>)}
+          </ul>
+        </>
+      )}
       {model.visitors.length > 0 && (
         <>
           <hr />

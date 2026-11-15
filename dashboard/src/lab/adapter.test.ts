@@ -82,7 +82,11 @@ describe("a team review (boardLab)", () => {
       ["8 papers from PubMed and preprints (Europe PMC) (4 more screened out)", "carried"],
       ["nothing kept from ChEMBL (3 results screened out)", "empty"],
     ])
-    expect(m.characters.scout.lastFetched?.label).toMatch(/^8 papers/)
+    expect(m.characters.scout.lastFetched).toMatchObject({ provider: "europepmc" })
+    expect(trips(m, "scout").map((t) => [t.short, t.provider])).toEqual([["3 results · Exa", "exa"], ["8 papers · PubMed", "europepmc"], ["nothing", "chembl"]])
+    expect(m.searches).toEqual({ exa: 1, europepmc: 1, chembl: 1 }) // each search the run reported, by where it looked
+    expect(boardLab(REVIEW_WITH_VISITOR.slice(0, 4)).characters.scout.doing).toBe("Round 1: searched the web (Exa) for “placeholder web query” and brought back 3 results from the web (Exa) (2 more screened out). It still has its reply to write.")
+    expect(m.log.at(-1)?.text).toBe("Scout searched ChEMBL for “placeholder database query”: nothing kept from ChEMBL (3 results screened out).")
     expect(m.characters.librarian).toMatchObject({ inRun: false, trips: [] }) // not a second face for the scout
     expect(m.characters.librarian.standsFor).toMatch(/all made by the Scout/)
   })
@@ -183,8 +187,9 @@ describe("a research answer (answerLab)", () => {
     expect(trips(out, "scout")).toEqual([expect.objectContaining({ id: "step:search:exa:1", kind: "fetch", room: "discovery", at: T0 + 2600 })])
     expect(trips(out, "scout")[0].back).toBeUndefined()
     const back = answerLab(upTo(REAL_ANSWER, 6))
-    expect(trips(back, "scout")[0]).toMatchObject({ id: "step:search:exa:1", back: T0 + 5100, outcome: "carried", label: "6 results from the web (Exa)", short: "6 results" })
-    expect(back.characters.scout).toMatchObject({ state: "done", lastFetched: { label: "6 results from the web (Exa)", room: "discovery", at: T0 + 5100 } })
+    expect(trips(back, "scout")[0]).toMatchObject({ id: "step:search:exa:1", back: T0 + 5100, outcome: "carried", label: "6 results from the web (Exa)", short: "6 results · Exa", provider: "exa" })
+    expect(back.characters.scout).toMatchObject({ state: "done", lastFetched: { label: "6 results from the web (Exa)", room: "discovery", at: T0 + 5100, provider: "exa" } })
+    expect(back.searches).toEqual({ exa: 1 })
   })
 
   it("hands work on when one step finishes and the next starts", () => {
@@ -203,7 +208,8 @@ describe("a research answer (answerLab)", () => {
     expect(lib.map((t) => [t.id, t.back !== undefined])).toEqual([["step:search:europepmc:1", true], ["step:search:europepmc:2", false], ["step:search:chembl:1", false], ["step:search:clinicaltrials:1", false]])
     expect(m.characters.librarian.state).toBe("fetching") // still out for the others
     expect(m.characters.auditor.state).toBe("fetching") // screening the first results meanwhile
-    expect(lib[0]).toMatchObject({ label: "8 papers from PubMed and preprints (Europe PMC)", short: "8 papers", outcome: "carried" })
+    expect(lib[0]).toMatchObject({ label: "8 papers from PubMed and preprints (Europe PMC)", short: "8 papers · PubMed", outcome: "carried", provider: "europepmc" })
+    expect(m.searches).toEqual({ exa: 1, europepmc: 2, chembl: 1, clinicaltrials: 1 })
     // the Navigator gave its plan to the Scout and then to the Librarian, once each
     expect(trips(m, "navigator").map((t) => t.to)).toEqual(["scout", "librarian"])
   })

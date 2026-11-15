@@ -1,6 +1,7 @@
 // Home: a chat box for starting research, and what it can use. A question goes to the engine (POST /api/chat); the
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
+import { SquarePenIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import "@/research/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
@@ -19,7 +20,7 @@ import { useStickToBottomContext } from "use-stick-to-bottom"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
 import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
 import { ResearchAnswer } from "@/research/Answer"
-import { useSeenEvents } from "@/research/api"
+import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
 import { Inspector } from "@/research/Inspector"
 import { InspectorPane, InspectorToggle } from "@/research/InspectorPane"
 import { loadInspector, saveInspector, tabsOf, useNarrow, type InspectorTab } from "@/research/inspectorState"
@@ -52,6 +53,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [statuses, setStatuses] = useState<Record<string, string>>({}) // each direct answer's status, as its own events report it
   const box = useRef<HTMLTextAreaElement>(null)
   const asking = useRef<AbortController | undefined>(undefined)
+  const loadedTurns = useRef(turns) // what the page started with
   const thread = useRef<string | undefined>(undefined) // the engine's id for this conversation of direct answers
   const [canAnswer, setCanAnswer] = useState<"unknown" | "here" | "missing">("unknown") // whether this engine can answer directly
 
@@ -62,6 +64,27 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
     return () => { stale = true }
   }, [again])
   useEffect(() => saveTurns(turns), [turns])
+  // After a reload, or when a saved answer is opened: the conversation is the engine's. Its thread is found from the
+  // last answer on the page, so a follow-up continues it; and when the page holds only answers of that thread, the
+  // engine's list of them replaces the page's (an answer that was queued or asked before is not lost).
+  useEffect(() => {
+    const last = loadedTurns.current.findLast((t) => t.role === "assistant" && "research" in t)
+    if (!last || !("research" in last)) return
+    let stale = false
+    void (async () => {
+      const id = last.research.thread ?? (await threadOf(last.research.id))
+      if (stale || !id) return
+      if (!thread.current) thread.current = id
+      const all = await threadAnswers(id)
+      if (stale || all.length === 0) return
+      setTurns((old) => {
+        const mine = old.flatMap((t) => (t.role === "assistant" ? ["research" in t ? t.research.id : ""] : []))
+        if (mine.some((m) => !all.some((a) => a.id === m)) || all.every((a) => mine.includes(a.id))) return old // other kinds of reply on the page, or nothing to add
+        return all.flatMap((a, i) => { const was = old.find((t) => t.role === "assistant" && "research" in t && t.research.id === a.id); return [{ id: i * 2 + 1, role: "user" as const, content: a.question }, { id: i * 2 + 2, role: "assistant" as const, content: was?.content ?? "", research: { id: a.id, question: a.question, thread: a.thread } }] })
+      })
+    })()
+    return () => { stale = true }
+  }, [])
   useEffect(() => () => asking.current?.abort(), [])
 
   // Models a person may pick: only from providers whose key the engine has, and only while paid calls are on.
@@ -93,7 +116,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           const started = await startResearch(asked, effort === "quick" ? "quick" : "standard", thread.current)
           if (stop.signal.aborted) return
           thread.current = started.thread; setCanAnswer("here")
-          setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: "", research: { id: started.id, question: asked } }] })
+          setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: "", research: { id: started.id, question: asked, thread: started.thread } }] })
           return
         } catch (error) {
           if (!(error instanceof ResearchRefused) || error.status !== 404 || error.field) throw error
@@ -229,7 +252,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               <h1 className="sr-only">Research conversation</h1>
               <HeaderSlot area="title"><span className="header-title" title={firstQuestion}>{firstQuestion}</span></HeaderSlot>
               <HeaderSlot area="actions">
-                <button type="button" className="btn search-new" onClick={clear}>New search</button>
+                <button type="button" className="btn search-new" onClick={clear} aria-label="New search" title="New search"><SquarePenIcon aria-hidden="true" size={16} className="search-new-icon" /><span>New search</span></button>
                 {canInspect && <InspectorToggle open={showPane} onToggle={() => showInspector(!showPane)} />}
               </HeaderSlot>
             </>
@@ -242,7 +265,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
-                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer}
+                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops
                         onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
                         onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
                         onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}

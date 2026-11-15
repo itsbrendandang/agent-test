@@ -60,7 +60,7 @@ export function Activity({ steps, working, totalSeconds, defaultOpen = false }: 
                   <span className="activity-icon" aria-hidden="true">{st.status === "running" ? <Loader size={12} /> : ICON[st.status]}</span>
                   <span className="activity-label">{st.label}<span className="sr-only">: {STATUS_WORD[st.status]}</span></span>
                   {st.status !== "completed" && st.status !== "running" && <span className="activity-status">{STATUS_WORD[st.status]}</span>}
-                  {st.provider && <span className="muted small">{providerPlace(st.provider)}</span>}
+                  {st.provider && <span className="muted small activity-place">{providerPlace(st.provider)}</span>}
                   <span className="mono activity-ms">{st.status === "running" ? (st.total ? `${st.done ?? 0}/${st.total}` : "…") : seconds(st.ms)}</span>
                 </button>
                 {isOpen && (

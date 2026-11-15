@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
 import { LabMap } from "./LabMap"
 import { Mascot } from "./Mascot"
-import { CHARACTERS, FRESH_MS, MAP, ROOMS, STATE_GLYPH, STATE_WORD, captionOf, describeActivity, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
+import { CHARACTERS, FRESH_MS, MAP, ROOMS, SEARCH_SPOTS, STATE_GLYPH, STATE_WORD, captionOf, describeActivity, roomOf, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
 import { active, advance, createSim, moving, settle, syncTrips, visitorPoint, type Sim } from "./motion"
 import "./lab.css"
 
@@ -147,6 +147,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
         <div className="lab" data-still={still || undefined} data-paused={paused || undefined}>
           <LabMap />
           {ROOMS.map((r) => <span key={r.id} className="lab-room-name" style={{ left: `${((r.x + 46) / MAP.width) * 100}%`, top: `${((r.y + 31) / MAP.height) * 100}%` }}>{r.name}</span>)}
+          {Object.values(SEARCH_SPOTS).map((spot) => <span key={spot.sign} className="lab-spot-name" title={spot.about} style={{ left: `${((roomOf("discovery").x + spot.dx) / MAP.width) * 100}%`, top: `${((roomOf("discovery").y + spot.dy - 72) / MAP.height) * 100}%` }}>{spot.sign}</span>)}
           {CHARACTERS.map((c) => {
             const a = model.characters[c.id]
             const word = !a.inRun ? "not in this run" : a.state === "failed" ? "failed" : a.state === "cancelled" ? "cancelled" : ""

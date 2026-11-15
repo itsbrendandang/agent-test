@@ -81,7 +81,7 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
               {catalog.search.literature?.available && <li><span>Research papers (Europe PMC)</span><span className="pill" data-kind="success">free, no key needed</span></li>}
             </ul>
             {catalog.search.provider && <p className="muted small" data-testid="search-credit"><SearchCredit provider={catalog.search.provider} />{catalog.search.provider === "fixture" && ": in Demo a review uses example sources, not a live web search."}</p>}
-            <p className="muted small">Keys live in the engine's .env file. This page never shows or asks for one.</p>
+            <p className="muted small">Keys are held by the engine. This page never shows or asks for one.</p>
           </section>
           <section aria-label="Agents">
             <h3>Agents</h3>

@@ -11,6 +11,9 @@ import { CatalogPanel } from "@/home/CatalogPanel"
 import { boardScriptedWhy } from "@/home/chat"
 import { HomeView } from "./HomeView"
 
+/** The plan card carries the shared Practice badge. */
+const view_practice = (card: ReturnType<typeof within>) => card.getAllByText("Practice").some((e: HTMLElement) => !!e.closest("[data-provenance]"))
+
 /** The setup panel on its own (it is shown in Settings): what can be used, from the engine's catalog and status. */
 function setup(catalog: Catalog | null, status?: Parameters<typeof boardScriptedWhy>[0], why?: string) {
   const onRetry = vi.fn()
@@ -385,7 +388,7 @@ describe("confirm step", () => {
     await t.ask("q")
     const card = await planCard()
     expect(card.queryByRole("button", { name: "Start research" })).toBeNull() // a practice run is not called research
-    expect(card.getByText("Practice run: fixed text, not real research")).toBeInTheDocument() // and it says what it is before it starts
+    expect(card.getByText("Fixed text, not real research")).toBeInTheDocument(); expect(view_practice(card)).toBe(true) // and it says what it is before it starts
     await t.user.click(card.getByRole("button", { name: "Start practice run" }))
     await waitFor(() => expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(1))
     expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")[0].body).toMatchObject({ confirm: true })

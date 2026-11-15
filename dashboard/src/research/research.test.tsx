@@ -24,6 +24,7 @@ import S_CANCELLED from "@/test/research/stream-cancelled.jsonl?raw"
 import S_DEMO from "@/test/research/stream-demo.jsonl?raw"
 import S_FAILED from "@/test/research/stream-failed-source.jsonl?raw"
 import S_REAL from "@/test/research/stream-real.jsonl?raw"
+import DIVARASIB from "@/test/research/real-divarasib.jsonl?raw"
 import { reviewActivity } from "./boardAdapter"
 
 const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
@@ -663,5 +664,44 @@ describe("where a source was found", () => {
     const state = foldAnswer(lines(S_REAL))
     const rows = within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")
     for (const [i, src] of state.sources.entries()) expect(rows[i].querySelector(".search-credit")).toHaveAttribute("data-provider", src.provider)
+  })
+})
+
+// The first real direct answer the owner's engine made (its events, copied as recorded).
+describe("a real answer, as recorded", () => {
+  const events = lines(DIVARASIB)
+  it("puts every checked statement's mark in the text, although the engine's statements are the sentences without emphasis or citation markers", () => {
+    const s = foldAnswer(events)
+    expect(s.statements).toHaveLength(14)
+    const { text, unplaced } = withMarks(s.markdown, s.statements, s.sources, "k")
+    expect(unplaced).toEqual([])
+    for (const st of s.statements) expect(text).toContain(`(#k-check-${st.index})`)
+    // the mark comes after the sentence's own citation, not before it and not in another sentence
+    expect(text).toContain("(hazard ratio 0.58; 95% CI 0.44 to 0.76; P<0.001) [1](#k-cite-1). [check](#k-check-2)")
+    expect(text).toContain("With median follow-up of 14.3 months [1](#k-cite-1), they give no longer-term survival or late-toxicity data. [check](#k-check-13)")
+  })
+  it("shows it as live research with its opening, steps, selection, credits, cited and selected, marks, what is missing, next steps and what it spent", async () => {
+    await show(events)
+    const answer = screen.getByText("Live research").closest("div")!.parentElement!.parentElement!
+    const page = within(document.body)
+    expect(page.getByText(/^I'll search the web and PubMed for phase 3 divarasib results/)).toBeInTheDocument()
+    expect(document.body).toHaveTextContent("Prepared in 3s")
+    expect(document.body).toHaveTextContent("13 steps · 31s")
+    expect(document.body).toHaveTextContent("Selected 6 of 22 sources automatically. The searches returned 24 results; a source found twice is counted once.")
+    const sources = within(screen.getByRole("region", { name: "Sources" }))
+    const rows = sources.getAllByRole("listitem")
+    expect(rows).toHaveLength(6)
+    expect(rows.map((r) => r.querySelector(".search-credit")!.getAttribute("data-provider"))).toEqual(["exa", "europepmc", "exa", "europepmc", "exa", "exa"])
+    expect(rows[0]).toHaveTextContent("Found through Exa (web search)"); expect(rows[1]).toHaveTextContent("PMID 42929675"); expect(rows[1]).not.toHaveTextContent("Exa")
+    expect(rows[1]).toHaveTextContent("Adagrasib in KRAS G12C-Mutated NSCLC") // the title's markup is not shown as text
+    expect(rows[1]).not.toHaveTextContent("<i>")
+    expect(rows.map((r) => /Cited in the answer/.test(r.textContent!))).toEqual([true, false, false, false, true, true])
+    expect(document.body).toHaveTextContent("14 of 14 cited statements checked: 13 supported, 0 contradicted, 1 insufficient evidence.")
+    expect(within(screen.getByRole("region", { name: "What is missing" })).getAllByRole("listitem")).toHaveLength(3)
+    const next = within(screen.getByRole("region", { name: "What to do next" }))
+    expect(next.getAllByRole("listitem")).toHaveLength(3)
+    expect(next.getAllByRole("button", { name: /^Source \d$/ }).map((b) => b.textContent)).toEqual(["1", "1", "1", "5", "6"])
+    expect(document.body).toHaveTextContent("Spent: $0.07 of a run limit of $0.15. Completed in 31s.")
+    expect(answer).toBeTruthy()
   })
 })

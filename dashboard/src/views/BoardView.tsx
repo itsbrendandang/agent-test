@@ -12,6 +12,7 @@ import { TeamMessage, type Checked } from "@/components/Thread"
 import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
+import { PROVIDERS } from "@/research/providers"
 import { uncheckedReasons } from "@/lib/verdict"
 import { BOARD_JOB, checkedOf, inShort, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
@@ -179,7 +180,7 @@ export function BoardView() {
       <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`} data-agent={g.member}>
         <AgentAvatar name={g.member} size={32} className="thread-search-face" />
         <p>
-          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : g.provider && DATABASES.includes(g.provider) ? "looked up database records" : "searched the web"}
+          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : g.provider && DATABASES.includes(g.provider) ? `looked up records in ${PROVIDERS[g.provider]?.place ?? "a database"}` : "searched the web"}
           {g.provider && <> · <SearchCredit provider={g.provider} /></>}
         </p>
         <ul>
@@ -190,7 +191,7 @@ export function BoardView() {
   }
   const sources = [...new Map(evidence.flatMap((e) => e.items.map((i) => [i.url, { ...i, provider: i.provider ?? providerOf(e) }] as const))).values()]
   const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
-  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider as Checked["sourceProvider"], quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
+  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
   const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))

@@ -281,3 +281,11 @@
 .inspector-empty { padding: 16px; }
 .inspector-sheet { width: min(92vw, 440px) !important; max-width: none !important; padding: 0; gap: 0; background: var(--surface, #fff); }
 .inspector-sheethead { padding: 12px 16px 0; }
+.inspector .activity-place { display: none; } /* the step's label already names the place; the column is too narrow for both */
+.catalog-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.catalog-who h3 { margin: 0; min-width: 0; }
+.catalog-who svg { flex: none; }
+/* the header's "New search": words where there is room, an icon where there is not */
+.search-new { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.search-new .search-new-icon { display: none; }
+@media (max-width: 640px) { .search-new { width: 36px; height: 36px; padding: 0; justify-content: center; border-color: transparent; background: none; } .search-new span { display: none; } .search-new .search-new-icon { display: block; } }

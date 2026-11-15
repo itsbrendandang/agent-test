@@ -54,7 +54,7 @@ export function SettingsView() {
 
   return (
     <div className="page settings">
-      <PageHead title="Settings" about={isDesktop ? "What the engine on this machine can use, and the API keys kept by the desktop app." : "What the engine on this machine can use. Keys are set in its .env file, never in this page."} />
+      <PageHead title="Settings" about="How the next run is made, what the app can use, and help. This page never asks for an API key." />
       <EngineSection />
       <SetupDetails />
       <section className="keys" aria-labelledby="help-title">
@@ -67,7 +67,7 @@ export function SettingsView() {
         <label className="newrun-check">
           <input type="checkbox" checked={characters} onChange={(e) => setCharactersShown(e.target.checked)} /> Show characters
         </label>
-        <p className="muted small">Momo, Ember and Fuji are decoration: they appear on the loading screen, on Home and while something loads. They are not the agents that do the work. Turn them off if they distract you; the choice is remembered in this browser.</p>
+        <p className="muted small">Momo, Ember and Fuji are decoration, not the agents that do the work. The choice is remembered in this browser.</p>
       </section>
       {isDesktop && (
       <section className="keys" aria-labelledby="keys-title">
@@ -163,28 +163,37 @@ function EngineSection() {
     </li>
   )
   return (
-    <section className="keys" aria-labelledby="engine-title">
-      <h2 id="engine-title">What this computer can use</h2>
-      <p className="muted small">The engine is the program on this computer that starts runs and keeps their results. This page only reads from it. It reads its keys from a file called <code>.env</code>. Address: <code>{ENGINE}</code></p>
-      {facts === undefined && <p className="muted small" role="status">Checking the engine…</p>}
-      {facts === null && <EngineOffline needs="Tools and keys cannot be checked." said={problem.said} onRetry={() => { setFacts(undefined); setRetry((n) => n + 1) }} />}
+    <>
+      <section className="keys" aria-labelledby="mode-title">
+        <h2 id="mode-title">Next run: Demo or Real</h2>
+        {facts === undefined && <p className="muted small" role="status">Checking the engine…</p>}
+        {facts === null && <EngineOffline needs="Whether runs may cost money cannot be checked." said={problem.said} onRetry={() => { setFacts(undefined); setRetry((n) => n + 1) }} />}
+        {facts && (
+          <ul className="engine-facts">
+            <li>
+              <div className="keys-name"><strong>How the next run is made</strong><span className="muted small">Results you already have keep their own badge.</span></div>
+              <ModeSwitch paid={facts.paid} locked={facts.locked} compact />
+              <p className="engine-how muted small">
+                {facts.paid === "off" && "Demo: nothing that costs money can start. Practice runs use fixed example answers and are free. "}
+                {facts.paid === "on" && "Real: runs use real AI models and searches, and cost money. Each one still asks you to confirm first. "}
+                {facts.paid !== "on" && HOW_TO_TURN_ON}
+              </p>
+            </li>
+            <TokenRow />
+          </ul>
+        )}
+      </section>
       {facts && (
-        <ul className="engine-facts">
-          <li>
-            <div className="keys-name"><strong>Demo or Real</strong><span className="muted small">Whether runs may cost money.</span></div>
-            <ModeSwitch paid={facts.paid} locked={facts.locked} compact />
-            <p className="engine-how muted small">
-              {facts.paid === "off" && "Nothing that costs money can start: no real models, no web search, no cloud runs. Practice runs (fixed text, no model) work and cost nothing. "}
-              {facts.paid === "on" && "Runs with real models and web search cost money. Each one still asks you to confirm first. "}
-              {facts.paid !== "on" && HOW_TO_TURN_ON}
-            </p>
-          </li>
-          <TokenRow />
-          {Object.entries(facts.tools).map(([name, on]) => row(name, on, "found", "not found"))}
-          {Object.entries(facts.keys).sort(([a], [b]) => a.localeCompare(b)).map(([name, on]) => row(name, on, "set", "not set"))}
-        </ul>
+        <details className="keys technical">
+          <summary>Technical</summary>
+          <p className="muted small">For the person who runs the app. The engine is the program that starts runs and keeps their results; this page only reads from it. It reads its keys from a file called <code>.env</code> in the project folder. Engine address: <code>{ENGINE}</code>. Session token file: <code>{TOKEN_FILE}</code>.</p>
+          <ul className="engine-facts" aria-label="Tools and keys the engine found">
+            {Object.entries(facts.tools).map(([name, on]) => row(name, on, "found", "not found"))}
+            {Object.entries(facts.keys).sort(([a], [b]) => a.localeCompare(b)).map(([name, on]) => row(name, on, "set", "not set"))}
+          </ul>
+        </details>
       )}
-    </section>
+    </>
   )
 }
 
@@ -199,8 +208,8 @@ export function TokenRow() {
         {held && <button type="button" className="btn" onClick={forgetToken}>Forget token</button>}
       </span>
       <p className="engine-how muted small">
-        Anything that can spend money needs the engine's session token. The engine writes it to <code>{TOKEN_FILE}</code> when it starts, and this page asks for it
-        the first time it is needed. It is kept for this browser tab only, never saved to disk by the page, and never shown again.
+        Anything that can spend money needs it. The page asks for it the first time it is needed, keeps it for this browser tab only, and never shows it again.
+        The person who runs the app can tell you where to find it (see Technical).
       </p>
     </li>
   )

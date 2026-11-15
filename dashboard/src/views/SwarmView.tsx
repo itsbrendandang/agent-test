@@ -243,15 +243,9 @@ export function SwarmView() {
         {run?.phase === "done" && (
         <div className="swarm-result" role="group" aria-label="Result">
           <p className="swarm-resulthead"><span className="story-eyebrow">The score</span></p>
-          {isDemo(run) && (
-            <p className="swarm-note swarm-notbench">
-              This is not a research result.{run.task === "demo" && " The demo task is a small made-up dataset, used to test that everything works."}
-              {run.model === "mock" && " A practice run replays fixed steps and does no real analysis."}
-            </p>
-          )}
           <div className="swarm-score" data-demo={isDemo(run) || undefined}>
             <strong>{score(run.score)}</strong>
-            <span className="muted">{run.score === undefined ? "not scored: the scoring program gave no score for this run" : "out of 1. A scoring program checked the files this run wrote; no model decides the score."}</span>
+            <span className="muted">{run.score === undefined ? "not scored: the scoring program gave no score for this run" : "out of 1 · from a scoring program that checks the files the run wrote, not from a model"}</span>
           </div>
           {run.artifacts && run.artifacts.length > 0 && (
             <ul className="swarm-artifacts" aria-label="Score per required output">
@@ -267,7 +261,7 @@ export function SwarmView() {
               <span className="muted small"><span data-testid="tested-count">{claims.length - count.untested} of {claims.length} statement{claims.length === 1 ? "" : "s"} tested</span> · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
             </p>
           )}
-          {run.solver === "single" && <p className="swarm-note">One agent alone has nobody checking it, so there are no tested statements or rejections to show.</p>}
+          {run.solver === "single" && <p className="swarm-note">One agent alone has no reviewer, so it has no tested statements.</p>}
         </div>
         )}
         <ol className="swarm-steps" aria-label="Roles, in the order they run">
@@ -292,7 +286,7 @@ export function SwarmView() {
               {run.phase === "queued" ? "Nothing has run yet."
                 : run.solver === "glhf"
                 ? <>So far: {claims.length} statement{claims.length === 1 ? "" : "s"} written down, {markCount("supported", count.supported)}, {markCount("contradicted", count.refuted)}, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
-                : "One agent alone keeps no list of statements, so there is nothing to count until it finishes."}
+                : "Nothing to count until it finishes."}
             </p>
           </div>
         )}
@@ -317,8 +311,8 @@ export function SwarmView() {
 
       <section className="talk" aria-label="What each role did">
         <h2 className="talk-title">The work, step by step {live && <span className="pill" data-kind="info">live</span>}</h2>
-        <p className="muted small">One entry for each role, in the order they worked. These lines are written by code from what the run recorded, not by a model. The chips show how each statement the team made did when it was tested.</p>
-        {!run ? null : !ledger ? <p className="empty-note">{run.solver === "single" ? "One agent working alone keeps no shared notes, so there are no steps to show. Its score is above." : "Nothing recorded yet."}</p> : (
+        <p className="muted small">One entry per role, in order, written by code from the run's record. The chips show how each statement did when it was tested.</p>
+        {!run ? null : !ledger ? <p className="empty-note">{run.solver === "single" ? "One agent alone keeps no shared notes, so there are no steps to show." : "Nothing recorded yet."}</p> : (
           <Conversation className="thread-inline" aria-label="What each role did, in order">
             <ConversationContent className="thread-list">
               {activity(ledger).map((entry) => (
@@ -336,7 +330,7 @@ export function SwarmView() {
       <section className="card-surface swarm-card swarm-board" aria-label="Scoreboard">
         <div className="swarm-cardhead">
           <h2>Side by side: one agent against the team</h2>
-          <span className="muted small">The latest run of each kind on the same task with the same settings. Press a score to open that run.</span>
+          <span className="muted small">Latest run of each kind, same task and settings. Press a score to open the run.</span>
         </div>
         {scoreboard === undefined ? <p className="muted small" role="status">Loading the scores…</p>
           : scoreboard === null ? <p role="alert" className="swarm-rownote">The engine did not return a scoreboard. Stop the app and start it again with <code>npm start</code> to get the current version.</p>

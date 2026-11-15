@@ -2,7 +2,7 @@
 // the corridor, to a pick-up point between the desks, and back), kept as plain data so it can be tested without a
 // browser. A walk starts for one reason only: the activity model has a trip the simulation has not walked yet.
 // Nothing in this file makes a teammate move by itself, and there is no ambient wandering.
-import { CHARACTERS, MAP, ROOMS, characterOf, roomOf, type Character, type CharacterId, type LabModel, type RoomId, type Trip } from "./model"
+import { CHARACTERS, MAP, ROOMS, SEARCH_SPOTS, characterOf, roomOf, searchSpot, type Character, type CharacterId, type LabModel, type RoomId, type Trip } from "./model"
 
 export interface Point { x: number; y: number }
 type Waypoint = Point & { action?: "pickup" | "drop" }
@@ -32,6 +32,8 @@ export interface Walker {
   carrying: boolean
   /** The few characters shown over the parcel. */
   tag: string
+  /** Trips that arrived while this one was on its way to the same room and were taken along with it. */
+  along: number
   /** At the pick-up point, and what it fetches is not known yet. */
   waiting: boolean
   pauseUntil: number
@@ -56,7 +58,7 @@ export function createSim(): Sim {
     const home = stationPoint(c)
     // Anh's teammates walk at 38 to 58 units a second, at random. Here the pace is fixed per teammate and faster,
     // because a walk has to end before the engine's next event for the same teammate, not whenever it likes.
-    return [c.id, { id: c.id, index: c.index, home, x: home.x, y: home.y, route: [], queue: [], carrying: false, tag: "", waiting: false, pauseUntil: 0, speed: 84 + (c.index * 7) % 5 * 6 }]
+    return [c.id, { id: c.id, index: c.index, home, x: home.x, y: home.y, route: [], queue: [], carrying: false, tag: "", along: 0, waiting: false, pauseUntil: 0, speed: 84 + (c.index * 7) % 5 * 6 }]
   })) as Record<CharacterId, Walker>
   return { clock: 0, walkers, seen: new Set() }
 }
@@ -65,7 +67,7 @@ export function createSim(): Sim {
 function reset(sim: Sim, run: string | undefined) {
   sim.run = run
   sim.seen = new Set()
-  for (const w of Object.values(sim.walkers)) Object.assign(w, { x: w.home.x, y: w.home.y, route: [], queue: [], job: undefined, carrying: false, tag: "", waiting: false, pauseUntil: 0 })
+  for (const w of Object.values(sim.walkers)) Object.assign(w, { x: w.home.x, y: w.home.y, route: [], queue: [], job: undefined, carrying: false, tag: "", along: 0, waiting: false, pauseUntil: 0 })
 }
 /** Everyone at their desks with empty hands, and every trip the model has now counted as walked. */
 export function settle(sim: Sim, model: LabModel) {
@@ -78,9 +80,11 @@ const viaCorridor = (from: Point, to: Point): Waypoint[] =>
 
 function start(w: Walker, trip: Trip) {
   const here = { x: w.x, y: w.y }
-  w.job = trip; w.waiting = false; w.pauseUntil = 0
+  w.job = trip; w.waiting = false; w.pauseUntil = 0; w.along = 0
   if (trip.kind === "fetch") {
-    const spot = pickupPoint(trip.room, w.index)
+    // a real search is picked up at its own point in Discovery; everything else between the desks
+    const search = trip.room === "discovery" ? searchSpot(trip.provider) : undefined
+    const spot = search ? { x: roomOf("discovery").x + SEARCH_SPOTS[search].dx, y: roomOf("discovery").y + SEARCH_SPOTS[search].dy + (w.index % 2 ? 6 : -6) } : pickupPoint(trip.room, w.index)
     w.carrying = false; w.tag = ""
     w.route = [...viaCorridor(here, spot), { ...spot, action: "pickup" }, ...viaCorridor(spot, w.home), w.home]
   } else {
@@ -106,6 +110,8 @@ export function syncTrips(sim: Sim, model: LabModel, walk: (trip: Trip) => boole
       if (sim.seen.has(t.id)) continue
       sim.seen.add(t.id)
       if (!walk(t)) continue
+      // A finished fetch for the room this teammate is already walking to is picked up on the same walk.
+      if (t.kind === "fetch" && t.back !== undefined && t.outcome === "carried" && w.job?.kind === "fetch" && w.job.room === t.room && searchSpot(w.job.provider) === searchSpot(t.provider) && !w.carrying && !w.queue.length && w.route.some((p) => p.action === "pickup")) { w.along++; continue }
       w.queue.push(t)
       if (w.queue.length > MAX_WAITING) w.queue.shift()
     }
@@ -116,7 +122,7 @@ export function syncTrips(sim: Sim, model: LabModel, walk: (trip: Trip) => boole
 /** Drop everything and walk home (a cancelled run). */
 export function recall(w: Walker) {
   const here = { x: w.x, y: w.y }
-  w.queue = []; w.job = undefined; w.carrying = false; w.tag = ""; w.waiting = false; w.pauseUntil = 0
+  w.queue = []; w.job = undefined; w.carrying = false; w.tag = ""; w.along = 0; w.waiting = false; w.pauseUntil = 0
   w.route = here.x === w.home.x && here.y === w.home.y ? [] : [...viaCorridor(here, w.home), w.home]
 }
 
@@ -129,14 +135,19 @@ export const moving = (sim: Sim, w: Walker): boolean => w.route.length > 0 && !w
 /** Move everyone on by `dt` seconds. `speed` multiplies the walking pace (a replay at 4x). Returns `active`. */
 export function advance(sim: Sim, dt: number, speed = 1): boolean {
   sim.clock += dt
+  /** What came back is in hand (or nothing was there): a short stop, shorter in a faster replay. */
+  const pickUp = (w: Walker) => {
+    w.carrying = w.job?.outcome === "carried"
+    w.tag = w.carrying ? `${w.job!.short}${w.along ? ` +${w.along} more` : ""}` : ""
+    w.pauseUntil = sim.clock + (w.carrying ? PICKUP_PAUSE : EMPTY_PAUSE) / speed
+  }
   for (const w of Object.values(sim.walkers)) {
     if (!w.route.length) { const next = w.queue.shift(); if (next) start(w, next); else continue }
     if (w.waiting) {
       // at the pick-up point: go on once the model says what came back
       if (w.job?.back === undefined) continue
       w.waiting = false
-      w.carrying = w.job.outcome === "carried"; w.tag = w.carrying ? w.job.short : ""
-      w.pauseUntil = sim.clock + (w.carrying ? PICKUP_PAUSE : EMPTY_PAUSE)
+      pickUp(w)
     }
     if (sim.clock < w.pauseUntil) continue
     const next = w.route[0]
@@ -144,11 +155,9 @@ export function advance(sim: Sim, dt: number, speed = 1): boolean {
     if (distance > step) { w.x += (dx / distance) * step; w.y += (dy / distance) * step; continue }
     w.x = next.x; w.y = next.y
     w.route.shift()
-    if (next.action === "pickup") {
-      if (w.job?.back === undefined) w.waiting = true
-      else { w.carrying = w.job.outcome === "carried"; w.tag = w.carrying ? w.job.short : ""; w.pauseUntil = sim.clock + (w.carrying ? PICKUP_PAUSE : EMPTY_PAUSE) }
-    } else if (next.action === "drop") { w.carrying = false; w.tag = ""; w.pauseUntil = sim.clock + DROP_PAUSE }
-    if (!w.route.length) { w.job = undefined; w.carrying = false; w.tag = "" } // home: delivered
+    if (next.action === "pickup") { if (w.job?.back === undefined) w.waiting = true; else pickUp(w) }
+    else if (next.action === "drop") { w.carrying = false; w.tag = ""; w.pauseUntil = sim.clock + DROP_PAUSE / speed }
+    if (!w.route.length) { w.job = undefined; w.carrying = false; w.tag = ""; w.along = 0 } // home: delivered
   }
   return active(sim)
 }

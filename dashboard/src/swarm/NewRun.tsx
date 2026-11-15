@@ -131,7 +131,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
                   You are in Demo mode, so only a practice run can start. To use a real model, choose Real at the top of the page first.
                 </p>
               )}
-              {!off && models.length === 1 && <p className="muted small">The engine has no model API key, so only the practice option is listed. Add a key to .env and restart the engine to run a real model.</p>}
+              {!off && models.length === 1 && <p className="muted small">The engine has no key for an AI model, so only the practice option is listed. The person who runs the app can add one (Settings, Technical).</p>}
               {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the text limit. You will be asked to confirm.</p>}
               {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail. Add the key to .env and restart the engine.</p>}
             </div>

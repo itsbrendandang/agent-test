@@ -7,12 +7,12 @@ import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { Provenance } from "@/components/Provenance"
 import { provenanceOf } from "@/lib/provenance"
 import { plainDuration } from "@/lib/format"
-import { safeUrl } from "@/lib/words"
+import { runLimit, safeUrl, spent } from "@/lib/words"
 import { Activity } from "./Activity"
 import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
 import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
-import { copyText, foldAnswer, preparation, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
+import { copyText, foldAnswer, preparation, sourceCounts, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
 import { Working } from "./Working"
 
 const money = (usd: number) => (usd === 0 ? "nothing" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
@@ -35,11 +35,13 @@ interface Props {
   onStatus?: (status: AnswerState["status"]) => void
   /** Take a queued follow-up out again before it starts. */
   onRemove?: () => void
+  /** The composer below offers Stop for this answer, so the answer does not show a second one. */
+  composerStops?: boolean
   /** Open the inspector on this answer, at a tab. */
   onInspect?: (tab: "evidence" | "results" | "activity") => void
 }
 
-export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect }: Props) {
+export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops }: Props) {
   const { events, lost } = useResearchEvents(id)
   const s = useMemo(() => foldAnswer(events), [events])
   const key = useId().replace(/[^a-z0-9]/gi, "")
@@ -109,8 +111,8 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
       {working && s.status !== "queued" && !lost && (
         <div className="answer-working">
           <Working>{progressLine(s)}</Working>
-          {!demo && s.caps && <span className="muted small">Run limit: {money(s.caps.maxUsd)} · {plainDuration(s.caps.maxSeconds * 1000)}</span>}
-          <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>
+          {!demo && s.caps && <span className="muted small">{runLimit(s.caps.maxUsd)} · {plainDuration(s.caps.maxSeconds * 1000)}</span>}
+          {!composerStops && <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>}
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
@@ -178,7 +180,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
               <li key={i}>
                 <span className="story-eyebrow">{r.label}</span>
                 <span className="answer-next-text">{r.text}</span>
-                <span className="muted small">{r.why} {r.basis.length > 0 && <>Based on {r.basis.map((n) => <button key={n} type="button" className="answer-cite" aria-label={`Source ${n}`} onClick={() => goTo(n)}>{n}</button>)}</>}</span>
+                <span className="muted small">{r.why} {r.basis.length > 0 && <>Based on {r.basis.filter((n) => s.sources.some((x) => x.n === n)).map((n, i) => <span key={n}>{i > 0 && ", "}<button type="button" className="answer-cite" aria-label={`Source ${n}`} onClick={() => goTo(n)}>{n}</button></span>)}</>}</span>
               </li>
             ))}
           </ul>
@@ -189,6 +191,8 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
         <section className="answer-selection" aria-label="How the sources were selected">
           <p>
             <b>Selected {s.selection.selected.length} of {s.selection.selected.length + s.selection.notSelected.length} sources automatically.</b>{" "}
+            {/* The searches' own counts can be higher: two searches can find the same source, and it is listed once. */}
+            {(sourceCounts(s).found ?? 0) > s.selection.selected.length + s.selection.notSelected.length && <>The searches returned {sourceCounts(s).found} results; a source found twice is counted once. </>}
             {s.selection.criteria}
           </p>
           <details>
@@ -245,7 +249,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
 
       {s.status === "done" && s.finished && (
         <p className="muted small answer-foot">
-          {demo ? "Practice: nothing was spent." : `Spent: ${money(s.finished.usd)}${s.caps ? ` of a run limit of ${money(s.caps.maxUsd)}` : ""}. Completed in ${seconds(s.finished.seconds * 1000)}.`}
+          {demo ? "Practice: nothing was spent." : `${spent(s.finished.usd)}${s.caps ? ` of a run limit of ${money(s.caps.maxUsd)}` : ""}. Completed in ${seconds(s.finished.seconds * 1000)}.`}
           {s.finished.review?.notes && !demo && ` A critic raised ${s.finished.review.notes.raised} point${s.finished.review.notes.raised === 1 ? "" : "s"}; ${s.finished.review.notes.resolved} ${s.finished.review.notes.resolved === 1 ? "was" : "were"} dealt with${s.finished.review.revised ? " in one revision" : ""}.`}
           {s.finished.stopped && ` ${STOPPED[s.finished.stopped] ?? "It ended early."}`}{s.finished.note && ` ${s.finished.note}`}
         </p>

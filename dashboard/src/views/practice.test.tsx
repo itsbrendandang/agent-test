@@ -1,9 +1,7 @@
-// One wording for a practice run, in every view that shows runs: Home (the "What was checked" strip), Runs, Compare
-// and Board. (The Graph view has the same check in its own tests.) Also: the Compare view's role-by-role conversation.
+// One badge for a practice result, in every view that shows runs: Saved research, Compare and Team review. (The Graph view has the same check in its own tests.) Also: the Compare view's role-by-role conversation.
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { Checked } from "@/home/Checked"
 import { forgetScripted } from "@/lib/scripted"
 import { PAID_OFF, routes } from "@/test/engine"
 import { BoardView } from "./BoardView"
@@ -36,15 +34,6 @@ const practice = (el: HTMLElement) => expect(el.querySelector('[data-provenance=
 const SCORES = [{ task: "demo", model: "mock", timeLimit: 1800, maxTokens: 1000, diff: 0, swarm: { id: "s-mock", score: 1, extras: [] }, single: { id: "x-mock", score: 1, extras: [] } }]
 
 describe("a practice run says so, in the same words, wherever it is shown", () => {
-  it("Home: the latest review and the latest pair of runs", async () => {
-    routes({ "GET /api/runs": { status: 200, body: [{ id: "r1", brief: "kras.md", rounds: 1, startedAt: 1, status: "done", claims: 1 }] }, "GET /api/glhf/scoreboard": { status: 200, body: SCORES } })
-    render(<Checked onOpen={() => {}} />)
-    const review = await screen.findByRole("button", { name: /Latest review/ })
-    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
-    await emit({ type: "run.started", runId: "r1", brief: "kras", title: "KRAS", mock: true })
-    practice(review)
-    practice(screen.getByRole("button", { name: /One agent or a team/ }))
-  })
   it("Runs: each card", async () => {
     routes({
       "GET /api/search": { status: 200, body: [{ kind: "swarm", id: "s-mock", title: "Task demo", status: "done", startedAt: 4, score: 1, matches: [] }, { kind: "board", id: "b-mock", title: "kras", status: "done", startedAt: 1, matches: [] }] },
