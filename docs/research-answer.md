@@ -129,9 +129,10 @@ question. This is how a question starts the agents that match it.
    the numbered sources, each specialist gets the question, its method notes and those sources, and drafts one
    short section: `### Method view: <its title>`. It has no tools: it cannot search or run code. It may only say
    what the sources state.
-3. **The model follows the effort.** A specialist runs on the `cheap` tier at Quick and on the `strong` tier at
-   Standard (`specialist_tier`). Both tiers are set under `models` in `board/config.yaml`, so they can be Claude
-   or OpenAI models.
+3. **The model follows the effort, with a company check.** Quick requests the `cheap` tier and Standard requests
+   the `strong` tier (`specialist_tier`). The cheap tier is used only if it is from the same company as the
+   writer. Otherwise the specialist uses the writer's model. This keeps the statement checker on a different
+   company from both. The tiers are set under `models` in `board/config.yaml`.
 4. **Its section is reviewed.** The section becomes part of the draft. The statement checker checks each of its
    cited sentences against the source, and the critic reads it, like the rest of the answer.
 5. **It never takes money the answer needs.** A specialist is asked only when its worst-case cost fits under the

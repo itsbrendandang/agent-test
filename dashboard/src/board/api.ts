@@ -12,7 +12,7 @@ export interface RosterMember {
   /** One agent playing several roles: mode id -> role title. The active mode is on each member.replied event. */
   modes?: Record<string, string>
 }
-export interface RunSummary { id: string; brief: string; rounds: number; startedAt: number; status: "done" | "running" | "paused" | "failed"; claims: number; /** Why a failed run stopped, in plain words. */ error?: string; /** Present when the run searched. */ search?: { searches: number; provider?: SearchProvider } }
+export interface RunSummary { id: string; example?: boolean; brief: string; rounds: number; startedAt: number; status: "done" | "running" | "paused" | "failed"; claims: number; /** Why a failed run stopped, in plain words. */ error?: string; /** Present when the run searched. */ search?: { searches: number; provider?: SearchProvider } }
 /** "exa": a live web search. "europepmc": a free literature search. The six databases return records, not papers. "fixture": a practice run's example sources, not a search. */
 export type SearchProvider = "exa" | "fixture" | "europepmc" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
 /** The public databases a scout can look records up in. */

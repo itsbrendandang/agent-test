@@ -28,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 # The parts of the repository the hosted app is built from.
-PARTS = ["engine/package.json", "engine/package-lock.json", "engine/src", "dashboard", "board/config.yaml", "board/agents", "board/context", "board/briefs", "board/expertise", "glhf/specialists", ".agents/skills"]
+PARTS = ["engine/package.json", "engine/package-lock.json", "engine/src", "dashboard", "examples", "board/config.yaml", "board/agents", "board/context", "board/briefs", "board/expertise", "glhf/specialists", ".agents/skills"]
 SKIP_DIRS = {"node_modules", "dist", "target", ".venv", "__pycache__", "runs", ".git"}
 
 

@@ -42,7 +42,7 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `glhf/bixbench_v1/` | Adapter for the public BixBench dataset (v1.5): single agent and swarm. | In use (a pilot of 8 questions ran). |
 | `glhf/demo_case/` | The small built-in test case. | In use. |
 | `glhf/memory/` | Lessons from runs. A person approves each one. | In use. |
-| `glhf/specialists/` | Profiles of domain specialists and method notes. | Instructions only. Being connected to the team review. |
+| `glhf/specialists/` | Profiles of domain specialists and method notes. | Matched by skills to research questions. Selected specialists write short sections from the sources found. |
 | `glhf/openmodels/`, `deploy/` | Modal: serving open models for the benchmark, and hosting the app. | Being built. Nothing is deployed. |
 | `bixbench/` | A teammate's separate single-agent baseline for BixBench v1. | Kept for reference. Not used for our comparison. |
 | `datasets/` | A catalogue of public datasets with their licences. Pointers only. | No code reads it yet. |

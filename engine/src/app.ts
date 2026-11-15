@@ -40,6 +40,7 @@ import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
 import { search } from "./search/search.ts"
+import { exampleBoards, exampleHits, handleExample } from "./examples.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
 export const DEFAULT_HOST = "127.0.0.1"
@@ -162,6 +163,7 @@ export function createApp(options: AppOptions = {}) {
     if (!guard(req, res, env)) return // foreign Host or Origin: refused; preflight: answered
     const url = new URL(req.url ?? "/", "http://x")
     const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
+    if (parts[0] === "api" && handleExample(req, res, url, config, env)) return
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
     if (parts[0] === "api" && parts[1] === "bixv1") return handleBixV1(req, res, parts)
     if (url.pathname === "/api/paid") return handlePaid(req, res, { config, env, hasToken, tokenFile: TOKEN_FILE, stopPaidRuns: cancelPaidRuns }) // the runtime paid switch (paidswitch.ts)
@@ -177,7 +179,7 @@ export function createApp(options: AppOptions = {}) {
         keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
-      if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? "")].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")
+      if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? ""), ...exampleHits(url.searchParams.get("q") ?? "", env)].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")
       if (url.pathname === "/api/token") return hasToken(req) ? json(res, 200, { ok: true }) : json(res, 401, tokenNeeded("this", TOKEN_FILE))
       if (url.pathname === "/api/ask") { // AI search over experiments
         // The keyword answer for the dashboard or a token holder; the model call (money) for a token holder only.
@@ -190,7 +192,7 @@ export function createApp(options: AppOptions = {}) {
       }
       if (url.pathname === "/api/briefs") return json(res, 200,
         readdirSync(path(config, "briefs")).filter((f) => f.endsWith(".md") && !f.startsWith("_")))
-      if (url.pathname === "/api/runs" && req.method === "GET") return json(res, 200, listRuns())
+      if (url.pathname === "/api/runs" && req.method === "GET") return json(res, 200, [...listRuns(), ...exampleBoards(env)])
       if (url.pathname === "/api/runs" && req.method === "POST") {
         const { brief } = await readJson<{ brief?: unknown }>(req)
         if (!mockNow() && paidCallsOff()) throw new PaidCallsOff("starting a board run with real models") // not reachable with the engine's own MOCK; kept for a handler built with mock: false

@@ -1,0 +1,514 @@
+{
+ "id": "a-20261115081826-afb15659",
+ "thread": "t-aae6e76340",
+ "kind": "answer",
+ "question": "Investigate hypotheses for KRAS G12C inhibitor response and resistance",
+ "effort": "standard",
+ "mode": "demo",
+ "status": "done",
+ "startedAt": 1794759506516,
+ "caps": {
+  "maxUsd": 0,
+  "maxSeconds": 120
+ },
+ "models": {
+  "planner": "scripted",
+  "writer": "scripted",
+  "checker": "scripted",
+  "critic": "scripted"
+ },
+ "steps": [
+  {
+   "step": "prepare",
+   "kind": "prepare",
+   "label": "Preparing the searches",
+   "agent": "planner",
+   "input": {
+    "model": "scripted",
+    "level": "standard",
+    "webSearches": 3,
+    "literatureQueries": 3,
+    "databaseLookups": 0
+   },
+   "status": "completed",
+   "ms": 0,
+   "summary": "Example sources only."
+  },
+  {
+   "step": "hypotheses",
+   "kind": "hypothesize",
+   "label": "Setting up hypotheses to test",
+   "agent": "planner",
+   "input": {
+    "model": "scripted",
+    "atMost": 3
+   },
+   "status": "completed",
+   "ms": 0,
+   "found": 2,
+   "summary": "2 hypotheses to test. Each gets its own web search and literature search; the general searches planned before are not run on top."
+  },
+  {
+   "step": "search:fixture:1",
+   "kind": "search",
+   "label": "Loading example sources",
+   "provider": "fixture",
+   "query": "Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients.",
+   "agent": "investigator-1",
+   "input": {
+    "provider": "Example sources (demo)",
+    "query": "Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients.",
+    "note": "Example sources. Nothing is searched in a demo."
+   },
+   "hypothesis": "h1",
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "summary": "4 results."
+  },
+  {
+   "step": "search:fixture:2",
+   "kind": "search",
+   "label": "Loading example sources",
+   "provider": "fixture",
+   "query": "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.",
+   "agent": "investigator-2",
+   "input": {
+    "provider": "Example sources (demo)",
+    "query": "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.",
+    "note": "Example sources. Nothing is searched in a demo."
+   },
+   "hypothesis": "h2",
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "summary": "4 results."
+  },
+  {
+   "step": "evaluate:fixture:1",
+   "kind": "evaluate",
+   "label": "Screening 4 results",
+   "provider": "fixture",
+   "agent": "investigator-1",
+   "input": {
+    "results": 4,
+    "model": "scripted",
+    "question": "Is this so: Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients. (Evidence for it or against it both count.)"
+   },
+   "hypothesis": "h1",
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "kept": 3,
+   "summary": "3 of 4 kept."
+  },
+  {
+   "step": "evaluate:fixture:2",
+   "kind": "evaluate",
+   "label": "Screening 4 results",
+   "provider": "fixture",
+   "agent": "investigator-2",
+   "input": {
+    "results": 4,
+    "model": "scripted",
+    "question": "Is this so: Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors. (Evidence for it or against it both count.)"
+   },
+   "hypothesis": "h2",
+   "status": "completed",
+   "ms": 1,
+   "found": 4,
+   "kept": 3,
+   "summary": "3 of 4 kept."
+  },
+  {
+   "step": "write:h1",
+   "kind": "write",
+   "label": "Drafting the section for H1 from 3 sources",
+   "hypothesis": "h1",
+   "agent": "investigator-1",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 1800,
+    "words": 126
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "1 cited sentence."
+  },
+  {
+   "step": "write:h2",
+   "kind": "write",
+   "label": "Drafting the section for H2 from 3 sources",
+   "hypothesis": "h2",
+   "agent": "investigator-2",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 1800,
+    "words": 126
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "2 cited sentences."
+  },
+  {
+   "step": "specialist:medicinal-chemist",
+   "kind": "write",
+   "label": "Medicinal Chemist: reading 3 sources with its method notes",
+   "agent": "specialist:medicinal-chemist",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 1800,
+    "words": 126
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "1 cited sentence."
+  },
+  {
+   "step": "specialist:omics-biomarker-integrator",
+   "kind": "write",
+   "label": "Omics biomarker integrator: reading 3 sources with its method notes",
+   "agent": "specialist:omics-biomarker-integrator",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 1800,
+    "words": 126
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "1 cited sentence."
+  },
+  {
+   "step": "write",
+   "kind": "write",
+   "agent": "writer",
+   "label": "Comparing the hypotheses",
+   "input": {
+    "model": "scripted",
+    "sources": 3,
+    "maxOutputTokens": 3000,
+    "words": 380
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "140 words, 4 cited sentences."
+  },
+  {
+   "step": "check",
+   "kind": "check",
+   "agent": "checker",
+   "label": "Checking 4 statements against their sources",
+   "input": {
+    "statements": 4,
+    "checker": "scripted",
+    "rule": "the checker must quote a passage; a program must find it in the source, with the statement's numbers"
+   },
+   "status": "completed",
+   "ms": 3,
+   "summary": "4 hold up."
+  },
+  {
+   "step": "review",
+   "kind": "review",
+   "agent": "critic",
+   "label": "Reviewing the whole draft",
+   "input": {
+    "model": "scripted",
+    "looksFor": "overreach, missing caveats, weight on preprints or reviews, sources that disagree, parts of the question that were skipped"
+   },
+   "status": "completed",
+   "ms": 1,
+   "found": 0,
+   "summary": "No problem found."
+  },
+  {
+   "step": "check:stance",
+   "kind": "check",
+   "agent": "checker",
+   "label": "Checking which way 3 statements point",
+   "input": {
+    "statements": 3,
+    "hypotheses": 2,
+    "checker": "scripted",
+    "rule": "a statement counts for or against a hypothesis only when this model, not told the writer's choice, says it points that way"
+   },
+   "status": "completed",
+   "ms": 0,
+   "found": 3,
+   "kept": 2,
+   "summary": "2 of 3 point the way they were filed."
+  },
+  {
+   "step": "save",
+   "kind": "save",
+   "label": "Saving the answer and its files",
+   "status": "completed",
+   "ms": 0,
+   "summary": "The record and three result files."
+  }
+ ],
+ "searches": [
+  {
+   "provider": "fixture",
+   "query": "Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients.",
+   "ran": true,
+   "found": 4,
+   "kept": 3,
+   "hypothesis": "h1"
+  },
+  {
+   "provider": "fixture",
+   "query": "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.",
+   "ran": true,
+   "found": 4,
+   "kept": 3,
+   "hypothesis": "h2"
+  }
+ ],
+ "sources": [
+  {
+   "n": 1,
+   "url": "https://example.org/mock/kras-g12c-clinical-review",
+   "title": "KRAS G12C inhibitors in NSCLC: clinical review (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "hypotheses": [
+    "h1",
+    "h2"
+   ],
+   "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients. Acquired resistance through secondary KRAS mutations and bypass signaling is common within a year.",
+   "studyType": "clinical",
+   "relevance": 1,
+   "cited": true
+  },
+  {
+   "n": 2,
+   "url": "https://example.org/mock/herg-acrylamide",
+   "title": "hERG liability of piperazine acrylamides (mock)",
+   "provider": "fixture",
+   "note": "example source, in vitro",
+   "hypotheses": [
+    "h1",
+    "h2"
+   ],
+   "text": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+   "studyType": "in_vitro",
+   "relevance": 1,
+   "cited": true
+  },
+  {
+   "n": 3,
+   "url": "https://example.org/mock/resistance-mechanisms",
+   "title": "Resistance mechanisms to KRAS G12C inhibition (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "hypotheses": [
+    "h1",
+    "h2"
+   ],
+   "text": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification. Compounds binding a different pocket region retained activity against Y96D in cell assays.",
+   "studyType": "clinical",
+   "relevance": 1,
+   "cited": true
+  }
+ ],
+ "statements": [
+  {
+   "stage": "draft",
+   "index": 0,
+   "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients.",
+   "sources": [
+    1
+   ],
+   "hypothesis": "h1",
+   "side": "for",
+   "verdict": "verified",
+   "quote": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients.",
+   "quoteSource": 1,
+   "quoteFound": true,
+   "checker": "scripted",
+   "agent": "investigator-1",
+   "stance": "supports"
+  },
+  {
+   "stage": "draft",
+   "index": 1,
+   "text": "Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations.",
+   "sources": [
+    2
+   ],
+   "hypothesis": "h2",
+   "side": "for",
+   "verdict": "verified",
+   "quote": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+   "quoteSource": 2,
+   "quoteFound": true,
+   "checker": "scripted",
+   "agent": "investigator-2",
+   "stance": "neither"
+  },
+  {
+   "stage": "draft",
+   "index": 2,
+   "text": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification.",
+   "sources": [
+    3
+   ],
+   "hypothesis": "h2",
+   "side": "against",
+   "verdict": "verified",
+   "quote": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification.",
+   "quoteSource": 3,
+   "quoteFound": true,
+   "checker": "scripted",
+   "agent": "investigator-2",
+   "stance": "contradicts"
+  },
+  {
+   "stage": "draft",
+   "index": 3,
+   "text": "Adding polarity reduced hERG binding in most matched pairs.",
+   "sources": [
+    2
+   ],
+   "verdict": "verified",
+   "quote": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+   "quoteSource": 2,
+   "quoteFound": true,
+   "checker": "scripted",
+   "agent": "writer"
+  }
+ ],
+ "recommendations": [],
+ "usd": 0,
+ "review": {
+  "checker": "scripted",
+  "critic": "scripted",
+  "revised": false,
+  "notes": []
+ },
+ "workStartedAt": 1794759506525,
+ "workedMs": 21,
+ "opening": "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked.",
+ "specialists": [
+  {
+   "room": "bench",
+   "name": "medicinal-chemist",
+   "title": "Medicinal Chemist",
+   "agent": "specialist:medicinal-chemist",
+   "why": "Its method notes match the question's words: response.",
+   "methods": []
+  },
+  {
+   "room": "bench",
+   "name": "omics-biomarker-integrator",
+   "title": "Omics biomarker integrator",
+   "agent": "specialist:omics-biomarker-integrator",
+   "why": "Its method notes match the question's words: response.",
+   "methods": [
+    {
+     "name": "signature-response-enrichment",
+     "title": "Signature response enrichment"
+    }
+   ]
+  }
+ ],
+ "hypotheses": [
+  {
+   "id": "h1",
+   "text": "Demo hypothesis: approved covalent KRAS G12C inhibitors produce objective responses in previously treated patients.",
+   "supportIf": "A clinical report gives a response rate in previously treated patients.",
+   "contradictIf": "Clinical reports find no responses in these patients.",
+   "origin": "planner",
+   "agent": "investigator-1",
+   "for": [
+    1
+   ],
+   "against": [],
+   "forStatements": [
+    0
+   ],
+   "againstStatements": [],
+   "verdict": "verified",
+   "note": "1 checked statement from 1 source for it; none against it.",
+   "testedBy": {
+    "kind": "sources"
+   }
+  },
+  {
+   "id": "h2",
+   "text": "Demo hypothesis: tumours do not become resistant to KRAS G12C inhibitors.",
+   "supportIf": "Studies of patients who progressed find no resistance mutations.",
+   "contradictIf": "Sequencing of patients who progressed finds resistance mutations.",
+   "origin": "planner",
+   "agent": "investigator-2",
+   "for": [],
+   "against": [
+    3
+   ],
+   "forStatements": [],
+   "againstStatements": [
+    2
+   ],
+   "verdict": "contradicted",
+   "note": "1 checked statement from 1 source against it; none for it. 1 statement filed under it is not counted (not checked, not found in the source, or not pointing that way).",
+   "testedBy": {
+    "kind": "sources"
+   }
+  }
+ ],
+ "selection": {
+  "counts": {
+   "results": 8,
+   "unique": 4,
+   "selected": 3
+  },
+  "criteria": "Kept: results that the screening model judged to help answer the question and that report findings of their own, or are reviews. At most 12 are numbered at the standard level, the most relevant first, with the searches taking turns so that one search cannot fill the list. \"Relevant\" is the screening model's yes, partly or no. It is not a calibrated score.",
+  "selected": [
+   {
+    "n": 1,
+    "why": "Screened as answering the question; study type: clinical.",
+    "limitation": "An example source, not a real one."
+   },
+   {
+    "n": 2,
+    "why": "Screened as answering the question; study type: in vitro.",
+    "limitation": "An example source, not a real one."
+   },
+   {
+    "n": 3,
+    "why": "Screened as answering the question; study type: clinical.",
+    "limitation": "An example source, not a real one."
+   }
+  ],
+  "notSelected": [
+   {
+    "title": "Top 10 biotech stocks to watch (mock)",
+    "url": "https://example.org/mock/marketing-blog",
+    "provider": "fixture",
+    "reason": "Screened as not about the question."
+   }
+  ]
+ },
+ "draft": "**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.** In the example sources there is a finding for H1 and a finding against H2. Switch to Real to ask your question for real.\n\n### H1: approved covalent KRAS G12C inhibitors produce objective responses in previously treated…\n**For:** Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1].\n**Not found:** an example source that reports no responses.\n\n### H2: tumours do not become resistant to KRAS G12C inhibitors\n**For:** Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2].\n**Against:** Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification [3].\n\n### Method view: Medicinal Chemist\nAdding polarity reduced hERG binding in most matched pairs [2].",
+ "answer": {
+  "markdown": "**Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked.** In the example sources there is a finding for H1 and a finding against H2. Switch to Real to ask your question for real.\n\n### H1: approved covalent KRAS G12C inhibitors produce objective responses in previously treated…\n**For:** Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients [1].\n**Not found:** an example source that reports no responses.\n\n### H2: tumours do not become resistant to KRAS G12C inhibitors\n**For:** Piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations [2].\n**Against:** Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification [3].\n\n### Method view: Medicinal Chemist\nAdding polarity reduced hERG binding in most matched pairs [2].",
+  "direct": "Demo answer. This is fixed example text, not research. Nothing was searched and no model was asked. In the example sources there is a finding for H1 and a finding against H2. Switch to Real to ask your question for real."
+ },
+ "counts": {
+  "sources": 3,
+  "statements": 4,
+  "verified": 4,
+  "contradicted": 0,
+  "unsupported": 0,
+  "unchecked": 0
+ },
+ "note": "1 sentence that the writer wrote twice is shown once.",
+ "missing": [],
+ "finishedAt": 1794759506546,
+ "seconds": 0
+}

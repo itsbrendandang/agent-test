@@ -1,0 +1,30 @@
+[
+ {
+  "id": "a-20261115081826-afb15659/answer.md",
+  "name": "answer.md",
+  "type": "text/markdown",
+  "bytes": 2019,
+  "at": 1794759506546
+ },
+ {
+  "id": "a-20261115081826-afb15659/sources.json",
+  "name": "sources.json",
+  "type": "application/json",
+  "bytes": 1506,
+  "at": 1794759506546
+ },
+ {
+  "id": "a-20261115081826-afb15659/sources.csv",
+  "name": "sources.csv",
+  "type": "text/csv",
+  "bytes": 491,
+  "at": 1794759506546
+ },
+ {
+  "id": "a-20261115081826-afb15659/record.json",
+  "name": "record.json",
+  "type": "application/json",
+  "bytes": 16615,
+  "at": 1794759506546
+ }
+]

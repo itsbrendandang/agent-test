@@ -45,6 +45,7 @@ export interface Selection { criteria: string; /** The engine's own counts: resu
 export type ResearchEvent = { type: string; at?: number; seq?: number } & Record<string, unknown>
 
 export interface AnswerState {
+  example?: boolean
   mode?: "real" | "demo"; question?: string; effort?: string
   caps?: { maxUsd: number; maxSeconds: number }; models?: Record<string, string>
   searches: Searched[]; sources: Source[]; steps: Step[]
@@ -92,6 +93,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
     if (s.status === "starting" || (s.status === "queued" && e.type !== "research.queued")) s.status = "running"
     switch (e.type) {
       case "research.started":
+        s.example = e.example === true || undefined
         s.mode = e.mode === "demo" ? "demo" : e.mode === "real" ? "real" : undefined
         s.question = str(e.question); s.effort = str(e.effort)
         if (e.caps && typeof e.caps === "object") { const c = e.caps as Record<string, unknown>; const maxUsd = num(c.maxUsd), maxSeconds = num(c.maxSeconds); if (maxUsd !== undefined && maxSeconds !== undefined) s.caps = { maxUsd, maxSeconds } }
@@ -283,7 +285,7 @@ export function withMarks(markdown: string, statements: Statement[], sources: So
 
 /** The answer as plain text with its numbered source list, for "Copy answer". */
 export const copyText = (s: AnswerState): string =>
-  [s.markdown.trim(), s.sources.length ? `\nSources\n${s.sources.map((x) => `[${x.n}] ${x.title || x.url} ${x.url}`).join("\n")}` : ""].join("\n").trim()
+  [s.example ? "Example · practice, $0\n" : "", s.markdown.trim(), s.sources.length ? `\nSources\n${s.sources.map((x) => `[${x.n}] ${x.title || x.url} ${x.url}`).join("\n")}` : ""].join("\n").trim()
 
 /** The measured preparation phase: the engine's "prepare" step. undefined when the engine reported none. */
 export const preparation = (s: AnswerState): { running: boolean; ms?: number; failed?: boolean } | undefined => {
@@ -362,7 +364,7 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   const events: ResearchEvent[] = []
   let seq = 0
   const push = (type: string, rest: object) => events.push({ ...rest, type, seq: ++seq }) // a record field named "type" or "seq" cannot displace these
-  push("research.started", { id: r.id, thread: r.thread, question: r.question, effort: r.effort, mode: r.mode, caps: r.caps, models: r.models })
+  push("research.started", { id: r.id, thread: r.thread, question: r.question, effort: r.effort, mode: r.mode, example: r.example, caps: r.caps, models: r.models })
   if (r.status === "queued") push("research.queued", { after: r.after })
   for (const st of Array.isArray(r.steps) ? (r.steps as Record<string, unknown>[]) : []) { push("step.started", st); if (st.status !== "running") push("step.finished", st) }
   if (typeof r.opening === "string") push("opening", { text: r.opening })

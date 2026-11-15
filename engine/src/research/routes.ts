@@ -41,6 +41,7 @@ import { type Match, matchSpecialists } from "../specialists.ts"
 import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThreadId, listArtifacts, listRecords, loadRecord, newAnswerId, newThreadId, readArtifact, ResearchLog, saveRecord, threadLines, threadRecords } from "./store.ts"
 import { plainBlock, scrub } from "./text.ts"
 import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts"
+import { exampleEntries } from "../examples.ts"
 
 export const MAX_QUEUED_PER_THREAD = 3
 export const MAX_STREAMS_PER_ANSWER = 8
@@ -314,6 +315,7 @@ export function createResearch(deps: ResearchDeps) {
     if (body.effort !== undefined && !isEffort(body.effort)) throw new Refusal(400, "effort", "effort must be \"quick\" or \"standard\" (the deep level is a team review: ask for a plan with POST /api/chat)")
     const effort: Effort = (body.effort as Effort | undefined) ?? "quick"
     if (body.thread !== undefined && !isThreadId(body.thread)) throw new Refusal(400, "thread", "thread must be the id of a thread this engine gave out")
+    if (exampleEntries({ ...env, GLHF_HIDE_EXAMPLES: "0" }).some((e) => e.thread === body.thread && body.thread !== undefined)) throw new Refusal(403, "thread", "Examples are read-only. Start a new question instead.")
     const earlier = body.thread === undefined ? [] : threadRecords(config, body.thread as string, now())
     if (body.thread !== undefined && !earlier.length) throw new Refusal(404, "thread", "no such thread")
 

@@ -1,0 +1,30 @@
+[
+ {
+  "id": "a-20261115081826-afa96cbf/answer.md",
+  "name": "answer.md",
+  "type": "text/markdown",
+  "bytes": 1857,
+  "at": 1794759506584
+ },
+ {
+  "id": "a-20261115081826-afa96cbf/sources.json",
+  "name": "sources.json",
+  "type": "application/json",
+  "bytes": 1499,
+  "at": 1794759506584
+ },
+ {
+  "id": "a-20261115081826-afa96cbf/sources.csv",
+  "name": "sources.csv",
+  "type": "text/csv",
+  "bytes": 491,
+  "at": 1794759506584
+ },
+ {
+  "id": "a-20261115081826-afa96cbf/record.json",
+  "name": "record.json",
+  "type": "application/json",
+  "bytes": 14511,
+  "at": 1794759506584
+ }
+]

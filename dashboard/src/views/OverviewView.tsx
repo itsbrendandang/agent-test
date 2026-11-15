@@ -3,7 +3,9 @@
 // written below it. One line keeps the counts: a practice run is counted apart and is never added to research.
 import { useEffect, useMemo, useState } from "react"
 import { EngineOffline } from "@/components/Shared"
-import { answerLab, emptyLab, Lab, type LabEvent } from "@/lab"
+import { answerLab, boardLab, emptyLab, Lab, type LabEvent } from "@/lab"
+import { useLabEvents } from "@/lab/useLabModel"
+import { Provenance } from "@/components/Provenance"
 import { answerRuns, boardRuns, mergeRuns, swarmRuns, type RunRef } from "@/lab/runs"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { setAsk, setOpenAnswer } from "@/lib/open"
@@ -43,10 +45,21 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const totals = useMemo(() => totalsOf(runs ?? []), [runs])
 
   // The answer asked from this page. The lab below is drawn from its events, the same ones the answer reads.
-  const [asked, setAsked] = useState<{ id: string; question: string }>()
+  const [asked, setAsked] = useState<{ id: string; question: string; kind?: "answer" | "board"; example?: boolean }>()
+  useEffect(() => {
+    const open = () => {
+      const match = /^#Overview\/example\/(?:(answer|board)\/)?([\w.-]+)$/.exec(window.location.hash)
+      if (!match) return
+      const kind = match[1] === "board" ? "board" : "answer"
+      void readEngine<{ question?: string; title?: string; example?: boolean }>(`/api/${kind === "board" ? "runs" : "research"}/${encodeURIComponent(match[2])}`).then((r) => { if (r.example) setAsked({ id: match[2], question: r.question ?? r.title ?? "Example board review", kind, example: true }) }, () => {})
+    }
+    open(); window.addEventListener("hashchange", open)
+    return () => window.removeEventListener("hashchange", open)
+  }, [])
   const [refused, setRefused] = useState<string>()
-  const events = useSeenEvents(asked?.id)
-  const lab = useMemo(() => (asked ? answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events])
+  const events = useSeenEvents(asked?.kind === "board" ? undefined : asked?.id)
+  const board = useLabEvents(asked?.kind === "board" ? "board" : undefined, asked?.kind === "board" ? asked.id : undefined)
+  const lab = useMemo(() => (asked ? asked.kind === "board" ? boardLab(board.events, asked.id) : answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events, board.events])
   const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
   // An answer that ended is counted at once: the line of counts is read again.
   useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -79,16 +92,17 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <div className="ov-lab">
         <div className="ov-row-label">
           <span id="ov-lab-title">Agent Lab</span>
+          {asked?.example && <Provenance kind="example" />}
           <small role="status">{said}</small>
         </div>
         <Lab model={lab} />
       </div>
 
-      {asked && (
+      {asked && asked.kind !== "board" && (
         <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
           <h2 id="ov-answer-title">{asked.question}</h2>
           <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
-          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>Ask a follow-up in Research</button>
+          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Ask a follow-up in Research"}</button>
         </section>
       )}
 
