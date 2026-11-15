@@ -76,6 +76,16 @@ test("each source's records become evidence items in the literature title form; 
   assert.deepEqual(ax[0].item, { url: "https://arxiv.org/abs/2401.01234", title: "Modelling semaglutide response & weight (arXiv preprint, 2024) [preprint]", text: "We model the response to semaglutide in 1,000 simulated patients.", provider: "arxiv" })
 })
 
+test("a retracted paper is dropped so the agents cannot cite it as evidence", () => {
+  const body = { results: [
+    { id: "https://openalex.org/W991", doi: "https://doi.org/10.1000/retracted.1", title: "A later-retracted claim", publication_year: 2019, type: "article", is_retracted: true, abstract_inverted_index: { Retracted: [0], claim: [1] } },
+    { id: "https://openalex.org/W992", doi: "https://doi.org/10.1000/sound.1", title: "A sound study", publication_year: 2021, type: "article", is_retracted: false, abstract_inverted_index: { Sound: [0], finding: [1] } },
+  ] }
+  const out = parseOpenAlex(body)
+  assert.equal(out.length, 1)
+  assert.equal(out[0].item.url, "https://doi.org/10.1000/sound.1")
+})
+
 test("titles are compared without case, punctuation or the (Journal, year) end", () => {
   assert.equal(titleKey("Semaglutide and Cardiovascular Outcomes. (N Engl J Med, 2023) [review]"), titleKey("semaglutide and cardiovascular outcomes"))
 })

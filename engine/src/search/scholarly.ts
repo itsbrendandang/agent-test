@@ -107,6 +107,7 @@ export function parseOpenAlex(body: unknown): FoundPaper[] {
   const out: FoundPaper[] = []
   for (const w of works as Record<string, unknown>[]) {
     if (!w || typeof w !== "object") continue
+    if (w.is_retracted === true) continue // a retracted paper was withdrawn: it must never be cited as evidence
     const doi = cleanDoi(w.doi)
     const id = /^https:\/\/openalex\.org\/W\d+$/.test(str(w.id)) ? str(w.id) : undefined
     const url = doi ? `https://doi.org/${doi}` : id
@@ -121,7 +122,7 @@ export function parseOpenAlex(body: unknown): FoundPaper[] {
 }
 
 async function openAlex(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
-  const params = new URLSearchParams({ search: query, per_page: String(PER_SOURCE), select: "id,doi,title,display_name,publication_year,type,primary_location,abstract_inverted_index" })
+  const params = new URLSearchParams({ search: query, per_page: String(PER_SOURCE), select: "id,doi,title,display_name,publication_year,type,primary_location,abstract_inverted_index,is_retracted" })
   return parseOpenAlex(json(await get("openalex", `https://${LITERATURE_HOSTS.openalex}/works?${params}`, fetchFn, signal, { accept: "application/json" })))
 }
 
