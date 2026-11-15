@@ -571,17 +571,37 @@ class TokenBook:
             # not lent a second time.
             lenders = ("overshoot",)
             self.reserves["finish"] = 0
+        return self._booked(grant.phase, spent, grant.tokens, over, self._borrow(over, lenders))
+
+    def charge(self, label: str, spent: int, allowed: int | None) -> dict[str, Any]:
+        """Book one call that ran outside the phase grants (a claim call of the claims engine),
+        as soon as it ends. Its cap came out of the claims pool, which already leaves out the
+        reserves; tokens over the cap are borrowed like a phase's overshoot (overshoot reserve,
+        then finish reserve, never the report's). Booking each call keeps `used` true while
+        claims run, so a phase settled in between (the relevance judge) pays only its own tokens."""
+        spent = max(0, spent)
+        self.used += spent
+        over = max(0, spent - allowed) if allowed is not None else 0
+        borrowed = self._borrow(over, ("overshoot", "finish"))
+        return self._booked(label, spent, allowed, over, borrowed)
+
+    def _borrow(self, over: int, lenders: tuple[str, ...]) -> dict[str, int]:
         borrowed: dict[str, int] = {}
         for name in lenders:
             take = min(over - sum(borrowed.values()), self.reserves[name])
             if take > 0:
                 borrowed[name] = take
                 self.reserves[name] -= take
+        return borrowed
+
+    def _booked(
+        self, phase: str, spent: int, allowed: int | None, over: int, borrowed: dict[str, int]
+    ) -> dict[str, Any]:
         return {
-            "phase": grant.phase,
+            "phase": phase,
             "spent": spent,
-            "allowed": grant.tokens,
-            "unused_rolls_forward": max(0, grant.tokens - spent),
+            "allowed": allowed,
+            "unused_rolls_forward": max(0, allowed - spent) if allowed is not None else 0,
             "overshoot": over,
             "borrowed": borrowed,
             "not_covered": over - sum(borrowed.values()),
@@ -749,7 +769,6 @@ def glhf_swarm(
     exa: bool = False,
     memory_dir: str | None = None,
     engine: str = "phases",
-    no_critic: bool = False,
     no_auditor: bool = False,
     no_pilot: bool = False,
     no_retriage: bool = False,
@@ -767,7 +786,6 @@ def glhf_swarm(
     if engine not in ("phases", "claims"):
         raise ValueError(f"unknown engine {engine!r}; use 'phases' or 'claims'")
     flags = SwarmFlags.from_options(
-        no_critic=no_critic,
         no_auditor=no_auditor,
         no_pilot=no_pilot,
         no_retriage=no_retriage,
@@ -1319,6 +1337,21 @@ def glhf_swarm(
             ledger.mark_rechecked()
             await save_ledger(ledger)
 
+        def charge_claim_call(label: str, used: int, allowed: int | None) -> None:
+            """Book one claim call as it ends (TokenBook.charge), so the book stays true."""
+            if book is None:
+                return
+            settled = book.charge(label, used, allowed)
+            ledger.log("claims.settled", **settled)
+            if settled["borrowed"]:
+                ledger.log(
+                    "budget.borrowed",
+                    phase=label,
+                    overshoot=settled["overshoot"],
+                    from_reserves=settled["borrowed"],
+                    reserves_left=settled["reserves_left"],
+                )
+
         async def claims_flow() -> None:
             nonlocal board
             host = os.environ.get(HOST_LEDGER_ENV)
@@ -1378,6 +1411,7 @@ def glhf_swarm(
                 after=after_critique,
                 messages=state.messages,
                 max_messages=max_messages_per_role,
+                charge=charge_claim_call,
             )
             limits = Limits(
                 reserved_tokens=reserved,
@@ -1394,7 +1428,11 @@ def glhf_swarm(
                 rounds=summary.rounds,
             )
             if book:
-                book.used = tokens_used()  # the claims were paid outside the phase grants
+                # Each claim call was booked as it ended; what the book missed is logged, not hidden.
+                drift = tokens_used() - book.used
+                if drift:
+                    ledger.log("claims.drift", tokens=drift, used=tokens_used(), booked=book.used)
+                    book.used = tokens_used()
             placed = await assemble_outputs(board, outputs)
             ledger.log("finish.assembled", artifacts=placed)
             missing = needs_rescue(await check_contract(outputs))

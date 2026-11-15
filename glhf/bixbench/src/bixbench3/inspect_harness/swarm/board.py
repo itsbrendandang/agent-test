@@ -77,6 +77,10 @@ class ClaimBudget:
     tokens_spent: int = 0
     seconds_alloc: float = 0.0
     seconds_spent: float = 0.0
+    # What each role (pilot, workup, audit, critique, revise) spent on this claim, so a review
+    # role's share can be paid per round (claim_budget.call_tokens).
+    stage_tokens_spent: dict[str, int] = field(default_factory=dict)
+    stage_seconds_spent: dict[str, float] = field(default_factory=dict)
 
     @property
     def tokens_left(self) -> int:
@@ -249,11 +253,22 @@ class Board:
         )
         return record
 
-    def spend(self, claim_id: str, tokens: int, seconds: float) -> ClaimBudget:
+    def spend(
+        self, claim_id: str, tokens: int, seconds: float, stage: str | None = None
+    ) -> ClaimBudget:
         budget = self.claims[claim_id].budget
         budget.tokens_spent += max(0, tokens)
         budget.seconds_spent += max(0.0, seconds)
-        self.event("budget.spent", claim_id=claim_id, tokens=tokens, seconds=round(seconds, 3))
+        if stage:
+            budget.stage_tokens_spent[stage] = budget.stage_tokens_spent.get(stage, 0) + max(
+                0, tokens
+            )
+            budget.stage_seconds_spent[stage] = budget.stage_seconds_spent.get(stage, 0.0) + max(
+                0.0, seconds
+            )
+        self.event(
+            "budget.spent", claim_id=claim_id, tokens=tokens, seconds=round(seconds, 3), stage=stage
+        )
         return budget
 
     def add_artifact(self, claim_id: str, artifact: Artifact) -> None:
