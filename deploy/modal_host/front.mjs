@@ -96,8 +96,8 @@ const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&a
 export function loginPage(message = "", next = "/") {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Sign in</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;background:#f6f5f2;color:#1c1b19;display:grid;place-items:center;min-height:100vh;margin:0}main{background:#fff;border:1px solid #dcd9d2;border-radius:12px;padding:28px;width:min(92vw,380px)}h1{font-size:20px;margin:0 0 4px}p{margin:0 0 16px;color:#57534e;font-size:14px}label{display:block;font-size:14px;margin-bottom:6px}input{box-sizing:border-box;width:100%;font:inherit;padding:10px;border:1px solid #a8a29e;border-radius:8px}button{margin-top:14px;width:100%;font:inherit;padding:10px;border:0;border-radius:8px;background:#1c1b19;color:#fff;cursor:pointer}.msg{color:#b42318;font-size:14px;margin:12px 0 0}</style></head>
-<body><main><h1>AI Scientist Bot</h1><p>This is a private app. Sign in with your access code.</p>
-<form method="post" action="/login"><input type="hidden" name="next" value="${escapeHtml(next)}"><input type="text" name="username" value="AI Scientist Bot" autocomplete="username" hidden>
+<body><main><h1>Bit Crew</h1><p>This is a private app. Sign in with your access code.</p>
+<form method="post" action="/login"><input type="hidden" name="next" value="${escapeHtml(next)}"><input type="text" name="username" value="Bit Crew" autocomplete="username" hidden>
 <label for="code">Access code</label><input id="code" name="code" type="password" autocomplete="current-password" required autofocus>
 <button type="submit">Sign in</button></form>${message ? `<p class="msg" role="alert">${escapeHtml(message)}</p>` : ""}</main></body></html>`
 }

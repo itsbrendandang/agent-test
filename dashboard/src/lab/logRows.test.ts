@@ -30,10 +30,64 @@ describe("full event log", () => {
       { key: "search", type: "evidence.triaged", member: "x", provider: "fixture", kept: 1, dropped: 0, items: [{ title: "Example", url: "https://example.org" }] },
       { key: "fail", type: "run.failed", error: "The run failed safely." },
     ], "board")
-    expect(rows.find((r) => r.kind === "write")).toMatchObject({ agent: "Custom expert", text: "Replied in round 1. Full reply", usd: 0 })
+    expect(rows.find((r) => r.kind === "write")).toMatchObject({ agent: "Custom expert", text: "Full reply", usd: 0, round: { n: 1 } })
     expect(rows.find((r) => r.kind === "search")?.text).toContain("practice example sources")
     expect(rows.find((r) => r.kind === "search")?.sources).toHaveLength(1)
     expect(rows.find((r) => r.kind === "error")?.text).toContain("The run failed safely.")
+  })
+  it("gives a team review's speakers their jobs, flags a reply a check contradicted, and names the checkers in plain words", () => {
+    const rows = eventRows([
+      { key: "roster", type: "run.roster", members: [{ name: "critic", title: "Critic", role: "member", source: "board" }, { name: "tox", title: "Toxicologist", role: "member", source: "specialist" }] },
+      { key: "r1", type: "round.started", round: 1, message: "Go." },
+      { key: "a", type: "member.replied", member: "critic", round: 1, text: "Two claims." },
+      { key: "b", type: "member.replied", member: "tox", round: 1, text: "One claim." },
+      { key: "c1", type: "claim.checked", member: "critic", round: 1, claim: "x", verdict: "contradicted", checker: "first-pass", checkedBy: "scripted" },
+      { key: "c2", type: "claim.checked", member: "critic", round: 1, claim: "y", verdict: "contradicted", checker: "openai", checkedBy: "gpt-x" },
+      { key: "c3", type: "claim.checked", member: "tox", round: 1, claim: "z", verdict: "verified", checker: "claude-code" },
+      { key: "d", type: "member.replied", member: "critic", round: 2, text: "Later." },
+    ], "board")
+    const reply = (key: string) => rows.find((r) => r.id.endsWith(`:${key}`))!
+    expect(reply("r1").job).toBe("runs the discussion; does not do the research or decide what is true")
+    expect(reply("a")).toMatchObject({ job: "tries to prove the others wrong", wrong: 2 })
+    expect(reply("b")).toMatchObject({ job: "method specialist: reads method notes, has no tools and runs nothing" })
+    expect(reply("b").wrong).toBeUndefined()
+    expect(reply("d").wrong).toBeUndefined() // a check in round 1 does not mark the same member's round 2 reply
+    expect(reply("c1")).toMatchObject({ agent: "The quick first check", agentId: "first-pass" })
+    expect(reply("c1").text).toContain("Practice run: no model checked it.")
+    expect(reply("c2")).toMatchObject({ agent: "The second, careful check", agentId: "openai" })
+    expect(reply("c2").text).toContain("Checked by gpt-x.")
+    expect(reply("c3").agent).toBe("The second, careful check")
+    const sourced = eventRows([
+      { key: "f", type: "claim.checked", member: "critic", round: 1, claim: "x", verdict: "verified", checker: "first-pass", source: "analysis.py" },
+      { key: "u", type: "claim.checked", member: "critic", round: 1, claim: "y", verdict: "verified", checker: "first-pass", source: "https://example.org/p" },
+    ], "board")
+    expect(sourced[0].text).toContain("Source: analysis.py.")
+    expect(sourced[1].text).not.toContain("Source:")
+    expect(sourced[1].sources).toEqual([{ title: "https://example.org/p", url: "https://example.org/p" }])
+    expect(rows.every((r) => !r.note || r.job === undefined)).toBe(true)
+    expect(eventRows([{ key: "a", type: "member.replied", member: "critic", round: 1, text: "x" }], "answer")[0].job).toBeUndefined()
+  })
+  it("credits Exa for an old real review's search that recorded no provider, and nobody for a practice one", () => {
+    const search = { key: "s", type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0 }
+    const real = eventRows([{ key: "start", type: "run.started", mock: false }, search], "board").find((r) => r.kind === "search")!
+    expect(real.provider).toBe("exa")
+    expect(real.text).toBe("Searched the web for “q”: kept 1, dropped 0.")
+    const practice = eventRows([{ key: "start", type: "run.started", mock: true }, search], "board").find((r) => r.kind === "search")!
+    expect(practice.provider).toBeUndefined()
+    expect(practice.text).toBe("Searched sources for “q”: kept 1, dropped 0.")
+    expect(eventRows([{ key: "start", type: "run.started", mock: false }, { ...search, provider: "europepmc" }], "board").find((r) => r.kind === "search")!.provider).toBe("europepmc")
+  })
+  it("marks every row of the final round as final, so a filtered log keeps the final heading", () => {
+    const rows = eventRows([
+      // Real board events carry `at`; without it the log orders rows by kind, not by when they happened.
+      { key: "r1", at: 1, type: "round.started", round: 1, message: "Round 1." },
+      { key: "m1", at: 2, type: "member.replied", member: "scout", round: 1, text: "a" },
+      { key: "r2", at: 3, type: "round.started", round: 2, final: true, message: "Round 2. Final." },
+      { key: "m2", at: 4, type: "member.replied", member: "scout", round: 2, text: "b" },
+      { key: "c2", at: 5, type: "claim.checked", member: "scout", round: 2, claim: "b", verdict: "verified", checker: "first-pass" },
+    ], "board")
+    expect(rows.map((r) => r.round)).toEqual([{ n: 1 }, { n: 1 }, { n: 2, final: true }, { n: 2, final: true }, { n: 2, final: true }])
+    expect(filterRows(rows, { agent: "scout", kind: "", query: "" }).map((r) => r.round)).toEqual([{ n: 1 }, { n: 2, final: true }])
   })
   it("combines agent, kind and word search filters including sources", () => {
     const rows = eventRows(events, "answer")
@@ -101,5 +155,15 @@ describe("full event log", () => {
     expect(sparse[0].text).toContain("Status: failed. Script missing")
     expect(sparse.every((r) => !r.text.includes("p =") && !r.text.includes("e =") && !r.text.includes("Contradicts the statement:"))).toBe(true)
     expect(sparse[1].text).toContain("id not recorded")
+  })
+  it("says where each test ran: a Modal sandbox with its id, or Docker", () => {
+    const rows = eventRows([
+      { kind: "test.executed", claim: "C1", name: "Permutation", status: "ok", exit_code: 0, backend: "modal", sandbox_id: "sb-7" },
+      { kind: "test.executed", claim: "C2", name: "Row count", status: "timeout", backend: "docker", sandbox_id: null },
+      { kind: "test.executed", claim: "C3", name: "Old run", status: "ok" },
+    ], "swarm")
+    expect(rows[0].text).toBe("Ran test Permutation for statement C1. Ran in a Modal sandbox (sb-7). Status: ok. Exit code: 0.")
+    expect(rows[1].text).toBe("Ran test Row count for statement C2. Ran in a Docker sandbox. Status: timeout.")
+    expect(rows[2].text).toBe("Ran test Old run for statement C3. Status: ok.")
   })
 })

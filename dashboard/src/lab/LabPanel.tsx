@@ -4,6 +4,7 @@
 // cannot disagree about what was reported.
 import { SearchCredit } from "@/components/Shared"
 import type { SearchProvider } from "@/board/api"
+import { logLink } from "@/lib/links"
 import { AgentAvatar } from "./AgentAvatar"
 import { Mascot } from "./Mascot"
 import { CLAIM_GLYPH, CLAIM_WORD, LOG_KIND_WORD, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, dayName, logDid, logKind, roomOf, shortTime, type CharacterId, type LabModel, type LogKind, type LogLine } from "./model"
@@ -79,6 +80,10 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
         {a.lastFetched && <div><dt>Last fetched</dt><dd>{a.lastFetched.label} <span className="muted">(in {roomOf(a.lastFetched.room).name}, {shortTime(a.lastFetched.at)})</span></dd></div>}
         {a.problem && <div><dt>A step of its own failed</dt><dd data-tone="bad">✕ {a.problem.text}</dd></div>}
       </dl>
+      {/* The same teammate in the Agent Log: this run's events, filtered to the agents and steps it plays. */}
+      {a.inRun && model.kind && model.runId && (
+        <p className="lab-to-log"><a href={logLink({ kind: model.kind, id: model.runId }, selected)}>{captionOf(a)} in the Agent Log</a></p>
+      )}
       <details className="lab-about">
         <summary>About</summary>
         <p>{a.label ? `The ${c.name}, at home in ${roomOf(c.room).name}.` : `At home in ${roomOf(c.room).name}.`}{a.inRun && a.since !== undefined && model.status !== "empty" && <> In this state since <time dateTime={new Date(a.since).toISOString()}>{clockTime(a.since)}</time>.</>}</p>

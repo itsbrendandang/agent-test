@@ -2,7 +2,7 @@
 // and GET /api/glhf/scoreboard, so the dashboard and the terminal always agree.
 //
 // Two runs are compared only when they had the same task, case folder, model, place (local or cloud), effort,
-// time limit and token budget. Within such a group the row shows the latest settled run of each solver, also
+// time limit, token budget and analysis sandbox (this machine or Modal: another machine and image). Within such a group the row shows the latest settled run of each solver, also
 // when that run failed: an older success never stands in for a newer failure. Extras that one side had and
 // the other did not are listed per run, and named in the row's note.
 import type { GlhfRun } from "./types.ts"
@@ -41,11 +41,12 @@ export function extras(run: GlhfRun): string[] {
   if (s.seed) out.push(`seed ${s.seed}`)
   if (s.effort) out.push(`effort ${s.effort}`)
   if (run.mode === "cloud") out.push("cloud")
+  if (s.analysisBackend === "modal") out.push("analyses on Modal")
   return out
 }
 
 /** Runs with the same key may be compared. */
-export const pairKey = (run: GlhfRun) => JSON.stringify([run.task, run.settings?.caseId ?? null, run.model, run.mode, run.settings?.effort ?? null, run.settings?.timeLimit ?? null, run.settings?.maxTokens ?? null])
+export const pairKey = (run: GlhfRun) => JSON.stringify([run.task, run.settings?.caseId ?? null, run.model, run.mode, run.settings?.effort ?? null, run.settings?.timeLimit ?? null, run.settings?.maxTokens ?? null, run.settings?.analysisBackend ?? "local"])
 
 const cell = (run: GlhfRun): Cell => {
   const out: Cell = { id: run.id, phase: run.phase as "done" | "failed", startedAt: run.startedAt, extras: extras(run) }
@@ -72,7 +73,7 @@ export function scoreboard(runs: GlhfRun[]): Row[] {
   for (const row of rows.values()) {
     const { single, swarm } = row
     if (!single || !swarm) {
-      row.note = `no matching ${single ? "swarm run" : "baseline"}: no ${single ? "swarm" : "single-agent"} run has this task, case, model, place, effort, time limit and token budget`
+      row.note = `no matching ${single ? "swarm run" : "baseline"}: no ${single ? "swarm" : "single-agent"} run has this task, case, model, place, effort, time limit, token budget and analysis sandbox`
       continue
     }
     const failed = [single.phase === "failed" && "single agent", swarm.phase === "failed" && "swarm"].filter(Boolean)

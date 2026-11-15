@@ -7,6 +7,8 @@ instead of through the engine. It is ON unless NO_PAID_CALLS is exactly "0". Whi
   A local model is `ollama/<name>` served from this machine: see "Local models" below
 - a cloud launch is refused: `bixbench3 run`, `bixbench3 setup-runtime` (cli.py)
 - Exa documentation search is refused                                 (swarm/tools.py, glhf_local.py)
+- analyses in a Modal sandbox (`glhf_local --sandbox modal`) are refused, also with the
+  scripted model: Modal bills the sandbox by the second               (glhf_local.py)
 - past.dev recall and ingest are refused                              (swarm/past_memory.py, swarm/memory.py)
 - the provider keys are blank in this process, so Inspect, the sandbox it starts and anything
   further down have no key to spend with                              (`enforce`)
@@ -331,10 +333,14 @@ def enforce(environ: MutableMapping[str, str] | None = None) -> bool:
     return True
 
 
-def refuse_run(model: str, role_models: Iterable[str] = (), *, exa: bool = False) -> None:
+def refuse_run(
+    model: str, role_models: Iterable[str] = (), *, exa: bool = False, modal: bool = False
+) -> None:
     """The check of a local run before anything is started: keys blanked, and with the switch on
-    only the scripted model and local models (ollama/<name> on this machine), without Exa search,
-    may run. With a local model among them, its checked address is pinned (`use_local`)."""
+    only the scripted model and local models (ollama/<name> on this machine), without Exa search
+    and with the analyses on this machine (not `--sandbox modal`, which Modal bills by the
+    second, also with the scripted model), may run. With a local model among them, its checked
+    address is pinned (`use_local`)."""
     models = [model, *role_models]
     off = enforce()
     if off:
@@ -345,3 +351,5 @@ def refuse_run(model: str, role_models: Iterable[str] = (), *, exa: bool = False
         return
     if exa:
         refuse_paid("Exa documentation search (--exa)")
+    if modal:
+        refuse_paid("analyses in a Modal sandbox (--sandbox modal, ANALYSIS_BACKEND=modal)")

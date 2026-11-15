@@ -383,7 +383,8 @@ export const noteOutcome = (n: Note): { word: string; kind: "success" | "warning
  * (the copied text and the saved file keep them). Only used for an answer the engine itself labelled demo.
  */
 export function oncePractice(text: string): string {
-  const cut = text.replace(/^\s*\*\*Demo answer\.[^*]*\*\*\s*/i, "").replace(/^\s*Demo hypothesis:\s*/i, "")
+  // While the text is still streaming, the bold sentence may not be closed yet: it is left out as well, so it does not show and then vanish.
+  const cut = text.replace(/^\s*\*\*Demo answer\.[^*]*\*\*\s*/i, "").replace(/^\s*\*\*Demo answer\.[^*]*$/i, "").replace(/^\s*Demo hypothesis:\s*/i, "")
   return cut ? cut[0].toUpperCase() + cut.slice(1) : cut
 }
 

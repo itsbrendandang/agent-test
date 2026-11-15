@@ -88,21 +88,20 @@ describe("one picture per agent, left of its label", () => {
     for (const [i, name] of ["scout", "critic", "medicinal-chemist"].entries()) {
       const face = members[i].querySelector("svg[data-agent]")!
       expect(face).toHaveAttribute("data-agent", name)
-      expect(members[i].firstElementChild).toBe(face) // the picture is first: left of the label
+      expect(members[i].firstElementChild!.firstElementChild).toBe(face) // the picture is first: left of the label
+      expect(members[i].firstElementChild).toHaveAttribute("href", expect.stringMatching(new RegExp(`^#Lab/board/[\\w.-]+\\?agent=${name}$`))) // and opens its messages in the Agent Log
       const who = agentIdentity(name)
       expect(face).toHaveAttribute("data-face", `${who.shape}:${who.colour}`)
       expect(face).toHaveAttribute("aria-hidden", "true") // decoration: the label is the text beside it
     }
   })
-  it("a search step carries the searcher's picture, the same one as on that member's row and message", async () => {
+  it("a search step names the searcher, and that member's picture is the same in the member list and in the discussion", async () => {
     await open()
-    const step = screen.getByRole("note", { name: "Scout searched" })
-    const face = step.querySelector("svg[data-agent]")!
-    expect(step.firstElementChild).toBe(face)
+    const step = screen.getByRole("list", { name: "Run events" }).querySelector(".chat-note[data-kind='search']")!
+    expect(step).toHaveTextContent("Scout (Data and Evidence)")
     const inList = screen.getByRole("list", { name: "Who took part" }).querySelector('svg[data-agent="scout"]')!
-    expect(face.getAttribute("data-face")).toBe(inList.getAttribute("data-face"))
-    const inMessage = screen.getByRole("article", { name: "Scout" }).querySelector("svg[data-agent]")
-    if (inMessage) expect(inMessage.getAttribute("data-face")).toBe(face.getAttribute("data-face"))
+    const inMessage = screen.getByRole("list", { name: "Run events" }).querySelector('.chat-msg svg[data-agent="scout"]')!
+    expect(inMessage.getAttribute("data-face")).toBe(inList.getAttribute("data-face"))
     expect(new Set([...document.querySelectorAll('svg[data-agent="scout"]')].map((f) => f.getAttribute("data-face"))).size).toBe(1) // never a second, different face
   })
   it("a source's screening result is a word with an explanation, not a number", async () => {

@@ -39,6 +39,6 @@ const { lines, warnings } = engineSummary(status, here, reused)
 if (lines.length) console.log(`\n${lines.join("\n")}`)
 for (const w of warnings) console.warn(`\nWARNING: ${w}`)
 
-console.log(`\nAI Scientist Bot is ready:  ${DASHBOARD}\nPress Ctrl+C here to stop it.\n`)
+console.log(`\nBit Crew is ready:  ${DASHBOARD}\nPress Ctrl+C here to stop it.\n`)
 if (!process.env.NO_OPEN) spawn(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "win32" ? ["/c", "start", DASHBOARD] : [DASHBOARD], { stdio: "ignore", detached: true }).on("error", () => {})
 if (!children.length) process.exit(0)

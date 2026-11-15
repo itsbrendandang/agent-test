@@ -185,3 +185,38 @@ it("keeps two agents with the same name as two choices with different labels, ea
   expect(screen.getByText("Checked claim two.")).toBeInTheDocument()
   expect(screen.queryByText("Checked claim one.")).toBeNull()
 })
+
+it("draws a team review's rounds as headed lines, and its statement checks and searches as quiet notes", () => {
+  const review: EventRow[] = [
+    { id: "r1", agent: "Lead scientist", agentId: "lead-scientist", kind: "prepare", text: "State your position.", sources: [], round: { n: 1 } },
+    { id: "s", agent: "Scout", agentId: "scout", kind: "search", text: "Searched the web for “q”: kept 1, dropped 0.", sources: [], note: true, provider: "exa" },
+    { id: "a", agent: "Scout", agentId: "scout", kind: "write", text: "The data is complete.", sources: [], round: { n: 1 } },
+    { id: "c", agent: "First check", agentId: "first-pass", kind: "check", text: "Contradicted: Scout's statement “x”.", sources: [], note: true, round: { n: 1 }, mark: "contradicted" },
+    { id: "r2", agent: "Lead scientist", agentId: "lead-scientist", kind: "prepare", text: "Started round 2.", sources: [], round: { n: 2, final: true } },
+  ]
+  render(<EventLog rows={review} run={{ id: "b", kind: "board" }} connection="ended" />)
+  const list = screen.getByRole("list", { name: "Run events" })
+  expect(within(list).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Round 1", "Round 2: final positions"])
+  const check = list.querySelector(".chat-note[data-kind='check']")!
+  expect(check).toHaveAttribute("data-mark", "contradicted")
+  expect(check.querySelector(".chat-note-mark")).toHaveTextContent("✕")
+  expect(within(list.querySelector<HTMLElement>(".chat-note[data-kind='search']")!).getByRole("link", { name: "Exa" })).toHaveAttribute("href", "https://exa.ai")
+  expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown") // the round lines are not events
+})
+
+it("shows a team member's job under the name, and a red line on a reply a check contradicted", () => {
+  const review: EventRow[] = [
+    { id: "a", agent: "Critic", agentId: "critic", kind: "write", text: "The margin is thin.", sources: [], round: { n: 1 }, job: "tries to prove the others wrong", wrong: 1 },
+    { id: "b", agent: "Scout", agentId: "scout", kind: "write", text: "Twelve samples.", sources: [], round: { n: 1 }, job: "looks at the data before any research begins", wrong: 2 },
+    { id: "c", agent: "Lead", agentId: "lead-scientist", kind: "write", text: "Fine.", sources: [], round: { n: 1 } },
+  ]
+  render(<EventLog rows={review} run={{ id: "b", kind: "board" }} connection="ended" />)
+  const [critic, scout, lead] = screen.getByRole("list", { name: "Run events" }).querySelectorAll<HTMLElement>(".chat-msg")
+  expect(critic.querySelector(".chat-who")).toHaveTextContent("tries to prove the others wrong")
+  expect(critic).toHaveAttribute("data-wrong")
+  expect(critic).toHaveTextContent("A check contradicted one statement here.")
+  expect(scout).toHaveTextContent("A check contradicted 2 statements here.")
+  expect(lead).not.toHaveAttribute("data-wrong")
+  expect(lead).not.toHaveTextContent("contradicted")
+  expect(lead.querySelector(".chat-job")).toBeNull()
+})

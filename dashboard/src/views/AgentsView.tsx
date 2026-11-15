@@ -12,6 +12,9 @@ import { EngineOffline, PageHead } from "@/components/Shared"
 import { ChatRefused, getCatalog, type Catalog, type CatalogAgent } from "@/home/api"
 import { agentText, skillText } from "@/home/chat"
 import { AgentAvatar } from "@/lab/AgentAvatar"
+import { agentKey } from "@/lab/identity"
+import type { RunKind } from "@/lab/model"
+import { agentLink, agentOfHash, logLink, replaceAddress } from "@/lib/links"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { hasWords } from "@/lib/format"
 import { provenanceOf } from "@/lib/provenance"
@@ -54,6 +57,20 @@ const memberOrder = (a: CatalogAgent, b: CatalogAgent) => {
   return rank(a) - rank(b) || (rank(a) === 2 ? a.title.localeCompare(b.title) : 0)
 }
 
+/**
+ * The card an address names, by the agent's own name. A name both teams have opens the card of the team the run belongs
+ * to. A research answer's steps have no card.
+ */
+function memberFor(members: readonly Member[], name: string, from?: RunKind): Member | undefined {
+  if (from === "answer") return undefined
+  const team = from === "swarm" ? members.filter((m) => m.group === "nine") : from ? members.filter((m) => m.group !== "nine") : []
+  const pool = team.length ? team : members
+  const key = agentKey(name.replace(/^specialist:/, ""))
+  return pool.find((m) => agentKey(m.agent) === key)
+}
+/** The Agent Log of the newest run this member works in, filtered to it. */
+const memberLog = (m: Member) => logLink({ kind: m.group === "nine" ? "swarm" : "board" }, m.agent)
+
 const latestDoneTeamRun = (runs: GlhfRun[]) => runs.find((r) => r.solver === "glhf" && r.phase === "done")?.id
 
 export function AgentsView() {
@@ -68,6 +85,13 @@ export function AgentsView() {
   const [opened, setOpened] = useState<string>()
   const [lastOpened, setLastOpened] = useState<string>()
   const opener = useRef<HTMLButtonElement>(undefined)
+  // "#Agents/<name>": the address names an agent whose details open, once the cards it may be on have loaded.
+  const [wanted, setWanted] = useState(() => agentOfHash(window.location.hash))
+  useEffect(() => {
+    const sync = () => { const named = agentOfHash(window.location.hash); setWanted(named); if (!named) setOpened(undefined) }
+    window.addEventListener("hashchange", sync)
+    return () => window.removeEventListener("hashchange", sync)
+  }, [])
   useEffect(() => {
     let stale = false
     getCatalog().then((c) => { if (!stale) setCatalog(c) },
@@ -100,6 +124,14 @@ export function AgentsView() {
       }
     }),
   ]
+  const loaded = catalog !== undefined || catalogProblem !== undefined
+  if (wanted && loaded) { const key = memberFor(members, wanted.name, wanted.from)?.key; setOpened(key); if (key) setLastOpened(key); setWanted(undefined) }
+  const openedMember = members.find((m) => m.key === opened)
+  // The open card is in the address, so it can be copied and Back returns to it.
+  useEffect(() => {
+    if (wanted || !window.location.hash.startsWith("#Agents")) return
+    replaceAddress(openedMember ? agentLink(openedMember.agent, openedMember.group === "nine" ? "swarm" : "board") : "#Agents")
+  }, [openedMember?.key, wanted]) // eslint-disable-line react-hooks/exhaustive-deps -- the card's name is what the address holds
   const shown = members.filter((m) => (group === "all" || m.group === group) && hasWords(m.text, filter))
   const skills = (catalog?.skills ?? []).filter((s) => hasWords(skillText(s), filter))
 
@@ -145,10 +177,8 @@ export function AgentsView() {
                     </dl>
                     <div className="member-end">
                       <p className="member-foot">{m.foot}</p>
-                      {m.details && (
-                        <Button type="button" variant="outline" size="sm" className="member-details" aria-label={`Details of ${m.name}`} aria-haspopup="dialog" aria-expanded={opened === m.key}
-                          onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key); setLastOpened(m.key) }}>Details</Button>
-                      )}
+                      <Button type="button" variant="outline" size="sm" className="member-details" aria-label={`Details of ${m.name}`} aria-haspopup="dialog" aria-expanded={opened === m.key}
+                        onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key); setLastOpened(m.key) }}>Details</Button>
                     </div>
                   </li>
                 ))}
@@ -196,7 +226,11 @@ function MemberPanel({ open, member, onClose, returnFocus }: { open: boolean; me
                 <div><dt>Takes part</dt><dd>{member.part}</dd></div>
               </dl>
               <p className="member-foot">{member.foot}</p>
-              <div className="team-prompt">{member.details}</div>
+              <p className="member-panel-links">
+                <a href={memberLog(member)}>{member.name}'s messages in the Agent Log</a>
+                <span className="muted small"> · in the newest {member.group === "nine" ? "benchmark run" : "team review"}</span>
+              </p>
+              {member.details && <div className="team-prompt">{member.details}</div>}
             </div>
           </>
         )}

@@ -1,12 +1,12 @@
 // The inspector's remembered state (shown or not, how wide), when there is room for it beside the conversation, and
 // which of its tabs have something to show.
 import { useEffect, useState } from "react"
-import type { AnswerState, ResearchEvent } from "./model"
+import type { AnswerState } from "./model"
 
-export type InspectorTab = "evidence" | "hypotheses" | "structure" | "results" | "activity" | "lab"
+export type InspectorTab = "evidence" | "hypotheses" | "structure" | "results" | "activity"
 
 /** The tabs that have something to show for this answer. */
-export function tabsOf(s: AnswerState | undefined, events: ResearchEvent[]): InspectorTab[] {
+export function tabsOf(s: AnswerState | undefined): InspectorTab[] {
   if (!s) return []
   return [
     ...(s.sources.length || s.statements.length || s.notes.length || s.selection ? ["evidence" as const] : []),
@@ -14,7 +14,6 @@ export function tabsOf(s: AnswerState | undefined, events: ResearchEvent[]): Ins
     ...(s.proteins.length ? ["structure" as const] : []),
     ...(s.artifacts.length ? ["results" as const] : []),
     ...(s.steps.length || s.status !== "starting" ? ["activity" as const] : []),
-    ...(events.length && s.steps.length ? ["lab" as const] : []),
   ]
 }
 

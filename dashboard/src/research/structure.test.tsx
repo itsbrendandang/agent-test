@@ -54,9 +54,9 @@ describe("the answer's proteins", () => {
   })
   it("make the Structure tab appear; without them there is none", () => {
     const real = lines(S_REAL)
-    expect(tabsOf(foldAnswer(real), real)).not.toContain("structure")
+    expect(tabsOf(foldAnswer(real))).not.toContain("structure")
     const withProteins = [...real, { type: "proteins", seq: 10_000, items: [KRAS] }]
-    expect(tabsOf(foldAnswer(withProteins), withProteins)).toEqual(["evidence", "structure", "results", "activity", "lab"])
+    expect(tabsOf(foldAnswer(withProteins))).toEqual(["evidence", "structure", "results", "activity"])
   })
 })
 
@@ -147,7 +147,7 @@ describe("the Structure tab", () => {
     const user = userEvent.setup()
     engine([])
     const events = [...lines(S_REAL), { type: "proteins", seq: 10_000, items: [KRAS] }]
-    function Shown() { const [tab, setTab] = useState<InspectorTab>(); return <Inspector id="a-1" state={foldAnswer(events)} events={events} tab={tab} onTab={setTab} /> }
+    function Shown() { const [tab, setTab] = useState<InspectorTab>(); return <Inspector id="a-1" state={foldAnswer(events)} tab={tab} onTab={setTab} /> }
     render(<Shown />)
     await user.click(screen.getByRole("tab", { name: "Structure" }))
     expect(await screen.findByRole("region", { name: "Proteins in this answer" })).toBeInTheDocument()

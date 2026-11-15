@@ -1,5 +1,5 @@
-/** The product's name as people read it. As a slug it is "ai-scientist-bot". */
-export const PRODUCT = "AI Scientist Bot"
+/** The product's name as people read it. The slug stays "ai-scientist-bot" (package names, user agents) for compatibility. */
+export const PRODUCT = "Bit Crew"
 
 // The views of the app. The keys are addresses (the URL hash, stored choices, deep links): they never change.
 // What a person reads is LABEL. Overview is first and is what opens when the address names no view and no view
@@ -11,7 +11,7 @@ export const DEFAULT_VIEW: View = "Overview"
 export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Log", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
-  Overview: "How much has been run, and how much of it is research.",
+  Overview: "Ask a question and watch the team work on it.",
   Home: "Ask a research question and read the answer with its sources.",
   Runs: "Everything that was researched, newest first, with keyword search.",
   Compare: "One agent against a team of nine, on the same benchmark task.",
@@ -19,20 +19,24 @@ export const ABOUT: Record<View, string> = {
   Board: "One team review: the recommendation, the checks and the discussion.",
   Agents: "Who does the work: the nine roles, the review agents, specialists and skills.",
   Graph: "One run as a graph of who said what and how it was checked.",
-  Lab: "The full event log of a run, with agent filters and downloads.",
+  Lab: "The full event log of a run or a team review, with agent filters and downloads.",
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
-/** The everyday workflow: these get the weight. */
-export const PRIMARY: readonly View[] = ["Overview", "Home", "Lab", "Runs", "Compare"]
-/** Advanced views: kept, quieter, under "More". */
-export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Benchmarks"]
+/** The views the navigation lists. Benchmarks and Compare open only by their address. */
+export type Listed = Exclude<View, "Benchmarks" | "Compare" | "Settings">
+/** The everyday loop, as in a search tool: ask, read the answer, find it again. These get the weight. */
+export const PRIMARY: readonly Listed[] = ["Overview", "Home", "Runs"]
+/** The quieter group under the main one, with the heading MORE_LABEL: how an answer was made. Benchmarks and Compare
+ *  are not in the navigation: they open only by their address (#Benchmarks, #Compare, #Compare/<run id>). */
+export const MORE_LABEL = "How it works"
+export const MORE: readonly Listed[] = ["Lab", "Board", "Graph", "Agents"]
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }
 
-/** A hash is "#View" or "#View/<run id>": the address of a view, and of one run in it. */
+/** A hash is "#View" or "#View/<run id>": the address of a view, and of one run in it. What follows "?" is the view's own (lib/links.ts). */
 const parts = (hash: string): [string, string | undefined] => {
-  let label = hash.replace(/^#/, "")
+  let label = hash.replace(/^#/, "").replace(/\?.*$/, "")
   try { label = decodeURIComponent(label) } catch { /* a broken escape names no view */ }
   const cut = label.indexOf("/")
   return cut < 0 ? [label, undefined] : [label.slice(0, cut), label.slice(cut + 1) || undefined]

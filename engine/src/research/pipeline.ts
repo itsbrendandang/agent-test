@@ -2,8 +2,9 @@
 //
 //   prepare   a cheap model writes the queries and the opening sentence (a fixed fallback when its reply cannot be read)
 //   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC,
-//             OpenAlex, Semantic Scholar and arXiv at once, merged: search/scholarly.ts),
-//             further web searches and, at the standard level, database lookups
+//             OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv at once, merged: search/scholarly.ts),
+//             further web searches, for a question about a lab method the published lab protocols (protocol
+//             journals and protocols.io: search/protocols.ts) and, at the standard level, database lookups
 //   evaluate  each search's results are screened by the board's first pass (triage.ts)
 //   sources   what was kept is numbered [1]..[n]; the selection says why each was kept and why the others were not
 //   write     the strong model writes a draft from the numbered sources only
@@ -41,6 +42,7 @@ import type { BoardConfig } from "../config.ts"
 import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "../search/exa.ts"
 import { MAX_MERGED, titleKey } from "../search/scholarly.ts"
+import { isProtocolTitle, MAX_PROTOCOLS } from "../search/protocols.ts"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../paid/exaledger.ts"
@@ -53,7 +55,7 @@ import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, 
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { proteinsOf } from "../structure/proteins.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
-import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
+import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, looksProtocol, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
 import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
 export const DATABASES = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"] as const
@@ -65,6 +67,8 @@ export interface Plan {
   medical: boolean
   web: { query: string; objective: string }[]
   literature: string[]
+  /** Searches of published lab protocols (search/protocols.ts). Empty unless the question is about a lab method (`withProtocols`). */
+  protocols: string[]
   databases: { source: Database; query: string }[]
   /** The one sentence that says what will be done. Checked by code; a code-built sentence when the planner's is not usable. */
   opening: string
@@ -135,6 +139,8 @@ export interface PipelineDeps {
   exa: (query: string, objective: string) => Promise<SearchResult>
   /** One free literature search (literature.ts). */
   literature: (query: string) => Promise<SearchResult>
+  /** One free search of published lab protocols (protocols.ts). Absent: no protocol is searched. */
+  protocols?: (query: string) => Promise<SearchResult>
   /** One database lookup (sources/), when that module is there. */
   database?: (source: Database, query: string) => Promise<SearchResult>
   /** The method specialists whose notes fit a question, best first (specialists.ts: matchSpecialists). Absent: no answer gets one. */
@@ -285,7 +291,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typ
 /** The plan when the planner's reply cannot be used: the question itself for the web search, its main words for the literature. */
 export function fallbackPlan(question: string): Plan {
   const keywords = keywordsOf(question)
-  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], databases: [], opening: openingFallback(false), fallback: true, simple: false }
+  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], protocols: [], databases: [], opening: openingFallback(false), fallback: true, simple: false }
 }
 
 /**
@@ -302,13 +308,29 @@ export const SHORT_OPENING = "This is a plain factual question, so I'll keep it 
  * gets the full review). Not in a demo answer.
  */
 export function shortPath(plan: Plan, medical: boolean): boolean {
-  return plan.simple && !plan.fallback && !medical
+  return plan.simple && !plan.fallback && !medical && !plan.protocols.length
+}
+
+/** Protocol queries one answer runs, at most. */
+export const MAX_PROTOCOL_QUERIES = 2
+
+/**
+ * The plan with its protocol searches settled by code: the planner's protocol queries (at most MAX_PROTOCOL_QUERIES,
+ * and no more than the level's literature query limit). The planner decides: when it wrote none, none run. Only when its
+ * reply could not be read (the fallback plan) does code decide, with one query made from the first literature query
+ * for a question that asks for a lab protocol, an SOP or how to do a lab method (text.ts looksProtocol).
+ */
+export function withProtocols(plan: Plan, question: string, level: Pick<Level, "queries">): Plan {
+  const max = Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries))
+  if (plan.protocols.length) return { ...plan, protocols: plan.protocols.slice(0, max) }
+  if (plan.fallback && looksProtocol(question) && plan.literature[0]) return { ...plan, protocols: [plan.literature[0]], opening: openingFallback(plan.databases.length > 0, true) }
+  return plan
 }
 
 export const MAX_OPENING_CHARS = 240
 /** The opening sentence built by code from what the level runs. */
-export const openingFallback = (databases: boolean): string =>
-  `I'll search the web and PubMed${databases ? ", look in public databases," : ""} for this question, screen what comes back, write an answer from the kept sources, and check each statement against its source.`
+export const openingFallback = (databases: boolean, protocols = false): string =>
+  `I'll search the web${protocols ? ", PubMed and published lab protocols" : " and PubMed"}${databases ? ", look in public databases," : ""} for this question, screen what comes back, write an answer from the kept sources, and check each statement against its source.`
 
 // Words for work this pipeline never does. An opening that uses one is not shown: it would promise a step that does not run.
 const NOT_DONE = /\b(experiments?|simulat\w*|analy[sz]e the data|run (?:the |an? )?(?:analysis|code|model|pipeline)|download\w*|full[- ]text|full papers?|whole papers?|team|board|specialists?|agents?|datasets?|email|call|contact)\b/i
@@ -346,13 +368,14 @@ export function readPlan(text: string, question: string, level: Level): Plan {
     const query = line(d.query, 200)
     return query.length >= 2 ? [{ source: d.source as Database, query }] : []
   }).slice(0, level.databaseLookups)
+  const protocols = [...new Set((Array.isArray(body.protocols) ? body.protocols : []).map((q) => line(q, 120).replace(/["()]/g, " ").replace(/\b(AND|OR|NOT)\b/g, " ").replace(/\s+/g, " ").trim()).filter((q) => q.length >= 3))].slice(0, MAX_PROTOCOL_QUERIES)
   if (!web.length && !literature.length) return base
   const withDatabases = databases.length > 0
   return {
-    opening: readOpening(body.opening, withDatabases) ?? openingFallback(withDatabases),
+    opening: readOpening(body.opening, withDatabases) ?? openingFallback(withDatabases, protocols.length > 0),
     keyQuestion: line(body.key_question, 600) || base.keyQuestion,
     medical: body.medical === true || base.medical,
-    web: web.length ? web : base.web, literature: literature.length ? literature : base.literature, databases, fallback: false,
+    web: web.length ? web : base.web, literature: literature.length ? literature : base.literature, protocols, databases, fallback: false,
     simple: body.simple === true,
   }
 }
@@ -556,9 +579,10 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
 const urlKey = (url: string) => { try { const u = new URL(url); return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}` } catch { return url } }
 
 /** The indexes the literature search (scholarly.ts) also searches: a paper found there keeps its own name as its provider. */
-export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv"]
+export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"]
 const isPaperIndex = (value: unknown): value is Provider => (PAPER_INDEXES as readonly unknown[]).includes(value)
-const isPaper = (provider: Provider) => provider === "europepmc" || isPaperIndex(provider)
+/** A paper or a published protocol: cited like a paper, merged by title, with its year. */
+const isPaper = (provider: Provider) => provider === "europepmc" || provider === "protocols" || isPaperIndex(provider)
 /** Where a found item came from: the index of a literature search's paper, else the search that found it. */
 export const providerOf = (item: EvidenceItem, search: Provider): Provider => (search === "europepmc" && isPaperIndex(item.provider) ? item.provider : search)
 /** The keys a source is known by: its address and, for a paper, its title as scholarly.ts merges by, so one paper found under a PubMed and a DOI address is one source. */
@@ -584,6 +608,7 @@ const STUDY_LABEL: Record<string, string> = { clinical: "clinical", in_vitro: "i
 export function noteOf(item: EvidenceItem, provider: Provider): string | undefined {
   const labels: string[] = []
   if (provider === "fixture") labels.push("example source")
+  if (provider === "protocols" || isProtocolTitle(item.title)) labels.push("protocol") // a published lab protocol, whichever search found it
   if (/\[preprint\]|\(preprint\b/i.test(item.title)) labels.push("preprint")
   if (/\[review\]/i.test(item.title) || item.studyType === "review") labels.push("review")
   const study = item.studyType && item.studyType !== "review" ? STUDY_LABEL[item.studyType] : undefined
@@ -606,7 +631,7 @@ export function exaSpentBy(config: BoardConfig, id: string): number {
   return Math.max(0, usd)
 }
 
-export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
+export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", crossref: "Only the abstract was read.", biorxiv: "Only the abstract was read.", protocols: "Only the abstract of the protocol was read, not its steps.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
 
 /**
  * Why each numbered source was selected and what limits it, and why the others were not: assembled by code from what
@@ -623,7 +648,7 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
     selected: sources.map((s) => {
       const judged = s.relevance === 1 ? "Screened as answering the question" : s.relevance === 0.5 ? "Screened as partly answering the question" : "Not screened; kept as found"
       const study = s.studyType ? `; study type: ${STUDY_LABEL[s.studyType] ?? s.studyType}` : ""
-      const limits = [/preprint/.test(s.note ?? "") && "A preprint: not peer reviewed.", /review/.test(s.note ?? "") && "A review: it summarises other studies.", READ_LIMIT[s.provider] ?? "A database record, not a paper."].filter(Boolean).join(" ")
+      const limits = [/preprint/.test(s.note ?? "") && "A preprint: not peer reviewed.", /review/.test(s.note ?? "") && "A review: it summarises other studies.", /protocol/.test(s.note ?? "") && "A protocol: it describes a method, not findings.", READ_LIMIT[s.provider] ?? "A database record, not a paper."].filter(Boolean).join(" ")
       return { n: s.n, why: `${s.earlier ? "Listed again from the earlier answer in this thread. " : ""}${judged}${study}.`, ...(limits ? { limitation: limits } : {}) }
     }),
     notSelected: others.slice(0, 40),
@@ -633,16 +658,18 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
 /**
  * The numbered sources: the candidates that passed screening, each address once, the most relevant first, the
  * providers taking turns inside one relevance level (so web pages cannot push every paper out), cut to `max`.
+ * A lab protocol belongs to no one hypothesis's search, so it serves every hypothesis.
  */
 export function numberSources(candidates: Candidate[], max: number, hypotheses: string[] = []): StoredSource[] {
   // Each address once. One that several hypotheses' searches found serves each of them.
   const byKey = new Map<string, Candidate & { serves: string[] }>()
   const unique: (Candidate & { serves: string[] })[] = []
+  const servesOf = (c: Candidate): string[] => (c.hypothesis ? [c.hypothesis] : c.provider === "protocols" ? hypotheses : [])
   for (const c of [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
     const keys = sourceKeys(c.item, c.provider), first = keys.map((k) => byKey.get(k)).find(Boolean)
-    if (!first) { const entry = { ...c, serves: c.hypothesis ? [c.hypothesis] : [] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
+    if (!first) { const entry = { ...c, serves: [...servesOf(c)] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
     for (const k of keys) if (!byKey.has(k)) byKey.set(k, first)
-    if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
+    for (const id of servesOf(c)) if (!first.serves.includes(id)) first.serves.push(id)
   }
   const tier = (c: Candidate) => (c.item.relevance === 1 ? 0 : c.item.relevance === 0.5 ? 2 : 1) // screened "yes", not screened, screened "partly"
   /** The most relevant first; inside one relevance level the searches take turns. */
@@ -747,10 +774,11 @@ export const countsOf = (sources: number, statements: Statement[]): Counts => ({
 
 // ── The run ──────────────────────────────────────────────────────────────────────────────────────
 
-const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar and arXiv", fixture: "Loading example sources" }
+const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv", protocols: "Searching published lab protocols (protocol journals, protocols.io)", fixture: "Loading example sources" }
 const NOT_SEARCHED: Partial<Record<Provider, string>> = {
   exa: "The web search did not run, so this answer rests on the other searches only.",
-  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv) was not searched, so this answer rests on the other searches only.",
+  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv) was not searched, so this answer rests on the other searches only.",
+  protocols: "The published lab protocols were not searched, so this answer rests on the other searches only.",
 }
 const hash = (value: unknown) => createHash("sha1").update(JSON.stringify(value)).digest("hex").slice(0, 16)
 /** First-pass calls that run at once, at most (as triage.ts does inside one FirstPass). */
@@ -935,7 +963,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const databasesOn = !demo && Boolean(deps.database) && level.databaseLookups > 0
     let plan = fallbackPlan(record.question)
     {
-      const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0 })
+      const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0, protocols: !demo && deps.protocols ? Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries)) : 0 })
       const user = plannerUser(record.question, thread)
       begin({ step: "prepare", kind: "prepare", label: "Preparing the searches", agent: "planner", input: { model: brain.names.planner, level: record.effort, webSearches: level.exaSearches, literatureQueries: level.queries, databaseLookups: databasesOn ? level.databaseLookups : 0 } })
       const why = allow(brain.worstCase("plan", system.length + user.length), "plan", { system, user })
@@ -947,6 +975,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor("prepare", stop.reason); throw stop ?? error }
         // The planner failing is not a reason to fail the answer: the question's own words are searched.
       }
+      plan = demo || !deps.protocols ? { ...plan, protocols: [] } : withProtocols(plan, record.question, level)
       if (demo) plan = { ...plan, opening: "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked." }
       medical = medical || plan.medical
       short = !demo && shortPath(plan, medical)
@@ -954,7 +983,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (plan.fallback && !demo) {
         notes.push("The query planner's reply could not be used, so the question's own words were searched.")
         end("prepare", "failed", { error: "The query planner's reply could not be used.", consequence: "The question's own words are searched instead." })
-      } else end("prepare", "completed", { summary: demo ? "Example sources only." : short ? "A plain factual question: the short path is taken (one search, a short answer, one round of checks)." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
+      } else end("prepare", "completed", { summary: demo ? "Example sources only." : short ? "A plain factual question: the short path is taken (one search, a short answer, one round of checks)." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.protocols.length ? `, ${plural(plan.protocols.length, "lab protocol query", "lab protocol queries")}` : ""}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
       record.opening = plan.opening
       emit("opening", { type: "opening", text: plan.opening })
       if (short) {
@@ -996,7 +1025,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const cutNote = set.cut.length ? `${plural(set.cut.length, "more hypothesis", "more hypotheses")} ${set.cut.length === 1 ? "was" : "were"} proposed and not tested, because ${set.cut[0].reason}.` : ""
       if (!tested.length || cutNote) record.hypothesesNote = [tested.length ? "" : set.reason ?? "No hypotheses were needed.", cutNote].filter(Boolean).join(" ")
       cut = set.cut
-      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
+      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top${plan.protocols.length ? ", except the lab protocol searches, whose protocols every hypothesis may cite" : ""}.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
       emit("hypotheses", { type: "hypotheses", items: record.hypotheses, needed: set.needed, ...(tested.length ? {} : { reason: set.reason }), ...(set.cut.length ? { cut: set.cut } : {}) })
       save()
     }
@@ -1028,7 +1057,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         try {
           let screened = await firstPassOnce(`screen:${provider}`, screening, (firstPass) => firstPass.triage(fresh, question))
           // A database record (a trial registration, a label) often "reports no results of its own": it is kept unless it is off the question, as the board keeps it.
-          const record_ = (DATABASES as readonly string[]).includes(provider)
+          // So is a protocol: it describes a method and reports no findings, which is what was asked for.
+          const record_ = (DATABASES as readonly string[]).includes(provider) || provider === "protocols"
           screened = screened.map((s) => (record_ && !s.keep && s.item.relevance !== 0 ? { ...s, keep: true } : s))
           screened.forEach((s, at) => {
             if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); for (const k of sourceKeys(s.item, provider)) tag?.chain?.add(k); kept++ }
@@ -1127,7 +1157,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         ...(db && deps.database ? [search(db.source, db.query, { text: "database records" }, new Set(chain), () => deps.database!(db.source, db.query), undefined, tag(2, sameBefore + 1))] : []),
       ])
     }
-    if (tested.length) await together(tested.map((h, at) => chainOf(h, at))) // every hypothesis at the same time, each opened by its web search
+    /** The lab protocol searches, when the plan has them. They belong to no one hypothesis: what they find serves every hypothesis (numberSources). */
+    const protocolSearches = (known: Set<string>) => (deps.protocols ? plan.protocols.map((q) => search("protocols", q, { maxResults: MAX_PROTOCOLS, text: "abstracts" }, known, () => deps.protocols!(q))) : [])
+    if (tested.length) await together([...tested.map((h, at) => chainOf(h, at)), ...protocolSearches(new Set())]) // every hypothesis at the same time, each opened by its web search
     else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
     else if (short) {
       // One web search. The literature is searched only when the web gave no source, so a short answer still has one to cite.
@@ -1142,6 +1174,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       await together([
         ...moreWeb.map((w) => web(w, afterFirst)),
         ...plan.literature.slice(0, level.queries).map((q) => search("europepmc", q, { maxResults: MAX_MERGED, text: "abstracts" }, afterFirst, () => deps.literature(q))),
+        ...protocolSearches(afterFirst),
         ...plan.databases.slice(0, level.databaseLookups).map((d) => search(d.source, d.query, { text: "database records" }, afterFirst, () => deps.database!(d.source, d.query))),
       ])
       // A follow-up may list sources of the answer before it again, when they pass screening for the new question.
@@ -1270,6 +1303,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.
+      // A piece is sent every 400 characters or 200 ms, whichever comes first, so a live view shows the text as it comes.
       const streamed = log.has("answer.delta:0")
       let all = "", sent = 0, piece = 0, last = performance.now()
       const flush = (final: boolean) => {
@@ -1279,7 +1313,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (upTo > sent) { emit(`answer.delta:${piece++}`, { type: "answer.delta", text: all.slice(sent, upTo) }); sent = upTo; last = performance.now() }
       }
       let reply: { text: string; truncated: boolean }
-      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 500) flush(false) }, short)) } catch (error) {
+      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 200) flush(false) }, short)) } catch (error) {
         const stop = error instanceof StepFailed ? undefined : asStop(error)
         if (stop) endFor("write", stop.reason, "No answer was written. The sources that were found are listed.")
         else if (!(error instanceof Interrupted)) end("write", "failed", { error: `The writer did not answer (${message(error)}).`, consequence: "No answer was written." })

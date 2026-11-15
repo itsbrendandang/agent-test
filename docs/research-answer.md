@@ -20,7 +20,7 @@ The two levels on this page are `quick` and `standard`. The third level, `deep`,
 flowchart LR
     q(["Your question"]) --> prepare["Prepare<br/>plan the queries"]
     prepare --> exa["Web search (Exa)<br/>opens every answer"]
-    exa --> more["At the same time:<br/>the literature (Europe PMC, OpenAlex,<br/>Semantic Scholar, arXiv),<br/>more web searches,<br/>public databases (standard)"]
+    exa --> more["At the same time:<br/>the literature (Europe PMC, OpenAlex,<br/>Semantic Scholar, arXiv,<br/>Crossref, bioRxiv/medRxiv),<br/>more web searches,<br/>lab protocols (a lab-method question),<br/>public databases (standard)"]
     more --> screen["Screen each result<br/>for relevance"]
     screen --> number["Number the kept sources<br/>[1] .. [n] (code)"]
     number --> write["Write the draft<br/>from the numbered sources only"]
@@ -36,9 +36,10 @@ flowchart LR
 
 | Step | Who does it | What it does |
 |---|---|---|
-| Prepare | cheap model (`models.cheap`) | Writes 1 to 3 web queries, 1 to 3 literature queries and one opening sentence. If its reply cannot be read, the question's own words are searched. |
+| Prepare | cheap model (`models.cheap`) | Writes 1 to 3 web queries, 1 to 3 literature queries, 0 to 2 lab protocol queries and one opening sentence. If its reply cannot be read, the question's own words are searched. |
 | Web search | Exa (paid) | Always the first search. `quick`: exactly 1. `standard`: up to 3. |
-| Literature search | Europe PMC, OpenAlex, Semantic Scholar, arXiv (all free, no key) | Abstracts of papers and preprints. One literature query asks the four at the same time (`engine/src/search/scholarly.ts`). Each source has its own time limit (12 s); a source that fails is skipped and named, and the others are still used. A paper found twice (same DOI or same title) is listed once, Europe PMC's copy first. At most 12 papers go on to screening. Each kept paper names the index it came from. A free `SEMANTIC_SCHOLAR_API_KEY` in `.env` only raises Semantic Scholar's rate limit; it is not needed. Runs after the first web search, at the same time as the other searches. |
+| Literature search | Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv (all free, no key) | Abstracts of papers and preprints. One literature query asks the six at the same time. bioRxiv/medRxiv is searched through Crossref (DOIs that start with 10.1101) (`engine/src/search/scholarly.ts`). Each source has its own time limit (12 s); a source that fails is skipped and named, and the others are still used. A paper found twice (same DOI or same title) is listed once, Europe PMC's copy first. At most 12 papers go on to screening. Each kept paper names the index it came from. A free `SEMANTIC_SCHOLAR_API_KEY` in `.env` only raises Semantic Scholar's rate limit; it is not needed. Runs after the first web search, at the same time as the other searches. |
+| Lab protocol search | Europe PMC and OpenAlex limited to protocol journals, protocols.io through Crossref (all free, no key) | Only for a question that asks for a protocol, an SOP or how to do a lab method. The planner decides and writes the queries; when it writes none, none run. Only when the planner's reply cannot be read does code decide: for a question that names a lab method and asks for a protocol, an SOP or how to do it (`looksProtocol` in `engine/src/research/text.ts`), code makes one query from the first literature query. At most 2, and no more than the level's literature query limit. Journals: Bio-protocol, STAR Protocols, Nature Protocols, JoVE, Current Protocols, Cold Spring Harbor Protocols, MethodsX, Methods in Molecular Biology, and Protocol Exchange (OpenAlex only). The three sources are asked at once (`engine/src/search/protocols.ts`), each with its own time limit (12 s); a source that fails is skipped and named. A protocol found twice (same DOI, same title, or another version of one protocols.io protocol) is listed once. At most 10 go on to screening. A protocol is kept when it is on the question, even though it reports no findings of its own. It is marked "protocol" in the sources and cited like a paper. Only its abstract is read, not its steps. A question with protocol searches never takes the short path. The protocols.io API is not used: it needs a token. |
 | Database lookups | public databases (free) | `standard` only, up to 2: ClinicalTrials.gov, ChEMBL, openFDA, Open Targets, UniProt, PubChem (`engine/src/sources/`). |
 | Screen | cheap model | The board's own first pass (`engine/src/board/triage.ts`): is the result about the question, does it report findings, what kind of study is it. |
 | Number | code | Kept sources become `[1]..[n]`, the most relevant first. The order comes from the plan, not from which reply arrived first. |
@@ -89,14 +90,15 @@ nothing more). Code then takes the **short path** only when all of these hold (`
 `engine/src/research/pipeline.ts`):
 
 - the planner's reply was read (not the fallback plan) and says `simple`;
-- the question is not about health (a medical answer always gets the full review).
+- the question is not about health (a medical answer always gets the full review);
+- the plan has no lab protocol searches.
 
 On the short path, at both levels:
 
 | Step | Short path |
 |---|---|
 | Hypotheses, method specialists | Not run. |
-| Searches | One web search. The literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv) is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
+| Searches | One web search. The literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv) is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
 | Number | At most 3 sources. |
 | Write | At most 120 words and 1,000 output tokens, with the least thinking the model allows. |
 | Statement checker | Runs once on every cited sentence, as in the full flow. |
@@ -138,9 +140,11 @@ answer and the app say so.
    plain factual question it may answer "no hypotheses needed"; then the answer runs as described above.
 2. **Each hypothesis has its own investigator.** The investigators work at the same time. Investigator 1 works
    on H1, investigator 2 on H2, and so on. An investigator does its hypothesis's searches (its web search with
-   Exa first, then its literature search (Europe PMC, OpenAlex, Semantic Scholar, arXiv), and a database lookup when it planned one and the
+   Exa first, then its literature search (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref,
+   bioRxiv/medRxiv), and a database lookup when it planned one and the
    level has room), the screening of what they find (against the hypothesis itself), and then the draft of its
-   own section. It is given only its own hypothesis and the sources its own searches found. Every step in the
+   own section. It is given only its own hypothesis and the sources its own searches found, plus the lab
+   protocols found, when the plan has protocol searches: those run beside the hypotheses and serve every one. Every step in the
    event log names who did it (`agent`: `planner`, `investigator-1`, `writer`, `checker`, `critic`). **No limit is raised for this.** Each hypothesis uses one
    web search and one literature query of the level, so with today's limits (3 and 3) at most 3 are tested. A
    proposal that does not fit is set aside and named under "What is missing". The numbered sources (12) are
@@ -372,6 +376,13 @@ prepare, hypothesize, search, evaluate, write, check, review, revise, save; stat
 `proteins` (only when the answer has one), `artifact.created`, and one of
 `research.finished`, `research.failed`, `research.cancelled`. The exact shapes are in
 `engine/src/research/types.ts`. Example streams made by the code are in `engine/test/fixtures/research/`.
+
+`answer.delta` carries the draft while the writer writes it: a piece at least every 400 characters or 200 ms,
+up to the NEXT STEPS line, which nobody sees. Joined, the pieces are the draft as it was streamed; `answer.written`
+then gives the finished draft. After a restart in the middle of the writing the text is not streamed a second
+time. A demo answer's scripted writer gives its fixed text a few words at a time (`pacedDemoBrain` in
+`engine/src/research/demo.ts`, `DEMO_PACE_MS` apart in a running engine; tests pass `demoPaceMs`), so the
+dashboard's live view works in Demo mode too. Tests: `engine/test/research-live.test.ts`.
 
 ## Where an answer is stored
 

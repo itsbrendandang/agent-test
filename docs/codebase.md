@@ -25,7 +25,8 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `engine/src/` | The backend (TypeScript, run directly by Node.js, no build step). | In use. |
 | `engine/src/board/board.ts`, `agents.ts`, `claims.ts`, `triage.ts`, `checkers.ts`, `mock.ts` | The team review: rounds, members, statements, checks, and the fixed replies of a practice run. | In use. |
 | `engine/src/search/exa.ts`, `exaledger.ts`, `literature.ts` | The scout's searches: Exa (paid, with a spend record and a ceiling) and Europe PMC (free). | In use. |
-| `engine/src/search/scholarly.ts` | The research answer's literature search: Europe PMC, OpenAlex, Semantic Scholar and arXiv (free), merged. | In use. |
+| `engine/src/search/scholarly.ts` | The research answer's literature search: Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv (free), merged. | In use. |
+| `engine/src/search/protocols.ts` | The research answer's lab protocol search: protocol journals (Europe PMC, OpenAlex) and protocols.io (Crossref), free, merged. | In use. |
 | `engine/src/chat/` | The chat on the Search screen: catalogue, plans, routes. | In use. |
 | `engine/src/research/`, `engine/src/sources/` | A direct answer with numbered sources, and searches of public databases. | Being built. Not complete in `main`. |
 | `engine/src/glhf/` | The run tracker for swarm runs: start, follow, cancel, grade. | In use. |
@@ -63,7 +64,7 @@ were kept so that saved runs still open.
 
 | You see | In the code |
 |---|---|
-| AI Scientist Bot | The repository is `agent-test`; some scripts and variables say `glhf` or `drug-board`. |
+| Bit Crew | The repository is `agent-test`; some scripts and variables say `glhf` or `drug-board`. |
 | Team review | `board` (`board/`, `engine/src/board/board.ts`, `/api/runs`, `BoardView.tsx`, `DRUG_BOARD_*` variables). |
 | Search | `HomeView.tsx`, `dashboard/src/home/`, `/api/chat`. |
 | Saved research | `ExperimentsView.tsx`, "runs". |
@@ -78,7 +79,7 @@ Do not rename these in the code without a plan for the saved runs.
 |---|---|---|
 | Something that can spend money (a model call, a paid search, a cloud launch) | The engine, never the dashboard. | Call `refusePaid()` right before the paid step, store the result under a stable key so a replay does not pay twice, and add a test that counts the calls. |
 | A new search source | `engine/src/sources/` | Return the same evidence items as `literature.ts`, with a `provider` name, and give it its own cap. |
-| A team member or a change to one | `board/agents/<name>.md` and the `board:` list in `board/config.yaml` | Keep the scout on the list. Run the board tests. |
+| A team member or a change to one | `board/agents/<name>.md` and the `board:` list in `board/config.yaml` | Keep the scout and the evidence verifier on the list. Run the board tests. |
 | A new screen or part of one | `dashboard/src/views/` and a folder beside `home/` | Use the parts in `components/ui` and `components/ai-elements`; add tests beside the file. |
 | A new API route | `engine/src/<area>/routes.ts`, registered in `app.ts` | Use the request checks in `http.ts`; never loosen them. |
 | Swarm logic | `glhf/bixbench/src/bixbench3/inspect_harness/swarm/` | Do not touch the grader or the upstream solver. |

@@ -1,4 +1,4 @@
-# AI Scientist Bot
+# Bit Crew
 
 **Ask a science question. A team of AI agents researches it. You see what they found, what they
 checked, and what is still uncertain.**
@@ -6,7 +6,7 @@ checked, and what is still uncertain.**
 Built for the **SF AI Research Hackathon** (Track 3, AI Scientist Swarms) by team GLHF:
 Brendan Dang, Anh Lam and Josh Bustamante.
 
-**Contents:** [Try it](#try-it) · [Demo and Real](#demo-and-real) · [What is in the app](#what-is-in-the-app) ·
+**Contents:** [Run it](#run-it-on-your-machine) · [Demo and Real](#demo-and-real) · [Using the app](#using-the-app) ·
 [Where things stand](#where-things-stand) · [Benchmarks](#benchmarks) · [How it fits together](#how-it-fits-together) ·
 [Words](#words) · [Read more](#read-more)
 
@@ -101,48 +101,110 @@ Good to know:
 - Tests and coding agents never spend money. `npm run check` forces paid calls off.
 
 The limits in `board/config.yaml` are **$0.15 per Quick answer**, **$0.60 per Standard answer**,
-**$5 per team review**, and **$20 per day** across answers and reviews. Exa also has a **$40
-lifetime limit** in the engine's search record. These are limits, not price quotes.
+**$5 per team review**, and **$20 per day** across answers, reviews and analyses on Modal. Exa
+also has a **$40 lifetime limit** in the engine's search record. These are limits, not price quotes.
 The engine checks the team review limits (the `meeting:` section) when it reads the file. A limit
 that is not a number (for example `$5`) stops the engine, or the run, with a message that names
 the key, so a typo cannot switch the limit off.
 
-## What is in the app
+### Run the analyses on Modal (optional)
+
+A swarm run runs code: the agents' commands, the checks, and the registered tests that decide
+each statement's mark. By default this code runs in a Docker sandbox on your machine. With
+`ANALYSIS_BACKEND=modal` in `.env` it runs in a [Modal](https://modal.com) sandbox instead. That
+sandbox comes from the BixBench v1 work (PR #32): a checked R and conda image, no network, and
+only the case's data files are uploaded.
+
+- It costs Modal credits, also for a practice run. So it is refused while paid calls are off. It
+  never moves the work back to your machine on its own: it fails with the reason.
+- Each run may cost at most `GLHF_MODAL_MAX_USD` (default $2), and Modal runs count in the $20
+  daily limit.
+- Each test says where it ran (Docker or Modal, with the sandbox id). The Compare screen and the
+  Agent Log show it.
+- Set up once: `modal token new`, then `uv sync --group modal --python 3.12` in
+  `glhf/bixbench_v1`. `npm run doctor` shows what is missing.
+
+Tested with fakes only; no run has used Modal yet. Details:
+[docs/configuration.md](docs/configuration.md#where-the-swarms-analyses-run-analysis_backend).
+
+## Using the app
+
+The sidebar has two groups. **Overview**, **Research** and **Saved research** come first: ask, read, find again.
+**How it works** holds **Agent Log**, **Team review**, **Graph** and **Agents**. **Settings** opens from the profile
+row at the foot. Benchmarks and Compare are not in the sidebar; they open only by their address (`#Benchmarks`,
+`#Compare`). The pictures below are **Demo mode**: practice runs with fixed example text, not research. The app
+labels them "Practice".
 
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. It is also the conversation in Research, so a follow-up there continues it. Totals and charts separate practice from research. |
-| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
+| Overview | Ask in the "Let's research together!" question box. Its card shows under the box: the agents and their current step, with Stop, while the team researches, and "The answer is ready." when it ends. The answer itself is not written on the Overview: "See the answer and follow up in Research" opens its chat in Research, with the full answer and the box for a follow-up. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and practice apart. |
+| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. While the answer is made, the Agent Lab sits beside it (above it on a narrow screen); when the answer is done the Lab folds into one line. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
-| Compare | A team of nine agents against one agent alone, on the same task. |
-| Team review | One review in detail: what each agent said, and how each statement was checked. |
+| Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
+| Team review | One review in detail: the recommendation, how each statement was checked, and the sources. Its discussion is the Agent Log's group chat for that review, with a link "Open in Agent Log". |
 | Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
 | Graph | One run as a picture of who said what. |
-| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab stays on Overview. |
-| Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
-| Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
+| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs (research answers, team reviews and task runs), next to Follow newest. A team review shows a "Round n" line where each round begins, the lead and the members as messages, and each statement check as a quiet note with its mark (✓ supported, ✕ contradicted, ? insufficient evidence, ○ not checked). No room picture here; the Lab stays on Overview. |
+| Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
+| Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
 
-The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
-Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
-below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.
-The room art is unchanged. The Lab's look is by Anh Lam.
+### 1. Overview: ask, and watch the team work
 
-Research answers can add **method specialists** whose skills fit the question. Code matches
-the question to their method notes. They write from the sources found; their sections are
-checked and reviewed with the rest of the answer. Quick can add one specialist on the cheap
-model tier. Standard can add two on the strong tier. If the cheap model is from a different
-company than the writer, the specialist uses the writer's model instead. This keeps its
-statement checker independent. A question with no match gets none. See
-[docs/research-answer.md](docs/research-answer.md#method-specialists).
+The app opens here. Choose Quick, Standard or Deep for a question, then press Send. Under the box, **Try asking**
+shows biology questions; a click fills the box, and nothing is sent until you press Send.
 
-A **plain factual question**, such as "What is the powerhouse of the cell?", takes a short path
-at both levels. The planner marks it simple; health questions never take it. The short path
-uses one search, at most 3 sources and a short answer written with little thinking. Each cited
-statement is still checked once. It has no hypotheses, specialists, critic or revision. See
-[docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
+Ask in the "Let's research together!" question box. Its card shows under the box: the agents and their current step,
+with Stop, while the team researches, and "The answer is ready." when it ends. The answer itself is not written on the
+Overview: "See the answer and follow up in Research" opens its chat in Research, with the full answer and the box for
+a follow-up. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and
+practice apart.
 
-**Protein structures.** When an answer is about a protein, the Research inspector has a
-**Structure** tab. It lists each protein of the answer: from its UniProt sources, or a sequence or UniProt
+![The Overview while the team researches: the question card with the agents, the current step and Stop](docs/images/overview.png)
+
+![The Overview when the run ends: "The answer is ready." and the link "See the answer and follow up in Research"](docs/images/overview-done.png)
+
+The **Agent Lab** shows the team as characters in six rooms (Discovery, Planning, Experiment bench; Evidence review,
+Quality control, Report studio). Click a teammate to see what it does now, and its steps in the Agent Log. Spending
+and limits are in Settings.
+
+The Lab's look is by Anh Lam.
+
+### 2. Research: the answer as a chat
+
+An Overview question continues here as the same conversation, so a follow-up keeps the context. The answer is
+written **live**: its text appears as the writer writes it, under short lines that say what the team is doing
+("Searching the web: found 6, kept 4."). Each cited sentence has a source number and a check mark. Below the text are
+the **hypotheses**, each with its sources for and against, then "What is missing" and the sources. Pictures from the
+sources show in a strip under the text; each links to its source page. "Open in the Agent Log" shows every step.
+A question that asks for a lab protocol or an SOP also searches published protocols (see [How a research answer is made](#how-a-research-answer-is-made)).
+
+Try asking works as on Overview: a click fills the box. The button at the top right opens the **inspector**, with
+up to five tabs (a tab shows only when it has content):
+
+- **Evidence**: the sources (found, selected, cited) and each checked statement with its quoted passage. A citation
+  number in the answer opens this tab with that source lit; "Show in the answer" goes back.
+- **Hypotheses**, **Results** (the saved files) and **Activity** (the steps, in order).
+- **Structure**: only when the answer is about a protein (see [Protein structures](#protein-structures)).
+
+![Research: a practice answer with the inspector open on the Evidence tab](docs/images/research.png)
+
+While an answer is made, the **Agent Lab** sits beside the conversation, on the right. A narrow screen puts the Lab
+above the conversation. When the Lab sits above the conversation and is narrower than 480 px, the agents' name tags
+are hidden so they do not overlap; click an agent's dot to see its name. Beside the conversation the name tags always
+show. The Lab uses the same scene as the Overview. Agents move only for steps the engine reports. Agents with no step
+stay at their desks. Click an agent to see what it is doing. "Hide the lab" folds it into one line. The browser
+remembers this choice for the next answer. When the answer is done, the Lab folds by itself. "Show the lab" opens it
+again, and "Replay" plays the recorded events again. A Demo answer is finished in a fraction of a second, so the Lab
+replays a new Demo answer once, labelled "Replay". "Pause motion" stops all movement. With the system's reduced-motion
+setting, nothing moves and nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
+
+![Research with a Demo answer on the left and its Agent Lab replaying on the right](docs/images/research-lab.png)
+
+![A narrow screen: the Agent Lab, opened again after the answer, above the conversation (the name tags are hidden, so each agent shows as a dot)](docs/images/research-lab-narrow.png)
+
+#### Protein structures
+
+The **Structure** tab lists each protein of the answer: from its UniProt sources, or a sequence or UniProt
 accession in the question or the answer. It shows the name, the organism with its strain, and the length.
 Open one to see its predicted 3D structure, coloured by the model's confidence (pLDDT), with a legend.
 ESMFold (Meta AI, through the free ESM Atlas API) folds sequences of up to 400 amino acids. A longer
@@ -154,10 +216,10 @@ open it, and kept in `board/runs/.structures/`. See
 
 ![The Structure tab beside a practice answer: KRAS G12C predicted by ESMFold, coloured by confidence](docs/images/structure.png)
 
-**Test proteins** let you try the Structure tab. Eight real UniProt entries, each short enough for
-ESMFold, are listed under "Try a test protein" on the empty Research page. A chip asks a question that
-names the protein, and its answer has the Structure tab. "Open the structure viewer" opens them without
-asking anything. The same list is inside the Structure tab. Each sequence was read from UniProt
+**Test proteins** let you try it. Eight real UniProt entries, each short enough for ESMFold, are listed
+under "Try a test protein" on the empty Research page. A chip fills the box with a question that names the
+protein; its answer has the Structure tab. "Open the structure viewer" opens them without asking anything.
+The same list is inside the Structure tab. Each sequence was read from UniProt
 (`engine/src/structure/test-proteins.json`, with UniProt's checksum of each entry); none was typed by hand.
 
 | Test protein | Organism or strain | UniProt | Amino acids |
@@ -174,17 +236,136 @@ asking anything. The same list is inside the Structure tab. Each sequence was re
 On 2026-11-15 the public ESMFold API folded seven of them. It timed out on InhA, which then shows
 AlphaFold DB's model, labelled as such.
 
+### 3. Saved research: everything that was run
+
+Newest first, with a search box that finds a word in a question, a result or anything that was said. Filters:
+Answers, Team reviews, Benchmark runs and **Examples** (six read-only practice runs, see
+[Example library](#example-library)). Each row opens the run, and has a link to its Agent Log (and to its Graph, for
+a run that has one).
+
+### 4. Agent Log and Team review: who said what
+
+The **Agent Log** shows every event of one run as a **group chat**. Each agent turn is a message beside the agent's
+picture and name. Longer reasoning opens with **Show thinking**; other long text opens with **Show more**. Tool
+calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the
+newest message. One toolbar holds the search box, the
+**Agent** and **Kind of step** menus (each choice with its number of events), Clear and Download (JSON or CSV). The
+run menu at the top lists runs in progress, then finished ones (research answers, team reviews and task runs), next
+to **Follow newest**. Click a face or a name to see only that agent's messages, then follow the link to its card in
+Agents. A team review shows a "Round n" line where each round begins, the lead and the members as messages, and each
+statement check as a quiet note with its mark (✓ supported, ✕ contradicted, ? insufficient evidence, ○ not checked).
+
+![The Agent Log for a practice team review: the "Round 1" line, the lead's message, the scout's and the evidence verifier's searches as quiet notes, then the members' messages](docs/images/agent-log.png)
+
+A **Team review** is the drug board: a lead scientist and seven members discuss a written brief over rounds, and the
+lead writes a recommendation. In every round the scout gathers sources first, then the **evidence verifier** rechecks
+each source the scout cited and searches for what it missed; the lead reads its report before deciding. The screen
+shows the recommendation first, then how many statements were checked and how each one did (supported, contradicted,
+insufficient evidence), who took part, and the discussion round by round. The discussion is the Agent Log's group chat
+for that review, with a link "Open in Agent Log". Each member opens its messages in the Agent Log; each source and
+checked statement has an "In the graph" link.
+
+![Team review: the recommendation, the counts of checked statements, the seven members who took part, and the start of the discussion](docs/images/team-review.png)
+
+### 5. Agents: who does the work
+
+All agents as member cards, grouped by team: the **team of nine** (benchmark tasks) in step order, the **team review**
+with its lead first, then the **specialists** A to Z. Filter by team or search by name, job or tool. **Details** opens
+one member in a side panel, with a link to its messages in the Agent Log.
+
+![Agents: member cards for the team of nine, with their step and model group](docs/images/agents.png)
+
+### 6. Graph: one run as a picture
+
+One run (a team review, or a Compare run on a benchmark task) as a 3D graph of team members and their statements, coloured by what each
+check found. "Watch how this unfolded" replays the statements in order; "Next contradicted one" jumps to a problem.
+Select a node to see its details and what it connects to. The side panel links back to the run and to the Agent Log.
+A research answer has no graph.
+
+![Graph: a practice team review as members and statements, with contradicted ones in red](docs/images/graph.png)
+
+### 7. Settings
+
+Your profile (kept in this browser only), **Run mode** (Demo or Real; see [Turn on Real mode](#turn-on-real-mode)),
+**Usage and limits** (spent today, the limit per run and per day, Exa search), the session token for Real runs, and
+**Appearance**: Light, Dark or Match system. Light is the default. **Help** opens "How this works".
+
+### Compare and Benchmarks
+
+These two are not in the sidebar; open them by their address. **Compare** (`#Compare`) runs the team of nine against
+one agent alone on the same benchmark task. **Benchmarks** (`#Benchmarks`) sets out our
+results as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. These
+numbers come from real runs, read from the run records. Where something was not measured the screen says "Not
+known". The numbers are in [Benchmarks](#benchmarks) below.
+
+### How the screens connect
+
+The same agent, run, source or statement appears on several screens. Each one links to the others:
+
+- **An agent.** A face or a name in the Agent Log shows only that agent's messages. The line above the log then links
+  to its card in Agents (a research answer's steps have no card). A card's Details link to its messages in the Agent Log. In the Overview Lab, the selected
+  teammate links to its steps in the Agent Log. In a team review, each member under "Who took part" opens its
+  messages, and each name in "The team" opens its card.
+- **A run.** The Agent Log links to the run's own screen (Research, Team review or Compare) and to its graph. Team
+  review, Compare and the Graph link back to the Agent Log. Each row in Saved research has Agent Log and Graph links.
+  An answer in Research has "Open in the Agent Log". Answers have no graph.
+- **A source or a statement.** In Research, a citation number opens the inspector's Evidence tab with that source lit.
+  "Show in the answer" in the inspector lights the source or opens the statement's check in the answer. On a narrow
+  window the citation stays in the answer. In a team review, each source and each checked statement has an "In the
+  graph" link that selects its node.
+
+The address bar always says what is shown, so Back, Forward and a copied link return to it:
+`#Lab/<kind>/<run id>?agent=<name>`, `#Graph/<kind>/<run id>?node=<node id>`, `#Agents/<name>`, `#Board/<run id>`,
+`#Compare/<run id>`. The code is in `dashboard/src/lib/links.ts`.
+
+### How a research answer is made
+
+Research answers can add **method specialists** whose skills fit the question. Code matches
+the question to their method notes. They write from the sources found; their sections are
+checked and reviewed with the rest of the answer. Quick can add one specialist on the cheap
+model tier. Standard can add two on the strong tier. If the cheap model is from a different
+company than the writer, the specialist uses the writer's model instead. This keeps its
+statement checker independent. A question with no match gets none. See
+[docs/research-answer.md](docs/research-answer.md#method-specialists).
+
+A **plain factual question**, such as "What is the powerhouse of the cell?", takes a short path
+at both levels. The planner marks it simple; health questions never take it. The short path
+uses one search, at most 3 sources and a short answer written with little thinking. Each cited
+statement is still checked once. It has no hypotheses, specialists, critic or revision. See
+[docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
+
+**The answer is written in real time.** While a research answer is made, its text appears as the
+writer writes it, under quiet lines that say what the team is doing ("Searching the web: found 6,
+kept 4."). The text comes from the engine's own event stream (`answer.delta` pieces; see
+[docs/research-answer.md](docs/research-answer.md#the-api)), not from the page. A reconnect or a reload continues the stream where it stopped. A
+finished answer is shown at once; it is never typed out again. In Demo mode the scripted writer
+gives its fixed text a few words at a time, so the same view can be tried for free. The chat view
+for one answer is `dashboard/src/research/LiveChat.tsx` (the AI Elements Conversation and Message,
+with the text drawn by streamdown with raw HTML, images and non-web links turned off). Research uses
+its status lines and live text for the running answer. Other screens can open it as a live preview
+of an answer in progress.
+
 **Try asking** shows biology questions under the question box on Overview and Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
 only the biology word, never a person in the search. When none is about biology, or the feed
-cannot be read, curated biology questions are shown. On Overview a click fills the box; on
-Research it sends the question. If the engine cannot be reached, the older example questions stay.
+cannot be read, curated biology questions are shown. On Overview and on Research a click fills
+the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
-Research answers search the literature in four free sources at once: Europe PMC (PubMed and
-preprints), OpenAlex, Semantic Scholar and arXiv. A source that fails is skipped and named; a
+Research answers search the literature in six free sources at once: Europe PMC (PubMed and
+preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is skipped and named; a
 paper found twice is listed once. No key is needed. See
 [docs/research-answer.md](docs/research-answer.md#the-flow).
+
+Research answers can also find **lab protocols and SOPs**. When a question asks for a protocol,
+an SOP or how to do a lab method ("How do I isolate hepatocytes from mouse liver?"), the answer
+also searches published protocols. Three free sources are asked at once: Europe PMC and OpenAlex,
+both limited to protocol journals (Bio-protocol, STAR Protocols, Nature Protocols, JoVE, Current
+Protocols, Cold Spring Harbor Protocols, MethodsX, Methods in Molecular Biology, and Protocol
+Exchange in OpenAlex only), and protocols.io through Crossref. No key is needed. The
+protocols.io API itself needs a token, so it is not used. A protocol is marked "protocol" in the
+sources and cited like a paper. Only its abstract is read, not its steps. See
+`engine/src/search/protocols.ts`.
 
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
@@ -214,36 +395,6 @@ node scripts/generate-examples.mjs
 
 The script starts its own engine with paid calls off and locked. It makes the events through
 the Demo pipeline, not by hand. These are practice runs, not research or benchmark results.
-
-### Earlier Demo screenshots
-
-The Overview, Research, Team review and Lab pictures below show earlier layouts in **Demo
-mode**. They are practice runs: fixed example text, not research. The app labels them "Practice".
-The Benchmarks picture is described separately.
-
-**Overview.** Practice runs are counted apart from research, so the big number is only what real
-models produced.
-
-![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
-
-**Research.** You ask; the answer is split into hypotheses, each with the sources for and against
-it. A mark that rests on one source only says so ("one source only").
-
-![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
-
-**Team review.** The decision first, then how many statements were checked and how each one did.
-
-![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
-
-**Overview's Agent Lab.** The same run as a scene: who is working and who fetched what.
-This earlier picture shows the room art, not the current three-column layout or the Agent Log.
-
-![Earlier Demo Lab: six rooms with agents as characters and an activity panel](docs/images/lab.png)
-
-**Benchmarks.** These numbers are real runs, read from the run records. Where something was not
-measured the screen says "Not known".
-
-![The Benchmarks screen: the record to beat, and one agent against the team of nine with accuracy, tokens, time and cost](docs/images/benchmarks.png)
 
 ## Where things stand
 
@@ -322,7 +473,7 @@ A first report, in words. Charts and a fuller scope come later.
 | BixBench v1.5 | A pilot: 3 datasets, 8 questions, `anthropic/claude-sonnet-5-5`. | One agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). |
 | BixBench v1.5 | 20 datasets, 82 questions, an open model (Qwen3.6 35B) served on Modal, same token limit for both. | One agent: 15 of 82. Swarm: 19 of 82. No difference detected (exact p = 0.29). 42 of the 82 answers were not graded, because no judge model was used; they count as wrong, so both scores are lower bounds. |
 
-The Benchmarks screen in the app shows these rows with their intervals, tokens and time.
+The Benchmarks screen in the app (address `#Benchmarks`) shows these rows with their intervals, tokens and time.
 
 Eight questions are far too few to tell the two apart. The pilot also used an older swarm; it
 has changed since, and the changes were tested with a scripted model only, not a real one. We
@@ -386,12 +537,12 @@ holds the keys, enforces the spending limits, and is the only part that reaches 
 ```mermaid
 flowchart TB
     you(["You, in a browser"])
-    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Research · Saved research · Compare · Team review<br/>Agents · Graph · Lab · Settings"]
+    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Overview · Research · Saved research<br/>How it works: Agent Log · Team review · Graph · Agents<br/>Settings · by address: Compare · Benchmarks"]
 
     subgraph engine["The engine · 127.0.0.1:8787 · on your machine"]
         gate{"Access check and<br/>spending limits"}
         answer["<b>Direct answer</b><br/>search, screen, write,<br/>hypotheses"]
-        board["<b>Team review</b><br/>lead scientist + 6 members,<br/>method specialists when they fit"]
+        board["<b>Team review</b><br/>lead scientist + 7 members,<br/>method specialists when they fit"]
         tracker["<b>Run tracker</b><br/>starts and follows<br/>benchmark runs"]
         check["<b>Statement checker</b><br/>the quoted passage must be<br/>in the source"]
     end
@@ -399,7 +550,7 @@ flowchart TB
     sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
     store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
     paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
-    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv:<br/>papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
+    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv<br/>Crossref · bioRxiv/medRxiv:<br/>papers and preprints<br/>protocol journals · protocols.io (Crossref):<br/>lab protocols<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
 
     you --> app
     app -- "questions, starts, cancels" --> gate
@@ -429,8 +580,8 @@ flowchart TB
 ```
 
 Solid arrows stay on your machine. Dotted arrows leave it, and only the engine sends them: the
-red box costs money and is refused in Demo mode; the green box is free. In a team review only one
-member, the scout, searches. The swarm's sandbox has no network at all. A direct answer written
+red box costs money and is refused in Demo mode; the green box is free. In a team review the scout
+gathers the sources, and the evidence verifier rechecks them in every round with its own free searches. The swarm's sandbox has no network at all. A direct answer written
 by real models is built but still switched off (see "Where things stand").
 
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is

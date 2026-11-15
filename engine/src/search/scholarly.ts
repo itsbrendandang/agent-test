@@ -1,4 +1,4 @@
-// The research answer's literature search: Europe PMC (literature.ts) and three more free scholarly indexes, searched
+// The research answer's literature search: Europe PMC (literature.ts) and five more free scholarly indexes, searched
 // at the same time and merged into one list. Taken from Anh Lam's glhf/scripts/fetch_literature.py.
 //
 //   europepmc        PubMed/MEDLINE, PubMed Central and preprints (literature.ts)
@@ -6,6 +6,8 @@
 //   semanticscholar  Semantic Scholar: works without a key; SEMANTIC_SCHOLAR_API_KEY (or S2_API_KEY) from the
 //                    environment only raises its rate limit. The key is free and is never logged.
 //   arxiv            arXiv preprints (physics, computing, quantitative biology)
+//   crossref         Crossref: the DOI registry across every publisher (abstracts when the publisher deposits one)
+//   biorxiv          bioRxiv/medRxiv preprints, via Crossref filtered to the 10.1101 prefix
 //
 // RULES (tested in test/scholarly.test.ts, which never reaches the network):
 // - No key and no charge for any of them: this adds no paid call. Only HTTPS, only to the hosts in LITERATURE_HOSTS; a
@@ -21,18 +23,20 @@ import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "./exa.ts"
 import { cleanDoi, europePmcPapers, type FoundPaper, plainText, readCapped } from "./literature.ts"
 
-export const SCHOLARLY_SOURCES = ["europepmc", "openalex", "semanticscholar", "arxiv"] as const
+export const SCHOLARLY_SOURCES = ["europepmc", "openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"] as const
 export type ScholarlySource = (typeof SCHOLARLY_SOURCES)[number]
 
-/** The only hosts the literature search may call, by source. */
+/** The only hosts the literature search may call, by source. (crossref and biorxiv share the Crossref API host.) */
 export const LITERATURE_HOSTS: Record<ScholarlySource, string> = {
   europepmc: "www.ebi.ac.uk",
   openalex: "api.openalex.org",
   semanticscholar: "api.semanticscholar.org",
   arxiv: "export.arxiv.org",
+  crossref: "api.crossref.org",
+  biorxiv: "api.crossref.org",
 }
 
-export const SOURCE_NAME: Record<ScholarlySource, string> = { europepmc: "Europe PMC", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv" }
+export const SOURCE_NAME: Record<ScholarlySource, string> = { europepmc: "Europe PMC", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv", crossref: "Crossref", biorxiv: "bioRxiv/medRxiv" }
 
 /** Papers asked of each added source. Europe PMC keeps its own 8 (literature.ts). */
 export const PER_SOURCE = 5
@@ -40,9 +44,9 @@ export const PER_SOURCE = 5
 export const MAX_MERGED = 12
 /** Time limit of one source, in milliseconds. Europe PMC also keeps literature.ts's 15 s limit on each request. */
 export const SOURCE_TIMEOUT_MS = 12_000
-const MAX_ABSTRACT_CHARS = 3000
-const MAX_BODY_BYTES = 4_000_000
-const USER_AGENT = "ai-scientist-bot/0.1 (research answer literature search; +https://github.com/itsbrendandang/agent-test)"
+export const MAX_ABSTRACT_CHARS = 3000
+export const MAX_BODY_BYTES = 4_000_000
+export const USER_AGENT = "ai-scientist-bot/0.1 (research answer literature search; +https://github.com/itsbrendandang/agent-test)"
 
 export interface ScholarlyOptions {
   fetchFn?: typeof fetch
@@ -52,12 +56,15 @@ export interface ScholarlyOptions {
 }
 
 /** A source that could not be used. The message says why, without the source's name. */
-class SourceFailed extends Error {}
+export class SourceFailed extends Error {}
 
 /** One GET to a source's own host. Anything but HTTPS to that host is refused before a request is made. */
-async function get(source: ScholarlySource, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> {
+const get = (source: ScholarlySource, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> => getFrom(LITERATURE_HOSTS[source], url, fetchFn, signal, headers)
+
+/** One GET to `host` only (protocols.ts uses it too): HTTPS, no redirect, a capped body. */
+export async function getFrom(host: string, url: string, fetchFn: typeof fetch, signal: AbortSignal, headers: Record<string, string> = {}): Promise<string> {
   const u = new URL(url)
-  if (u.protocol !== "https:" || u.hostname !== LITERATURE_HOSTS[source]) throw new SourceFailed("address not allowed")
+  if (u.protocol !== "https:" || u.hostname !== host) throw new SourceFailed("address not allowed")
   const res = await fetchFn(url, { headers: { "user-agent": USER_AGENT, ...headers }, redirect: "error", signal })
   if (!res.ok) throw new SourceFailed(`answered ${res.status}`)
   const text = await readCapped(res, MAX_BODY_BYTES)
@@ -65,14 +72,14 @@ async function get(source: ScholarlySource, url: string, fetchFn: typeof fetch, 
   return text
 }
 
-const json = (text: string): unknown => {
+export const json = (text: string): unknown => {
   try { return JSON.parse(text) } catch { throw new SourceFailed("sent something that is not JSON") }
 }
-const str = (value: unknown): string => (typeof value === "string" ? value : typeof value === "number" ? String(value) : "")
-const year = (value: unknown): string | undefined => { const y = str(value).slice(0, 4); return /^(19|20)\d{2}$/.test(y) ? y : undefined }
+export const str = (value: unknown): string => (typeof value === "string" ? value : typeof value === "number" ? String(value) : "")
+export const year = (value: unknown): string | undefined => { const y = str(value).slice(0, 4); return /^(19|20)\d{2}$/.test(y) ? y : undefined }
 
 /** "Title (Venue, 2024) [preprint]": the form literature.ts writes, which the answer reads the year and the marks from. */
-function titled(title: string, venue: string | undefined, published: string | undefined, mark?: "preprint" | "review"): string {
+export function titled(title: string, venue: string | undefined, published: string | undefined, mark?: "preprint" | "review"): string {
   const where = [venue, published].filter(Boolean).join(", ")
   return `${title}${where ? ` (${where})` : ""}${mark ? ` [${mark}]` : ""}`.slice(0, 300)
 }
@@ -103,6 +110,7 @@ export function parseOpenAlex(body: unknown): FoundPaper[] {
   const out: FoundPaper[] = []
   for (const w of works as Record<string, unknown>[]) {
     if (!w || typeof w !== "object") continue
+    if (w.is_retracted === true) continue // a retracted paper was withdrawn: it must never be cited as evidence
     const doi = cleanDoi(w.doi)
     const id = /^https:\/\/openalex\.org\/W\d+$/.test(str(w.id)) ? str(w.id) : undefined
     const url = doi ? `https://doi.org/${doi}` : id
@@ -117,7 +125,7 @@ export function parseOpenAlex(body: unknown): FoundPaper[] {
 }
 
 async function openAlex(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
-  const params = new URLSearchParams({ search: query, per_page: String(PER_SOURCE), select: "id,doi,title,display_name,publication_year,type,primary_location,abstract_inverted_index" })
+  const params = new URLSearchParams({ search: query, per_page: String(PER_SOURCE), select: "id,doi,title,display_name,publication_year,type,primary_location,abstract_inverted_index,is_retracted" })
   return parseOpenAlex(json(await get("openalex", `https://${LITERATURE_HOSTS.openalex}/works?${params}`, fetchFn, signal, { accept: "application/json" })))
 }
 
@@ -175,6 +183,40 @@ async function arxiv(query: string, fetchFn: typeof fetch, signal: AbortSignal):
   return parseArxiv(await get("arxiv", `https://${LITERATURE_HOSTS.arxiv}/api/query?${params}`, fetchFn, signal, { accept: "application/atom+xml" }))
 }
 
+// ── Crossref / bioRxiv ─────────────────────────────────────────────────────────────────────────────
+// Both use the Crossref API; bioRxiv/medRxiv is Crossref filtered to the 10.1101 DOI prefix.
+
+const firstStr = (value: unknown): string => (Array.isArray(value) ? str(value[0]) : str(value))
+
+/** The items of one Crossref answer. `source` sets the provider and, for biorxiv, the preprint mark. */
+export function parseCrossref(body: unknown, source: ScholarlySource = "crossref"): FoundPaper[] {
+  const items = ((body as { message?: { items?: unknown } })?.message ?? {}).items
+  if (!Array.isArray(items)) return []
+  const out: FoundPaper[] = []
+  for (const it of items as Record<string, unknown>[]) {
+    if (!it || typeof it !== "object") continue
+    const doi = cleanDoi(it.DOI)
+    if (!doi) continue
+    const parts = (((it.issued as { "date-parts"?: unknown[] } | undefined)?.["date-parts"] ?? [])[0]) as unknown[] | undefined
+    const published = Array.isArray(parts) ? year(parts[0]) : undefined
+    const preprint = source === "biorxiv" || str(it.type) === "posted-content"
+    const venue = preprint ? firstStr(it["group-title"]) || "preprint" : firstStr(it["container-title"]) || undefined
+    const p = paper(source, `https://doi.org/${doi}`, titled(plainText(firstStr(it.title)), venue, published, preprint ? "preprint" : undefined), str(it.abstract), doi)
+    if (p) out.push(p)
+  }
+  return out
+}
+
+async function crossref(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
+  const params = new URLSearchParams({ query, rows: String(PER_SOURCE) })
+  return parseCrossref(json(await get("crossref", `https://${LITERATURE_HOSTS.crossref}/works?${params}`, fetchFn, signal, { accept: "application/json" })), "crossref")
+}
+
+async function biorxiv(query: string, fetchFn: typeof fetch, signal: AbortSignal): Promise<FoundPaper[]> {
+  const params = new URLSearchParams({ query, rows: String(PER_SOURCE), filter: "prefix:10.1101" })
+  return parseCrossref(json(await get("biorxiv", `https://${LITERATURE_HOSTS.biorxiv}/works?${params}`, fetchFn, signal, { accept: "application/json" })), "biorxiv")
+}
+
 // ── Merge ────────────────────────────────────────────────────────────────────────────────────────
 
 /** A title as a merge key: lower case, accents and punctuation set aside, and without the "(Journal, 2024) [mark]" end. */
@@ -201,7 +243,7 @@ export function mergePapers(lists: FoundPaper[][], max = MAX_MERGED): EvidenceIt
 }
 
 /** Ends with SourceFailed once `ms` have passed; aborts `controller` so the request is dropped too. */
-function inTime<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+export function inTime<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const late = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { controller.abort(); reject(new SourceFailed(`did not answer within ${ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`}`)) }, ms) })
@@ -217,7 +259,11 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
   const sources = SCHOLARLY_SOURCES
   const run = (source: ScholarlySource, signal: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> => {
     if (source === "europepmc") return europePmcPapers(query, fetchFn, signal, MAX_BODY_BYTES).then((r) => ({ papers: r.papers, notices: r.notices.map((n) => `Europe PMC: ${n}`) }))
-    const work = source === "openalex" ? openAlex(query, fetchFn, signal) : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env) : arxiv(query, fetchFn, signal)
+    const work = source === "openalex" ? openAlex(query, fetchFn, signal)
+      : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env)
+      : source === "arxiv" ? arxiv(query, fetchFn, signal)
+      : source === "crossref" ? crossref(query, fetchFn, signal)
+      : biorxiv(query, fetchFn, signal)
     return work.then((papers) => ({ papers, notices: [] }))
   }
   const settled = await Promise.allSettled(sources.map((s) => inTime((signal) => run(s, signal), ms)))
@@ -235,7 +281,7 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
 }
 
 /** A short reason without a key: only the message of our own errors, a fixed phrase for anything else. */
-function reason(error: unknown): string {
+export function reason(error: unknown): string {
   if (error instanceof SourceFailed) return error.message
   if (error instanceof Error && /^Europe PMC (answered \d+|sent too much)$/.test(error.message)) return error.message.replace("Europe PMC ", "")
   if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) return "it ran out of time"

@@ -303,6 +303,7 @@ Tests: `glhf/bixbench/tests/unit/test_paid.py` (11 tests) and
 |---|---|---|
 | `uv run bixbench3 run ...`, `uv run bixbench3 setup-runtime ...` | Refused before the task is looked up. These start a billed virtual machine. With `--dry-run` they are allowed, because a dry run starts nothing. `status`, `complete` and `cancel` of a cloud run that exists still work. | `bixbench3/cli.py` |
 | `uv run python -m bixbench3.glhf_local` with a real model, a `--role-model`, or `--exa` | Refused before anything is created, with one line of text. `--model mock` runs. | `refuse_run` in `paid.py`, `glhf_local.py` |
+| `python -m bixbench3.glhf_local --sandbox modal` (the engine's `ANALYSIS_BACKEND=modal`), also with `--model mock` | Refused before anything is created: Modal bills the sandbox by the second. The engine refuses such a run when it is asked for, and does not run it on this machine instead. | `refuse_run` in `paid.py`, `checkRequest` in `engine/src/glhf/tracker.ts` |
 | The `search_docs` tool | Refused before the key, the ledger or the network is touched. | `swarm/tools.py` |
 | past.dev: recall of lessons in a run, and sending lessons (ingest) | Refused. A run reads the local file `glhf/memory/lessons.md`. | `swarm/past_memory.py` |
 | Lesson approval (`... swarm.memory approve`) | The lesson is approved in the local file `lessons.md`. Nothing is sent to past.dev, and the command says so. | `swarm/memory.py` |
@@ -485,7 +486,10 @@ Each run is one [Pi Durable](https://github.com/earendil-works/pi) task
 (`engine/src/glhf/task.ts`). The task starts the run as a separate process, sleeps between
 checks, and stores a checkpoint after each step in `glhf/runs/tracker.sqlite`.
 
-- Local run: start `glhf_local.py`, read `run.json` every 2 seconds, record the grade.
+- Local run: start `glhf_local.py`, read `run.json` every 2 seconds, record the grade. With
+  `ANALYSIS_BACKEND=modal` the same runner is started in `glhf/bixbench_v1`'s environment with
+  `--sandbox modal`, and its analyses run in a Modal sandbox (see
+  [configuration.md](configuration.md#where-the-swarms-analyses-run-analysis_backend)).
 - Cloud run: start `bixbench3 run`, wait until it detaches, call `bixbench3 status` every
   5 minutes, then `bixbench3 complete` to collect the grades and delete the machine.
 

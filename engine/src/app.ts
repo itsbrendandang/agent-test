@@ -43,6 +43,7 @@ import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
 import { createStructure, type StructureOptions } from "./structure/routes.ts"
 import { directAnswers, previewOn } from "./research/preview.ts"
+import { DEMO_PACE_MS } from "./research/demo.ts"
 import { search } from "./search/search.ts"
 import { createTrending } from "./search/trending.ts"
 import { exampleBoards, exampleHits, handleExample } from "./examples.ts"
@@ -121,7 +122,7 @@ export function createApp(options: AppOptions = {}) {
   }
 
   const trust = { hasToken, env, tokenFile: TOKEN_FILE }
-  const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow }) // the direct, sourced answer (research/routes.ts)
+  const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow, demoPaceMs: DEMO_PACE_MS }) // the direct, sourced answer (research/routes.ts); a demo answer is written a few words at a time
   const structure = createStructure(config, options.structure) // protein structures for the Search screen (structure/routes.ts)
   const trending = createTrending(options.trending) // "Try asking" questions; read on first use, not at startup
   /**

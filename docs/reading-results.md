@@ -156,9 +156,9 @@ Read `<run folder>/ledger.json` (written by the solver process), not the copy un
 |---|---|
 | `claims[].registered[]` | One entry per registered test: `name`, `method`, `by`, `test_null`, `script_path`, `script_sha256`, `script_bytes`, `script` (the registered content), `relevance`, `run`. |
 | `registered[].relevance` | `null` until judged. Then `score` (or `null` when the judge gave no usable answer), `relevant`, `reason`, `threshold`, `judge`, `judge_model`, `proposer_model`, `same_vendor_as_proposer`. |
-| `registered[].run` | `null` until run. Then `status` (`ok`, `changed`, `missing`, `failed`, `timeout`, `unparsable`), `command`, `exit_code`, `seconds`, `output_tail`, `sha256_at_run`, `p_value`, `contradicts`, `detail`. Only `ok` has a result. |
+| `registered[].run` | `null` until run. Then `status` (`ok`, `changed`, `missing`, `failed`, `timeout`, `unparsable`), `command`, `exit_code`, `seconds`, `output_tail`, `sha256_at_run`, `p_value`, `contradicts`, `detail`, and where it ran: `backend` (`docker`, or `modal` with `ANALYSIS_BACKEND=modal`) and `sandbox_id`. Only `ok` has a result. Where it ran does not change the verdict rules. |
 | `claims[].tests[]` | The results that enter the mean: `name`, `p_value`, `contradicts`, `note`, `by`, `registered`, `e_value`, and now `source` (`harness` or `model`) and `counts` (`false`: judged not relevant, worth 0). |
-| Events | `test.registered` (now with `test_null`, `script_path`, `script_sha256`, `script_bytes`), `test.relevance`, `test.executed`, `test.recorded` (now with `source`, `counts`), `test.not_run`, `relevance.skipped`, `relevance.failed`, and the phase events of `relevance N`. |
+| Events | `test.registered` (now with `test_null`, `script_path`, `script_sha256`, `script_bytes`), `test.relevance`, `test.executed` (now with `backend` and `sandbox_id`), `test.recorded` (now with `source`, `counts`), `test.not_run`, `relevance.skipped`, `relevance.failed`, and the phase events of `relevance N`. |
 
 Tested with automated tests, including a simulation of the false-support rate with a table of
 before and after ([DESIGN.md](../glhf/docs/DESIGN.md#simulation-of-false-support)), and with

@@ -16,7 +16,8 @@ beforeEach(() => {
   streams.length = 0; forgetScripted()
   vi.stubGlobal("EventSource", class { url: string; onmessage?: (m: { data: string }) => void; constructor(url: string) { this.url = url; streams.push(this) } close() {} })
 })
-const emit = (event: object) => act(() => { for (const s of streams) s.onmessage?.({ data: JSON.stringify({ key: JSON.stringify(event), at: 0, ...event }) }) })
+let tick = 0 // each event a moment after the one before, as the engine records them
+const emit = (event: object) => act(() => { tick++; for (const s of streams) s.onmessage?.({ data: JSON.stringify({ key: JSON.stringify(event), at: tick, ...event }) }) })
 
 // The roster as the engine lists it now: the board members carry the swarm's role names.
 const ROSTER = [
@@ -46,51 +47,68 @@ describe("the board's discussion", () => {
     await emit({ type: "claim.checked", round: 1, member: "critic", claim: "Nobody tested it", kind: "web", verdict: "unsupported", checker: "first-pass", source: "javascript:alert(1)" })
     return view
   }
-  it("reads like a group chat: who speaks, their plain job, one sentence, the full reply folded, a chip per statement", async () => {
+  // The discussion is the Agent Log's own group chat: the same rows, bubbles, notes and toolbar.
+  const log = () => screen.getByRole("list", { name: "Run events" })
+  const bubble = (name: string) => [...log().querySelectorAll<HTMLElement>(".chat-msg")].find((li) => li.querySelector(".chat-who strong")?.textContent === name)!
+  const checks = () => [...log().querySelectorAll<HTMLElement>(".chat-note[data-kind='check']")]
+  it("reads like the Agent Log: a round line, then the lead and each member as bubbles with their faces, in the order they spoke", async () => {
     await open()
-    const round = within(screen.getByRole("group", { name: "Round 1" }))
-    expect(round.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["Lead Scientist", "Scout", "Critic"]) // in the order they spoke
-    const scout = within(round.getByRole("article", { name: "Scout" }))
-    expect(scout.getByText("looks at the data before any research begins")).toBeInTheDocument()
-    expect(within(round.getByRole("article", { name: "Critic" })).getByText("tries to prove the others wrong")).toBeInTheDocument()
-    expect(scout.getByText("The data has 12 samples.")).toHaveClass("thread-short") // no "In short" line in this reply: its first sentence
-    const full = scout.getByText("Show full reply").closest("details")!
-    expect(full).not.toHaveAttribute("open")
-    expect(full).toHaveTextContent("Two are missing a label, and one file is empty.")
-    const chips = within(scout.getByRole("group", { name: "What the checks found about Scout's statements" }))
-    expect(chips.getByText(/^(Holds up|Supported)$/).closest("[title]")).toHaveAttribute("title", expect.stringContaining("verified")) // glyph plus plain word; the expert word stays reachable
+    const discussion = within(screen.getByRole("region", { name: "Discussion" }))
+    expect(discussion.getByRole("region", { name: "Full event log" })).toBeInTheDocument() // the Agent Log component itself, with its toolbar
+    expect(discussion.getByRole("combobox", { name: "Agent" })).toBeInTheDocument()
+    expect(within(log()).getByRole("heading", { name: "Round 1" })).toBeInTheDocument()
+    const order = [...log().querySelectorAll(".chat-round, .chat-msg[data-first]")].map((li) => li.classList.contains("chat-round") ? li.textContent : li.querySelector(".chat-who strong")!.textContent)
+    expect(order).toEqual(["Round 1", agentIdentity("lead-scientist").label, agentIdentity("scout").label, agentIdentity("critic").label])
+    expect(bubble(agentIdentity("lead-scientist").label)).toHaveTextContent("State your position. Then give your evidence.")
+    expect(bubble(agentIdentity("scout").label).querySelector("svg[data-agent='scout']")).not.toBeNull()
+    expect(bubble(agentIdentity("scout").label)).toHaveTextContent("The data has 12 samples. Two are missing a label, and one file is empty.")
   })
-  it("a chip opens the statement, the source and why it got that result", async () => {
+  it("shows each statement check as a quiet note with its mark, the statement, why, and who checked it", async () => {
     await open()
-    const user = userEvent.setup()
-    const scout = within(screen.getByRole("article", { name: "Scout" }))
-    expect(scout.queryByText("The statement")).toBeNull()
-    const chip = scout.getByRole("button", { name: /Statement 1: Supported/ })
-    await user.click(chip)
-    expect(chip).toHaveAttribute("aria-expanded", "true")
-    const detail = scout.getByText("The statement").closest("dl")!
-    expect(detail).toHaveTextContent("The statementThe data has 12 samples")
-    expect(detail).toHaveTextContent('Whyquoted: "12 samples"')
-    expect(detail).toHaveTextContent("Checked bythe quick first check (practice: no model)")
-    expect(detail).toHaveTextContent("Sourcethe brief (the question and data the team was given)")
-    expect(within(detail).getByText("verified")).toBeInTheDocument() // the expert word, as the small second text
-    await user.click(chip)
-    expect(scout.queryByText("The statement")).toBeNull()
+    const [scout, critic, stretch] = checks()
+    expect(scout).toHaveAttribute("data-mark", "supported")
+    expect(scout).toHaveTextContent(`Supported: ${agentIdentity("scout").label}'s statement “The data has 12 samples”.`)
+    expect(scout).toHaveTextContent('quoted: "12 samples"')
+    expect(scout).toHaveTextContent("Source: the brief.")
+    expect(scout).toHaveTextContent("Practice run: no model checked it.")
+    expect(scout.querySelector(".chat-note-mark")).toHaveTextContent("✓")
+    expect(critic).toHaveAttribute("data-mark", "contradicted")
+    expect(within(critic).getByRole("link", { name: "https://example.org/paper" })).toHaveAttribute("href", "https://example.org/paper")
+    expect(stretch).toHaveAttribute("data-mark", "insufficient")
+    expect([...stretch.querySelectorAll("a")].map((a) => a.getAttribute("href")).filter((h) => !h?.startsWith("#Graph/"))).toEqual([]) // a javascript: source is never a link; only the graph link is
   })
-  it("marks the moment a check proves a statement wrong, on the message and in the headline", async () => {
+  it("marks the moment a check proves a statement wrong, in the log and in the headline", async () => {
     await open()
-    const critic = screen.getByRole("article", { name: "Critic" })
-    expect(critic).toHaveAttribute("data-wrong", "true")
-    expect(critic).toHaveTextContent("A check contradicted one statement here.")
-    expect(within(critic).getByText(/^(Proven wrong|Contradicted)$/)).toBeInTheDocument()
-    expect(within(critic).getByText(/^(Not enough evidence|Insufficient evidence)$/)).toBeInTheDocument()
-    expect(screen.getByRole("article", { name: "Scout" })).not.toHaveAttribute("data-wrong")
-    expect(screen.getByText(/One statement was contradicted\./)).toBeInTheDocument()
+    const wrong = checks().filter((li) => li.dataset.mark === "contradicted")
+    expect(wrong).toHaveLength(1)
+    expect(wrong[0]).toHaveTextContent("Contradicted:")
+    expect(wrong[0].querySelector(".chat-note-mark")).toHaveTextContent("✕")
+    expect(screen.getByText(/One statement was contradicted\./)).toHaveTextContent("Look for the ✕ checks in the discussion below.")
+  })
+  it("keeps each speaker's job, the red mark on a contradicted reply, plain checker names, and the live headline", async () => {
+    await open()
+    expect(bubble(agentIdentity("scout").label).querySelector(".chat-who")).toHaveTextContent("looks at the data before any research begins")
+    expect(bubble(agentIdentity("critic").label).querySelector(".chat-who")).toHaveTextContent("tries to prove the others wrong")
+    expect(bubble(agentIdentity("critic").label)).toHaveAttribute("data-wrong")
+    expect(bubble(agentIdentity("critic").label)).toHaveTextContent("A check contradicted one statement here.")
+    expect(bubble(agentIdentity("scout").label)).not.toHaveAttribute("data-wrong")
+    const [scout, critic, stretch] = checks()
+    expect(scout.querySelector("strong")).toHaveTextContent("The quick first check")
+    expect(critic.querySelector("strong")).toHaveTextContent("The second, careful check")
+    expect(stretch.querySelector("strong")).toHaveTextContent("The quick first check")
+    const discussion = screen.getByRole("region", { name: "Discussion" })
+    expect(discussion.querySelector(".loading-text")).toHaveTextContent("The team is discussing: round 1")
+    await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
+    expect(discussion.querySelector(".loading")).toBeNull()
+  })
+  it("opens the same run in the Agent Log", async () => {
+    await open()
+    expect(within(screen.getByRole("region", { name: "Discussion" })).getByRole("link", { name: "Open in Agent Log" })).toHaveAttribute("href", "#Lab/board/run-1")
   })
   it("says in one sentence what happened", async () => {
     await open()
     await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
-    expect(screen.getByRole("status")).toHaveTextContent(/^The team has decided\.$/) // no memo to show yet: one plain line, and the count is said once, below
+    expect(screen.getByRole("region", { name: "What happened" }).querySelector(".story-headline")).toHaveTextContent(/^The team has decided\.$/) // no memo to show yet: one plain line, and the count is said once, below
     const found = within(screen.getByRole("group", { name: "What the checks found" }))
     expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 3 statements checked.")
     expect(found.getByText("1 supported")).toBeInTheDocument(); expect(found.getByText("1 contradicted")).toBeInTheDocument(); expect(found.getByText("1 insufficient evidence")).toBeInTheDocument()
@@ -100,11 +118,10 @@ describe("the board's discussion", () => {
   })
   it("keeps everything a model wrote as text: no HTML, no script, no image, no link from its words", async () => {
     const { container } = await open()
-    const critic = screen.getByRole("article", { name: "Critic" })
+    const critic = bubble(agentIdentity("critic").label)
     expect(critic).toHaveTextContent('<img src=x onerror="window.__pwned=1">')
     expect(critic).toHaveTextContent("[click](javascript:alert(1))")
-    await userEvent.setup().click(within(critic).getByRole("button", { name: /Statement 2: Insufficient evidence/ }))
-    expect(critic).toHaveTextContent("Sourcejavascript:alert(1)") // shown, as text
+    expect(checks()[2]).toHaveTextContent("Source: javascript:alert(1).") // the check's source, shown as text
     expect(container.querySelector("img, script, iframe, object, embed")).toBeNull() // nothing is fetched from a model-supplied address
     expect((window as { __pwned?: number }).__pwned).toBeUndefined()
     const links = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))
@@ -113,17 +130,18 @@ describe("the board's discussion", () => {
 })
 
 describe("the message line", () => {
-  it("uses the engine's own summary of a reply when the run recorded one, and credits the search only when it was Exa", async () => {
+  it("uses the engine's own summary of a reply when the run recorded one; the full reply is behind Show thinking, without its In short line", async () => {
     board()
     render(<BoardView />)
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit({ type: "run.started", runId: "run-1", brief: "kras", title: "KRAS", mock: false })
     await emit({ type: "round.started", round: 1, message: "Go.", final: false })
     await emit({ type: "member.replied", round: 1, member: "scout", summary: "The data is complete.", text: "In short: The data is complete.\n\nTwelve samples, none missing." })
-    const scout = screen.getByRole("article", { name: "Scout" })
-    expect(within(scout).getByText("The data is complete.")).toHaveClass("thread-short")
-    expect(within(scout).getByText("Show full reply").closest("details")).toHaveTextContent("Twelve samples, none missing.")
-    expect(within(scout).getByText("Show full reply").closest("details")).not.toHaveTextContent("In short")
+    const scout = [...screen.getByRole("list", { name: "Run events" }).querySelectorAll<HTMLElement>(".chat-msg")].find((li) => li.textContent?.includes("The data is complete."))!
+    expect(within(scout).getByText("The data is complete.")).toBeVisible()
+    await userEvent.setup().click(within(scout).getByRole("button", { name: "Show thinking" }))
+    expect(scout).toHaveTextContent("Twelve samples, none missing.")
+    expect(scout).not.toHaveTextContent("In short")
   })
   it("is the reply's own \"In short\" sentence when it has one, and the rest is the full reply", () => {
     expect(splitReply("In short: hold CMP-0517 until the heart-safety margin is fixed.\n\nThe hERG IC50 is 6 uM. That is too close.")).toEqual({

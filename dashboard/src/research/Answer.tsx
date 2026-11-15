@@ -2,11 +2,15 @@
 // numbered citations, a mark beside each statement that was checked, the source list, and what it cost.
 // Everything shown comes from the answer's own events. A mark appears only where a check was recorded; a sentence
 // without one is background and carries no mark. A demo answer is labelled a demo and its marks say so.
+// While the answer is made, its text appears as the engine streams it (live Markdown with a caret), under the line of
+// the current step and quiet lines saying how the last steps ended (LiveChat.tsx LiveSteps). A finished answer is
+// drawn at once, never typed out.
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { Provenance } from "@/components/Provenance"
 import { provenanceOf } from "@/lib/provenance"
 import { plainDuration } from "@/lib/format"
+import { logLink } from "@/lib/links"
 import { runLimit, safeUrl, spent } from "@/lib/words"
 import { Activity } from "./Activity"
 import { AgentsWorking } from "./AgentsWorking"
@@ -18,6 +22,7 @@ import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
 import { searchPlace } from "./providers"
 import { copyText, foldAnswer, oncePractice, ownLines, preparation, sourceCounts, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
 import { Working } from "./Working"
+import { LiveSteps } from "./LiveChat"
 
 const money = (usd: number) => (usd === 0 ? "nothing" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const STOPPED: Record<string, string> = {
@@ -45,9 +50,17 @@ interface Props {
   composerStops?: boolean
   /** Open the inspector on this answer, at a tab. */
   onInspect?: (tab: "evidence" | "results" | "activity") => void
+  /** A source or a checked statement chosen somewhere else (the inspector): it is lit here too. `n` counts the choices. */
+  picked?: Picked
+  /** A source or a statement was chosen here: the inspector shows it too. */
+  onPick?: (pick: Omit<Picked, "n">) => void
+  /** The Overview's card: the agents and the step line while it runs, one line when it ends, never the answer itself. */
+  brief?: boolean
 }
+/** One choice of a source (its number) or of a checked statement (its index), shared by the answer and the inspector. */
+export interface Picked { source?: number; statement?: number; n: number }
 
-export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops, fresh }: Props) {
+export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops, fresh, picked: chosen, onPick, brief }: Props) {
   const { events, lost } = useResearchEvents(id)
   const s = useMemo(() => foldAnswer(events), [events])
   const key = useId().replace(/[^a-z0-9]/gi, "")
@@ -77,7 +90,19 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
   useEffect(() => { const timer = window.setTimeout(() => setSeen(true), 600); return () => window.clearTimeout(timer) }, [])
   const waiting = !!fresh && s.status !== "queued" && !lost && (nothingYet || !seen)
   const byIndex = new Map(s.statements.map((st) => [st.index, st]))
-  const goTo = (n: number) => { setLit(n); document.getElementById(`${uid}-source-${n}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }) }
+  const show = (n: number) => { setLit(n); document.getElementById(`${uid}-source-${n}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }) }
+  const goTo = (n: number) => { show(n); onPick?.({ source: n }) }
+  // A choice made in the inspector: the source is lit in the list below, the statement's check is opened.
+  const [seenChoice, setSeenChoice] = useState<number>()
+  if (chosen && chosen.n !== seenChoice) {
+    setSeenChoice(chosen.n)
+    if (chosen.source !== undefined) setLit(chosen.source)
+    if (chosen.statement !== undefined) setOpen(chosen.statement)
+  }
+  useEffect(() => {
+    if (chosen?.source !== undefined) document.getElementById(`${uid}-source-${chosen.source}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" })
+    else if (chosen?.statement !== undefined) document.getElementById(`${uid}-check`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" })
+  }, [chosen?.n]) // eslint-disable-line react-hooks/exhaustive-deps -- one scroll per choice
   const mark = (st: Statement) => {
     const m = markOf(st.verdict)
     return (
@@ -121,22 +146,26 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {onRemove && <button type="button" className="link-btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(() => onRemove()) }}>Remove</button>}
         </div>
       )}
-      {waiting && <AgentsWorking>{working ? progressLine(s) : "The answer is ready."}</AgentsWorking>}
+      {brief
+        ? (s.status !== "queued" && <AgentsWorking>{working ? progressLine(s) : s.status === "done" ? "The answer is ready." : s.status === "failed" ? "The answer could not be finished." : "The answer was stopped."}</AgentsWorking>)
+        : waiting && <AgentsWorking>{working ? progressLine(s) : "The answer is ready."}</AgentsWorking>}
       {working && s.status !== "queued" && !lost && (
         <div className="answer-working">
           {/* Until the answer has something to show: the agents, with the engine's current step in words. Then the quiet line. */}
-          {!waiting && <Working>{progressLine(s)}</Working>}
+          {!waiting && !brief && <Working>{progressLine(s)}</Working>}
           {!demo && s.caps && <span className="muted small">{runLimit(s.caps.maxUsd)} · {plainDuration(s.caps.maxSeconds * 1000)}</span>}
           {!composerStops && <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>}
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
+      {working && !waiting && !lost && !brief && <LiveSteps state={s} ended />}
       <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
       {lost && working && (
-        <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
+        <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown && !brief ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
+      {!brief && <>
 
-      {s.markdown && <SafeMarkdown className="answer-text" inline={inline}>{marked.text}</SafeMarkdown>}
+      {s.markdown && <SafeMarkdown className="answer-text" inline={inline} live={working && !s.complete}>{marked.text}</SafeMarkdown>}
       {s.markdown && <AnswerImages sources={s.sources} onSource={setLit} />}
       {!s.complete && s.markdown && <p className="muted small">Still being written. It has not been checked yet.</p>}
 
@@ -153,6 +182,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
             {shown.note && <><dt>Why</dt><dd>{shown.note}</dd></>}
             <dt>Checked by</dt><dd>{shown.checker === "scripted" ? "nobody: practice text" : shown.checker || "not recorded"}{shown.carried && <span className="muted small"> (checked on the first draft; the sentence did not change)</span>}</dd>
             <dt>Sources</dt><dd>{shown.sources.length ? shown.sources.map((n) => <button key={n} type="button" className="answer-cite" aria-label={`Source ${n}`} onClick={() => goTo(n)}>{n}</button>) : "none cited"}</dd>
+            {onPick && <><dt>Evidence</dt><dd><button type="button" className="link-btn" onClick={() => onPick({ statement: shown.index })}>Show this check in the inspector</button></dd></>}
           </dl>
         )}
       </div>
@@ -286,8 +316,10 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {!s.example && latest && onAgain && (s.status === "done" || s.status === "cancelled") && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}
           {onReview && s.status === "done" && <button type="button" className="link-btn" onClick={onReview}>Have a team review this</button>}
           {onInspect && (s.sources.length > 0 || s.statements.length > 0) && <button type="button" className="link-btn" onClick={() => onInspect("evidence")}>Inspect the evidence</button>}
+          {s.status !== "starting" && <a className="link-btn" href={logLink({ kind: "answer", id })} title="Every step of this answer, agent by agent">Open in the Agent Log</a>}
         </div>
       )}
+      </>}
     </>
   )
 }
