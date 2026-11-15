@@ -1,6 +1,7 @@
 // The runtime paid switch (src/paidswitch.ts, src/paid.ts). Nothing here can spend: fetch is a spy that fails, the
 // providers are fakes, and the keys are fake. Under `node --test` the switch is LOCKED (paid.ts paidSwitchLocked), so
 // each test that needs it open sets PAID_SWITCH_LOCKED=0 for its own length and restores it.
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs"
