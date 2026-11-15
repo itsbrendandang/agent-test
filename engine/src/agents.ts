@@ -58,6 +58,30 @@ function sharedContext(config: BoardConfig): string {
     .map((f) => `### ${f}\n${readFileSync(`${dir}/${f}`, "utf8").trim()}`).join("\n\n")
 }
 
+/** The tools that search, in the order a member uses them. The web search opens every review (the owner's rule). */
+export const SEARCH_TOOLS = ["exa_search", "literature_search", "database_search"] as const
+
+/**
+ * The order of a member's searches, built from the search tools it holds: the web search first, in every review, then
+ * the literature, then the databases, and the web search again only for what those cannot find. Empty for a member
+ * with fewer than two search tools (there is no order to give).
+ */
+export function searchOrder(tools: string[]): string {
+  const has = (tool: (typeof SEARCH_TOOLS)[number]) => tools.includes(tool)
+  if (SEARCH_TOOLS.filter(has).length < 2) return ""
+  const steps = [
+    has("exa_search") && "First, in every review: one `exa_search` (a web search) on the main question of the brief.",
+    has("literature_search") && "Then `literature_search` for peer-reviewed findings on each key question.",
+    has("database_search") && "Then `database_search` for records: trials, bioactivity, drug labels, targets.",
+    has("exa_search") && "`exa_search` again only for what the other searches cannot find.",
+  ].filter(Boolean)
+  return [
+    "# The order of your searches",
+    ...steps.map((step, i) => `${i + 1}. ${step}`),
+    "When a search is refused or fails, say so plainly in your reply. Never put a source from memory in its place: a statement is checked only against sources a search returned in this review.",
+  ].join("\n")
+}
+
 const CLAIMS_FORMAT = `End every reply with a "CLAIMS" section: one line per factual claim you relied on, as
 - [literature] <claim> (source: <URL>)
 - [computed] <claim> (source: <what you computed and from which SMILES>)
@@ -71,6 +95,7 @@ export function instructionsFor(config: BoardConfig, agent: AgentDef, brief: Bri
   return [
     agent.prompt,
     agent.role === "member" ? `# Your deliverable\n${agent.deliverable ?? ""}\n\n# Claims\n${CLAIMS_FORMAT}` : `# Your board\n${board}`,
+    searchOrder(agent.tools), // before the tools' own guidance: the web search opens every review
     agent.tools.includes("exa_search") && SEARCH_GUIDANCE,
     agent.tools.includes("literature_search") && LITERATURE_GUIDANCE,
     `# Shared context\n${sharedContext(config)}`,

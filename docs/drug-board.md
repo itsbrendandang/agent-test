@@ -184,8 +184,11 @@ Decision support only. This doesn't replace expert review or regulatory judgment
 
 The scout has a second search tool, `literature_search` (`engine/src/literature.ts`). It searches PubMed and
 preprints through [Europe PMC](https://europepmc.org/RestfulWebService) and returns abstracts. It needs no key and
-costs nothing, so it does not use the Exa credit; the scout is told to use it first and to keep `exa_search` for
-what papers do not cover. Its results go through the same screening and the same evidence pool as Exa's, and a
+costs nothing, so it does not use the Exa credit. The order of the scout's searches is fixed in its instructions
+(`searchOrder` in `engine/src/agents.ts`, and `board/agents/scout.md`): one `exa_search` on the brief's main question
+opens every review, then `literature_search` on each key question, then `exa_search` again only for what the other
+searches cannot find. The caps are unchanged (20 Exa searches a run, the $40 lifetime ceiling), and a refused or
+failed search is said plainly and never replaced by example sources. Its results go through the same screening and the same evidence pool as Exa's, and a
 statement is "verified" only when the quoted passage is in the abstract. Limits: `meeting.max_literature_searches`
 per run (default 20); abstracts only, not full papers; preprints are marked `[preprint]`. A practice run reaches no
 network and gets the example sources. A query that finds nothing is tried again with fewer words. Not yet done: a real

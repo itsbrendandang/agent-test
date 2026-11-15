@@ -12,8 +12,9 @@ const MAX_RESULTS = 8
 const MAX_ABSTRACT_CHARS = 3000
 
 export const LITERATURE_GUIDANCE = `# Searching the literature
-\`literature_search\` searches PubMed and preprints through Europe PMC and returns abstracts. It is free: use it
-first for anything a peer-reviewed paper would answer (assay results, mechanisms, clinical findings).
+\`literature_search\` searches PubMed and preprints through Europe PMC and returns abstracts. It is free. After your
+opening web search, use it for anything a peer-reviewed paper would answer (assay results, mechanisms, clinical
+findings), on each key question of the brief.
 - Write a short keyword query, as you would type into PubMed: 3 to 6 terms, no sentences. Example: KRAS G12C covalent inhibitor hERG.
 - A preprint is marked [preprint]: it has not been peer reviewed. Say so when you cite one.
 - You see abstracts, not full papers. Do not state a number that is not in the abstract.

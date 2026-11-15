@@ -16,7 +16,7 @@ export const SEARCH_GUIDANCE = `# Searching
 - \`query\`: plain natural-language intent. Name the subject and the constraint, and a time window only if recency matters. Do not put instructions in the query.
 - \`objective\`: the goal this search serves: which documents should rank first (for example primary research over news), which to exclude, and the facts or figures you need from them.
 - \`key_question\`: the one question from the brief this search is for.
-- Run several focused searches rather than one broad one. Cite only URLs a search returned, and say so when a search finds nothing relevant.`
+- Keep each search focused on one question. Cite only URLs a search returned, and say so when a search finds nothing relevant.`
 
 export interface SearchResult {
   items: EvidenceItem[]
