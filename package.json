@@ -15,7 +15,6 @@
     "demo": "node engine/src/glhf/cli.ts demo",
     "scoreboard": "node engine/src/glhf/cli.ts scoreboard",
     "dashboard": "npm --prefix dashboard run dev",
-    "desktop": "npm --prefix dashboard run desktop",
     "check": "node scripts/check.mjs",
     "typecheck": "(cd engine && npx tsc --noEmit) && (cd dashboard && npx tsc -b)",
     "test:engine": "npm --prefix engine test",

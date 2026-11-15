@@ -35,7 +35,6 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `dashboard/src/views/` | One file per view. `HomeView.tsx` is Search, `ExperimentsView.tsx` is Saved research, `SwarmView.tsx` is Compare, `WorldsView.tsx` is Graph. | In use. |
 | `dashboard/src/home/`, `research/`, `board/`, `swarm/`, `graph/` | The parts of each view. | In use; `research/` is being built. |
 | `dashboard/src/components/` | Shared parts. `ui/` is shadcn/ui, `ai-elements/` is Vercel AI Elements. | In use. |
-| `dashboard/src-tauri/`, `scripts/desktop/`, `downloads/` | The Mac app and its installer. | Paused. |
 | `board/config.yaml` | Limits, models and the team list of a review. | In use. Shared file: edit with care. |
 | `board/agents/` | One instruction file per team member. | In use. |
 | `board/briefs/`, `board/context/`, `board/expertise/` | Written questions, shared context, notes kept between reviews. | In use. |

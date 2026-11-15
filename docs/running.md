@@ -14,7 +14,6 @@ case are defined in the [README](developers.md#words-used-in-these-documents).
 | `npm run scoreboard` | Same as `npm run glhf -- scoreboard`. |
 | `npm run engine` | Starts the engine on `127.0.0.1:8787`. It continues unfinished runs. |
 | `npm run dashboard` | Starts the dashboard on `http://localhost:5317`. |
-| `npm run desktop` | The dashboard as a Tauri desktop app. Needs Rust. |
 | `npm run board` | One drug board run in the terminal. |
 | `npm run resume <run-id>` | Continues an unfinished drug board run. |
 | `npm run runs` | Lists drug board runs. |
@@ -341,7 +340,6 @@ These limits are real. Know them before you trust the switch.
 | Credentials other than the six named keys | Only `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `EXA_API_KEY`, `PAST_API_KEY`, `HF_TOKEN` and `TINKER_API_KEY` are blanked. Google, AWS and Azure credentials pass through. A saved Hugging Face login (from `hf auth login`) also passes through, because it is a file, not the `HF_TOKEN` variable. |
 | A cloud run that is already on its virtual machine | It is not stopped. Its keys are on the machine. Stop it yourself with `uv run bixbench3 cancel --run <cloud-run-id> --project <project>`. |
 | A coding agent (Pi, Claude Code) and its own model use | A separate program with its own account. |
-| The desktop app's Settings view (it tests provider keys that you type in) | It does not go through the engine. |
 
 So the switch protects against a mistake in the normal commands. It does not protect against
 code that goes around them. The rule for that is in [AGENTS.md](../AGENTS.md): an agent never

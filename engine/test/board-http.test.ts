@@ -12,7 +12,7 @@ import { BriefRejected, loadBrief } from "../src/brief.ts"
 import { checkerEnv, parseVerdict } from "../src/checkers.ts"
 import { type BoardConfig, loadConfig } from "../src/config.ts"
 import { stamp } from "../src/glhf/proc.ts"
-import { allowedHost, allowedOrigin, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
+import { allowedHost, allowedOrigin, dashboardOrigins, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
 
 // These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
 // fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
@@ -27,13 +27,12 @@ const tempConfig = (): BoardConfig => {
 }
 
 test("origin: dashboard allowed, other pages forbidden, none for CLI", () => {
+  assert.deepEqual([...dashboardOrigins({})].sort(), ["http://127.0.0.1:5317", "http://localhost:5317"])
   assert.equal(originState(req({ origin: "http://127.0.0.1:5317" }), {}), "allowed")
   assert.equal(originState(req({ origin: "http://localhost:5317" }), {}), "allowed")
   // Vite's default ports are any other project's dev server: not the dashboard unless configured.
   for (const port of [5173, 4173]) for (const host of ["localhost", "127.0.0.1"]) assert.equal(originState(req({ origin: `http://${host}:${port}` }), {}), "forbidden", `${host}:${port}`)
   assert.equal(originState(req({ origin: "http://localhost:5173" }), { DASHBOARD_ORIGINS: "http://localhost:5173" }), "allowed", "DASHBOARD_ORIGINS adds one")
-  // The built desktop app: tauri://localhost on macOS and Linux, http(s)://tauri.localhost on Windows.
-  for (const origin of ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]) assert.equal(originState(req({ origin }), {}), "allowed", origin)
   assert.equal(originState(req({ origin: "https://evil.example" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "http://localhost:9999" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "null" }), {}), "forbidden")

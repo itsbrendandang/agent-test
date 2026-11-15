@@ -20,7 +20,6 @@ changing the UI. This page is the short map.
 | Controls | shadcn/ui and Radix in `src/components/ui/` |
 | Graph | three.js with `3d-force-graph`, loaded only when the Graph view opens |
 | Styling | Tailwind CSS 4, tokens in `src/index.css` |
-| Desktop shell | Tauri 2 in `src-tauri/`. **Paused**; the browser is the supported way to use the app. |
 
 ## Commands
 
@@ -175,7 +174,6 @@ src/
 ├── hooks/                           # use-mobile (below 768 px)
 ├── lib/                             # engine address, words and marks, provenance, records, paid switch client, formats
 └── test/                            # test helpers and fixtures
-src-tauri/                           # desktop shell (paused)
 ```
 
 Design tokens (colours, spacing, radii, fonts: Geist for text, Geist Mono for durations, ids and counts) are the

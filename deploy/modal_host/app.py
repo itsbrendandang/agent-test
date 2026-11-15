@@ -28,7 +28,7 @@ APP_NAME = "asb-host"
 VOLUME_NAME = "asb-host-data"
 ACCESS_SECRET = "asb-host-access"  # sign-in code hashes and the cookie key (access.py). Not an API key.
 KEYS_SECRET = "asb-keys"  # provider keys. Made by the owner only; attached in real mode only.
-NODE_IMAGE = "node:26.13.1-bookworm-slim"  # the repo's Node line (Dockerfile: node:26-bookworm-slim), pinned to the patch the desktop app ships
+NODE_IMAGE = "node:26.13.1-bookworm-slim"  # the repo's Node line (Dockerfile: node:26-bookworm-slim), pinned to a patch release
 PORT = 8000
 
 MODE = os.environ.get("ASB_HOST_MODE", "demo")
@@ -57,7 +57,7 @@ def build_image() -> modal.Image:
         .add_local_file(repo / "dashboard/package.json", "/build/dashboard/package.json", copy=True)
         .add_local_file(repo / "dashboard/package-lock.json", "/build/dashboard/package-lock.json", copy=True)
         .run_commands("cd /build/dashboard && npm ci --no-audit --no-fund")
-        .add_local_dir(repo / "dashboard", "/build/dashboard", copy=True, ignore=[*never, "dist", "src-tauri", "docs", "*.md"])
+        .add_local_dir(repo / "dashboard", "/build/dashboard", copy=True, ignore=[*never, "dist", "docs", "*.md"])
         .run_commands("cd /build/dashboard && VITE_ENGINE_URL= npx vite build --outDir /srv/dashboard --emptyOutDir && test -f /srv/dashboard/index.html && ! grep -rl 'localhost:8787' /srv/dashboard && rm -rf /build")
         .add_local_dir(repo / "engine/src", "/app/engine/src", copy=True, ignore=never)
         # What the board reads: its settings, members, shared context, briefs, and the notes it starts with. Not board/runs.
@@ -108,7 +108,7 @@ class Host:
             app_root=Path("/app"), volume_root=Path("/data/v1"), dashboard_dir=Path("/srv/dashboard"), front_script=Path("/app/deploy/front.mjs"),
             mode=os.environ.get("ASB_HOST_MODE", "demo"), port=PORT, commit=volume.commit,
             snapshot_seconds=float(os.environ.get("ASB_SNAPSHOT_SECONDS", "5")),
-            node_args=("--max-old-space-size=512",),  # a ceiling against a runaway, as in the desktop app; the engine stays far below it
+            node_args=("--max-old-space-size=512",),  # a ceiling against a runaway; the engine stays far below it
         )
         self.host.start()
 

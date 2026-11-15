@@ -27,7 +27,6 @@ npm run runs            # list board runs
 npm run resume <run-id> # continue an unfinished run
 npm run engine          # backend for the dashboard, port 8787; continues unfinished runs
 npm run dashboard       # http://localhost:5317, then "Board" (second icon)
-npm run desktop         # same UI as a Tauri desktop app (needs Rust)
 ```
 
 In VS Code, run **Tasks: Run Task → Board: start all** to start the engine and dashboard together.
@@ -162,7 +161,7 @@ engine/src/            board.ts (Pi Durable), triage.ts + questions.ts + provide
                        models.ts (Anthropic and OpenAI directly / scripted), mock.ts, app.ts (HTTP + SSE handler), server.ts (listens),
                        http.ts, runlock.ts, cli.ts
 engine/src/glhf/       not part of the board: the GLHF run tracker
-dashboard/             the web UI (Tauri + React); the board is dashboard/src/views/BoardView.tsx
+dashboard/             the web UI (React); the board is dashboard/src/views/BoardView.tsx
 ```
 
 ## Next steps
@@ -176,7 +175,6 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Brief sections for research tasks. `brief.required_sections` in `board/config.yaml` still asks for drug sections (Candidates, Target and Indication).
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
 - [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.
-- [ ] Add the Exa key to the dashboard Settings (keychain) instead of `.env`.
 
 Decision support only. This doesn't replace expert review or regulatory judgment.
 

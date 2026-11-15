@@ -140,7 +140,7 @@ test("the one rule: reads are open, scripted actions need the Origin or the toke
 test("M1: an Origin header alone starts nothing that can spend or touches shared state", async () => {
   const before = folders()
   for (const [what, body] of SPENDING) {
-    for (const origin of [DASH, "http://localhost:5317", "tauri://localhost"]) asksForToken(await call("POST", "/api/glhf/runs", { origin }, body), `${what} from ${origin}`)
+    for (const origin of [DASH, "http://localhost:5317"]) asksForToken(await call("POST", "/api/glhf/runs", { origin }, body), `${what} from ${origin}`)
     asksForToken(await call("POST", "/api/glhf/runs", { origin: DASH, token: "0".repeat(48) }, body), `${what} with a wrong token`)
     assert.equal((await call("POST", "/api/glhf/runs", NOBODY, body)).status, 403, `${what} from nobody`)
   }
@@ -338,10 +338,20 @@ test("low (c): the dashboard's static server sends a content security policy tha
     assert.equal((await get("/app.js")).body, "1")
     assert.match((await get("/../../etc/passwd")).body, /<title>t<\/title>/, "a path outside the folder gets the page")
   } finally { rmSync(root, { recursive: true, force: true }) }
-  // The policy matches the desktop app's production policy, without what only Tauri needs (ipc).
-  const tauri = JSON.parse(readFileSync(join(here, "..", "..", "dashboard", "src-tauri", "tauri.conf.json"), "utf8")).app.security.csp as Record<string, string>
-  const mine = Object.fromEntries(securityHeaders({})["content-security-policy"].split("; ").map((d) => [d.slice(0, d.indexOf(" ")), d.slice(d.indexOf(" ") + 1)]))
-  for (const [directive, value] of Object.entries(tauri)) assert.equal(mine[directive], directive === "connect-src" ? value.replace(" ipc: http://ipc.localhost", "") : value, directive)
+  const policy = Object.fromEntries(securityHeaders({})["content-security-policy"].split("; ").map((d) => [d.slice(0, d.indexOf(" ")), d.slice(d.indexOf(" ") + 1)]))
+  assert.deepEqual(policy, {
+    "default-src": "'self'",
+    "script-src": "'self' 'wasm-unsafe-eval'",
+    "style-src": "'self' 'unsafe-inline'",
+    "img-src": "'self' data: blob:",
+    "font-src": "'self' data:",
+    "connect-src": "'self' http://127.0.0.1:8787 http://localhost:8787",
+    "object-src": "'none'",
+    "frame-src": "'none'",
+    "base-uri": "'self'",
+    "form-action": "'none'",
+    "frame-ancestors": "'none'",
+  })
   // The engine's address can be set, and cannot smuggle a directive in.
   assert.match(securityHeaders({ GLHF_ENGINE_PORT: "9001" })["content-security-policy"], /connect-src 'self' http:\/\/127\.0\.0\.1:9001 http:\/\/localhost:9001;/)
   assert.match(securityHeaders({ ENGINE_ORIGINS: "http://engine.lan:8787 x; script-src *, https://e.example" })["content-security-policy"], /connect-src 'self' http:\/\/engine\.lan:8787 https:\/\/e\.example;/)

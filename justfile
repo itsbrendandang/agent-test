@@ -23,8 +23,5 @@ engine:
 dashboard:
     npm --prefix dashboard run dev
 
-desktop:
-    npm --prefix dashboard run desktop
-
 typecheck:
     npm run typecheck

@@ -107,7 +107,7 @@ test("a paid board run starts with this server's token only; the dashboard's Ori
   assert.equal((await post("/api/runs/paused-run/resume", {}, {})).status, 403)
   assert.equal((await post("/api/runs", { "x-glhf-token": "0".repeat(48) }, { brief: "ok.md" })).status, 403, "a wrong token")
   // M1: an Origin is a header anyone on this machine can send. It does not start or resume a paid run.
-  for (const origin of [DASH, "tauri://localhost"]) for (const [path, body] of [["/api/runs", { brief: "ok.md" }], ["/api/runs/paused-run/resume", {}]] as const) {
+  for (const origin of [DASH]) for (const [path, body] of [["/api/runs", { brief: "ok.md" }], ["/api/runs/paused-run/resume", {}]] as const) {
     const res = await post(path, { origin }, body)
     assert.equal(res.status, 401, `${origin} ${path}`)
     const said = JSON.parse(res.body)

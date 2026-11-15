@@ -82,7 +82,6 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 | The faces of the agents that did the work (not the characters above) | `src/lab/identity.ts`, `src/lab/AgentAvatar.tsx` |
 | AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
 | Tests and their stand-in engine | `src/**/*.test.ts(x)`, `src/test/` |
-| The desktop window (size, title, icons) | `src-tauri/tauri.conf.json`, `src-tauri/icons/` |
 
 ## One of each
 
@@ -106,8 +105,7 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 The template the dashboard started from is gone: the Overview, Simulations and Analytics views, the placeholder
 "Worlds" view (now Graph), the parade, the avatar in the rail, the status line across the top (`StatusLine.tsx`), the seven-item rail, the `.toon-btn` buttons, `src/sim/`, `src/agent/`,
 `src/runs/`, `src/system/UsageBars.tsx`, the chart component, and the "Your crew" editor in Agents (it gave the
-characters roles and skills, which made decoration look like agents). Settings shows the desktop key form only
-inside the desktop app.
+characters roles and skills, which made decoration look like agents). Settings uses the engine's connection status; API keys are configured on the engine.
 
 Brought back from git history (commit `e071754^`), by the owner's decision: the loading screen
 (`Splash.tsx`), and AI Elements with the shadcn pieces it needs. `message.tsx` differs from history in one way:

@@ -72,7 +72,7 @@ Set these in `.env` or in your shell. All are optional.
 |---|---|---|---|
 | `DRUG_BOARD_PORT` | `8787` | Engine port. The CLI also uses it to find the engine. | `engine/src/server.ts`, `engine/src/glhf/cli.ts` |
 | `HOST` | `127.0.0.1` | Address the engine listens on. Docker Compose sets `0.0.0.0` inside the container. | `bindHost` in `engine/src/app.ts` |
-| `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
+| `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on port 5317. | `engine/src/http.ts` |
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |

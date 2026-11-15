@@ -14,8 +14,7 @@ How each item was checked:
 ## Must fix before making public
 
 1. **There is no licence for our own code.** No `LICENSE` at the repository root; `package.json`,
-   `engine/package.json` and `dashboard/package.json` have no `license` field; `dashboard/src-tauri/Cargo.toml`
-   has `license = ""`. A public repository without a licence is "all rights reserved": nobody may reuse it.
+   `engine/package.json` and `dashboard/package.json` have no `license` field. A public repository without a licence is "all rights reserved": nobody may reuse it.
    The three contributors must choose one and add the file. (F)
 2. **`glhf/bixbench/` is CC BY-SA 4.0 and our changes to it are not marked.** The licence allows
    redistribution, but requires (a) attribution and the licence notice, which are present (`LICENSE`, `NOTICE`,
@@ -41,17 +40,14 @@ How each item was checked:
    `dashboard/src/components/ai-elements/*` (4 Vercel AI Elements files; licence not confirmed, see 1.4). (F, N)
 6. **Provenance of the dashboard skeleton and its artwork is not recorded.** `dashboard/README.md` says the
    dashboard "started as Sim Lab, a UI skeleton". Nothing says who wrote Sim Lab or under what terms.
-   `dashboard/src/assets/logo.png`, `dashboard/public/favicon.png` and the 17 files in
-   `dashboard/src-tauri/icons/` have no stated source. Confirm we own them or replace them.
+   `dashboard/src/assets/logo.png` and `dashboard/public/favicon.png` have no stated source. Confirm we own them or replace them.
    `dashboard/public/icons.svg` holds the GitHub, Discord, X and Bluesky brand marks and is referenced by no
    file: delete it. (F)
 7. **Every commit carries a machine-local author address.** All 20 commits are authored as
    `<local user>@<Mac hostname>.local`, which shows the local account name and the computer's name. If that
    should not be public, publish from a fresh history (or rewrite the author) before the first public push; it
-   cannot be undone after. Personal identifiers also in the tree: `authors = ["Brendan Dang"]` in
-   `dashboard/src-tauri/Cargo.toml`, the keychain service `com.brendandang.drugboard` (the bundle identifier is `com.brendandang.aiscientistbot`) in
-   `dashboard/src-tauri/tauri.conf.json` and `dashboard/src-tauri/src/keys.rs`, and the clone URL
-   `github.com/itsbrendandang/agent-test` in `CONTRIBUTING.md`. Keep or change them on purpose. (F)
+   cannot be undone after. The clone URL
+   `github.com/itsbrendandang/agent-test` in `CONTRIBUTING.md` also identifies the owner. Keep or change them on purpose. (F)
 8. **Do not publish benchmark run folders until two things are settled.** (a) BixBench v1: transcripts and
    reports that quote questions or ideal answers must keep the dataset's canary string and the Apache-2.0
    notice (section 3.1). (b) BixBench3: the dataset is gated; the terms a person accepts at the gate are not
@@ -167,7 +163,7 @@ Flagged: none.
 
 ### 2.2 `dashboard/` (npm)
 
-640 packages installed of 727 lockfile entries. "Linked" below follows the lockfile's `dev` flag; many of the
+Historical snapshot before dependency removal: 640 packages installed of 727 lockfile entries. "Linked" below follows the lockfile's `dev` flag; many of the
 packages marked linked are pulled in by the `shadcn` command-line tool, which is listed under `dependencies`
 but is not imported by the app. (F)
 
@@ -178,7 +174,6 @@ but is not imported by the app. (F)
 | Apache-2.0 | 24 | 21 linked, 3 dev |
 | BSD-3-Clause | 12 | linked |
 | BSD-2-Clause | 5 | linked |
-| Apache-2.0 OR MIT | 3 | 1 linked, 2 dev (Tauri) |
 | BlueOak-1.0.0 | 3 | linked (permissive) |
 | OFL-1.1 | 2 | linked (fonts) |
 | MPL-2.0 | 2 | dev |
@@ -189,14 +184,12 @@ but is not imported by the app. (F)
 |---|---|---|---|
 | `@fontsource-variable/fredoka`, `@fontsource-variable/geist` | 5.3.0 | OFL-1.1 | bundled fonts |
 | `@streamdown/cjk`, `/code`, `/math`, `/mermaid`, `streamdown` | 1.0.4, 2.0.0, 1.0.3, 1.0.3, 2.7.1 | Apache-2.0 | linked |
-| `@tauri-apps/api` | 2.12.4 | Apache-2.0 OR MIT | linked |
 | `@ui-sdk/core`, `@ui-sdk/react` | 0.1.0-beta.1 | Apache-2.0 | linked |
 | `ai` | 7.0.173 | Apache-2.0 | linked |
 | `class-variance-authority` | 0.7.1 | Apache-2.0 | linked |
 | `lucide-react` | 1.72.0 | ISC | linked |
 | `cmdk`, `cn`, `nanoid`, `radix-ui`, `react`, `react-dom`, `recharts`, `tw-animate-css`, `use-stick-to-bottom` | installed versions | MIT | linked |
 | `shadcn` | 4.23.0 | MIT | command-line tool listed under `dependencies` |
-| `@tauri-apps/cli` | 2.12.4 | Apache-2.0 OR MIT | dev |
 | `@tailwindcss/vite`, `tailwindcss`, `@types/*`, `@vitejs/plugin-react`, `oxlint`, `vite` | installed versions | MIT | dev |
 | `typescript` | 7.0.2 | Apache-2.0 | dev |
 
@@ -208,25 +201,6 @@ but is not imported by the app. (F)
 | `khroma` 2.1.0 | No `license` field | linked | Its `license` file is the MIT text. |
 | `caniuse-lite` | CC-BY-4.0 | build data | Attribution only. |
 | Fredoka and Geist fonts | OFL-1.1 | bundled in the built app | Free to bundle and redistribute; keep the licence with the font files; do not sell the fonts alone. (M) |
-
-### 2.3 `dashboard/src-tauri/` (Rust crates, desktop shell)
-
-Not asked for, but it is linked into the desktop binary. 458 packages in `Cargo.lock`; 258 found in the local
-cargo registry and read from their `Cargo.toml`; 199 not downloaded on this machine (builds for other
-platforms) and **not checked**. (F)
-
-| Licence | Count |
-|---|---|
-| MIT and/or Apache-2.0 (various spellings) | 199 |
-| Unicode-3.0 | 19 |
-| Zlib, or Zlib/Apache-2.0/MIT | 16 |
-| Unlicense OR MIT | 7 |
-| MPL-2.0 | 5 (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, `selectors`), linked |
-| BSD-3-Clause, ISC, CC0, CDLA-Permissive-2.0 and combinations | 12 |
-
-Flagged: the five MPL-2.0 crates are linked into the binary (file-level copyleft; publish their source
-location if a binary is distributed). On Linux, Tauri links the system WebKitGTK and GTK libraries, which
-are LGPL (M); this matters only if a Linux binary is distributed.
 
 ### 2.4 `glhf/bixbench/` (Python, uv)
 
@@ -315,7 +289,7 @@ exception) (M). We do not redistribute wheels, so nothing follows for the reposi
 | `glhf/memory/lessons.md` | Lessons from a demo-case run; no benchmark content. | F |
 | `glhf/docs/GLHF-ideas-and-design.docx` | Ours (python-docx, edited in Word). Internal draft. | F |
 | `docs/*.png`, `dashboard/docs/screenshot.png` | Our screenshots. | F |
-| `dashboard/src/assets/logo.png`, `dashboard/public/favicon.png`, `dashboard/src-tauri/icons/*` | **Unknown.** | F |
+| `dashboard/src/assets/logo.png`, `dashboard/public/favicon.png` | **Unknown.** | F |
 | `engine/test/fixtures/bixv1/**` (untracked, about to be added) | Made-up questions (`fx-1-q1` …), not dataset rows. | F |
 
 ## 4. Docker images and what they download
@@ -352,12 +326,11 @@ repository. They would matter if we published a built image.
 | Finding | Where | Mark |
 |---|---|---|
 | Author email of all 20 commits is `<local user>@<hostname>.local`. | `git log` | F |
-| Personal name and identifier. | `dashboard/src-tauri/Cargo.toml` (`authors`), `dashboard/src-tauri/tauri.conf.json` and `dashboard/src-tauri/src/keys.rs` (`com.brendandang.drugboard`), `CONTRIBUTING.md` line 8 (clone URL). First added in commits `802cfad` and `d0b5645`. | F |
 | Key-shaped string in history. | Commit `47913c3`, `glhf/bixbench/tests/unit/test_runner_commands.py`. Upstream placeholder, not a key. | F |
 | Internal working note. | `glhf/docs/GLHF-ideas-and-design.docx` | F |
 | Upstream's bucket and project names. | `glhf/bixbench/AGENTS.md` (upstream text, already public). | F, N |
 | Unreferenced brand logos. | `dashboard/public/icons.svg` | F |
-| Artwork of unknown origin. | `dashboard/src/assets/logo.png`, `dashboard/public/favicon.png`, `dashboard/src-tauri/icons/*` | F |
+| Artwork of unknown origin. | `dashboard/src/assets/logo.png`, `dashboard/public/favicon.png` | F |
 | Absolute paths with a username, real emails, `.env`, tokens. | None found in the tree or in history. | F |
 | Local files that must stay out of git. | `.env`, `glhf/data/` (5.5 GB of BixBench capsules), `glhf/runs/`, `glhf/bixbench_v1/runs/`: all ignored today. | F |
 
