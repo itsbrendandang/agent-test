@@ -1,6 +1,8 @@
 // The optional inspector beside the Research conversation. It only shows what one answer's own record holds:
 //  Evidence: the sources (found / selected / cited), each checked statement with its mark, quoted passage and
 //            checker, and the critic's notes with whether they were dealt with.
+//  Structure: the proteins of the answer and the test proteins; opening one shows its predicted 3D structure
+//            (ESMFold, or AlphaFold DB's model), coloured by the model's confidence. Shown only when the answer has a protein.
 //  Results:  the files the engine registered for the answer (name, type, size, time), a text preview, a download.
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
 //  Lab:      the team at work, drawn from the same events.
@@ -19,8 +21,10 @@ import { PROVIDERS, searchPlace } from "./providers"
 
 // The Lab draws the whole scene: loaded only when its tab is opened.
 const LabTab = lazy(() => import("./LabTab"))
+// The Structure tab and its 3D viewer: loaded only when the tab is opened.
+const StructureTab = lazy(() => import("./structure/StructureTab"))
 
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity", lab: "Agent Lab" }
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", structure: "Structure", results: "Results", activity: "Activity", lab: "Agent Lab" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
@@ -42,6 +46,7 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
       <div className="inspector-panel" id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${current}`} tabIndex={0}>
         {current === "evidence" && <Evidence state={state} />}
         {current === "hypotheses" && <HypothesesTable state={state} />}
+        {current === "structure" && <Suspense fallback={<p className="muted small">Loading the structure view.</p>}><StructureTab proteins={state.proteins} sources={state.sources} /></Suspense>}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
         {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Agent Lab.</p>}><LabTab id={id} events={events} /></Suspense>}

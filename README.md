@@ -141,6 +141,39 @@ uses one search, at most 3 sources and a short answer written with little thinki
 statement is still checked once. It has no hypotheses, specialists, critic or revision. See
 [docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
 
+**Protein structures.** When an answer is about a protein, the Research inspector has a
+**Structure** tab. It lists each protein of the answer: from its UniProt sources, or a sequence or UniProt
+accession in the question or the answer. It shows the name, the organism with its strain, and the length.
+Open one to see its predicted 3D structure, coloured by the model's confidence (pLDDT), with a legend.
+ESMFold (Meta AI, through the free ESM Atlas API) folds sequences of up to 400 amino acids. A longer
+protein, or one ESMFold cannot fold, shows AlphaFold DB's model if it has a UniProt accession. The tab
+always names the model and links to UniProt and to the model's page. It is a prediction, not an
+experimental structure. Both services are free and need no key. A structure is fetched only when you
+open it, and kept in `board/runs/.structures/`. See
+[docs/research-answer.md](docs/research-answer.md#protein-structures).
+
+![The Structure tab beside a practice answer: KRAS G12C predicted by ESMFold, coloured by confidence](docs/images/structure.png)
+
+**Test proteins** let you try the Structure tab. Eight real UniProt entries, each short enough for
+ESMFold, are listed under "Try a test protein" on the empty Research page. A chip asks a question that
+names the protein, and its answer has the Structure tab. "Open the structure viewer" opens them without
+asking anything. The same list is inside the Structure tab. Each sequence was read from UniProt
+(`engine/src/structure/test-proteins.json`, with UniProt's checksum of each entry); none was typed by hand.
+
+| Test protein | Organism or strain | UniProt | Amino acids |
+|---|---|---|---|
+| Ubiquitin (residues 1-76 of polyubiquitin-C) | *Homo sapiens* | [P0CG48](https://www.uniprot.org/uniprotkb/P0CG48/entry) | 76 |
+| Green fluorescent protein | *Aequorea victoria* | [P42212](https://www.uniprot.org/uniprotkb/P42212/entry) | 238 |
+| Lysozyme C (hen egg white) | *Gallus gallus* | [P00698](https://www.uniprot.org/uniprotkb/P00698/entry) | 147 |
+| Thioredoxin 1 | *Escherichia coli* (strain K12) | [P0AA25](https://www.uniprot.org/uniprotkb/P0AA25/entry) | 109 |
+| Spike receptor-binding domain (residues 319-541) | SARS-CoV-2 | [P0DTC2](https://www.uniprot.org/uniprotkb/P0DTC2/entry) | 223 |
+| Insulin (preproinsulin) | *Homo sapiens* | [P01308](https://www.uniprot.org/uniprotkb/P01308/entry) | 110 |
+| GTPase KRas, G12C variant (glycine 12 changed to cysteine) | *Homo sapiens* | [P01116](https://www.uniprot.org/uniprotkb/P01116/entry) | 189 |
+| InhA, enoyl-ACP reductase | *Mycobacterium tuberculosis* (strain H37Rv) | [P9WGR1](https://www.uniprot.org/uniprotkb/P9WGR1/entry) | 269 |
+
+On 2026-11-15 the public ESMFold API folded seven of them. It timed out on InhA, which then shows
+AlphaFold DB's model, labelled as such.
+
 **Try asking** shows biology questions under the question box on Overview and Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names

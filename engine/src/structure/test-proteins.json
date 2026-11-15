@@ -1,0 +1,170 @@
+{
+ "_about": "Test proteins for the Structure tab. Every sequence was read from UniProt REST (https://rest.uniprot.org/uniprotkb/<accession>.json) on 2026-11-15. `uniprotLength` and `crc64` are UniProt's length and checksum of the whole entry sequence, so a person can check the entry has not changed. A `range` keeps only those residues (1-based, inclusive); a `mutation` changes one residue, and the original residue was checked. No sequence was typed by hand.",
+ "verifiedOn": "2026-11-15",
+ "proteins": [
+  {
+   "id": "ubiquitin",
+   "name": "Ubiquitin",
+   "label": "Ubiquitin (human)",
+   "gene": "UBC",
+   "organism": "Homo sapiens (Human)",
+   "accession": "P0CG48",
+   "entry": "UBC_HUMAN",
+   "uniprotLength": 685,
+   "crc64": "B6E7BC06FEE77196",
+   "range": [
+    1,
+    76
+   ],
+   "length": 76,
+   "sequence": "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG",
+   "aliases": [
+    "ubiquitin"
+   ],
+   "question": "Show the structure of human ubiquitin",
+   "about": "The first of the nine ubiquitin repeats of polyubiquitin-C: one 76-residue ubiquitin."
+  },
+  {
+   "id": "gfp",
+   "name": "Green fluorescent protein",
+   "label": "GFP (Aequorea victoria)",
+   "gene": "GFP",
+   "organism": "Aequorea victoria (Water jellyfish)",
+   "accession": "P42212",
+   "entry": "GFP_AEQVI",
+   "uniprotLength": 238,
+   "crc64": "EA5A6F21FBFB6E05",
+   "length": 238,
+   "sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK",
+   "aliases": [
+    "gfp",
+    "green fluorescent protein"
+   ],
+   "question": "Show the structure of GFP from Aequorea victoria",
+   "about": "A barrel-shaped fluorescent protein from a jellyfish."
+  },
+  {
+   "id": "lysozyme",
+   "name": "Lysozyme C",
+   "label": "Lysozyme (hen egg white)",
+   "gene": "LYZ",
+   "organism": "Gallus gallus (Chicken)",
+   "accession": "P00698",
+   "entry": "LYSC_CHICK",
+   "uniprotLength": 147,
+   "crc64": "81E85743FF579468",
+   "length": 147,
+   "sequence": "MRSLLILVLCFLPLAALGKVFGRCELAAAMKRHGLDNYRGYSLGNWVCAAKFESNFNTQATNRNTDGSTDYGILQINSRWWCNDGRTPGSRNLCNIPCSALLSSDITASVNCAKKIVSDGNGMNAWVAWRNRCKGTDVQAWIRGCRL",
+   "aliases": [
+    "lysozyme",
+    "hen egg-white lysozyme",
+    "hen egg white lysozyme"
+   ],
+   "question": "Show the structure of hen egg-white lysozyme",
+   "about": "An enzyme from chicken egg white that cuts bacterial cell walls. The sequence includes the 18-residue signal peptide."
+  },
+  {
+   "id": "thioredoxin",
+   "name": "Thioredoxin 1",
+   "label": "Thioredoxin (E. coli K-12)",
+   "gene": "trxA",
+   "organism": "Escherichia coli (strain K12)",
+   "accession": "P0AA25",
+   "entry": "THIO_ECOLI",
+   "uniprotLength": 109,
+   "crc64": "EF5933EA29668EE9",
+   "length": 109,
+   "sequence": "MSDKIIHLTDDSFDTDVLKADGAILVDFWAEWCGPCKMIAPILDEIADEYQGKLTVAKLNIDQNPGTAPKYGIRGIPTLLLFKNGEVAATKVGALSKGQLKEFLDANLA",
+   "aliases": [
+    "thioredoxin",
+    "trxa"
+   ],
+   "question": "Show the structure of thioredoxin from E. coli K-12",
+   "about": "A small redox protein of the E. coli K-12 strain."
+  },
+  {
+   "id": "spike-rbd",
+   "name": "Spike glycoprotein, receptor-binding domain",
+   "label": "Spike RBD (SARS-CoV-2)",
+   "gene": "S",
+   "organism": "Severe acute respiratory syndrome coronavirus 2 (2019-nCoV)",
+   "accession": "P0DTC2",
+   "entry": "SPIKE_SARS2",
+   "uniprotLength": 1273,
+   "crc64": "B17BE6D9F1C4EA34",
+   "range": [
+    319,
+    541
+   ],
+   "length": 223,
+   "sequence": "RVQPTESIVRFPNITNLCPFGEVFNATRFASVYAWNRKRISNCVADYSVLYNSASFSTFKCYGVSPTKLNDLCFTNVYADSFVIRGDEVRQIAPGQTGKIADYNYKLPDDFTGCVIAWNSNNLDSKVGGNYNYLYRLFRKSNLKPFERDISTEIYQAGSTPCNGVEGFNCYFPLQSYGFQPTNGVGYQPYRVVVLSFELLHAPATVCGPKKSTNLVKNKCVNF",
+   "aliases": [
+    "spike rbd",
+    "receptor-binding domain",
+    "receptor binding domain",
+    "spike protein",
+    "sars-cov-2 spike"
+   ],
+   "question": "Show the structure of the SARS-CoV-2 spike receptor-binding domain",
+   "about": "Residues 319-541 of the SARS-CoV-2 spike: the part that binds the human ACE2 receptor. The whole spike (1,273 residues) is too long for ESMFold's free API."
+  },
+  {
+   "id": "insulin",
+   "name": "Insulin (preproinsulin)",
+   "label": "Insulin (human)",
+   "gene": "INS",
+   "organism": "Homo sapiens (Human)",
+   "accession": "P01308",
+   "entry": "INS_HUMAN",
+   "uniprotLength": 110,
+   "crc64": "C2C3B23B85E520E5",
+   "length": 110,
+   "sequence": "MALWMRLLPLLALLALWGPDPAAAFVNQHLCGSHLVEALYLVCGERGFFYTPKTRREAEDLQVGQVELGGGPGAGSLQPLALEGSLQKRGIVEQCCTSICSLYQLENYCN",
+   "aliases": [
+    "insulin",
+    "preproinsulin"
+   ],
+   "question": "Show the structure of human insulin",
+   "about": "The whole precursor chain: signal peptide, B chain, C peptide and A chain. Mature insulin is cut from it."
+  },
+  {
+   "id": "kras-g12c",
+   "name": "GTPase KRas, G12C variant",
+   "label": "KRAS G12C (human)",
+   "gene": "KRAS",
+   "organism": "Homo sapiens (Human)",
+   "accession": "P01116",
+   "entry": "RASK_HUMAN",
+   "uniprotLength": 189,
+   "crc64": "973547B2E11C2C81",
+   "mutation": "G12C",
+   "length": 189,
+   "sequence": "MTEYKLVVVGACGVGKSALTIQLIQNHFVDEYDPTIEDSYRKQVVIDGETCLLDILDTAGQEEYSAMRDQYMRTGEGFLCVFAINNTKSFEDIHHYREQIKRVKDSEDVPMVLVGNKCDLPSRTVDTKQAQDLARSYGIPFIETSAKTRQRVEDAFYTLVREIRQYRLKKISKEEKTPGCVKIKKCIIM",
+   "aliases": [
+    "kras g12c",
+    "kras"
+   ],
+   "question": "Show the structure of KRAS G12C",
+   "about": "The canonical KRAS sequence (isoform 2B) with glycine 12 changed to cysteine: the drug target of sotorasib and adagrasib."
+  },
+  {
+   "id": "inha",
+   "name": "Enoyl-[acyl-carrier-protein] reductase [NADH] (InhA)",
+   "label": "InhA (M. tuberculosis H37Rv)",
+   "gene": "inhA",
+   "organism": "Mycobacterium tuberculosis (strain ATCC 25618 / H37Rv)",
+   "accession": "P9WGR1",
+   "entry": "INHA_MYCTU",
+   "uniprotLength": 269,
+   "crc64": "F161D6D6A631CA08",
+   "length": 269,
+   "sequence": "MTGLLDGKRILVSGIITDSSIAFHIARVAQEQGAQLVLTGFDRLRLIQRITDRLPAKAPLLELDVQNEEHLASLAGRVTEAIGAGNKLDGVVHSIGFMPQTGMGINPFFDAPYADVSKGIHISAYSYASMAKALLPIMNPGGSIVGMDFDPSRAMPAYNWMTVAKSALESVNRFVAREAGKYGVRSNLVAAGPIRTLAMSAIVGGALGEEAGAQIQLLEEGWDQRAPIGWNMKDATPVAKTVCALLSDWLPATTGDIIYADGGAHTQLL",
+   "aliases": [
+    "inha",
+    "enoyl-acp reductase"
+   ],
+   "question": "Show the structure of InhA from Mycobacterium tuberculosis H37Rv",
+   "about": "The target of the tuberculosis drug isoniazid, from the H37Rv laboratory strain."
+  }
+ ]
+}

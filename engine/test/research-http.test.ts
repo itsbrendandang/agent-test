@@ -59,7 +59,7 @@ test("Demo: the same endpoint and the same event shapes, labelled demo, with fix
     assert.match(record.opening ?? "", /^This is a demo:/)
     assert.ok(record.sources.length === 3 && record.sources.every((s) => s.provider === "fixture" && /example source/.test(s.note ?? "") && s.url.startsWith("https://example.org/mock/")))
     assert.deepEqual(of(events, "step.started").map((s) => s.step), ["prepare", "search:fixture:1", "evaluate:fixture:1", "write", "check", "review", "revise", "review:2", "save"])
-    assert.deepEqual([...new Set(events.map((x) => x.type))].sort(), ["answer.delta", "answer.revised", "answer.written", "artifact.created", "missing", "opening", "recommendations", "research.finished", "research.started", "review.note", "review.resolved", "review.started", "selection", "sources", "sources.cited", "statement.checked", "step.finished", "step.progress", "step.started"])
+    assert.deepEqual([...new Set(events.map((x) => x.type))].sort(), ["answer.delta", "answer.revised", "answer.written", "artifact.created", "missing", "opening", "proteins", "recommendations", "research.finished", "research.started", "review.note", "review.resolved", "review.started", "selection", "sources", "sources.cited", "statement.checked", "step.finished", "step.progress", "step.started"])
     const drafts = of(events, "statement.checked").filter((s) => s.stage === "draft").sort((a, b) => a.index - b.index)
     assert.deepEqual(drafts.map((s) => s.verdict), ["verified", "verified", "contradicted"], "the demo shows a sentence that fails, and it is not shown as holding up")
     assert.deepEqual(record.statements.map((s) => [s.verdict, s.checker]), [["verified", "scripted"], ["verified", "scripted"]])
