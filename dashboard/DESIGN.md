@@ -175,8 +175,8 @@ A practice run's score or recommendation is never the headline without the words
 
 A first-time visitor gets from opening the app to a finished result, and understands it, without help.
 
-- **First visit**: Research says what this is in one sentence, offers three example questions that send in one
-  click, and says once when the app is in Demo mode.
+- **First visit**: Research says what this is in one sentence, offers one "Try asking" row of questions that send in one
+  click (see README, "Try asking"), and says once when the app is in Demo mode.
 - **Fewest clicks**: example (1), "Start practice run" (2), "See what they found" (3). A practice plan starts in
   one click only while the engine is in Demo mode and the plan is not paid (`quick` in `src/home/PlanCard.tsx`).
   Everything else keeps the confirm step, the cost and the tick box. Never weaken that.

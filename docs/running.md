@@ -611,6 +611,7 @@ starts the server and listens; the request handler is in `app.ts`, so tests can 
 | `POST /api/glhf/runs/:id/cancel` | Stops a local run and marks it cancelled. Answers the run record. |
 | `GET /api/glhf/scoreboard` | Scoreboard rows. |
 | `GET /api/search?q=...` | Word search over all runs. Every word must appear. |
+| `GET /api/trending` | "Try asking" questions: biology searches trending on Google now (free feed, kept an hour), else curated biology questions. No model. |
 | `POST /api/ask` | A question about the runs, answered by a small model. See below. |
 | `GET /api/status` | Drug board: scripted or live mode (`mock`), `paidCalls`, keys present. |
 | `GET /api/roster` | Drug board members. |
