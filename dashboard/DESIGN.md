@@ -42,7 +42,7 @@ Under 480 px the header drops the view's title, so the place name and the action
 | Research | `Home` | `src/views/HomeView.tsx`, `src/home/`, `src/research/` | Ask a research question. Read the answer with its sources, or a plan to confirm |
 | Saved research | `Runs` | `src/views/ExperimentsView.tsx` | Every saved answer, team review and task run, with keyword search |
 | Compare | `Compare` | `src/views/SwarmView.tsx`, `src/swarm/` | One agent alone against a team of nine on the same task. New run and Cancel |
-| Team review | `Board` | `src/views/BoardView.tsx`, `src/board/` | One team review: the decision, the discussion, the checks, the sources |
+| Team review | `Board` | `src/views/BoardView.tsx`, `src/board/` | One team review: the decision, the checks, the sources, and the discussion drawn by the Agent Log (`src/lab/EventLog.tsx`) |
 | Agents | `Agents` | `src/views/AgentsView.tsx` | Who does the work: roles, team members, specialists and methods |
 | Graph | `Graph` | `src/views/WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and how it was checked |
 | Lab | `Lab` | `src/views/LabView.tsx`, `src/lab/` | Watch the team at work in a run. Characters move only on engine events |
@@ -102,8 +102,10 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 - **One place for each input**: questions are asked on Research; keyword search is on Saved research; Agents has a filter box.
 - **One loading look**: `<Loading>text</Loading>` from `src/components/Crew.tsx`. The text is the status; the
   characters beside it are decoration.
-- **One conversation look**: the Research chat, the Team review discussion and "What each role did" on Compare all use the
-  AI Elements `Conversation` and `Message` through `src/components/Thread.tsx`.
+- **One conversation look**: the Research chat and "What each role did" on Compare use the AI Elements
+  `Conversation` and `Message` through `src/components/Thread.tsx`.
+- **One log**: a run's events, in order, are drawn only by the Agent Log's group chat (`src/lab/EventLog.tsx`). The
+  Team review's discussion is that same component for the review on screen, with a link "Open in Agent Log".
 - **One design system**: AI Elements reads the app's own colours (the token block at the end of `src/index.css`),
   and its visible buttons carry the app's `.btn` classes. Do not add a second theme or button style.
 
@@ -164,7 +166,8 @@ run)"), `plainWhen` ("today at 4:51 pm"). Scores keep three decimals.
 
 ## The conversation
 
-The discussion is the centre of Board and Compare: `TeamMessage` in `src/components/Thread.tsx`.
+The discussion is the centre of Compare: `TeamMessage` in `src/components/Thread.tsx`. Board's discussion is the
+Agent Log's group chat (`src/lab/EventLog.tsx`); see "One log" above.
 
 - Who speaks and their job in one plain line (`BOARD_JOB` in `words.ts`, written from `board/agents/*.md`; the
   swarm's from `src/swarm/roles.ts`). Do not invent what a role does.

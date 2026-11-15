@@ -19,7 +19,7 @@ export const ABOUT: Record<View, string> = {
   Board: "One team review: the recommendation, the checks and the discussion.",
   Agents: "Who does the work: the nine roles, the review agents, specialists and skills.",
   Graph: "One run as a graph of who said what and how it was checked.",
-  Lab: "The full event log of a run, with agent filters and downloads.",
+  Lab: "The full event log of a run or a team review, with agent filters and downloads.",
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
 /** The views the navigation lists. Benchmarks and Compare open only by their address. */

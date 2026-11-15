@@ -1,22 +1,24 @@
 // Team review (the board). By default a plain summary: is the team working, what did it decide, and what did the
-// checks find. "See how each statement was checked" opens the counts, the written decision and the team.
+// checks find. "See how each statement was checked" opens the counts, the written decision and the team. The
+// discussion is the Agent Log's own group chat (lab/EventLog.tsx), the same one the Agent Log shows for this run.
 import { lastRun, linkTo, showing, takeOpen } from "@/lib/open"
 import { agentLink, graphLink, logLink } from "@/lib/links"
 import { claimNodeId, sourceNodeId } from "@/graph/model"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { DATABASES, get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
-import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
-import { TeamMessage, type Checked } from "@/components/Thread"
+import type { LabEvent } from "@/lab/adapter"
 import { AgentAvatar } from "@/lab/AgentAvatar"
+import { EventLog } from "@/lab/EventLog"
+import { eventRows } from "@/lab/logRows"
+import type { Connection } from "@/lab/useLabModel"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
 import { stamp } from "@/lib/records"
-import { PROVIDERS } from "@/research/providers"
 import { uncheckedReasons } from "@/lib/verdict"
 import { BOARD_JOB, checkedOf, clip, leadSentence, MARK_WORD, markOf, mendTitle, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { problemOf, type Problem } from "@/lib/engine"
@@ -48,11 +50,6 @@ const firstPass = (c: { checker?: string }) => c.checker === "first-pass" || c.c
 const screened = (relevance: unknown): string | undefined => (relevance === 1 ? "Relevant" : relevance === 0.5 ? "Partly relevant" : undefined)
 /** "Scout (Data Inspector)" -> the name and the plain job. */
 const nameAndJob = (title: string) => { const m = /^(.*?)\s*\((.+)\)\s*$/.exec(title); return m ? { name: m[1], job: m[2] } : { name: title, job: undefined } }
-/** Who ruled on a statement, in plain words. The model id, when the run recorded one, is kept. */
-const checkerName = (c: { checker?: string; checkedBy?: string }) => {
-  const what = firstPass(c) ? "the quick first check" : c.checker === "openai" || c.checker === "claude-code" ? "the second, careful check" : c.checker
-  return c.checkedBy && c.checkedBy !== "scripted" ? `${what} (${c.checkedBy})` : c.checkedBy === "scripted" ? `${what} (practice: no model)` : what
-}
 
 export function BoardView() {
   const [status, setStatus] = useState<Status>()
@@ -70,6 +67,8 @@ export function BoardView() {
   // Someone who asked to see a review wants the discussion: it is open on arrival. Otherwise the last choice is kept.
   const [details, setDetails] = useState(() => opened !== undefined || localStorage.getItem("board.details") === "1")
   const events = useRunEvents(runId)
+  // The discussion, as the Agent Log draws it: the same rows, the same group chat.
+  const rows = useMemo(() => eventRows(events as unknown as LabEvent[], "board"), [events])
 
   useEffect(() => localStorage.setItem("board.details", details ? "1" : "0"), [details])
   const refresh = () => get<RunSummary[]>("/api/runs").then((r) => { setRuns(r); setRunId((id) => id ?? r[0]?.id) })
@@ -126,10 +125,8 @@ export function BoardView() {
   const failed = events.find((e): e is Of<"run.failed"> => e.type === "run.failed")
   // The run's own roster names everyone who spoke in it, also method specialists that the engine's standing roster does not list.
   const ran = events.find((e): e is Of<"run.roster"> => e.type === "run.roster")?.members ?? []
-  const title = (name: string) => ran.find((m) => m.name === name)?.title ?? roster.find((m) => m.name === name)?.title ?? plainTitle(name)
   // Who is listed as taking part: the run's own roster when it recorded one (it also names specialists), else the engine's.
   const took: { name: string; title: string }[] = ran.some((m) => m.role === "member") ? ran.filter((m) => m.role === "member") : members
-  const specialist = (name: string) => ran.find((m) => m.name === name)?.source === "specialist"
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const scripted = startedAs ?? status?.mock ?? false
   // One short line. Why (Demo, or a key the engine lacks) is in Settings, under Technical.
@@ -155,7 +152,6 @@ export function BoardView() {
   const checked = claims.length - marks.unchecked
   // Never a bare total: how many statements there were, and how many of them a check actually ruled on.
   const whyNot = uncheckedReasons(claims)
-  const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
   const headline = !status ? "Loading the review…"
     : !runId ? "No reviews yet. Pick a brief and press Start a review. With Demo chosen it is a practice run: fixed example answers, free."
@@ -168,35 +164,14 @@ export function BoardView() {
   const progress = done ? 1 : Math.min(0.95, ((rounds.length - 1) + (current ? current.replies.length / Math.max(1, members.length) : 0)) / maxRounds)
 
   const runRow = runs.find((r) => r.id === runId)
-  // A search step in the discussion: who searched, with what, the queries and how many results were kept.
-  const searchLines = (searches: Of<"evidence.triaged">[]) => {
-    const groups: { member: string; provider?: SearchProvider; list: Of<"evidence.triaged">[] }[] = []
-    for (const e of searches) {
-      const last = groups.at(-1), provider = providerOf(e)
-      if (last && last.member === e.member && last.provider === provider) last.list.push(e)
-      else groups.push({ member: e.member, provider, list: [e] })
-    }
-    return groups.map((g) => (
-      <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`} data-agent={g.member}>
-        <AgentAvatar name={g.member} size={32} className="thread-search-face" />
-        <p>
-          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : g.provider && DATABASES.includes(g.provider) ? `looked up records in ${PROVIDERS[g.provider]?.place ?? "a database"}` : "searched the web"}
-          {g.provider && <> · <SearchCredit provider={g.provider} /></>}
-        </p>
-        <ul>
-          {g.list.map((e) => <li key={e.key}>“{e.query}”: kept {e.kept} of {e.kept + e.dropped} result{e.kept + e.dropped === 1 ? "" : "s"}</li>)}
-        </ul>
-      </div>
-    ))
-  }
   const sources = [...new Map(evidence.flatMap((e) => e.items.map((i) => [i.url, { ...i, provider: i.provider ?? providerOf(e) }] as const))).values()]
   const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
-  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c), graph: runId ? graphLink("board", runId, claimNodeId(c.member, c.claim)) : undefined }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
   const question = startedEvent?.title ? mendTitle(startedEvent.title) : runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : ""
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
   const wrong = count("contradicted")
-  const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: specialist(member) ? "method specialist: reads method notes, has no tools and runs nothing" : BOARD_JOB[member] ?? t.job?.toLowerCase() } }
+  const shown = !!runId && (known || events.length > 0)
+  const connection: Connection = finished ? "ended" : events.length ? "live" : "connecting"
 
   return (
     <div className="page board">
@@ -275,7 +250,7 @@ export function BoardView() {
             <MarksLegend who="A separate checker decides each mark; the team does not grade itself." />
           </div>
         )}
-        {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was contradicted." : `${wrong} statements were contradicted.`} Look for the marked messages below.</p>}
+        {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was contradicted." : `${wrong} statements were contradicted.`} Look for the ✕ checks in the discussion below.</p>}
         {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. If it names a model or a key, check them in Settings (or ask the person who runs the engine). After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
       </section>
@@ -294,21 +269,13 @@ export function BoardView() {
 
       <section className="talk" aria-label="Discussion">
         <h2 className="talk-title">The discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
-        <p className="muted small">Who said what, in order. The chips under a message show what a separate check found for each statement in it.</p>
-        {rounds.length === 0 && <p className="empty-note">{runId && (known || events.length > 0) ? "Nobody has spoken yet." : <>Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Search</a>.</>}</p>}
-        <Conversation className="thread-inline" aria-label="Discussion, round by round">
-          <ConversationContent className="thread-list">
-            {rounds.map(([n, r]) => (
-              <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
-                <h3 className="round-head">Round {n}{r.head?.final ? ": final positions" : ""}</h3>
-                {r.head?.message && <TeamMessage agent={lead?.name ?? "lead-scientist"} name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
-                {searchLines(r.searches)}
-                {r.replies.map((reply) => <TeamMessage key={reply.key} agent={reply.member} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
-              </div>
-            ))}
-            {live && <Loading>{headline}</Loading>}
-          </ConversationContent>
-        </Conversation>
+        <p className="muted small">
+          Who said what, in order, round by round. After the replies in each round, a quiet note says what a separate check found for each statement.
+          {shown && <> <a href={logLink({ kind: "board", id: runId })}>Open in Agent Log</a></>}
+        </p>
+        {shown ? <EventLog rows={rows} run={{ id: runId, kind: "board", provenance: startedAs === undefined && !runRow?.example ? undefined : provenanceOf({ scripted: startedAs, example: runRow?.example }) }} connection={connection} />
+          : <p className="empty-note">Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Search</a>.</p>}
+        {live && !memoText && <Loading>{headline}</Loading>}
         {events.filter((e): e is Of<"constraint"> => e.type === "constraint").map((c) => (
           <p key={c.key} className="pill" data-kind="warning">The lead was told to wrap up: {c.detail}</p>
         ))}

@@ -2,13 +2,18 @@
 // messages from the same agent is grouped, long reasoning sits behind "Show thinking" (other long text behind "Show
 // more"), and tool calls, searches and system steps are small notes between the messages. Every row is still one list item, in the order eventRows gave.
 // Built from the dashboard's AI Elements and shadcn parts: Reasoning for "Show thinking", Collapsible for "Show more",
-// and the toolbar in LogTools.tsx. Each bubble keeps its own open or closed state.
+// and the toolbar in LogTools.tsx. Each bubble keeps its own open or closed state. A team review's discussion reads
+// the same way: a "Round n" line where each round begins, the members' replies as bubbles, and each statement check
+// as a quiet note with its mark. The Team review page shows this same component for its discussion.
 import { ArrowDownIcon, ChevronDownIcon, CogIcon, SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react"
-import { useLayoutEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { agentLink } from "@/lib/links"
+import { agentLink, graphLink, hasGraph } from "@/lib/links"
+import { SearchCredit } from "@/components/Shared"
+import type { SearchProvider } from "@/board/api"
+import { MARK_GLYPH } from "@/lib/words"
 import { AgentAvatar } from "./AgentAvatar"
 import { agentRows, hasCard } from "./agentFocus"
 import { chatItems, splitMessage, type ChatItem } from "./chat"
@@ -39,6 +44,8 @@ function Sources({ row }: { row: EventRow }) {
 
 /** A note's mark: what kind of step it was, at a glance (the AI Elements Tool header's icon, without its card). */
 function NoteIcon({ row }: { row: EventRow }) {
+  // A statement check carries the mark it found: the glyph goes with the word in the text, so it never rests on colour.
+  if (row.mark) return <span aria-hidden className="chat-note-icon chat-note-mark">{MARK_GLYPH[row.mark]}</span>
   const Icon = row.kind === "error" || row.kind === "limit" ? TriangleAlertIcon
     : ["search", "fetch", "sources", "evaluate"].includes(row.kind) ? SearchIcon
       : row.agentId === "engine" ? CogIcon : WrenchIcon
@@ -49,15 +56,17 @@ function NoteIcon({ row }: { row: EventRow }) {
 type OnAgent = (row: EventRow) => void
 const onlyLabel = (row: EventRow) => `Show only ${row.agent}'s messages`
 
-function Note({ row, onAgent }: { row: EventRow; onAgent: OnAgent }) {
+function Note({ row, onAgent, graph }: { row: EventRow; onAgent: OnAgent; graph?: string }) {
   return (
-    <li className="event-log-row chat-note" data-kind={row.kind}>
+    <li className="event-log-row chat-note" data-kind={row.kind} data-mark={row.mark}>
       <NoteIcon row={row} />
       <div className="chat-note-body">
         <div className="chat-note-line">
           {row.agentId !== "engine" && <button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button>}
           {row.agentId === "engine" && <span className="sr-only">{row.agent}: </span>}
           <span className="chat-note-text">{row.text}</span>
+          {row.provider && <SearchCredit provider={row.provider as SearchProvider} />}
+          {graph && <a className="small source-graph" href={graph}>Show this statement and its checks in the graph</a>}
           <When at={row.at} />
           <Cost row={row} />
         </div>
@@ -85,7 +94,7 @@ function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
   const { row, first, last } = item
   const { say, more } = splitMessage(row.text)
   return (
-    <li className="event-log-row chat-msg" data-kind={row.kind} data-first={first || undefined} data-last={last || undefined}>
+    <li className="event-log-row chat-msg" data-kind={row.kind} data-first={first || undefined} data-last={last || undefined} data-wrong={row.wrong ? true : undefined}>
       <div className="chat-face">{first && (
         // The face and the name filter the log to this agent; the line above the log then links to its details.
         <button type="button" className="chat-face-btn" aria-label={onlyLabel(row)} title={onlyLabel(row)} onClick={() => onAgent(row)}>
@@ -93,13 +102,14 @@ function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
         </button>
       )}</div>
       <div className="chat-body">
-        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><span>{readableName(row.kind)}</span></div> : <span className="sr-only">{row.agent}: </span>}
+        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><span>{readableName(row.kind)}</span>{row.job && <span className="chat-job">{row.job}</span>}</div> : <span className="sr-only">{row.agent}: </span>}
         <div className="chat-bubble">
           <p>{say || "(no text recorded)"}</p>
           {more && (row.thought
             ? <Reasoning className="chat-thinking"><ReasoningTrigger className="chat-toggle" /><ReasoningContent className="chat-more-text"><p>{more}</p></ReasoningContent></Reasoning>
             : <More text={more} />)}
           <Sources row={row} />
+          {!!row.wrong && <p className="chat-wrong"><span aria-hidden="true">✕</span> {row.wrong === 1 ? "A check contradicted one statement here." : `A check contradicted ${row.wrong} statements here.`}</p>}
         </div>
         {(validTime(row.at) || row.usd !== undefined) && <div className="chat-meta"><When at={row.at} /><Cost row={row} /></div>}
       </div>
@@ -211,7 +221,12 @@ export function EventLog({ rows, run, connection, agent, onAgent }: {
       {!rows.length ? <p className="event-log-empty">{connection === "connecting" ? "Loading event log…" : "No events received for this run yet."}</p> : !shown.length ? <p className="event-log-empty">No events match these filters.</p> : (
         <div className="chat-scroll" ref={thread} onScroll={onScroll}>
           <ol className="event-log-rows chat-thread" aria-label="Run events">
-            {items.map((item) => item.row.note ? <Note key={item.row.id} row={item.row} onAgent={focusOn} /> : <Message key={item.row.id} item={item} onAgent={focusOn} />)}
+            {items.map((item) => (
+              <Fragment key={item.row.id}>
+                {item.round && <li className="chat-round"><h3>Round {item.round.n}{item.round.final ? ": final positions" : ""}</h3></li>}
+                {item.row.note ? <Note row={item.row} onAgent={focusOn} graph={item.row.node && hasGraph(run.kind) ? graphLink(run.kind, run.id, item.row.node) : undefined} /> : <Message item={item} onAgent={focusOn} />}
+              </Fragment>
+            ))}
           </ol>
         </div>
       )}
