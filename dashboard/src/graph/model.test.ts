@@ -111,7 +111,7 @@ describe("board graph", () => {
   })
   it("reads the scripted flag from the run's own run.started event", () => {
     expect(g.scripted).toBe(true)
-    expect(find(g, "run").facts.find((f) => f.label === "Made with")?.value).toMatch(/Practice run/)
+    expect(find(g, "run").facts.find((f) => f.label === "Made with")?.value).toMatch(/^Practice: fixed example answers/)
     const real = BOARD_EVENTS.map((e) => (e.type === "run.started" ? { ...e, mock: false } : e))
     expect(buildBoardGraph({ runId: "r1", events: real }).scripted).toBe(false)
     const none = buildBoardGraph({ runId: "r1", events: BOARD_EVENTS.filter((e) => e.type !== "run.started") })
@@ -122,7 +122,7 @@ describe("board graph", () => {
     const scout = find(g, "agent:scout")
     expect(scout.label).toBe("Scout (Data Inspector)")
     expect(scout.facts.find((f) => f.label === "Replies")?.value).toBe("2")
-    expect(scout.facts.find((f) => f.label === "Statements")?.value).toBe("2: 1 held up, 1 proven wrong, 0 had too little evidence")
+    expect(scout.facts.find((f) => f.label === "Statements")?.value).toBe("2: 1 supported, 1 contradicted")
     expect(scout.activity.length).toBeGreaterThanOrEqual(3)
     expect(buildBoardGraph({ runId: "r1", events: BOARD_EVENTS }).nodes.find((n) => n.id === "agent:critic")!.label).toBe("critic")
   })

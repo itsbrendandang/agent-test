@@ -59,7 +59,7 @@ export function SettingsView() {
       <SetupDetails />
       <section className="keys" aria-labelledby="help-title">
         <h2 id="help-title">Help</h2>
-        <p className="muted small">Four plain steps: you ask, a team discusses, every statement is checked, you get an answer.</p>
+        <p className="muted small">Four plain steps: you ask, it searches and writes, statements are checked, you read the answer.</p>
         <button type="button" className="btn" onClick={openHelp}>How this works</button>
       </section>
       <section className="keys" aria-labelledby="look-title">

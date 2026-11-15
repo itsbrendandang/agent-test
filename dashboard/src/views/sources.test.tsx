@@ -147,17 +147,18 @@ describe("while a real run works, and when it cannot start", () => {
     await emit({ type: "member.replied", round: 1, member: "scout", text: "x", usd: 0.3 })
     await emit({ type: "member.replied", round: 1, member: "lead-scientist", text: "y", usd: 0.12 })
     const story = screen.getByRole("region", { name: "What happened" })
-    expect(story).toHaveTextContent("spent so far $0.42 of $5.00")
+    expect(within(story).getByTestId("spent")).toHaveTextContent("Spent: $0.42 so far · Run limit: $5") // what was recorded, and the most the run may spend
     expect(within(story).getByTestId("search-count")).toHaveTextContent("Searching: 2 of 20 web searches, 1 of 20 literature searches")
     await emit({ type: "run.finished", usd: 0.5, minutes: 2 })
-    expect(story).not.toHaveTextContent("spent so far")
-    expect(story).toHaveTextContent("took 2 minutes · cost $0.50")
+    expect(within(story).queryByTestId("spent")).toBeNull()
+    expect(story).toHaveTextContent("took 2 minutes · Spent: $0.50")
     expect(within(story).getByTestId("search-count")).toHaveTextContent("Searched: 2 of 20 web searches, 1 of 20 literature searches")
   })
   it("a practice run shows no spend line", async () => {
     await open(true)
     await emit({ type: "member.replied", round: 1, member: "scout", text: "x", usd: 0 })
-    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent("spent so far")
+    expect(within(screen.getByRole("region", { name: "What happened" })).queryByTestId("spent")).toBeNull()
+    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/Spent:|Run limit:/)
   })
   it("a run that failed at the start shows the engine's plain message, what to do, and Resume", async () => {
     await open(false, "failed")

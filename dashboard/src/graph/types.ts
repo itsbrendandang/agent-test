@@ -79,7 +79,7 @@ export interface Stats {
   claims: number
   /** Claims by the engine's own verdict word, e.g. { verified: 9, contradicted: 1 }. */
   byVerdict: Record<string, number>
-  /** The same claims by what they mean: held up, proven wrong, not enough evidence. */
+  /** The same claims in three groups, as the graph draws them: supported, contradicted, and the rest (insufficient evidence or not checked). */
   byOutcome: Record<Outcome, number>
   rounds: number
   problems: number

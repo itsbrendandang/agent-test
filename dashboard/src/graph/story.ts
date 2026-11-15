@@ -1,15 +1,16 @@
 // The one-sentence answer to "what happened here?", built only from counts of the run's own data. The words are the
-// dashboard's shared ones (src/lib/words.ts): "held up", "was proven wrong", "had too little evidence".
+// dashboard's shared ones (src/lib/words.ts): supported, contradicted, insufficient evidence, not checked.
 import { fmtScore } from "@/lib/format"
-import { verdictCount } from "@/lib/words"
-import type { GraphModel, Outcome, Stats } from "./types"
+import { markCounts, markOf, type Mark } from "@/lib/words"
+import type { GraphModel, Stats } from "./types"
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-const OUTCOMES: Outcome[] = ["holds", "fails", "unknown"]
 
-/** "9 held up, 1 was proven wrong, 2 had too little evidence". Zero counts are left out. */
-export function verdictParts(byOutcome: Record<Outcome, number>): string {
-  return OUTCOMES.filter((o) => byOutcome[o] > 0).map((o) => verdictCount(o, byOutcome[o])).join(", ")
+/** "9 supported, 1 contradicted, 2 insufficient evidence, 1 not checked", from the checks' own words. Zero counts are left out. */
+export function verdictParts(byVerdict: Record<string, number>): string {
+  const by: Partial<Record<Mark, number>> = {}
+  for (const [word, n] of Object.entries(byVerdict)) { const m = markOf(word); by[m] = (by[m] ?? 0) + n }
+  return markCounts(by)
 }
 
 /**
@@ -32,7 +33,7 @@ export function headline(model: Pick<GraphModel, "kind" | "single" | "status" | 
       ? `${pre}${who} took part, but no statements were recorded, so there is nothing to check.`
       : `${pre}${who} worked on this run, but made no statements, so nothing was tested.${problemsLine(s)}`
   }
-  return `${pre}${who} made ${plural(s.claims, "statement")}: ${verdictParts(s.byOutcome)}.${model.kind === "swarm" ? problemsLine(s) : ""}`
+  return `${pre}${who} made ${plural(s.claims, "statement")}: ${verdictParts(s.byVerdict)}.${model.kind === "swarm" ? problemsLine(s) : ""}`
 }
 
 function problemsLine(s: Stats): string {

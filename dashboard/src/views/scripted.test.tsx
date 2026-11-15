@@ -1,6 +1,6 @@
-// "Scripted" or "real" is a fact of the run on screen, never of the engine's state now. These tests show a real run
-// while paid calls are off (NO_PAID_CALLS on, the engine would run scripted models) and a scripted run while they
-// are on, in the Board view and in the Runs list.
+// Provenance is a fact of the result on screen, never of the engine's mode now. These tests show a live result
+// while the next run would be Demo, and a practice result while the next run would be Real, in Team review and in
+// the Saved research list. The badge says "Practice" or "Live research" from the record's own data in both.
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { forgetScripted, swarmScripted } from "@/lib/scripted"
@@ -25,26 +25,27 @@ const board = (paidCalls: boolean) => routes({
 const started = (mock: boolean) => ({ type: "run.started", runId: "run-1", brief: "kras", title: "KRAS", mock })
 
 describe("Board view", () => {
-  it("a real review shown while paid calls are off is labelled real, not scripted", async () => {
+  it("a live review shown while the next run would be Demo still says Live research", async () => {
     board(false)
     render(<BoardView />)
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit(started(false))
     const mode = within(await screen.findByTestId("run-mode"))
-    expect(mode.getByText("real model")).toBeInTheDocument()
+    expect(mode.getByText("Live research")).toBeInTheDocument()
     expect(mode.queryByText(/[Pp]ractice|scripted/)).toBeNull()
-    expect(screen.getByTestId("run-mode")).toHaveTextContent("This review ran with real models.")
+    expect(screen.getByTestId("run-mode").querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "live")
     // what a NEW review would use is said separately, and is about new reviews only
     expect(screen.getByTestId("next-mode")).toHaveTextContent("Demo mode: reviews are practice runs only.")
   })
-  it("a scripted review shown while paid calls are on is labelled scripted, not real", async () => {
+  it("a practice review shown while the next run would be Real still says Practice", async () => {
     board(true)
     render(<BoardView />)
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit(started(true))
     const mode = within(await screen.findByTestId("run-mode"))
-    expect(mode.getByText("Practice run: fixed text, not real research")).toBeInTheDocument()
-    expect(mode.queryByText("real model")).toBeNull()
+    expect(mode.getByText("Practice")).toBeInTheDocument()
+    expect(mode.queryByText(/Live research|real model/)).toBeNull()
+    expect(screen.getByTestId("run-mode").querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "practice")
     expect(screen.queryByTestId("next-mode")).toBeNull() // the engine would run real models now; that says nothing about this run
   })
   it("says nothing about the mode until the run itself has said", async () => {
@@ -80,13 +81,12 @@ describe("Runs list", () => {
 
   it.each([[false, "paid calls off"], [true, "paid calls on"]])("labels each run from the run itself (%s: %s)", async (paidCalls) => {
     list(paidCalls)
-    await waitFor(async () => expect(await card("s-mock")).toHaveTextContent("Practice run: fixed text, not real research · demo case"))
-    expect(await card("s-real")).toHaveTextContent("real model")
-    expect(await card("s-real")).not.toHaveTextContent("Practice run")
-    await waitFor(async () => expect(await card("b-real")).toHaveTextContent("real model"))
-    expect(await card("b-real")).not.toHaveTextContent("Practice run")
-    await waitFor(async () => expect(await card("b-mock")).toHaveTextContent("Practice run: fixed text, not real research"))
-    expect(await card("b-mock")).not.toHaveTextContent("real model")
+    const badge = async (id: string) => (await card(id)).querySelector("[data-provenance]")
+    await waitFor(async () => expect(await badge("s-mock")).toHaveTextContent(/^Practice$/))
+    expect(await card("s-mock")).toHaveTextContent("Demo task")
+    expect(await badge("s-real")).toHaveTextContent(/^Live research$/)
+    await waitFor(async () => expect(await badge("b-real")).toHaveTextContent(/^Live research$/))
+    await waitFor(async () => expect(await badge("b-mock")).toHaveTextContent(/^Practice$/))
   })
   it("does not move the keyboard focus to the keyword box", async () => {
     list(false)

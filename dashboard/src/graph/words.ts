@@ -1,7 +1,10 @@
 // Every word the Graph view shows for a kind of node or line, in one place. The words are the dashboard's shared ones
-// (src/lib/words.ts: practice run, statement, team member, test, problem, output, step, "Holds up" / "Proven wrong" /
-// "Not enough evidence"). The expert term goes in a tooltip or a small second line.
-import type { LinkKind, NodeKind, RunKind } from "./types"
+// (src/lib/words.ts: practice, statement, team member, test, problem, output, step, and the four marks Supported,
+// Contradicted, Insufficient evidence, Not checked). The expert term goes in a tooltip or a small second line.
+import type { LinkKind, NodeKind, Outcome, RunKind } from "./types"
+
+/** The graph draws statements in three groups (shape and colour). The third holds two marks, and says so. */
+export const GROUP_WORD: Record<Outcome, string> = { holds: "Supported", fails: "Contradicted", unknown: "Insufficient evidence or not checked" }
 
 export const kindLabel = (k: NodeKind, run: RunKind): string => ({
   run: "Run", agent: run === "swarm" ? "Role" : "Team member", checker: "Checker", phase: run === "swarm" ? "Step" : "Round",
@@ -36,6 +39,6 @@ export const LINK_VERB: Record<LinkKind, string> = {
 
 /** The dashboard's own legend sentences, with the checker's technical words after them. */
 export const LEGEND_SENTENCES = {
-  board: "Holds up: a source supports the statement. Proven wrong: a source goes against it. Not enough evidence: no source was found, or nothing checked it. A separate checker decides each one; the team does not grade itself. (Checker's words: verified, contradicted, unsupported, unchecked.)",
-  swarm: "Holds up: the statement passed its tests. Proven wrong: a test went against it. Not enough evidence: not enough evidence yet, or a planned test has no result. Code decides each one from the test numbers. (The record's words: supported, refuted, insufficient, untested.)",
+  board: "Supported: a separate check found a source that supports the statement. Contradicted: a source goes against it. Insufficient evidence: it was checked and no supporting source was found. Not checked: nothing checked it. A separate checker decides each one; the team does not grade itself. (Checker's words: verified, contradicted, unsupported, unchecked.)",
+  swarm: "Supported: the statement passed its tests. Contradicted: a test went against it. Insufficient evidence: its tests did not settle it, or a planned test has no result. Not checked: no test of it has a result. Code decides each one from the test numbers. (The record's words: supported, refuted, insufficient, untested.)",
 }

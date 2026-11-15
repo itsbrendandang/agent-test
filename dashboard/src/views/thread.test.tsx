@@ -86,12 +86,12 @@ describe("the board's discussion", () => {
     expect(within(critic).getByText(/^(Proven wrong|Contradicted)$/)).toBeInTheDocument()
     expect(within(critic).getByText(/^(Not enough evidence|Insufficient evidence)$/)).toBeInTheDocument()
     expect(screen.getByRole("article", { name: "Scout" })).not.toHaveAttribute("data-wrong")
-    expect(screen.getByText(/One statement was proven wrong\./)).toBeInTheDocument()
+    expect(screen.getByText(/One statement was contradicted\./)).toBeInTheDocument()
   })
   it("says in one sentence what happened", async () => {
     await open()
     await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
-    expect(screen.getByText(/The team has decided\./)).toHaveTextContent("2 team members made 3 statements: 1 held up, 1 was proven wrong, 1 had too little evidence.")
+    expect(screen.getByText(/The team has decided\./)).toHaveTextContent("2 team members made 3 statements: 1 supported, 1 contradicted, 1 insufficient evidence.")
     expect(screen.getByRole("region", { name: "What happened" })).toHaveTextContent("took 9 seconds · cost nothing (practice run)")
     expect(screen.getByRole("heading", { name: "KRAS" })).toBeInTheDocument() // the title is the question, not the run id
   })

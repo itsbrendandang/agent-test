@@ -22,7 +22,7 @@ import type { BoardEvent, RosterMember } from "@/board/api"
 import type { LedgerClaim, LedgerEvent, RunDetail } from "@/swarm/api"
 import { ROLES, roleOf } from "@/swarm/roles"
 import { outcomeOf } from "@/lib/verdict"
-import { PRACTICE, REAL } from "@/lib/words"
+import { markCounts, markOf, PRACTICE, REAL, type Mark as Found } from "@/lib/words"
 import type { Fact, GraphLink, GraphModel, GraphNode, LinkKind, Mark, NodeKind, Outcome, Stats, Step, Verdict } from "./types"
 import { LINK_VERB } from "./words"
 
@@ -88,7 +88,7 @@ class Builder {
   }
 }
 
-const SAYS: Record<Outcome, string> = { holds: "it held up", fails: "it was proven wrong", unknown: "it had too little evidence" }
+const SAYS: Record<Found, string> = { supported: "it was supported", contradicted: "it was contradicted", insufficient: "the evidence was insufficient", unchecked: "it was not checked" }
 const bump = (n: Draft, key: string, by = 1) => { n.count[key] = (n.count[key] ?? 0) + by }
 
 /** Counts of a set of nodes, for the headline. Swarm verdicts "insufficient" and "untested" are one group, as elsewhere. */
@@ -217,7 +217,7 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
         if (source && e.kind !== "brief") pendingSources.push({ claim: id, source, order })
         bump(a, "claims:" + id); bump(chk, "ruled:" + id)
         involved = [a.id, c.id, chk.id]
-        label = `Round ${e.round}: ${ck.label.charAt(0).toLowerCase()}${ck.label.slice(1)} on ${a.label}'s statement ${quote(e.claim, 90)}: ${SAYS[boardVerdict(e.verdict).cls]}.`
+        label = `Round ${e.round}: ${ck.label.charAt(0).toLowerCase()}${ck.label.slice(1)} on ${a.label}'s statement ${quote(e.claim, 90)}: ${SAYS[markOf(e.verdict)]}.`
         break
       }
       case "constraint": constraints.push(`${e.reason}: ${e.detail}`); label = `The run wraps up early (${e.reason}): ${clip(oneLine(e.detail), 140)}`; involved = ["run"]; break
@@ -262,10 +262,11 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
     }
     if (n.kind === "agent" && n.id !== "agent:lead") {
       const mine = Object.keys(n.count).filter((k) => k.startsWith("claims:")).map((k) => b.nodes.get(k.slice(7))!)
-      const byO = (o: Outcome) => mine.filter((c) => c.verdict?.cls === o).length
+      const by: Partial<Record<Found, number>> = {}
+      for (const c of mine) { const m = markOf(c.verdict?.raw); by[m] = (by[m] ?? 0) + 1 }
       n.facts.push(
         { label: "Replies", value: String(n.count.replies ?? 0) },
-        { label: "Statements", value: `${mine.length}: ${byO("holds")} held up, ${byO("fails")} proven wrong, ${byO("unknown")} had too little evidence` },
+        { label: "Statements", value: mine.length ? `${mine.length}: ${markCounts(by)}` : "0" },
       )
     }
     if (n.kind === "checker") {

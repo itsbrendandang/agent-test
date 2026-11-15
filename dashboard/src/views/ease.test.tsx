@@ -113,8 +113,10 @@ describe("help and next steps", () => {
     window.removeEventListener("app.help", asked)
     render(<HowItWorks open onClose={() => {}} />)
     const steps = within(screen.getByRole("list", { name: "The four steps" })).getAllByRole("listitem")
-    expect(steps.map((s) => s.querySelector("b")!.textContent)).toEqual(["You ask", "A team discusses", "Every statement is checked", "You get an answer"])
+    expect(steps.map((s) => s.querySelector("b")!.textContent)).toEqual(["You ask", "It searches and writes", "Statements are checked", "You read the answer"])
     expect(screen.getByRole("dialog")).toHaveTextContent("Nothing that costs money ever starts without asking you first.")
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/every statement/i) // it says how checks are shown, not that all are checked
+    expect(steps[3]).toHaveTextContent("✓ Supported, ✕ Contradicted, ? Insufficient evidence, ○ Not checked")
   })
   it("a finished review offers what to do next, and reopens on the review shown last time", async () => {
     localStorage.setItem("last.board", "run-2")
@@ -128,7 +130,7 @@ describe("help and next steps", () => {
     await emit({ type: "run.finished", usd: 0, minutes: 0.1 })
     const next = within(screen.getByRole("navigation", { name: "What you can do next" }))
     expect(next.getByRole("link", { name: "Ask a follow-up" })).toHaveAttribute("href", "#Home")
-    expect(next.getByRole("link", { name: "Watch it as a graph" })).toHaveAttribute("href", "#Graph")
+    expect(next.getByRole("link", { name: "See this run as a graph" })).toHaveAttribute("href", "#Graph")
     await userEvent.setup().click(next.getByRole("button", { name: "See how each statement was checked" }))
     expect(screen.getByRole("heading", { name: "Every check, counted" })).toBeInTheDocument()
     expect(next.getByRole("button", { name: "Copy a link to this review" })).toBeInTheDocument()

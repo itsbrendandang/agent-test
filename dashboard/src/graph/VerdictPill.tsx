@@ -6,7 +6,7 @@ import type { Verdict as V } from "./types"
 const CLAIM_WORDS = ["verified", "contradicted", "unsupported", "unchecked", "supported", "refuted", "insufficient", "untested"]
 
 /**
- * The dashboard's own verdict pill: the plain word with its glyph ("✓ Holds up", "✕ Proven wrong", "? Not enough evidence")
+ * The dashboard's own verdict pill: one of the four marks with its glyph ("✓ Supported", "✕ Contradicted", "? Insufficient evidence", "○ Not checked")
  * and the checker's own word as a small second line. A test has two results of its own, shown in the same style.
  */
 export function VerdictPill({ verdict, technical = true }: { verdict: V; technical?: boolean }) {

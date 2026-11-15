@@ -1,12 +1,14 @@
-// "How this works": the same four plain steps on every view, with a picture of the flow. Opened from the status line.
+// "How this works": four plain steps with a picture of the flow. Opened from Settings (and by openHelp()).
+// It never says that every statement is checked: the app shows how many were, and what each check found.
 import { useEffect, useRef } from "react"
-import { PRACTICE } from "@/lib/words"
+import { PROVENANCE_ABOUT } from "@/lib/provenance"
+import { MARK_GLYPH, MARK_WORD, MARKS } from "@/lib/words"
 
 const STEPS = [
-  ["1", "You ask", "Type a research question on Search, or press an example."],
-  ["2", "A team discusses", "Several AI agents work on it, each with one job. One of them only tries to prove the others wrong."],
-  ["3", "Every statement is checked", "A separate checker tests each thing they say against a source. The team does not grade itself."],
-  ["4", "You get an answer", "You see what the team recommends, and for every statement: ✓ holds up, ✕ proven wrong, or ? not enough evidence."],
+  ["1", "You ask", "Type a research question on Research, or press an example."],
+  ["2", "It searches and writes", "The app searches the literature and the web, picks sources and writes an answer. For a deeper question a team of AI agents discusses it, each with one job."],
+  ["3", "Statements are checked", "A separate checker tests cited statements against their sources. The app shows how many were checked; the writers do not grade themselves."],
+  ["4", "You read the answer", `With its sources, and a mark on each checked statement: ${MARKS.map((m) => `${MARK_GLYPH[m]} ${MARK_WORD[m]}`).join(", ")}.`],
 ] as const
 
 export function HowItWorks({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -20,7 +22,7 @@ export function HowItWorks({ open, onClose }: { open: boolean; onClose: () => vo
           <li key={n}><span className="how-n" aria-hidden="true">{n}</span><b>{title}</b><span>{text}</span></li>
         ))}
       </ol>
-      <p className="muted small">A label on every result says whether it is real. "{PRACTICE}" means no AI model was used: the text is a fixed example, so you can see how the app works for free. Nothing that costs money ever starts without asking you first.</p>
+      <p className="muted small">A badge on every result says how it was made. "Practice": {PROVENANCE_ABOUT.practice.toLowerCase()} "Live research": {PROVENANCE_ABOUT.live.toLowerCase()} Nothing that costs money ever starts without asking you first.</p>
       <form method="dialog"><button type="submit" className="btn btn-primary" autoFocus>Got it</button></form>
     </dialog>
   )

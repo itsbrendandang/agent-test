@@ -136,7 +136,7 @@ const BOARD_RANK = ["run.started", "run.resumed", "run.roster", "lead.framed", "
 const rank = (type: unknown) => { const i = BOARD_RANK.indexOf(String(type)); return i < 0 ? BOARD_RANK.length : i }
 
 /** Events with the same key replace each other (a replay after a crash emits the same keys); then oldest first. */
-function boardOrder(events: readonly LabEvent[]): LabEvent[] {
+export function boardOrder(events: readonly LabEvent[]): LabEvent[] {
   const last = new Map<string, number>()
   events.forEach((e, i) => { const k = str(e?.key); if (k !== undefined) last.set(k, i) })
   return events
@@ -329,7 +329,7 @@ const isFetch = (kind: string) => kind === "search" || kind === "fetch" || kind 
 interface StepSeen { id: string; kind: string; label: string; provider?: string; who: CharacterId; at: number; running: boolean }
 
 /** `seq` is the order. A seq that arrives twice counts once (the later copy wins); events without one keep their place at the end. */
-function answerOrder(events: readonly LabEvent[]): LabEvent[] {
+export function answerOrder(events: readonly LabEvent[]): LabEvent[] {
   const last = new Map<number, number>()
   events.forEach((e, i) => { const s = num(e?.seq); if (s !== undefined) last.set(s, i) })
   return events
@@ -547,6 +547,7 @@ export function swarmLab(run: SwarmRun | undefined, notes: SwarmNotes | null | u
   let current: { key: string; who: CharacterId; phase: string } | undefined
   let finished: { who: CharacterId; made: string } | undefined
 
+  if (phase === undefined) return m // the record has not been read yet: nothing is claimed
   if (phase === "queued" || phase === "launching") { m.status = "waiting"; m.note = clip(run.detail ?? (phase === "queued" ? "Waiting in the queue." : "Starting."), 200) }
   else m.status = "running"
   if (single && m.status === "running") b.set("experimenter", "working", "Working through the task alone.", run.startedAt)

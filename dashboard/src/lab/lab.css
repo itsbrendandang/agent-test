@@ -142,3 +142,10 @@
 .lab-note { font-size: 13px; color: var(--lab-muted); overflow-wrap: anywhere; }
 .lab-note[data-tone="bad"] { color: #9c1414; }
 @media (max-width: 520px) { .lab-toolbar { padding: 8px 10px; } .lab-legend { padding: 6px 10px 8px; } }
+.lab-page { gap: 10px; }
+.lab-about { flex: 1 1 320px; margin: 0; }
+.lab-speeds { display: inline-flex; gap: 4px; }
+.lab-replay-how { flex-basis: 100%; }
+.lab-picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.lab-picker select { min-width: 0; max-width: min(100%, 520px); }
+.lab-run h2.lab-run-title, .page .lab-run h2.lab-run-title { font-size: 16px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--lab-ink, var(--text)); margin: 0; }

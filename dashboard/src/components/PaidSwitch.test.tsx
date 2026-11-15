@@ -195,8 +195,8 @@ describe("past runs keep their own label", () => {
   it.each(["off", "on"] as const)("a practice run and a real run read the same with the switch %s", (paid) => {
     routes({})
     render(<><ModeSwitch paid={paid} /><span data-testid="practice"><ModeLabel scripted /></span><span data-testid="real"><ModeLabel scripted={false} /></span></>)
-    expect(screen.getByTestId("practice")).toHaveTextContent("Practice run: fixed text, not real research")
-    expect(screen.getByTestId("real")).toHaveTextContent("real model")
+    expect(screen.getByTestId("practice")).toHaveTextContent(/^Practice$/)
+    expect(screen.getByTestId("real")).toHaveTextContent(/^Live research$/)
   })
 })
 

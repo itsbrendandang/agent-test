@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Checked } from "@/home/Checked"
 import { forgetScripted } from "@/lib/scripted"
-import { PRACTICE } from "@/lib/words"
 import { PAID_OFF, routes } from "@/test/engine"
 import { BoardView } from "./BoardView"
 import { ExperimentsView } from "./ExperimentsView"
@@ -32,6 +31,8 @@ const LEDGER = {
     { kind: "phase.started", phase: "critique-1" }, { kind: "test.recorded", claim: "C2", name: "header only", p: 0.01, contradicts: true, verdict: "refuted" },
   ],
 }
+/** The one badge every view shows on a practice result (components/Provenance.tsx). */
+const practice = (el: HTMLElement) => expect(el.querySelector('[data-provenance="practice"]')).toHaveTextContent(/^Practice$/)
 const SCORES = [{ task: "demo", model: "mock", timeLimit: 1800, maxTokens: 1000, diff: 0, swarm: { id: "s-mock", score: 1, extras: [] }, single: { id: "x-mock", score: 1, extras: [] } }]
 
 describe("a practice run says so, in the same words, wherever it is shown", () => {
@@ -41,8 +42,8 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     const review = await screen.findByRole("button", { name: /Latest review/ })
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit({ type: "run.started", runId: "r1", brief: "kras", title: "KRAS", mock: true })
-    expect(review).toHaveTextContent(PRACTICE)
-    expect(screen.getByRole("button", { name: /One agent or a team/ })).toHaveTextContent(PRACTICE)
+    practice(review)
+    practice(screen.getByRole("button", { name: /One agent or a team/ }))
   })
   it("Runs: each card", async () => {
     routes({
@@ -53,7 +54,7 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (/\/api\/runs\/b-mock\/events$/.test(String(url))
       ? Promise.resolve(new Response(sse({ type: "run.started", runId: "b-mock", brief: "kras", title: "KRAS", mock: true }), { status: 200 })) : plain(url, init))))
     render(<ExperimentsView onOpen={() => {}} />)
-    for (const id of ["s-mock", "b-mock"]) await waitFor(async () => expect((await screen.findByText(id)).closest("button")).toHaveTextContent(PRACTICE))
+    for (const id of ["s-mock", "b-mock"]) await waitFor(async () => practice((await screen.findByText(id)).closest("button")!))
   })
   it("Board: the review on screen", async () => {
     routes({
@@ -63,7 +64,7 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     render(<BoardView />)
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await emit({ type: "run.started", runId: "r1", brief: "kras", title: "KRAS", mock: true })
-    expect(within(screen.getByTestId("run-mode")).getByText(PRACTICE)).toBeInTheDocument()
+    practice(screen.getByTestId("run-mode"))
   })
   const compare = () => {
     routes({ "GET /api/glhf/status": { status: 200, body: PAID_OFF }, "GET /api/glhf/runs": { status: 200, body: [RUN] }, "GET /api/glhf/scoreboard": { status: 200, body: SCORES },
@@ -73,7 +74,8 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
   it("Compare: the run on screen, and its score is not the headline", async () => {
     compare()
     const story = within(await screen.findByRole("region", { name: "Run" }))
-    await waitFor(() => expect(story.getByText(new RegExp(PRACTICE))).toBeInTheDocument())
+    await waitFor(() => practice(story.getByTestId("run-mode")))
+    expect(story.getByTestId("run-mode")).toHaveTextContent("Demo task") // the made-up dataset is said too
     expect(story.getByRole("status")).toHaveTextContent("The team finished this practice run. Its score, 1.000 out of 1, is not a research result.")
     expect(story.getByText(/took 17 seconds · 30-minute limit · cost nothing \(practice run\)/)).toBeInTheDocument()
   })

@@ -2,7 +2,7 @@
 // for keyboard and screen readers. Wording follows the dashboard's shared glossary (see words.ts).
 import { lazy, Suspense, useCallback, useMemo, useState } from "react"
 import { Loading } from "@/components/Crew"
-import { PRACTICE, VERDICT_WORD } from "@/lib/words"
+import { PRACTICE } from "@/lib/words"
 import { EngineOffline, ModeLabel, PageHead } from "@/components/Shared"
 import { setOpen, takeOpen } from "@/lib/open"
 import { useBoardRun, useRunList, useSwarmRun, useVisible, type RunRef } from "./data"
@@ -15,11 +15,11 @@ import { Scrubber } from "./Scrubber"
 import { headline, narration, replaySeconds } from "./story"
 import { GLYPH, LINK_KINDS, MAX_NODES, NODE_KINDS, QUIET_LINKS, VERDICT_CLASSES, type GraphModel, type LinkKind, type NodeKind, type Outcome } from "./types"
 import { applyView, byAttention, capGraph, countVerdicts, layoutView, neighbourMap, reveal, searchNodes } from "./view"
-import { KIND_WHAT, kindLabel, LINK_VERB } from "./words"
+import { GROUP_WORD, KIND_WHAT, kindLabel, LINK_VERB } from "./words"
 import "./graph.css"
 
 const GraphCanvas = lazy(() => import("./GraphCanvas").then((m) => ({ default: m.GraphCanvas })))
-const ABOUT = "Who said what in one run, and what held up when it was checked. Statements that were proven wrong are the easiest to find."
+const ABOUT = "Who said what in one run, and what each check found. Contradicted statements are the easiest to find."
 
 const toggle = <T,>(set: ReadonlySet<T>, v: T): Set<T> => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n }
 const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((x) => b.has(x))
@@ -158,11 +158,11 @@ export function GraphScreen() {
             </select>
           </label>
           {full && <span data-testid="scripted-label"><ModeLabel scripted={full.scripted} demo={full.demo} /></span>}
-          {full && full.scripted === undefined && !full.demo && <span className="pill" data-kind="warning" data-testid="scripted-label">mode not recorded</span>}
+          {full && full.scripted === undefined && !full.demo && <span className="pill" data-kind="warning" data-testid="scripted-label">how it was made: not recorded</span>}
           {status && status !== "done" && <span className="pill" data-kind={status === "failed" ? "danger" : "info"}>{status === "running" ? "running: the picture grows as events arrive" : status}</span>}
         </div>
         {full && <p className="graph-headline" role="status" data-testid="headline">{said}</p>}
-        {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), those proven wrong first. The headline above still counts the whole run.</p>}
+        {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), contradicted statements first. The headline above still counts the whole run.</p>}
         {full && full.maxOrder > 0 && (
           <div className="graph-row graph-play">
             <button type="button" className="btn btn-primary graph-playbtn" onClick={play} aria-pressed={playing}>
@@ -187,7 +187,7 @@ export function GraphScreen() {
             {query && <span className="muted small" role="status">{matches.length === 0 ? "No match" : `${matches.length} match${matches.length === 1 ? "" : "es"}; Enter for the next`}</span>}
           </form>
           <button type="button" className="btn" onClick={jumpRefuted} disabled={refuted.length === 0}>
-            <span aria-hidden="true">{GLYPH.fails}</span> Next one proven wrong ({refuted.length})
+            <span aria-hidden="true">{GLYPH.fails}</span> Next contradicted one ({refuted.length})
           </button>
           <div className="graph-seg" role="group" aria-label="Show as">
             <button type="button" className="btn" aria-pressed={!useList} disabled={unavailable !== undefined} onClick={() => setMode("graph")}>3D graph</button>
@@ -197,10 +197,10 @@ export function GraphScreen() {
         <details className="graph-more">
           <summary>More filters and options{summaryText ? <span className="muted"> · {summaryText}</span> : null}</summary>
           <div className="graph-row">
-            <label className="graph-check"><input type="checkbox" checked={emphasis} onChange={(e) => setEmphasis(e.target.checked)} /><span>Proven wrong first</span></label>
+            <label className="graph-check"><input type="checkbox" checked={emphasis} onChange={(e) => setEmphasis(e.target.checked)} /><span>Contradicted first</span></label>
             <fieldset className="graph-filter"><legend>Verdict</legend>
               {VERDICT_CLASSES.map((v) => (
-                <label key={v} className="graph-check"><input type="checkbox" checked={!hiddenVerdicts.has(v)} onChange={() => setHiddenVerdicts((s) => toggle(s, v))} /><span><span aria-hidden="true">{GLYPH[v]}</span> {VERDICT_WORD[v]}</span></label>
+                <label key={v} className="graph-check"><input type="checkbox" checked={!hiddenVerdicts.has(v)} onChange={() => setHiddenVerdicts((s) => toggle(s, v))} /><span><span aria-hidden="true">{GLYPH[v]}</span> {GROUP_WORD[v]}</span></label>
               ))}
             </fieldset>
           </div>
@@ -235,7 +235,7 @@ export function GraphScreen() {
                   <Suspense fallback={<Loading className="loading-block">Loading the 3D view…</Loading>}>
                     <GraphCanvas nodes={layout.nodes} links={layout.links} revealed={revealed} runKind={full.kind} style={style} fitKey={`${key}|${[...hiddenKinds]}|${[...hiddenVerdicts]}|${[...hiddenLinks]}`} focus={focus} paused={!visibleTab}
                       onSelect={select} onStep={stepBy} onUnavailable={(r) => setUnavailable(r)}
-                      summary={`3D graph of ${current.kind === "swarm" ? "swarm" : "board"} run ${current.id}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} statements proven wrong. The list view has the same content.`} />
+                      summary={`3D graph of ${current.kind === "swarm" ? "swarm" : "board"} run ${current.id}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
                   </Suspense>
                 )}
                 {useList && <GraphList runKind={full.kind} nodes={shown.nodes} links={shown.connections} selected={selectedNode?.id ?? null} onSelect={select} order={order} />}

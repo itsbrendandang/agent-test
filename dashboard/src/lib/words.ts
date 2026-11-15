@@ -1,6 +1,5 @@
 // The app's words, in one place, so every view says the same thing in plain language. The expert term stays
 // available as a tooltip or a small second line; it is never the only thing a newcomer reads.
-import type { Outcome } from "./verdict"
 
 /** A run made with fixed, scripted text instead of a model. The badge itself is the Provenance component ("Practice"). */
 export const PRACTICE = "Practice: fixed example answers, not real research"
@@ -47,12 +46,6 @@ export const runLimit = (usd: number): string => `Run limit: ${dollars(usd)}`
 export const estimated = (usd: number): string => `Estimated: about ${dollars(usd)}`
 /** What the engine recorded as spent. "Spent: $0.31". */
 export const spent = (usd: number): string => `Spent: ${dollars(usd)}`
-
-/** @deprecated The three-way words of before. Use Mark, markOf, MARK_WORD and markCount. Kept until every view has moved. */
-export const VERDICT_WORD: Record<Outcome, string> = { holds: "Holds up", fails: "Proven wrong", unknown: "Not enough evidence" }
-/** @deprecated Use markCount. */
-export const verdictCount = (outcome: Outcome, n: number): string =>
-  outcome === "holds" ? `${n} held up` : outcome === "fails" ? `${n} ${n === 1 ? "was" : "were"} proven wrong` : `${n} had too little evidence`
 
 /** The first sentence of a reply, for the "In short" line. Cut by code, never rewritten: it is the member's own words. */
 export function inShort(text: string, max = 240): string {

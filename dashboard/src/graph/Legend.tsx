@@ -1,7 +1,6 @@
 import { KIND_SHAPE, palette, VERDICT_SHAPE, type Shape } from "./style"
 import { GLYPH, NODE_KINDS, VERDICT_CLASSES, type NodeKind, type RunKind } from "./types"
-import { VERDICT_WORD } from "@/lib/words"
-import { KIND_TECH, KIND_WHAT, kindLabel, LEGEND_SENTENCES } from "./words"
+import { GROUP_WORD, KIND_TECH, KIND_WHAT, kindLabel, LEGEND_SENTENCES } from "./words"
 
 /** A small drawing of a node shape, in the node's colour. Decorative: the text next to it carries the meaning. */
 export function ShapeIcon({ shape, colour, size = 16 }: { shape: Shape; colour: string; size?: number }) {
@@ -32,7 +31,7 @@ export function Key({ kinds, runKind, open, onToggle }: { kinds: ReadonlySet<Nod
       {shown.map((k) => (
         <span key={k} title={`${KIND_WHAT[k]} (technical term: ${KIND_TECH[k]})`}><ShapeIcon shape={KIND_SHAPE[k]} colour={k === "claim" ? VERDICT_COLOUR.holds : KIND_COLOUR[k]} size={14} />{kindLabel(k, runKind)}</span>
       ))}
-      <span title="A claim's shape and glyph show whether it held up"><span aria-hidden="true">{GLYPH.holds} {GLYPH.fails} {GLYPH.unknown}</span> holds up · proven wrong · not enough evidence</span>
+      <span title="A statement's shape and glyph show what its check found"><span aria-hidden="true">{GLYPH.holds} {GLYPH.fails} {GLYPH.unknown}</span> supported · contradicted · insufficient evidence or not checked</span>
       <button type="button" className="graph-linkbtn" aria-expanded={open} aria-controls="graph-full-key" onClick={onToggle}>{open ? "Hide the full key" : "Full key"}</button>
     </div>
   )
@@ -46,11 +45,11 @@ export function FullKey({ kinds, runKind }: { kinds: ReadonlySet<NodeKind>; runK
         <h3>Statements and tests</h3>
         <ul>
           {VERDICT_CLASSES.map((v) => (
-            <li key={v}><ShapeIcon shape={VERDICT_SHAPE[v]} colour={VERDICT_COLOUR[v]} /><b aria-hidden="true">{GLYPH[v]}</b> {VERDICT_WORD[v]}</li>
+            <li key={v}><ShapeIcon shape={VERDICT_SHAPE[v]} colour={VERDICT_COLOUR[v]} /><b aria-hidden="true">{GLYPH[v]}</b> {GROUP_WORD[v]}</li>
           ))}
         </ul>
         <p className="muted small">{LEGEND_SENTENCES[runKind]}</p>
-        <p className="muted small">Shape and glyph carry the verdict, not just colour. Statements proven wrong are drawn larger, with a halo, and always labelled.</p>
+        <p className="muted small">Shape and glyph carry the verdict, not just colour. Contradicted statements are drawn larger, with a halo, and always labelled.</p>
       </div>
       <div>
         <h3>Nodes</h3>

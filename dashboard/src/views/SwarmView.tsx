@@ -416,8 +416,8 @@ export function SwarmView() {
                 {ledger.combination
                   ? <>Tests are planned (registered) before any result exists. A statement's score is the average over its planned tests, and a planned test
                     with no result counts as 0. With {ledger.claims_in_family ?? claims.length} claim{(ledger.claims_in_family ?? claims.length) === 1 ? "" : "s"} in
-                    this run, a statement holds up at {num(ledger.support_threshold ?? 1 / ledger.alpha)} or more, and only when every planned test has a result.</>
-                  : <>Scores multiply across tests, and a statement holds up at {num(1 / ledger.alpha)} or more.</>}
+                    this run, a statement is supported at {num(ledger.support_threshold ?? 1 / ledger.alpha)} or more, and only when every planned test has a result.</>
+                  : <>Scores multiply across tests, and a statement is supported at {num(1 / ledger.alpha)} or more.</>}
                 {" "}No model decides the result.
               </p>
             )}
@@ -428,7 +428,7 @@ export function SwarmView() {
                 <p>{c.text}</p>
                 <p className="swarm-note">If the statement were false: {c.null_hypothesis}</p>
                 <p className="swarm-note">
-                  Evidence score from its tests (e-value): {num(c.e_value)}. Needed to hold up: {num(c.threshold ?? 1 / (ledger?.alpha ?? 0.1))}
+                  Evidence score from its tests (e-value): {num(c.e_value)}. Needed to be supported: {num(c.threshold ?? 1 / (ledger?.alpha ?? 0.1))}
                   {c.replication_failed && " · independent replication failed"} · result files: {c.artifact_ids.join(", ") || "none"}
                 </p>
                 <ClaimTests claim={c} />

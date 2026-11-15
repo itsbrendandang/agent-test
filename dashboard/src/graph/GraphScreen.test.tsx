@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PRACTICE } from "@/lib/words"
+/** The shared badge (components/Provenance.tsx): the word alone. */
+const BADGE = /^Practice$/
 import { routes } from "@/test/engine"
 import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
@@ -77,14 +79,14 @@ describe("Graph view", () => {
     routes(lists)
     const { unmount } = render(<WorldsView />)
     await streamBoard()
-    expect(await screen.findByTestId("scripted-label")).toHaveTextContent(PRACTICE)
+    expect(await screen.findByTestId("scripted-label")).toHaveTextContent(BADGE)
     expect(screen.getByTestId("scripted-banner")).toHaveTextContent(PRACTICE)
     unmount()
     FakeEventSource.all = []
     routes(lists)
     render(<WorldsView />)
     await streamBoard(BOARD_EVENTS.map((e) => (e.type === "run.started" ? { ...e, mock: false } : e)))
-    expect(await screen.findByText("real model")).toBeInTheDocument()
+    expect(await screen.findByText("Live research")).toBeInTheDocument()
     expect(screen.queryByTestId("scripted-banner")).toBeNull()
   })
 
@@ -92,7 +94,7 @@ describe("Graph view", () => {
     routes(lists)
     render(<WorldsView />)
     await streamBoard(BOARD_EVENTS.filter((e) => e.type !== "run.started"))
-    expect(await screen.findByText("mode not recorded")).toBeInTheDocument()
+    expect(await screen.findByText("how it was made: not recorded")).toBeInTheDocument()
     expect(screen.queryByTestId("scripted-banner")).toBeNull()
   })
 
@@ -100,8 +102,8 @@ describe("Graph view", () => {
     sessionStorage.setItem("open.swarm", "s1")
     routes({ ...lists, ...swarmRoutes })
     render(<WorldsView />)
-    expect(await screen.findByTestId("scripted-label")).toHaveTextContent(PRACTICE)
-    expect(screen.getByText(/demo case/)).toBeInTheDocument()
+    expect((await screen.findByTestId("scripted-label")).querySelector("[data-provenance]")).toHaveTextContent(BADGE)
+    expect(screen.getByText("Demo task")).toBeInTheDocument()
     expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("swarm:s1")
   })
 
@@ -140,8 +142,8 @@ describe("Graph view", () => {
     listMode()
     const table = await screen.findByRole("table", { name: /nodes of the graph/i })
     const rows = within(table).getAllByRole("row").slice(1)
-    expect(rows[0]).toHaveTextContent("Proven wrong")
-    expect(rows[0].querySelector(".pill.v-contradicted")).not.toBeNull() // the dashboard's own pill: its glyph comes from CSS
+    expect(rows[0]).toHaveTextContent("Contradicted")
+    expect(rows[0].querySelector('.pill.mark[data-mark="contradicted"] .mark-glyph')).toHaveTextContent("✕") // the shared chip: glyph and word
     expect(rows[0]).toHaveTextContent(EVIL.slice(0, 20)) // the markup is shown as text
     expect(container.querySelector("img")).toBeNull()
     expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined()
@@ -157,7 +159,7 @@ describe("Graph view", () => {
     fireEvent.click(within(await firstRow()).getAllByRole("button")[0])
     const panel = await screen.findByTestId("node-panel")
     expect(panel).toHaveTextContent("Piperazine quinazolines show no hERG")
-    expect(panel).toHaveTextContent("Proven wrong")
+    expect(panel).toHaveTextContent("Contradicted")
     expect(panel).toHaveTextContent("contradicted") // the checker's own word, as a second line
     expect(panel).toHaveTextContent("Said by")
     expect(panel).toHaveTextContent("Scout (Data Inspector)")
@@ -231,7 +233,7 @@ describe("Graph view", () => {
     routes(lists)
     render(<WorldsView />)
     await streamBoard()
-    expect(await screen.findByTestId("headline")).toHaveTextContent("Over 2 rounds, 4 team members made 5 statements: 2 held up, 1 was proven wrong, 2 had too little evidence.")
+    expect(await screen.findByTestId("headline")).toHaveTextContent("Over 2 rounds, 4 team members made 5 statements: 2 supported, 1 contradicted, 1 insufficient evidence, 1 not checked.")
   })
 
   it("says plainly when a run has no claims", async () => {
@@ -245,8 +247,8 @@ describe("Graph view", () => {
     routes({ ...lists, "GET /api/runs": { status: 200, body: [{ ...boardRun, claims: 4 }] } })
     render(<WorldsView />)
     await streamBoard(PRACTICE_EVENTS)
-    expect(await screen.findByTestId("headline")).toHaveTextContent("Over 2 rounds, 2 team members made 2 statements: 2 had too little evidence.")
-    expect(screen.getByTestId("scripted-label")).toHaveTextContent(PRACTICE)
+    expect(await screen.findByTestId("headline")).toHaveTextContent("Over 2 rounds, 2 team members made 2 statements: 2 insufficient evidence.")
+    expect(screen.getByTestId("scripted-label")).toHaveTextContent(BADGE)
   })
 
   it("filters by kind and by verdict, in the graph and the list", async () => {
@@ -260,10 +262,10 @@ describe("Graph view", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Statement" }))
     await waitFor(() => expect(kindCount("Statement")).toBe(0))
     fireEvent.click(screen.getByRole("checkbox", { name: "Statement" }))
-    fireEvent.click(screen.getByRole("checkbox", { name: /Holds up/ }))
-    fireEvent.click(screen.getByRole("checkbox", { name: /Not enough evidence/ }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /Supported/ }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /Insufficient evidence or not checked/ }))
     await waitFor(() => expect(kindCount("Statement")).toBe(1))
-    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("Proven wrong")
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("Contradicted")
   })
 
   it("searches and flies to the match, contradicted first", async () => {
@@ -284,7 +286,7 @@ describe("Graph view", () => {
     render(<WorldsView />)
     await streamBoard()
     await waitFor(() => expect(fake.onSelect).toBeDefined())
-    const jump = await screen.findByRole("button", { name: /Next one proven wrong \(1\)/ })
+    const jump = await screen.findByRole("button", { name: /Next contradicted one \(1\)/ })
     fireEvent.click(jump)
     await waitFor(() => expect(fake.flown.at(-1)).toBe(claimId()))
   })
@@ -368,10 +370,10 @@ describe("Graph view", () => {
     render(<WorldsView />)
     const many = Array.from({ length: 700 }, (_, i) => ({ type: "claim.checked", round: 1, member: `m${i % 5}`, claim: `Claim number ${i}`, kind: "brief", verdict: i % 50 === 0 ? "contradicted" : "verified", checker: "first-pass", key: `c${i}`, at: 2_000 + i }) as BoardEvent)
     await streamBoard([BOARD_EVENTS[0], ...many])
-    expect(await screen.findByTestId("headline")).toHaveTextContent("5 team members made 700 statements: 686 held up, 14 were proven wrong.")
-    expect(screen.getByText(/This run is large: the 600 most important of \d+ nodes are drawn \(limit 600\), those proven wrong first\./)).toBeInTheDocument()
+    expect(await screen.findByTestId("headline")).toHaveTextContent("5 team members made 700 statements: 686 supported, 14 contradicted.")
+    expect(screen.getByText(/This run is large: the 600 most important of \d+ nodes are drawn \(limit 600\), contradicted statements first\./)).toBeInTheDocument()
     await waitFor(() => expect(fake.data.at(-1)?.nodes.length).toBeLessThanOrEqual(600))
-    expect(fake.data.at(-1)!.nodes.map((n) => n.id).filter((id) => id.startsWith("claim:")).length).toBeGreaterThan(14) // the 14 proven wrong are among them
+    expect(fake.data.at(-1)!.nodes.map((n) => n.id).filter((id) => id.startsWith("claim:")).length).toBeGreaterThan(14) // the 14 contradicted ones are among them
   })
 
   it("closes the event stream when the run ends", async () => {

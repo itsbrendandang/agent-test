@@ -9,10 +9,10 @@ const said = (g: ReturnType<typeof board>, partial = false) => headline(g, g.tot
 
 describe("the headline says what happened, from the run's own counts", () => {
   it("board: members, claims and each verdict by its own name", () => {
-    expect(said(board())).toBe("Over 2 rounds, 4 team members made 5 statements: 2 held up, 1 was proven wrong, 2 had too little evidence.")
+    expect(said(board())).toBe("Over 2 rounds, 4 team members made 5 statements: 2 supported, 1 contradicted, 1 insufficient evidence, 1 not checked.")
   })
   it("swarm: roles, claims, not-established counted together, problems fixed and open", () => {
-    expect(said(buildSwarmGraph(SWARM_DETAIL) as never)).toBe("3 roles made 3 statements: 1 held up, 1 was proven wrong, 1 had too little evidence. The reviewers found 2 problems: 1 fixed, 1 still open.")
+    expect(said(buildSwarmGraph(SWARM_DETAIL) as never)).toBe("3 roles made 3 statements: 1 supported, 1 contradicted, 1 insufficient evidence. The reviewers found 2 problems: 1 fixed, 1 still open.")
   })
   it("a board run with no claims says so plainly", () => {
     const g = board(BOARD_EVENTS.filter((e) => e.type !== "claim.checked"))
@@ -39,17 +39,17 @@ describe("the headline says what happened, from the run's own counts", () => {
   })
   it("uses singular words for one", () => {
     const one = board(BOARD_EVENTS.filter((e) => e.type !== "claim.checked" || e.member === "proposer"))
-    expect(said(one)).toMatch(/made 1 statement: 1 held up\.$/)
+    expect(said(one)).toMatch(/made 1 statement: 1 supported\.$/)
   })
-  it("counts a verdict word it does not know as not enough evidence, never as a success", () => {
-    expect(verdictParts({ holds: 1, fails: 0, unknown: 2 })).toBe("1 held up, 2 had too little evidence")
+  it("counts a verdict word it does not know as not checked, never as a success", () => {
+    expect(verdictParts({ verified: 1, contradicted: 0, unsupported: 1, untested: 1, mystery: 2 })).toBe("1 supported, 1 insufficient evidence, 3 not checked")
     const g = board([{ type: "claim.checked", round: 1, member: "x", claim: "c", kind: "literature", verdict: "mystery", checker: "first-pass", key: "c", at: 2 } as never])
-    expect(said(g)).toMatch(/1 had too little evidence\.$/)
+    expect(said(g)).toMatch(/1 not checked\.$/)
   })
   it("describes the current practice run: two members, two distinct claims, none checked against a source", () => {
     const g = board(PRACTICE_EVENTS)
     expect(g.nodes.filter((n) => n.kind === "claim")).toHaveLength(2) // four rulings, two claims carried into round 2
-    expect(said(g)).toBe("Over 2 rounds, 2 team members made 2 statements: 2 had too little evidence.")
+    expect(said(g)).toBe("Over 2 rounds, 2 team members made 2 statements: 2 insufficient evidence.")
     expect(g.scripted).toBe(true)
     expect(g.links.every((l) => g.nodes.some((n) => n.id === l.source) && g.nodes.some((n) => n.id === l.target))).toBe(true)
   })
@@ -85,7 +85,7 @@ describe("the replay's sentences come only from recorded events", () => {
     sorted.forEach((e, i) => {
       if (e.type !== "claim.checked") return
       const s = g.steps[i]
-      expect(s.label).toMatch(/it (held up|was proven wrong|had too little evidence)\.$/)
+      expect(s.label).toMatch(/(it was supported|it was contradicted|the evidence was insufficient|it was not checked)\.$/)
       expect(s.label).toContain(ROSTER.find((m) => m.name === e.member)!.title)
       expect(s.nodes).toHaveLength(3)
       expect(s.nodes[0]).toBe(`agent:${e.member}`)

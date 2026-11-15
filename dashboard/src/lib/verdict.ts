@@ -1,7 +1,7 @@
-// One vocabulary for verdicts. A board checker rules a claim verified, contradicted, unsupported or unchecked; the
-// swarm's ledger computes supported, refuted, insufficient or untested. They mean the same three things, and each
-// has a glyph so colour is never the only signal (the glyphs are added in CSS on .v-* and .sv-*):
-//   ✓ holds (verified, supported)   ✕ does not hold (contradicted, refuted)   ? not known (the rest)
+// The checks' own verdict words, and what a team review's event stream says about itself. A board checker rules a
+// statement verified, contradicted, unsupported or unchecked; the swarm's notes compute supported, refuted,
+// insufficient or untested. What a person reads is one of four marks (lib/words.ts: markOf, MARK_WORD, MARK_GLYPH).
+// `Outcome` is the coarser three-way grouping the graph draws by (shape and colour).
 import type { BoardEvent, Verdict } from "@/board/api"
 import type { ClaimVerdict } from "@/swarm/api"
 

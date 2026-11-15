@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Shared"
+import { Provenance } from "@/components/Provenance"
+import { provenanceOf } from "@/lib/provenance"
 import { swarmScripted, useBoardScripted } from "@/lib/scripted"
 import type { GlhfRun } from "@/swarm/api"
 import { runState } from "@/lib/status"
@@ -87,7 +89,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
                 <StatusPill state={runState(h.status, h.kind !== "swarm" || h.score !== undefined)} />
                 <span className="pill" data-kind="outline">{h.kind === "answer" ? "answer" : h.kind === "swarm" ? "one agent or a team" : "board review"}</span>
                 {h.kind === "answer"
-                  ? h.mode && <span className="pill" data-kind={h.mode === "demo" ? "neutral" : "info"} data-mode={h.mode === "demo" ? "scripted" : "real"}>{h.mode === "demo" ? "Demo response" : "AI answer"}</span>
+                  ? <Provenance kind={provenanceOf({ mode: h.mode })} />
                   : <ModeLabel scripted={h.kind === "swarm" ? swarmScripted(swarmRuns[h.id]) : boardFlags[h.id]} demo={h.kind === "swarm" && swarmRuns[h.id]?.task === "demo"} />}
                 {h.score !== undefined && <span className="exp-score" title="Score from the scoring program, out of 1">score {fmtScore(h.score)}</span>}
               </span>
