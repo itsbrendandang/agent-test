@@ -115,7 +115,7 @@ the key, so a typo cannot switch the limit off.
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
-| Agent Log | Every event of the selected run. Filter by agent or kind of step, search, follow live events, and download the shown log as JSON or CSV. No room picture here; the Lab stays on Overview. |
+| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. Filter by agent or kind of step, search, follow live events, and download the shown log as JSON or CSV. No room picture here; the Lab stays on Overview. |
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
 
