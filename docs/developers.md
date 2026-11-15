@@ -335,20 +335,20 @@ code 1 if a part needs attention. Use it before you commit and after you pull.
 `npm test` runs the harness tests, the type checks and the engine tests in one go. To run one engine test file:
 `cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts`.
 
-**`main` is not fully green today.** Measured on commit `1197442` with a clean checkout (`npm run check`):
+**GitHub's checks pass on `main`** (the runs of 2026-11-15). Measured on commit `1197442` with a clean checkout
+(`npm run check`), except where a row names another commit:
 
 | Part | State |
 |---|---|
 | Merge-conflict markers | None. |
 | Engine type check | Clean. |
-| Engine tests | 306 pass, 4 fail in 25 files, and `app.test.ts` does not finish. The four failures are in the run tracker and the BixBench v1 results API (`glhf-tracker` 2, `glhf-runs` 1, `bixv1-budget` 1) and are being fixed. All board, chat, paid-switch, literature and specialist tests pass. |
+| Engine tests | At `6e3cb2c`: 457 pass, 0 fail in 44 files, in a worktree without keys (`node --test test/*.test.ts`, 36 s). Type check and `oxlint` clean. |
 | Dashboard | Type check clean, 478 tests pass. |
 | Harness (`glhf/bixbench/tests/unit`) | 2,531 pass, 2 skipped, 192 expected failures (run after the claims-engine merge). The tests that need Docker were not repeated for this commit. |
 | BixBench v1 adapter | 200 pass (last full run; not repeated for this commit). |
 | Datasets catalogue | 231 pass (last full run; not repeated for this commit). |
 
-GitHub's checks fail on every push for the same reasons: the engine job runs into its time limit on the
-file that does not finish.
+GitHub's checks (`.github/workflows/ci.yml`) passed on the pushes to `main` of 2026-11-15, the engine job included.
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](status.md).

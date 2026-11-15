@@ -44,7 +44,12 @@ The six engine failures at pass 2, run file by file:
 | `glhf-runs` | `M7: the refusal that asks for maxTokens…` | wording assertion; owned by the run-control agents |
 | `glhf-tracker` (2) | cloud-run tests | error text now asks for `billCloud`; tests predate it |
 
-Meaning: `npm test` is still not a clean gate. One of the six hurts any CI without secrets.
+Meaning at `b749e38`: `npm test` was not a clean gate. One of the six hurt any CI without secrets.
+
+**Measured again at `6e3cb2c` (2026-11-15, a keyless worktree, `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1`):**
+`cd engine && npx tsc --noEmit` gives 0 errors, `npm run lint` is clean, and `node --test test/*.test.ts` gives
+**457 pass, 0 fail** in 36 s. The six failures above no longer happen, also without keys. GitHub's checks pass on `main`.
+The dashboard and the Python suites were not re-run for this line.
 
 ## 3. Routes (measured at `0d3b50e`, with the dashboard's `Origin` header)
 
