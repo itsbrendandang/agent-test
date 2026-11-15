@@ -231,7 +231,11 @@ export async function engine(options: EngineOptions = {}) {
   const research = createResearch({
     config, env, hasToken: (req) => req.headers["x-glhf-token"] === token, tokenFile: "glhf/runs/.token",
     mock: () => options.demo === true || (env.NO_PAID_CALLS ?? "").trim() !== "0",
-    models: () => models, onStored: options.onStored, specialists: () => [], ...options.deps, // no method specialist unless a test asks for them
+    models: () => models, onStored: options.onStored, specialists: () => [], // no method specialist unless a test asks for them
+    // The known-variant lookup reads UniProt through the database clients' live request path, which holds the real
+    // fetch, so it is never used here: by default UniProt "has no entry", unless a test gives a fake.
+    variants: async () => undefined,
+    ...options.deps,
   })
   const server = createServer((req, res) => void research.handle(req, res, new URL(req.url ?? "/", "http://x").pathname.split("/").filter(Boolean)))
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready))

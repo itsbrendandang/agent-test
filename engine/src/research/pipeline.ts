@@ -54,6 +54,7 @@ import { answerNotes, specialistRoom, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
+import { changesIn, type KnownVariants, type Target, variantTarget } from "../variants/known.ts"
 import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, looksProtocol, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
 import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
@@ -142,6 +143,11 @@ export interface PipelineDeps {
   protocols?: (query: string) => Promise<SearchResult>
   /** One database lookup (sources/), when that module is there. */
   database?: (source: Database, query: string) => Promise<SearchResult>
+  /**
+   * Known variants of the protein an answer is about (variants/known.ts: UniProt, free, keyless). Absent: no answer looks
+   * them up. `named`: substitutions the question writes (G12D), kept first. Undefined when the entry has none.
+   */
+  variants?: (target: Target, named: string[]) => Promise<KnownVariants | undefined>
   /** The method specialists whose notes fit a question, best first (specialists.ts: matchSpecialists). Absent: no answer gets one. */
   specialists?: (question: string) => Match[]
   /** A demo answer's example sources. Set only in demo mode: then no other search runs. */
@@ -799,7 +805,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
 
   // What an earlier invocation worked out is worked out again from the stored steps, so the record starts clean.
   Object.assign(record, { status: "running", steps: [], searches: [], sources: [], statements: [], recommendations: [], review: { ...record.review, revised: false, notes: [] } })
-  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short"] as const) delete record[field]
+  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short", "variants"] as const) delete record[field]
   record.workStartedAt ??= now()
 
   // Time is counted while the answer is worked on, not while the engine was down.
@@ -950,6 +956,40 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   }
   /** Calls left behind at a halt still end and are still billed: wait for them (not for ever), so their cost is in the record. */
   const settle = async () => { if (background.size) await Promise.race([Promise.allSettled([...background]), new Promise((resolve) => setTimeout(resolve, 20_000).unref())]) }
+
+  /**
+   * KNOWN VARIANTS. Once the sources are numbered, the protein the answer is about (variantTarget: an accession in the
+   * question, a gene symbol in a question about variants, or else a UniProt source) is looked up beside the writing. It is
+   * free, stored under a stable key like every outside step (a replay does not ask again), bound by the answer's time
+   * limit, and it never fails the answer: a lookup that fails or runs out of time only closes its own step.
+   */
+  const lookVariants = async (): Promise<void> => {
+    if (demo || !deps.variants) return
+    const target = variantTarget(record.question, sources)
+    if (!target) return
+    const named = changesIn(record.question)
+    const input = { target, named }
+    const step = "variants"
+    begin({ step, kind: "fetch", label: "Looking up known variants of the protein (UniProt)", provider: "uniprot", agent: "searcher", input: { database: "UniProt", ...("accession" in target ? { accession: target.accession } : { gene: target.gene }), ...(named.length ? { named: named.join(", ") } : {}) } })
+    try {
+      const why = allow(0, step, input)
+      if (why) return endFor(step, why, "Known variants were not looked up. The answer is not affected.")
+      const found = await inTime(once(step, input, async () => ({ value: (await deps.variants!(target, named)) ?? null, usd: 0 })))
+      if (record.status !== "running") return
+      if (!found || !found.items.length) return end(step, "empty", { summary: "UniProt reports no single-residue variant of this protein with a cited paper." })
+      record.variants = found
+      emit(step, { type: "variants", ...found })
+      save()
+      end(step, "completed", { found: found.found, kept: found.items.length, summary: `${plural(found.items.length, "known variant")} of ${found.gene || found.accession} with cited papers (of ${found.found} UniProt reports).` })
+    } catch (error) {
+      if (error instanceof Interrupted || interrupted()) return // the engine is stopping: the step is closed at the next start
+      if (record.status !== "running") return
+      const halt = asStop(error)
+      if (halt) return endFor(step, halt.reason, "Known variants were not looked up. The answer is not affected.")
+      end(step, "failed", { error: `UniProt could not be read (${error instanceof Error ? error.message : "the lookup failed"}).`, consequence: "No known variants are shown. The answer is not affected." })
+    }
+  }
+  let variantsDone: Promise<void> = Promise.resolve()
 
   let storedBefore = new Set<string>()
   try {
@@ -1212,6 +1252,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     emit("sources", { type: "sources", items: record.sources.map(({ text: _t, studyType: _s, relevance: _r, ...s }) => s) })
     emit("selection", { type: "selection", ...record.selection })
     save()
+    variantsDone = lookVariants().catch(() => {}) // beside the writing; awaited before the answer is closed
 
     const searched = () => record.searches.map((s) => s.ran ? `${providerName(s.provider)} for "${s.query}" (${s.found} found, ${s.kept} kept)` : `${providerName(s.provider)} did not run (${s.reason})`).join("; ")
     if (!sources.length) {
@@ -1609,6 +1650,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
     await settle() // what was left behind at the limit is counted before the answer is closed
   }
+  await variantsDone
   clearTimeout(timeout)
   if (interrupted()) { frozen = true; throw new Interrupted() }
 

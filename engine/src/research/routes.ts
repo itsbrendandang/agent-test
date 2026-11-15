@@ -45,6 +45,7 @@ import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts
 import { exampleEntries } from "../examples.ts"
 import { configHash, runManifest } from "../manifest.ts"
 import { previewOn } from "./preview.ts"
+import { lookupVariants } from "../variants/known.ts"
 
 export const MAX_QUEUED_PER_THREAD = 3
 export const MAX_STREAMS_PER_ANSWER = 8
@@ -64,6 +65,8 @@ export interface ResearchDeps {
   literature?: (query: string) => Promise<SearchResult>
   protocols?: (query: string) => Promise<SearchResult>
   database?: (source: Database, query: string) => Promise<SearchResult>
+  /** Tests: a stand-in for the known-variant lookup. Default: variants/known.ts (UniProt) at levels that allow database lookups. */
+  variants?: PipelineDeps["variants"]
   now?: () => number
   /** The method specialists that fit a question. Default: the matcher of specialists.ts over glhf/specialists. */
   specialists?: (question: string) => Match[]
@@ -213,6 +216,8 @@ export function createResearch(deps: ResearchDeps) {
               literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: free, no key needed
               protocols: deps.protocols ?? ((query) => protocolsLive(query)), // protocol journals (Europe PMC, OpenAlex) and protocols.io (Crossref): free, no key needed
               database: deps.database ?? (limits.levels[record.effort].databaseLookups ? await databaseLookup() : undefined),
+              // Known variants of the protein (free, keyless): only at a level that allows database lookups, like them.
+              variants: limits.levels[record.effort].databaseLookups ? deps.variants ?? ((target, named) => lookupVariants(target, named)) : undefined,
               paidOff: () => paidCallsOff(env),
             }
           }

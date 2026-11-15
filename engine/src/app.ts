@@ -18,6 +18,7 @@
 //   GET  /api/search?q=          keyword search over all runs and saved research answers
 //   GET  /api/trending           "Try asking": biology questions from Google's trending searches (search/trending.ts; free, kept an hour)
 //   /api/research/*              a direct, sourced answer to one question (see research/routes.ts)
+//   GET /api/variants/compare  a protein's known variants (UniProt) and their predicted confidence beside the reference (ESMFold), free and keyless (variants/routes.ts)
 //   POST /api/ask {question}     a small model answers from the run records (see ask.ts). Needs the dashboard's
 //                                Origin or the token; the model is asked only for a token holder
 //   /api/glhf/*                  GLHF benchmark runs (see glhf/routes.ts)
@@ -40,6 +41,7 @@ import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid/
 import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
+import { createVariants, type VariantsOptions } from "./variants/routes.ts"
 import { directAnswers, previewOn } from "./research/preview.ts"
 import { DEMO_PACE_MS } from "./research/demo.ts"
 import { search } from "./search/search.ts"
@@ -71,6 +73,8 @@ export interface AppOptions {
   ask?: import("./search/ask.ts").AskOptions
   /** Options for GET /api/trending (tests: a fake fetch). */
   trending?: import("./search/trending.ts").TrendingOptions
+  /** Options for GET /api/variants/compare (tests: a fake UniProt and a fake fold). */
+  variants?: VariantsOptions
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -120,6 +124,7 @@ export function createApp(options: AppOptions = {}) {
   const trust = { hasToken, env, tokenFile: TOKEN_FILE }
   const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow, demoPaceMs: DEMO_PACE_MS }) // the direct, sourced answer (research/routes.ts); a demo answer is written a few words at a time
   const trending = createTrending(options.trending) // "Try asking" questions; read on first use, not at startup
+  const variants = createVariants(config, options.variants) // known variants and their predicted confidence (variants/routes.ts)
   /**
    * May this request start or resume a board run? With scripted models anyone local may (it costs nothing). With
    * real models only a holder of the token: false, with 403 or the 401 that asks for the token sent, otherwise.
@@ -192,6 +197,7 @@ export function createApp(options: AppOptions = {}) {
     if (parts[0] === "api" && parts[1] === "bixv1") return handleBixV1(req, res, parts)
     if (url.pathname === "/api/paid") return handlePaid(req, res, { config, env, hasToken, tokenFile: TOKEN_FILE, stopPaidRuns: cancelPaidRuns }) // the runtime paid switch (paidswitch.ts)
     if (parts[0] === "api" && parts[1] === "research") return research.handle(req, res, parts) // POST a question, GET its events, record and files
+    if (parts[0] === "api" && parts[1] === "variants") return variants.handle(req, res, parts, url) // known variants, predicted confidence (free, keyless)
     if (parts[0] === "api" && parts[1] === "chat") return handleChat(req, res, parts, { config, mock: mockNow(), env, hasToken, start, launch, listRuns }) // the Home chat (chat/routes.ts)
     try {
       if (url.pathname === "/api/status") return json(res, 200, {

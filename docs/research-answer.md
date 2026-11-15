@@ -61,6 +61,35 @@ screen and the Overview show the pictures in a strip under the answer text. Each
 shows its number and site. A picture that does not load is left out. An answer with no picture, also one saved before
 this field, shows no strip. Europe PMC and the databases give no pictures.
 
+### Known variants
+
+When an answer is about a protein, code looks up the variants of it that are already reported. Nothing new is made or
+proposed. The protein is, in this order: an accession in the question; a gene symbol in a question about variants or
+mutations (or one that names a change such as G12D), through the answer's UniProt source for that gene when it has
+one; else the first UniProt source of the answer (`variantTarget` and `readEntry` in `engine/src/variants/known.ts`).
+So "Do TP53 mutations change MDM2 binding?" looks up TP53, even when an MDM2 source comes first. A symbol that finds no
+reviewed human entry is not a gene (CF, ALS, HIV-1): then the answer's first UniProt source is read instead, so "Which
+mutations cause CF?" with a CFTR source looks up CFTR.
+
+- **What is looked up.** The UniProt entry: its natural variants and mutagenesis features, each with the papers UniProt
+  cites (PubMed). Code keeps single-residue changes that cite at least one paper and match the entry's sequence. At most
+  6 are kept: the ones the question names first, then the ones with more cited papers. Each keeps UniProt's own text
+  and up to 3 PubMed links.
+- **When.** Beside the writing, once the sources are numbered (step `variants`, kind `fetch`). Only at a level that
+  allows database lookups (`standard` by default), and within the answer's time limit. It is free and needs no key. It
+  uses the database clients' request rules (`engine/src/sources/shared.ts`): a 15-second limit per request, answers
+  kept for 10 minutes, at most 2 requests, 45 seconds in all. Its result is stored under a stable key, so a restart
+  does not ask again.
+- **It never fails the answer.** A lookup that fails or runs out of time closes only its own step and says so.
+- **Predicted structures.** The Variants tab of the inspector shows the table: the variant, what UniProt reports, the
+  citation, and the change in the model's confidence (pLDDT) at that position. Opening the tab folds the reference and
+  each variant with ESMFold (`GET /api/variants/compare`). The same model folds all of them, so they can be compared.
+  "View" shows the variant's confidence beside the reference's along the protein. The page says these are
+  **predictions and the model's confidence, not measurements**. pLDDT does not measure stability or the effect of a
+  variant. ESMFold's free API folds at most 400 amino acids; a longer protein gets the table without predictions.
+  Folds are kept in `board/runs/.structures/`, the Structure tab's folder (`engine/src/variants/fold.ts` is a thin
+  adapter until that tab's fold service is merged).
+
 ## The short path for a plain factual question
 
 A plain factual question, such as "What is a cell?" or "What is the powerhouse of the cell?", does not need the
@@ -343,13 +372,14 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 | `GET /api/research/threads` | One line per thread, newest first. |
 | `GET /api/research/:id/artifacts` and `.../artifacts/:name` | The registered result files; one of them as a download. |
 | `GET /api/search?q=` | Saved answers are found here as `kind: "answer"`, next to the runs. |
+| `GET /api/variants/compare?accession=<UniProt>&variants=G12D,G13D` | The predicted confidence of the reference and of each variant (ESMFold). Only variants UniProt reports for that entry are accepted (400 otherwise). 429 when 2 comparisons are running. |
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they
 usually come: `research.queued`, `research.started`, `step.started` / `step.progress` / `step.finished` (kinds:
-prepare, hypothesize, search, evaluate, write, check, review, revise, save; status: completed, empty, failed, cancelled),
+prepare, hypothesize, search, evaluate, fetch, write, check, review, revise, save; status: completed, empty, failed, cancelled),
 `opening`, `short.path` (short path only), `hypotheses`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`,
 `statement.checked`, `hypothesis.checked`,
-`review.note`, `answer.revised`, `review.resolved`, `sources.cited`, `recommendations`, `missing`,
+`review.note`, `answer.revised`, `review.resolved`, `variants` (an answer about a protein with known variants), `sources.cited`, `recommendations`, `missing`,
 `artifact.created`, and one of
 `research.finished`, `research.failed`, `research.cancelled`. The exact shapes are in
 `engine/src/research/types.ts`. Example streams made by the code are in `engine/test/fixtures/research/`.

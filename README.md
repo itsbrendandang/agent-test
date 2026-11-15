@@ -203,6 +203,14 @@ only the biology word, never a person in the search. When none is about biology,
 cannot be read, curated biology questions are shown. On Overview and on Research a click fills
 the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
+When a research answer is about a protein, the **Variants** tab lists up to 6 of its variants
+that are already reported: UniProt's natural variants and mutagenesis results, each with its
+cited papers. Nothing new is made or proposed. The tab folds the reference and each variant
+with ESMFold and shows how the model's confidence (pLDDT) changes at that position. These are
+predictions and confidence, not measurements. The lookup is free, runs at the Standard level
+within the answer's time limit, and never fails the answer. See
+[docs/research-answer.md](docs/research-answer.md#known-variants).
+
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
 preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is skipped and named; a
 paper found twice is listed once. No key is needed. See

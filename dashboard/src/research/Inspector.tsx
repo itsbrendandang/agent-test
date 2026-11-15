@@ -1,6 +1,8 @@
 // The optional inspector beside the Research conversation. It only shows what one answer's own record holds:
 //  Evidence: the sources (found / selected / cited), each checked statement with its mark, quoted passage and
 //            checker, and the critic's notes with whether they were dealt with.
+//  Variants: known variants of the answer's protein (UniProt, with cited papers) and their predicted confidence beside
+//            the reference's (ESMFold). Predicted, not measured; shown only when the answer has known variants.
 //  Results:  the files the engine registered for the answer (name, type, size, time), a text preview, a download.
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
 // A tab exists only when it has content. Nothing here is a placeholder.
@@ -10,6 +12,7 @@ import type { Picked } from "./Answer"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
 import { HypothesesTable } from "./Hypotheses"
+import { KnownVariants } from "./variants/KnownVariants"
 import { artifactUrl } from "./api"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markOf } from "./marks"
 import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState } from "./model"
@@ -17,7 +20,7 @@ import { tabsOf, type InspectorTab } from "./inspectorState"
 import { ProviderCredit } from "./ProviderCredit"
 import { PROVIDERS, searchPlace } from "./providers"
 
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity" }
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", variants: "Variants", results: "Results", activity: "Activity" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
@@ -45,6 +48,7 @@ export function Inspector({ id, state, tab, onTab, picked, onPick }: {
       <div className="inspector-panel" id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${current}`} tabIndex={0}>
         {current === "evidence" && <Evidence state={state} picked={picked} onPick={onPick} />}
         {current === "hypotheses" && <HypothesesTable state={state} />}
+        {current === "variants" && state.variants && <KnownVariants key={state.variants.accession} variants={state.variants} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
       </div>
