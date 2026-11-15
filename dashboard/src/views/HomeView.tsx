@@ -2,7 +2,7 @@
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
 import { SquarePenIcon } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import "@/design/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
@@ -20,6 +20,7 @@ import { cancelResearch, DIRECT_ANSWERS_OFF, DirectAnswersOff, ResearchRefused, 
 import { AgentsWorking } from "@/research/AgentsWorking"
 import { AskBox } from "@/research/AskBox"
 import { TryAsking } from "@/research/TryAsking"
+import { TestProteinChips } from "@/research/structure/TestProteins"
 import { ResearchAnswer, type Picked } from "@/research/Answer"
 import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
@@ -34,6 +35,9 @@ import { groupRecords, stamp } from "@/lib/records"
 import { boardsRead, boardTitles, useBoardScripted } from "@/lib/scripted"
 import { linkTo, setOpen, takeAsk, takeOpenAnswer, viewOfKind } from "@/lib/open"
 import { openHelp } from "@/lib/shell"
+
+// The structure viewer opened from the empty page (test proteins only): loaded only when it is opened.
+const StructureTab = lazy(() => import("@/research/structure/StructureTab"))
 
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
@@ -59,6 +63,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [stopNote, setStopNote] = useState<string>() // what the engine answered to Stop
   const [pane, setPane] = useState(loadInspector) // the inspector: shown or not, and how wide; remembered
   const [inspect, setInspect] = useState<{ id?: string; tab?: InspectorTab }>({}) // which answer and tab; none = the latest answer
+  const [viewer, setViewer] = useState(false) // the structure viewer with the test proteins, opened from the empty page
   const [chosenItem, setChosenItem] = useState<Picked & { id: string }>() // the source or statement chosen in an answer or in the inspector
   const narrow = useNarrow()
   const [copied, setCopied] = useState<number>()
@@ -252,6 +257,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const canInspect = !!inspected && tabsOf(seenState).length > 0
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
+  const showViewer = viewer && empty && !showPane
   // A source or a checked statement chosen in an answer opens the inspector's Evidence tab on it (where there is room
   // beside the conversation, when the inspector is already open, or when a statement's check asks for it), and one
   // chosen there is lit in the answer.
@@ -262,7 +268,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
   return (
     <div className="page search" data-wide data-empty={empty || undefined}>
-      <div className="search-cols" data-inspector={(showPane && !narrow) || undefined}>
+      <div className="search-cols" data-inspector={((showPane || showViewer) && !narrow) || undefined}>
         <section className="search-main" aria-label="Search">
           {empty ? (
             <header className="search-hero">
@@ -370,6 +376,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               {/* One row: biology questions trending on Google (or curated) from the engine, else the fixed examples.
                   A question fills the box, as on the Overview: in Real mode a send costs money, so it is never one click. */}
               <TryAsking onPick={fill} disabled={sending !== undefined} fallback={EXAMPLES} />
+              {/* The test proteins: a chip fills the box the same way; the viewer opens without asking anything. */}
+              <TestProteinChips onPick={fill} onOpenViewer={() => setViewer(true)} disabled={sending !== undefined} />
               {catalog === null && (
                 <p className="search-demo" role="alert">
                   {whyNone
@@ -386,6 +394,14 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           <InspectorPane narrow={narrow} width={pane.width} onClose={() => showInspector(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
             <Inspector id={inspected} state={seenState} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
               picked={chosenItem?.id === inspected ? chosenItem : undefined} onPick={pick(inspected)} />
+          </InspectorPane>
+        )}
+        {showViewer && (
+          <InspectorPane narrow={narrow} width={pane.width} onClose={() => setViewer(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
+            <div className="inspector">
+              <div className="inspector-tabs"><span className="structure-viewer-title">Structure</span><button type="button" className="link-btn structure-viewer-close" onClick={() => setViewer(false)}>Close</button></div>
+              <div className="inspector-panel"><Suspense fallback={<p className="muted small">Loading the structure view.</p>}><StructureTab proteins={[]} /></Suspense></div>
+            </div>
           </InspectorPane>
         )}
       </div>

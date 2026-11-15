@@ -1,11 +1,13 @@
 // The optional inspector beside the Research conversation. It only shows what one answer's own record holds:
 //  Evidence: the sources (found / selected / cited), each checked statement with its mark, quoted passage and
 //            checker, and the critic's notes with whether they were dealt with.
+//  Structure: the proteins of the answer and the test proteins; opening one shows its predicted 3D structure
+//            (ESMFold, or AlphaFold DB's model), coloured by the model's confidence. Shown only when the answer has a protein.
 //  Results:  the files the engine registered for the answer (name, type, size, time), a text preview, a download.
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
 // A tab exists only when it has content. Nothing here is a placeholder.
 import { tracked } from "@/lib/engine"
-import { useEffect, useId, useState } from "react"
+import { lazy, Suspense, useEffect, useId, useState } from "react"
 import type { Picked } from "./Answer"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
@@ -17,7 +19,10 @@ import { tabsOf, type InspectorTab } from "./inspectorState"
 import { ProviderCredit } from "./ProviderCredit"
 import { PROVIDERS, searchPlace } from "./providers"
 
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity" }
+// The Structure tab and its 3D viewer: loaded only when the tab is opened.
+const StructureTab = lazy(() => import("./structure/StructureTab"))
+
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", structure: "Structure", results: "Results", activity: "Activity" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
@@ -45,6 +50,7 @@ export function Inspector({ id, state, tab, onTab, picked, onPick }: {
       <div className="inspector-panel" id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${current}`} tabIndex={0}>
         {current === "evidence" && <Evidence state={state} picked={picked} onPick={onPick} />}
         {current === "hypotheses" && <HypothesesTable state={state} />}
+        {current === "structure" && <Suspense fallback={<p className="muted small">Loading the structure view.</p>}><StructureTab proteins={state.proteins} sources={state.sources} /></Suspense>}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
       </div>

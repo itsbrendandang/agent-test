@@ -61,6 +61,27 @@ screen and the Overview show the pictures in a strip under the answer text. Each
 shows its number and site. A picture that does not load is left out. An answer with no picture, also one saved before
 this field, shows no strip. Europe PMC and the databases give no pictures.
 
+### Protein structures
+
+Code (not a model) lists the proteins of an answer as `proteins` in the record and the `proteins` event
+(`engine/src/structure/proteins.ts`). It looks in three places: the answer's UniProt sources (accession, protein, gene,
+organism with its strain, length); an amino-acid sequence or a UniProt accession written in the question or the
+answer (a FASTA record, where a UniProt header gives the name and organism; a line with only residues, as one run
+or blocks of ten, joined with the next lines only when they are wrapped at the same 50 to 80 letters; or one run of
+at least 30 capitals inside a sentence); and a test
+protein, when the question is that test protein's own question (its chip). Other questions never get a test protein. At most 8 are listed. An answer saved before the field gets them worked out when it is read.
+Nothing is fetched while the answer is made.
+
+On the Search screen the inspector then has a **Structure** tab. Opening a protein calls
+`GET /api/structure` (`engine/src/structure/fold.ts`). ESMFold (Meta AI) predicts the structure through the free
+ESM Atlas API when the sequence has at most 400 amino acids. A longer protein, or one ESMFold fails on, gets AlphaFold
+DB's model when it has a UniProt accession. The reply always names the model, and the tab says it is a prediction.
+The 3D view (3Dmol.js) colours each residue by the model's confidence (pLDDT), with a legend. These services are free
+and need no key, so no paid switch is involved. Only HTTPS to `api.esmatlas.com`, `alphafold.ebi.ac.uk` and
+`rest.uniprot.org`, with a time limit and a size limit. A good result is kept in `board/runs/.structures/` under a
+hash of what was asked; a failure is not kept on disk. An ESMFold failure is remembered in memory for 10 minutes, so
+the same sequence is not sent again at once. "Try again" sends `retry=1`, which asks ESMFold anyway.
+
 ## The short path for a plain factual question
 
 A plain factual question, such as "What is a cell?" or "What is the powerhouse of the cell?", does not need the
@@ -343,6 +364,8 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 | `GET /api/research/threads` | One line per thread, newest first. |
 | `GET /api/research/:id/artifacts` and `.../artifacts/:name` | The registered result files; one of them as a download. |
 | `GET /api/search?q=` | Saved answers are found here as `kind: "answer"`, next to the runs. |
+| `GET /api/structure?test=<id>`, `?accession=<UniProt>`, `?sequence=<letters>[&accession=]`, `&prefer=alphafold`, `&retry=1` | One protein's predicted structure: `{model, modelLabel, link, uniprot?, accession?, length, sequence?, meanPlddt, pdb, cached, note?, at}`. `422` for a sequence over 400 amino acids with no accession. |
+| `GET /api/structure/tests` | The built-in test proteins, with their sequences. |
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they
 usually come: `research.queued`, `research.started`, `step.started` / `step.progress` / `step.finished` (kinds:
@@ -350,7 +373,7 @@ prepare, hypothesize, search, evaluate, write, check, review, revise, save; stat
 `opening`, `short.path` (short path only), `hypotheses`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`,
 `statement.checked`, `hypothesis.checked`,
 `review.note`, `answer.revised`, `review.resolved`, `sources.cited`, `recommendations`, `missing`,
-`artifact.created`, and one of
+`proteins` (only when the answer has one), `artifact.created`, and one of
 `research.finished`, `research.failed`, `research.cancelled`. The exact shapes are in
 `engine/src/research/types.ts`. Example streams made by the code are in `engine/test/fixtures/research/`.
 

@@ -10,7 +10,7 @@ this list by exact address (and body, for Open Targets), so a request a client s
 | `clinicaltrials.json` | `sotorasib KRAS G12C`; `NCT04303780`; `NCT00000000` (not held: status 400) |
 | `openfda.json` | `sotorasib` (label, reaction counts, serious counts); `zzzznotadrug` (status 404) |
 | `opentargets.json` | `KRAS lung`; `KCNH2` (one search request that carries each hit's target record, saved on 2026-11-15); `ENSG00000055118` (read by id) |
-| `uniprot.json` | `KRAS`; `lacZ` (no human entry, then other organisms) |
+| `uniprot.json` | `KRAS`; `lacZ` (no human entry, then other organisms). The `length` field was added to the requests on 2026-11-15, with each entry's `sequence.length` as UniProt gave it that day |
 | `pubchem.json` | `sotorasib`; `aspirin`; `zzzznotacompound` (status 404) |
 
 What was trimmed, and nothing else: ChEMBL `molfile` and `standard_inchi` (replaced by a marker); openFDA label

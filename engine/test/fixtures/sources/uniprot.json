@@ -1,7 +1,7 @@
 [
  {
   "name": "up-kras",
-  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28kras%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28kras%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Clength%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
   "method": "GET",
   "status": 200,
   "body": {
@@ -9,6 +9,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "P01116",
+     "sequence": {
+      "length": 189
+     },
      "uniProtkbId": "RASK_HUMAN",
      "organism": {
       "scientificName": "Homo sapiens",
@@ -1254,6 +1257,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "Q9UQ13",
+     "sequence": {
+      "length": 582
+     },
      "uniProtkbId": "SHOC2_HUMAN",
      "organism": {
       "scientificName": "Homo sapiens",
@@ -1405,6 +1411,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "Q8N653",
+     "sequence": {
+      "length": 840
+     },
      "uniProtkbId": "LZTR1_HUMAN",
      "organism": {
       "scientificName": "Homo sapiens",
@@ -2912,7 +2921,7 @@
  },
  {
   "name": "up-fallback",
-  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Clength%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
   "method": "GET",
   "status": 200,
   "body": {
@@ -2921,7 +2930,7 @@
  },
  {
   "name": "up-fallback",
-  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Clength%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
   "method": "GET",
   "status": 200,
   "body": {
@@ -2929,6 +2938,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "P00722",
+     "sequence": {
+      "length": 1024
+     },
      "uniProtkbId": "BGAL_ECOLI",
      "organism": {
       "scientificName": "Escherichia coli (strain K12)",
@@ -2979,6 +2991,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "P07833",
+     "sequence": {
+      "length": 231
+     },
      "uniProtkbId": "HGXR_PLAFK",
      "organism": {
       "scientificName": "Plasmodium falciparum (isolate K1 / Thailand)",
@@ -3043,6 +3058,9 @@
     {
      "entryType": "UniProtKB reviewed (Swiss-Prot)",
      "primaryAccession": "P20035",
+     "sequence": {
+      "length": 231
+     },
      "uniProtkbId": "HGXR_PLAFG",
      "organism": {
       "scientificName": "Plasmodium falciparum (isolate FCR-3 / Gambia)",

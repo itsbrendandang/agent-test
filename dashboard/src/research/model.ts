@@ -43,6 +43,18 @@ export interface Recommendation { label: string; text: string; why: string; basi
 export interface Artifact { id: string; name: string; type: string; bytes: number; at?: number }
 export interface Selection { criteria: string; /** The engine's own counts: results the searches returned, different sources among them, and how many were selected. */ counts?: { results: number; unique: number; selected: number }; selected: { n: number; why: string; limitation?: string }[]; notSelected: { title: string; url: string; provider: Provider; reason: string }[] }
 export type ResearchEvent = { type: string; at?: number; seq?: number } & Record<string, unknown>
+/** A protein of the answer, found by the engine's code (engine/src/structure/proteins.ts): the Structure tab lists it and can show its predicted 3D structure. */
+export interface Protein {
+  key: string; name: string; accession?: string; gene?: string
+  /** UniProt's organism name; a strain is part of it ("Escherichia coli (strain K12)"). */
+  organism?: string
+  length?: number; sequence?: string
+  from: "source" | "question" | "answer" | "test"
+  /** The numbered source it came from. */
+  source?: number
+  /** A fragment or a variant, in plain words. */
+  note?: string
+}
 
 export interface AnswerState {
   example?: boolean
@@ -58,6 +70,8 @@ export interface AnswerState {
   hypotheses: Hypothesis[]; hypothesesNote?: string; hypothesesCut: { text: string; reason: string }[]
   /** "What is missing": plain sentences the engine's code wrote (searches that did not run, failed checks, open concerns). */
   missing: string[]
+  /** The proteins of the answer (empty: none, or an engine from before proteins were recorded). */
+  proteins: Protein[]
   /** Why these sources were chosen, and what was found but left out. Written by the engine's code, not by a model. */
   selection?: Selection
   /** The engine restarted while this answer was being made, and went on with it. */
@@ -90,7 +104,7 @@ const VERDICTS = ["verified", "contradicted", "unsupported", "unchecked"]
 
 /** What the events so far add up to. Unknown event types and malformed fields are ignored, never guessed at. */
 export function foldAnswer(events: ResearchEvent[]): AnswerState {
-  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], hypotheses: [], hypothesesCut: [], missing: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
+  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], hypotheses: [], hypothesesCut: [], missing: [], proteins: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
   let deltas = "", written: string | undefined, revised: string | undefined
   const draft: Statement[] = [], final: Statement[] = []
   const results = new Map<string, Hypothesis["result"]>()
@@ -143,6 +157,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
       }
       case "research.resumed": s.resumed = true; break
       case "missing": if (Array.isArray(e.items)) s.missing = (e.items as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== ""); break
+      case "proteins": if (Array.isArray(e.items)) s.proteins = proteinsOf(e.items); break
       case "research.cancelled": s.status = "cancelled"; s.spentUsd = num(e.spentUsd); s.seconds = num(e.seconds); break
       case "search.started": if (str(e.provider) && str(e.query) !== undefined) s.searches.push({ provider: str(e.provider)!, query: str(e.query)! }); break
       case "search.finished": {
@@ -207,6 +222,24 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
   // Final-stage checks replace the draft's. Without a revision the draft is the final text and its checks stand.
   s.statements = (final.length ? final : revised === undefined ? draft : []).sort((a, b) => a.index - b.index)
   return s
+}
+
+const FROM = ["source", "question", "answer", "test"]
+const ACCESSION = /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})$/
+/** The engine's proteins as the page may use them: a malformed one is dropped, an accession must be UniProt's, a sequence letters only. At most 8. */
+export function proteinsOf(items: unknown[]): Protein[] {
+  return items.flatMap((x) => {
+    const p = x as Record<string, unknown> | null
+    if (!p || !str(p.key) || !str(p.name)) return []
+    const seq = str(p.sequence)
+    return [{
+      key: str(p.key)!.slice(0, 80), name: str(p.name)!.slice(0, 200), from: (FROM.includes(p.from as string) ? p.from : "answer") as Protein["from"],
+      ...(str(p.accession) && ACCESSION.test(str(p.accession)!) ? { accession: str(p.accession) } : {}),
+      ...(str(p.gene) ? { gene: str(p.gene)!.slice(0, 40) } : {}), ...(str(p.organism) ? { organism: str(p.organism)!.slice(0, 200) } : {}),
+      ...(num(p.length) !== undefined && num(p.length)! > 0 ? { length: Math.round(num(p.length)!) } : {}),
+      ...(seq && /^[A-Z]{1,5000}$/.test(seq) ? { sequence: seq } : {}), ...(num(p.source) !== undefined ? { source: num(p.source) } : {}), ...(str(p.note) ? { note: str(p.note)!.slice(0, 200) } : {}),
+    }]
+  }).slice(0, 8)
 }
 
 export const providerPlace = (p: Provider) => PROVIDERS[p]?.place ?? p
@@ -399,6 +432,7 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   }
   if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
   if (Array.isArray(r.missing)) push("missing", { items: r.missing })
+  if (Array.isArray(r.proteins) && r.proteins.length) push("proteins", { items: r.proteins })
   for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })
   if (r.status === "done") push("research.finished", { usd: r.usd, seconds: r.seconds, counts: r.counts, searches: {}, review: r.review, stopped: r.stopped, note: r.note })
   else if (r.status === "failed") push("research.failed", { error: r.error, spentUsd: r.usd })

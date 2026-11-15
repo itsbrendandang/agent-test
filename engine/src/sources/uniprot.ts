@@ -16,7 +16,7 @@ const PAGE = "https://www.uniprot.org/uniprotkb"
 export const ACCESSION = /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})$/
 const accessionOf = (value: unknown): string => (typeof value === "string" && ACCESSION.test(value) ? value : "")
 
-export const FIELDS = "accession,id,reviewed,protein_name,gene_names,organism_name,cc_function,cc_disease,cc_subcellular_location,ft_variant"
+export const FIELDS = "accession,id,reviewed,protein_name,gene_names,organism_name,length,cc_function,cc_disease,cc_subcellular_location,ft_variant"
 const MAX_ENTRIES = 3
 
 export const searchUrl = (query: string) => `${API}?${new URLSearchParams({ query, format: "json", size: String(MAX_ENTRIES), fields: FIELDS })}`
@@ -39,6 +39,8 @@ function names(entry: Json): { accession: string; protein: string; gene: string;
   const head = join([
     `UniProtKB entry ${accession}${clean(entry.uniProtkbId) ? ` (${clean(entry.uniProtkbId)})` : ""}${/unreviewed/i.test(clean(entry.entryType)) ? ", unreviewed (TrEMBL)" : /reviewed/i.test(clean(entry.entryType)) ? ", reviewed (Swiss-Prot)" : ""}.`,
     say("Protein", protein), say("Gene", gene), say("Organism", organism),
+    // The length lets the Search screen's Structure tab say how long the protein is (structure/proteins.ts reads it).
+    say("Length", /^\d{1,6}$/.test(clean(rec(entry.sequence).length)) ? `${clean(rec(entry.sequence).length)} amino acids` : ""),
   ])
   return { accession, protein, gene, organism, head }
 }

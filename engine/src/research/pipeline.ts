@@ -53,6 +53,7 @@ import { investigatorSystem, investigatorUser, leadSystem, leadUser, specialistS
 import { answerNotes, specialistRoom, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
+import { proteinsOf } from "../structure/proteins.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
 import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, looksProtocol, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
 import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
@@ -799,7 +800,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
 
   // What an earlier invocation worked out is worked out again from the stored steps, so the record starts clean.
   Object.assign(record, { status: "running", steps: [], searches: [], sources: [], statements: [], recommendations: [], review: { ...record.review, revised: false, notes: [] } })
-  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short"] as const) delete record[field]
+  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short", "proteins"] as const) delete record[field]
   record.workStartedAt ??= now()
 
   // Time is counted while the answer is worked on, not while the engine was down.
@@ -1640,6 +1641,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   if (notes.length) record.note = notes.join(" ").slice(0, 2_000)
   record.missing = missingOf(record, cut)
   emit("missing", { type: "missing", items: record.missing })
+  // The proteins the Structure tab lists (code only, no network): a structure is fetched only when a person opens one.
+  record.proteins = proteinsOf(record)
+  if (record.proteins.length) emit("proteins", { type: "proteins", items: record.proteins })
 
   begin({ step: "save", kind: "save", label: "Saving the answer and its files" })
   const saving = running.get("save")!

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import type { AnswerState } from "./model"
 
-export type InspectorTab = "evidence" | "hypotheses" | "results" | "activity"
+export type InspectorTab = "evidence" | "hypotheses" | "structure" | "results" | "activity"
 
 /** The tabs that have something to show for this answer. */
 export function tabsOf(s: AnswerState | undefined): InspectorTab[] {
@@ -11,6 +11,7 @@ export function tabsOf(s: AnswerState | undefined): InspectorTab[] {
   return [
     ...(s.sources.length || s.statements.length || s.notes.length || s.selection ? ["evidence" as const] : []),
     ...(s.hypotheses.length ? ["hypotheses" as const] : []),
+    ...(s.proteins.length ? ["structure" as const] : []),
     ...(s.artifacts.length ? ["results" as const] : []),
     ...(s.steps.length || s.status !== "starting" ? ["activity" as const] : []),
   ]

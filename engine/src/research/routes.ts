@@ -45,6 +45,7 @@ import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts
 import { exampleEntries } from "../examples.ts"
 import { configHash, runManifest } from "../manifest.ts"
 import { previewOn } from "./preview.ts"
+import { proteinsOf, readProteins } from "../structure/proteins.ts"
 
 export const MAX_QUEUED_PER_THREAD = 3
 export const MAX_STREAMS_PER_ANSWER = 8
@@ -120,7 +121,8 @@ export function createResearch(deps: ResearchDeps) {
     res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" })
     res.end(JSON.stringify(body))
   }
-  const withFiles = (record: ResearchRecord) => ({ ...record, artifacts: listArtifacts(config, record.id) })
+  // An answer recorded before `proteins` existed gets them worked out here (code only, no network), so the Structure tab shows for it too.
+  const withFiles = (record: ResearchRecord) => ({ ...record, proteins: readProteins(record.proteins) ?? proteinsOf(record), artifacts: listArtifacts(config, record.id) })
   const cancelFile = (id: string) => `${answerDir(config, id)}/cancel`
   /** The record as it is on disk: a record left "running" by a stopped engine is still "running" here, and is continued. */
   const stored = (id: string) => loadRecord(config, id, 0)
