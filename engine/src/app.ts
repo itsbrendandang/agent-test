@@ -36,6 +36,7 @@ import { handleBixV1 } from "./bixv1/routes.ts"
 import { gate, guard, HttpError, isSafeId, linesFrom, readJson, safeId, tokenNeeded } from "./http.ts"
 import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid.ts"
 import { handlePaid } from "./paidswitch.ts"
+import { FatalModelError } from "./providers.ts"
 import { search } from "./search.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -74,7 +75,7 @@ export function createApp(options: AppOptions = {}) {
     if (active.has(runId)) return
     active.add(runId)
     run(runId)
-      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
+      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff || e instanceof FatalModelError ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
       .finally(() => active.delete(runId))
   }
 
@@ -85,8 +86,8 @@ export function createApp(options: AppOptions = {}) {
       let s: ReturnType<typeof loadState>
       try { s = loadState(config, id) } catch { return [] } // an unreadable run.json hides that run, not the list
       // "running" also when another process (the CLI) holds the run's lock, so it is not resumed twice.
-      const status = s.finished ? "done" : active.has(id) || lockHolder(`${dir}/${id}`) !== undefined ? "running" : "paused"
-      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...summarize(`${dir}/${id}`, s) }]
+      const status = s.finished ? "done" : active.has(id) || lockHolder(`${dir}/${id}`) !== undefined ? "running" : s.failed ? "failed" : "paused"
+      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...summarize(`${dir}/${id}`, s) }]
     })
   }
 

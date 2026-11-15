@@ -91,7 +91,7 @@ test("a missing tier key fails loudly and specifically; a real run is never sile
   assert.ok(error instanceof MissingTierKey)
   assert.equal(error.status, 503)
   assert.match(error.message, /tier "rival" \(openai\/gpt-5-mini\) needs OPENAI_API_KEY, which is not set/)
-  assert.match(error.message, /never silently made scripted/)
+  assert.match(error.message, /never silently turned into a practice run/)
   // Paid calls allowed and a key missing is NOT scripted mode.
   assert.equal(mockMode({ NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "k" }), false)
   // startRun refuses before it creates anything.

@@ -39,7 +39,7 @@ export interface SearchResult { kind: "swarm" | "board" | "agent" | "skill"; id:
 
 const MAX_MESSAGES = 20, MAX_MESSAGE = 4_000, MAX_QUESTION = 2_000, MAX_QUERY = 200
 const NOTHING_STARTED = "Nothing has started. Review the plan, then confirm to start it."
-const SCRIPTED_RUN = "If you start it now the board runs with scripted models: its replies are fixed text written in advance, not research."
+const SCRIPTED_RUN = "If you start it now it is a practice run: the replies are fixed example text written in advance, not research."
 
 /** A refusal that names the input it is about. */
 class FieldError extends HttpError {
@@ -193,7 +193,7 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
   // The same refusals as POST /api/runs (app.ts), in the same order: trust, the paid switch, the brief, the daily cap.
   if (record.plan.paid && paidCallsOff(env)) throw new PaidCallsOff("starting this plan, which was made for real models")
   if (!mock && paidCallsOff(env)) throw new PaidCallsOff("starting a board run with real models")
-  if (record.plan.paid !== !mock) throw bad("plan", `this plan was made for ${record.plan.paid ? "real" : "scripted"} models and the engine now runs ${mock ? "scripted" : "real"} ones; ask again to get a plan that says what will happen`)
+  if (record.plan.paid !== !mock) throw bad("plan", `this plan was made for a ${record.plan.paid ? "real" : "practice"} run and the engine now does ${mock ? "practice" : "real"} runs; ask again to get a plan that says what will happen`)
   if (!mock) trust(req, deps, "spend", "starting a board run with real models")
 
   const release = claimStart(config, id)
@@ -217,7 +217,7 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
   deps.launch(runId)
   const warnings = [...new Set(derived.warnings)]
   return { status: 201, body: { kind: "board", id: runId, scripted: mock, effort: effort.id, limits, agents: agents.map((a) => a.name),
-    note: mock ? "Started with scripted models: the board's replies are fixed text written in advance, not research. Nothing is spent." : `Started with real models. ${overridesApplied() ? `It stops at $${limits.maxUsd}.` : `It stops at the config cap, $${config.meeting.max_usd}.`}`,
+    note: mock ? "Started as a practice run: the replies are fixed example text written in advance, not research. Nothing is spent." : `Started with real models. ${overridesApplied() ? `It stops at $${limits.maxUsd}.` : `It stops at the config cap, $${config.meeting.max_usd}.`}`,
     ...(warnings.length ? { warnings } : {}) } }
 }
 

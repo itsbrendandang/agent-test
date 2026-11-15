@@ -34,12 +34,13 @@ interface ExaResponse {
 }
 
 /** One live Exa search. Throws on a non-2xx response. */
-export async function exaLive(query: string, objective: string, apiKey: string): Promise<SearchResult> {
+export async function exaLive(query: string, objective: string, apiKey: string, highlightChars?: number): Promise<SearchResult> {
   refusePaid("Exa search (api.exa.ai)")
   const res = await fetch("https://api.exa.ai/search", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": apiKey },
-    body: JSON.stringify({ query, objective, type: "auto", contents: { highlights: true } }),
+    // Bare highlights (Exa's recommendation) unless the board asks for a size: highlights are what a claim is checked against.
+    body: JSON.stringify({ query, objective, type: "auto", contents: { highlights: highlightChars ? { maxCharacters: highlightChars } : true } }),
   })
   if (!res.ok) throw new Error(`Exa ${res.status}: ${(await res.text()).slice(0, 500)}`)
   const body = (await res.json()) as ExaResponse
@@ -60,16 +61,16 @@ export function reportedCost(value: unknown): number | undefined {
 
 /** A real board run needs EXA_API_KEY and does not have it. */
 export class MissingExaKey extends Error {
-  constructor() { super("Exa search: EXA_API_KEY is not set. A real run does not fall back to fixture papers; set the key in .env, or run with scripted models.") }
+  constructor() { super("Exa search: EXA_API_KEY is not set. A real run does not fall back to example sources; set the key in .env, or do a practice run.") }
 }
 
 /**
  * Fixture papers in scripted mode (the run itself is labelled scripted: run.started.mock, run.json mock); a live
  * search otherwise. A real run with no key throws: fixture papers presented as search results would be fake evidence.
  */
-export async function exaSearch(query: string, objective: string, mock = MOCK, env: NodeJS.ProcessEnv = process.env): Promise<SearchResult> {
+export async function exaSearch(query: string, objective: string, mock = MOCK, env: NodeJS.ProcessEnv = process.env, highlightChars?: number): Promise<SearchResult> {
   if (mock) return { items: MOCK_EVIDENCE.slice(0, 5), notices: [] }
   const key = env.EXA_API_KEY?.trim()
   if (!key) throw new MissingExaKey()
-  return exaLive(query, objective, key)
+  return exaLive(query, objective, key, highlightChars)
 }

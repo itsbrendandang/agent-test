@@ -1,4 +1,4 @@
-// board run <brief.md>      start a run and follow it to the memo
+// board run <brief.md> [--max-usd N]  start a run and follow it to the memo; --max-usd only lowers its spend cap
 // board resume <run-id>     continue a run a previous process left unfinished
 // board list                runs and their status
 import { existsSync, readdirSync } from "node:fs"
@@ -11,7 +11,12 @@ import type { Stamped } from "./events.ts"
 import { PaidCallsOff } from "./paid.ts"
 import { MissingTierKey } from "./providers.ts"
 
-const [command, arg] = process.argv.slice(2)
+const rest = process.argv.slice(2)
+// --max-usd <dollars>: lower this run's spend cap (never raises it). For a careful first real run.
+const flag = rest.indexOf("--max-usd")
+const maxUsd = flag >= 0 ? Number(rest.splice(flag, 2)[1]) : undefined
+const [command, arg] = rest
+if (maxUsd !== undefined && !(Number.isFinite(maxUsd) && maxUsd > 0)) { console.error("✘ --max-usd needs a positive number of dollars, for example --max-usd 0.5"); process.exit(2) }
 const config = loadConfig()
 
 const print = (e: Stamped) => {
@@ -33,7 +38,7 @@ const print = (e: Stamped) => {
 try {
   if (command === "run") {
     const brief = resolve(ROOT, arg ?? "board/briefs/kras-g12c-hit-to-lead.md")
-    const runId = await startRun(brief)
+    const runId = await startRun(brief, { maxUsd })
     console.log(`run ${runId}`)
     await runBoard(runId, (log) => log.listeners.add(print))
   } else if (command === "resume" && arg) {
@@ -44,7 +49,7 @@ try {
       try { const s = loadState(config, id); console.log(`${s.finished ? "done   " : "pending"} ${id}  rounds=${s.rounds}`) } catch { /* not a run */ }
     }
   } else {
-    console.log("usage: board run [brief.md] | board resume <run-id> | board list")
+    console.log("usage: board run [brief.md] [--max-usd N] | board resume <run-id> | board list")
   }
 } catch (error) {
   if (error instanceof BriefRejected) { console.error(`✘ ${error.message}`); process.exit(2) }

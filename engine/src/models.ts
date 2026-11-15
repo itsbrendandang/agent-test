@@ -50,19 +50,28 @@ export function localProvider(names: string[], env: NodeJS.ProcessEnv = process.
  * the paid switch (paid.ts) can go off while that run is working: this makes the next model call of an in-flight real
  * run throw PaidCallsOff instead of spending. (The harness reports the failed turn; the run stops and stays resumable.)
  */
-export function gateProvider<P extends object>(provider: P): P {
+export type ModelWatch = (provider: string, modelId: string, message: { stopReason?: string; errorMessage?: string }) => void
+
+export function gateProvider<P extends object>(provider: P, watch?: ModelWatch): P {
   const calls = new Set(["stream", "streamSimple", "classify", "generateImages"])
   return new Proxy(provider, {
     get(target, key) {
       const value = Reflect.get(target, key, target)
       if (typeof value !== "function") return value
       if (!calls.has(String(key))) return value.bind(target)
-      return (...args: unknown[]) => { refusePaid(`a model call to ${String((target as { id?: string }).id ?? "a provider")}`); return value.apply(target, args) }
+      return (...args: unknown[]) => {
+        const id = String((target as { id?: string }).id ?? "a provider")
+        refusePaid(`a model call to ${id}`)
+        const stream = value.apply(target, args) as { result?: () => Promise<{ stopReason?: string; errorMessage?: string }> }
+        // `watch` sees the final message of every call: the board uses it to stop a run on an error no retry can fix.
+        if (watch && typeof stream?.result === "function") stream.result().then((message) => watch(id, String((args[0] as { id?: string })?.id ?? ""), message)).catch(() => {})
+        return stream
+      }
     },
   })
 }
 
-export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, config?: Pick<BoardConfig, "local_models">): Models {
+export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, config?: Pick<BoardConfig, "local_models">, watch?: ModelWatch): Models {
   const models = createModels()
   if (mock && local) { // real agents on this machine; nothing paid is registered
     models.setProvider(localProvider(TIERS.map((tier) => localModelFor(config ?? loadConfig(), tier, local))))
@@ -70,8 +79,8 @@ export function buildModels(roster: AgentDef[], mock = MOCK, local = LOCAL, conf
   }
   if (!mock) {
     refusePaid("the drug board with real models (Anthropic, OpenAI)") // no real provider is registered while paid calls are off
-    models.setProvider(gateProvider(anthropicProvider())) // ANTHROPIC_API_KEY: the lead, strong and cheap tiers
-    models.setProvider(gateProvider(openaiProvider())) // OPENAI_API_KEY: the rival tier, the first-pass checker for Anthropic members, the literature checker
+    models.setProvider(gateProvider(anthropicProvider(), watch)) // ANTHROPIC_API_KEY: the lead, strong and cheap tiers
+    models.setProvider(gateProvider(openaiProvider(), watch)) // OPENAI_API_KEY: the rival tier, the first-pass checker for Anthropic members, the literature checker
     checkTierPrices(models, loadConfig())
     return models
   }

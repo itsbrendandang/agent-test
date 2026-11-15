@@ -43,12 +43,15 @@ const MEMBER_REPLIES: Record<string, (round: number) => string> = {
   pilot: () => `Prepared a script that reads the assay table and computes descriptors from the SMILES. Not run: this board has no code tool yet.\n\nCLAIMS\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)`,
   experimenter: (r) => r === 1 ? `CMP-0423 passes solubility and clearance; CMP-0517 fails solubility.\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)\n- [brief] CMP-0423 kinetic solubility is 12 uM (source: brief)\n- [brief] CMP-0423 shows no resistance liability (source: brief)` :
     `No new results this round: the reruns the Reviser asked for need a code tool.\n\nCLAIMS`,
-  "methods-auditor": () => `The plan compares each candidate with every criterion. The hERG margin step is present; resistance testing is missing.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
-  critic: (r) => `Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)` ,
+  "methods-auditor": () => `The plan compares each candidate with every criterion. The hERG margin step is present; resistance testing is missing.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)\n- [literature] Adding polarity reduced hERG binding in most matched pairs (source: https://example.org/mock/herg-acrylamide)`,
+  critic: (r) => `Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)\n- [literature] Piperazine-linked quinazolines show no resistance liability (source: https://example.org/mock/resistance-mechanisms)` ,
   reviser: () => `Dropped the Experimenter's claim that CMP-0423 has no resistance liability: the brief has no resistance data. Nothing else changed.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
   finisher: () => `Required outputs: the comparison table is present. The resistance-mutant results are missing and cannot be made from this data.\n\nCLAIMS`,
   reporter: () => `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
 }
+
+/** Real members open with "In short:" (board/context/writing-style.md); the scripted ones do the same, from their first sentence. */
+const inShort = (reply: string) => `In short: ${reply.split("\n")[0].split(/(?<=[.!?])\s/)[0]}\n\n${reply}`
 
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
   const last = ctx.messages.at(-1)
@@ -58,9 +61,9 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
     const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : agent.name === "finisher" ? "Outputs complete except the resistance-mutant results." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
-    return { text: `${position}\n\nCLAIMS` }
+    return { text: inShort(`${position}\n\nCLAIMS`) }
   }
-  return { text: (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round) }
+  return { text: inShort((MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round)) }
 }
 
 const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)

@@ -53,7 +53,7 @@ const flat = (text: unknown, max: number) => String(text ?? "").replace(/\s+/g, 
 export function efforts(config: BoardConfig): Effort[] {
   const m = config.meeting, usd = Math.min(m.max_usd, m.daily_usd)
   return [
-    { id: "quick", label: "Quick", description: "The lead and the three best-matched members, one round, the cheap model tier, a few searches.",
+    { id: "quick", label: "Quick", description: "The lead, the member that searches, a member that makes checkable claims and the best-matched other member; one round, the cheap model tier, a few searches.",
       limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 3, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
     { id: "standard", label: "Standard", description: "The lead and every member that matches the question, each on the model tier in its own file, about half the rounds the config allows.",
       limits: { maxUsd: round2(usd * 0.6), maxMinutes: Math.max(1, Math.ceil(m.max_minutes * 2 / 3)), maxRounds: Math.max(1, Math.ceil(m.max_rounds / 2)) }, agents: "all", modelTier: "per agent", search: { exa: true, maxSearches: 12 } },
@@ -87,7 +87,17 @@ export function rankAgents(question: string, members: Member[]): PlanAgent[] {
 
 /** The agents for an effort level: the lead, then the ranked members cut or extended as the level says. */
 export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, members: Member[]): PlanAgent[] {
-  let chosen = effort.agents === "all" ? [...ranked] : ranked.slice(0, effort.agents)
+  // At every effort level a plan has the member that gathers evidence (the one with the search tool) and at least one
+  // member that makes checkable statements (one whose deliverable is claims to test, else the first other member). Without
+  // them a run has nothing to check a claim against, or nothing to check. They come first; the best-matched members fill
+  // the rest of the places. This only picks from the roster: it never adds a name that is not on the board.
+  const gatherer = members.find((m) => m.tools.includes("exa_search"))
+  const claimMaker = members.find((m) => m !== gatherer && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer)
+  const required: PlanAgent[] = []
+  if (gatherer) required.push(ranked.find((a) => a.name === gatherer.name) ?? { name: gatherer.name, title: gatherer.title, why: "Added at every effort level: the only member that can search, so the others have sources to cite." })
+  if (claimMaker) required.push(ranked.find((a) => a.name === claimMaker.name) ?? { name: claimMaker.name, title: claimMaker.title, why: "Added at every effort level: makes statements that can be checked, and proven wrong, against the evidence." })
+  const rest = ranked.filter((a) => !required.some((r) => r.name === a.name))
+  let chosen = effort.agents === "all" ? [...required, ...rest] : [...required, ...rest].slice(0, Math.max(effort.agents, required.length))
   const critic = members.find((m) => m.name === "critic")
   if (effort.id === "deep" && critic && !chosen.some((a) => a.name === "critic")) chosen.push({ name: "critic", title: critic.title, why: "Deep effort always adds the Critic, which runs on the other vendor's model." })
   chosen = chosen.filter((a) => members.some((m) => m.name === a.name))
@@ -196,19 +206,19 @@ export function derive(ctx: PlanContext, effort: Effort, agents: PlanAgent[], me
   const warnings: string[] = []
   const tiers = effort.modelTier === "per agent" ? [...new Set(chosen.map((m) => config.models[m.tier as keyof BoardConfig["models"]]).filter(Boolean))]
     : chosen.map((m) => (effort.id === "deep" && m.name === "critic" ? config.models.rival : config.models[effort.modelTier as keyof BoardConfig["models"]])).filter((v, i, all) => all.indexOf(v) === i)
-  if (mock) warnings.push("Scripted mode: the board's models are scripted. Its replies are fixed text written in advance, not research, and its search returns fixture papers.")
+  if (mock) warnings.push("Practice run: the board's replies are fixed example text written in advance, not research, and its search returns example sources.")
   else {
-    if (searchers.length && !env.EXA_API_KEY) warnings.push("No EXA_API_KEY is set: members with the search tool get fixture papers, not live search results.")
+    if (searchers.length && !env.EXA_API_KEY) warnings.push("No EXA_API_KEY is set: members with the search tool get example sources, not live search results.")
     warnings.push("Board models are called directly at Anthropic and OpenAI (board/config.yaml), whichever provider wrote this plan.")
   }
   if (!overridesApplied()) warnings.push(`Not applied yet: a board run today uses every member in board/config.yaml (${members.length}), each on its own model tier, with the config's limits ($${cap}, ${config.meeting.max_minutes} min, ${config.meeting.max_rounds} rounds) and no cap on searches. This plan's agents, limits, model tier and search cap are saved with the run (overrides.json) but board.ts does not read them.`)
   else warnings.push("This plan's agents and limits are applied to the run. Its model tier and search cap are not: each agent runs on its own model tier and searches are not counted.")
   return {
     search: { exa: !mock && Boolean(env.EXA_API_KEY) && searchers.length > 0 },
-    models: mock ? { lead: "scripted", members: "scripted", checker: "scripted" } : { lead: config.models.lead, members: tiers.join(", "), checker: `${config.models.cheap} / ${config.checkers.first_pass.alt}` },
+    models: mock ? { lead: "practice run", members: "practice run", checker: "practice run" } : { lead: config.models.lead, members: tiers.join(", "), checker: `${config.models.cheap} / ${config.checkers.first_pass.alt}` },
     limits: { ...effort.limits },
     estimate: mock
-      ? { usd: 0, basis: `Scripted models call no API, so this run costs nothing. With real models the ${effort.label} level would be capped at $${effort.limits.maxUsd}.` }
+      ? { usd: 0, basis: `A practice run calls no API, so it costs nothing. As a real run the ${effort.label} level would be capped at $${effort.limits.maxUsd}.` }
       : { usd: effort.limits.maxUsd, basis: `An upper bound, not a forecast: the ${effort.label} level's spend cap ($${effort.limits.maxUsd}, from meeting.max_usd in board/config.yaml). No past run was used to estimate.${overridesApplied() ? "" : ` Until board.ts applies per-run limits the real ceiling is the config cap, $${cap}.`}` },
     paid: !mock,
     warnings,
