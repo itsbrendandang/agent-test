@@ -133,6 +133,12 @@ The board's members, their prompts and the review's rounds do not change, and th
 model calls still go from this machine. Only `run_code`, `list_dir` and `read_file` run on Modal.
 This machine then only waits on the model, so more runs fit at once (`--workers`).
 
+Modal is what made the experiments fast. Each run's code cells get their own 2 cores and 8 GiB,
+so runs do not compete for this machine's cores, and many runs go at the same time. The time a
+whole set takes is then about the time of its slowest run, not the sum of all runs. The uncapped
+run above ran all 60 runs at once (`--workers 60`): it took about 41 minutes from start to end,
+for 244 minutes of agent time summed over the runs, and 1.61 USD of Modal time.
+
 Each sandbox:
 
 - is made from the image `bixbench-board-env:1`: Python 3.11 with `requirements.txt`, and R
