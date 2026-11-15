@@ -91,7 +91,7 @@ test("a missing tier key fails loudly and specifically; a real run is never sile
   assert.ok(error instanceof MissingTierKey)
   assert.equal(error.status, 503)
   assert.match(error.message, /tier "rival" \(openai\/gpt-5-mini\) needs OPENAI_API_KEY, which is not set/)
-  assert.match(error.message, /never silently made scripted/)
+  assert.match(error.message, /never silently turned into a practice run/)
   // Paid calls allowed and a key missing is NOT scripted mode.
   assert.equal(mockMode({ NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "k" }), false)
   // startRun refuses before it creates anything.
@@ -599,15 +599,17 @@ test("the practice run (default roster, the example brief) still shows every ver
   assert.ok(has("contradicted"), "proven wrong: without one the product's main feature is hidden")
   assert.ok(has("unsupported"), "not enough evidence")
   assert.ok(has("unsupported", "openai") || has("verified", "claude-code"), "escalated to a second checker")
-  assert.ok(rows.length >= 15 && events.length >= 40, `a practice run is not a handful of events (claims ${rows.length}, events ${events.length})`)
+  // Five members, and those with no task in a round reply "No task." (no claims): fewer rows than the nine-member board had.
+  assert.ok(rows.length >= 8 && events.length >= 25, `a practice run is not a handful of events (claims ${rows.length}, events ${events.length})`)
   assert.ok(rows.every((r) => typeof r.source === "string"), "every row records the source it cited")
 })
 
-test("the practice run has an evidence step (the scout searches)", async () => {
+test("the practice run has no search step: no board member has exa_search (the Scout is code, AGENTS.md: no open web search for benchmark agents)", async () => {
   const config = tempConfig({ max_minutes: 5 })
   const id = await startRun(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), { config, mock: true })
   await runBoard(id, undefined, { config, mock: true })
-  assert.ok(EventLog.read(join(config.paths.runs, id, "events.jsonl")).some((e) => e.type === "evidence.triaged"))
+  assert.ok(loadRoster(config).every((a) => !a.tools.includes("exa_search")), "no searcher on the roster")
+  assert.ok(!EventLog.read(join(config.paths.runs, id, "events.jsonl")).some((e) => e.type === "evidence.triaged"), "no evidence step")
 })
 
 test("the engine never leaves fetch as the real one", () => { assert.notEqual(globalThis.fetch, realFetch) })

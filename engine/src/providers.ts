@@ -29,7 +29,7 @@ export class MissingTierKey extends HttpError {
   readonly missing: { tier: string; model: string; key: string }[]
   constructor(missing: { tier: string; model: string; key: string }[]) {
     super(503, `Cannot start a board run with real models: ${missing.map((m) => `tier "${m.tier}" (${m.model}) needs ${m.key}, which is not set`).join("; ")}. ` +
-      `Set the key in .env, or run with scripted models (leave NO_PAID_CALLS on, or set DRUG_BOARD_MOCK=1). A run is never silently made scripted.`)
+      `Set the key in .env, or do a practice run (leave paid calls off, or set DRUG_BOARD_MOCK=1). A real run is never silently turned into a practice run.`)
     this.missing = missing
   }
 }
@@ -93,6 +93,25 @@ export function escalationModel(config: BoardConfig, memberModel: string | undef
   if (memberVendor === undefined) return { model: openai, independent: false }
   const pick = [openai, claude].find((m) => m.vendor !== memberVendor)
   return pick ? { model: pick, independent: true } : { model: openai, independent: false }
+}
+
+/**
+ * An error from a vendor that no retry can fix and that says something is wrong with the setup: the model id is
+ * unknown (404, "not found", "does not exist") or the key is refused (401, 403, an authentication or permission
+ * error). Not 429 (rate limit) or 5xx or a dropped connection: those can pass.
+ */
+export const isFatalModelError = (message: string | undefined): boolean =>
+  /\b(401|403|404)\b|not_found_error|authentication_error|permission_error|invalid_api_key|incorrect api key|does not exist|model_not_found|unauthorized/i.test(message ?? "")
+
+export class FatalModelError extends Error {}
+
+/** The plain sentence for a run that stopped because a tier's model or key was refused: which tier, which model, which vendor, what to do. */
+export function describeModelFailure(config: BoardConfig, vendor: string, modelId: string, error: string | undefined): string {
+  const qualified = `${vendor}/${modelId}`
+  const tiers = modelsNeeded(config).filter((m) => m.model.qualified === qualified).map((m) => m.tier)
+  const what = /\b(401|403)\b|authentication|permission|api[_ ]key|unauthorized/i.test(error ?? "") ? "the key was refused" : "the model was not found"
+  return `The run was stopped on its first failed call: ${vendor} answered that ${what} for ${tiers.length ? `tier ${tiers.map((t) => `"${t}"`).join(", ")} ` : ""}(${qualified}). ` +
+    `Nothing more was spent on it. ${what === "the key was refused" ? `Check ${VENDOR_KEY[vendor as Vendor] ?? "the key"} in .env.` : `Check the model id in board/config.yaml; \`npm run preflight\` lists the ids ${vendor} offers.`} Vendor message: ${String(error ?? "").replace(/\s+/g, " ").slice(0, 200)}`
 }
 
 /**

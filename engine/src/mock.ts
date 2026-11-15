@@ -47,6 +47,9 @@ const MEMBER_REPLIES: Record<string, (round: number) => string> = {
   reporter: (r) => r === 1 ? NO_TASK : `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
 }
 
+/** Real members open with "In short:" (board/context/writing-style.md); the scripted ones do the same, from their first sentence. */
+const inShort = (reply: string) => `In short: ${reply.split("\n")[0].split(/(?<=[.!?])\s/)[0]}\n\n${reply}`
+
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
   const last = ctx.messages.at(-1)
   const round = Number(/Round (\d+)/.exec(ctx.messages.filter((m) => m.role === "user").map(text).at(-1) ?? "")?.[1] ?? 1)
@@ -55,9 +58,10 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
     const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
-    return { text: `${position}\n\nCLAIMS` }
+    return { text: inShort(`${position}\n\nCLAIMS`) }
   }
-  return { text: (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round) }
+  const reply = (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round)
+  return { text: reply === NO_TASK ? reply : inShort(reply) }
 }
 
 export const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)
