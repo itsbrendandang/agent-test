@@ -1,7 +1,12 @@
 """Run logging: JSONL transcript + reproducible final script.
 
 Every run writes <run_dir>/transcript.jsonl with one event per line:
-  run_start, message, tool_call, tool_result, usage, final_answer, budget, run_end
+  run_start, message, member_input, member_output, tool_call, tool_result, cell,
+  final_answer, budget, run_end
+Every line has `t` (Unix time, seconds) and `event`, and is flushed as it is written, so the
+file can be followed while the run goes on. Lines from members that work at the same time
+never mix: writes take a lock. The fields are described for readers in
+docs/proposals/concurrent-board-runs-ui.md.
 All code cells also accumulate into <run_dir>/final_script.py so the analysis
 is reproducible outside the agent loop.
 
@@ -14,6 +19,7 @@ from __future__ import annotations
 import json
 import platform
 import subprocess
+import threading
 import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -35,12 +41,12 @@ class RunLogger:
         self._script = self.run_dir / "final_script.py"
         self._script.unlink(missing_ok=True)
         self._cell = 0
+        self._lock = threading.Lock()  # members can log at the same time
 
     def log(self, event: str, **payload: Any) -> None:
-        self._fh.write(
-            json.dumps({"t": round(time.time(), 3), "event": event, **payload})
-            + "\n"
-        )
+        line = json.dumps({"t": round(time.time(), 3), "event": event, **payload}) + "\n"
+        with self._lock:
+            self._fh.write(line)
 
     # -- convenience wrappers ------------------------------------------------
 
@@ -50,17 +56,41 @@ class RunLogger:
     def log_message(self, role: str, content: Any) -> None:
         self.log("message", role=role, content=content)
 
-    def log_tool_call(self, name: str, call_id: str, tool_input: dict) -> None:
-        self.log("tool_call", name=name, id=call_id, input=tool_input)
+    def log_tool_call(
+        self, name: str, call_id: str, tool_input: dict, member: str | None = None
+    ) -> None:
+        extra = {"member": member} if member else {}
+        self.log("tool_call", name=name, id=call_id, input=tool_input, **extra)
 
-    def log_tool_result(self, call_id: str, name: str, result: str) -> None:
-        self.log("tool_result", id=call_id, name=name, result=result)
+    def log_tool_result(
+        self, call_id: str, name: str, result: str, member: str | None = None
+    ) -> None:
+        extra = {"member": member} if member else {}
+        self.log("tool_result", id=call_id, name=name, result=result, **extra)
+
+    def log_cell(
+        self, member: str, call_id: str | None, result: Any, language: str, where: str
+    ) -> None:
+        """One code cell has ended. It started at the `tool_call` with the same `id`."""
+        self.log(
+            "cell",
+            member=member,
+            id=call_id,
+            cell=result.cell_index,
+            language=language,
+            where=where,
+            exit_code=result.exit_code,
+            timed_out=result.timed_out,
+            duration_s=result.duration_s,
+            new_files=sorted(result.new_files),
+        )
 
     def log_code_cell(self, code: str, result: Any) -> None:
         """Append a run_code cell to the reproducible script."""
-        with open(self._script, "a") as f:
-            f.write(f"\n# %% cell {self._cell}\n{code}\n")
-        self._cell += 1
+        with self._lock:
+            with open(self._script, "a") as f:
+                f.write(f"\n# %% cell {self._cell}\n{code}\n")
+            self._cell += 1
 
     def log_final_answer(self, answers: dict, forced: bool, reason: str) -> None:
         self.log("final_answer", answers=answers, forced=forced, reason=reason)

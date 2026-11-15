@@ -23,7 +23,7 @@ from .llm import LLMClient
 from .loader import Study
 from .logger import RunLogger
 from .prompts import FORCED_FINAL_PROMPT, SYSTEM_PROMPT, TASK_PROMPT_TEMPLATE
-from .sandbox import Sandbox
+from .sandbox import Sandbox, settings_of
 
 TOOL_SCHEMAS = [
     {
@@ -121,6 +121,7 @@ def _execute_tool(
     tool_input: dict,
     sandbox: Sandbox,
     logger: RunLogger,
+    call_id: str | None = None,
 ) -> tuple[str, dict[str, str] | None]:
     """Run one tool call. Returns (result_text, submitted_answers_or_None)."""
     if name == "run_code":
@@ -129,6 +130,8 @@ def _execute_tool(
             return "ERROR: empty code", None
         res = sandbox.run_code(code)
         logger.log_code_cell(code, res)
+        logger.log_cell("agent", call_id, res, "python",
+                        settings_of(sandbox).get("sandbox", "unknown"))
         return res.tool_result_text(), None
     if name == "list_dir":
         return sandbox.list_dir(tool_input.get("path", ".")), None
@@ -183,6 +186,7 @@ def solve(
     llm: LLMClient,
     run_dir: Path,
     sandbox: Sandbox | None = None,
+    run_id: str | None = None,
 ) -> SolveResult:
     """Run the single-agent loop on one study. Shared interface for the swarm."""
     run_dir = Path(run_dir)
@@ -203,6 +207,10 @@ def solve(
         provider=llm.provider,
         seed=llm.seed,
         questions=[q.question_id for q in study.questions],
+        solver="single",
+        members=["agent"],
+        run=run_id or study.study_id,
+        sandbox=settings_of(sandbox),
     )
     logger.log_message("system", SYSTEM_PROMPT)
     logger.log_message("user", messages[0]["content"])
@@ -241,14 +249,14 @@ def solve(
             results = []
             for tc in resp.tool_calls:
                 budget.record_tool_call()
-                logger.log_tool_call(tc.name, tc.id, tc.input)
+                logger.log_tool_call(tc.name, tc.id, tc.input, member="agent")
                 try:
                     result_text, submitted_answers = _execute_tool(
-                        tc.name, tc.input, sandbox, logger
+                        tc.name, tc.input, sandbox, logger, tc.id
                     )
                 except (PermissionError, OSError) as e:
                     result_text, submitted_answers = f"ERROR: {e}", None
-                logger.log_tool_result(tc.id, tc.name, result_text)
+                logger.log_tool_result(tc.id, tc.name, result_text, member="agent")
                 results.append(
                     {
                         "type": "tool_result",

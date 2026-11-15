@@ -1,0 +1,3 @@
+# Only for run.py --sandbox modal (code cells on Modal). Pinned: bixbase/modal_sandbox.py
+# uses the Modal API of this version.
+modal==1.6.1

@@ -10,21 +10,40 @@ Each study gets an isolated working directory. Code runs as a subprocess with:
 
 Every run_code call is logged: the cell source, stdout, stderr, exit status,
 timeout flag, and the list of files created/modified in the work dir.
+
+A cell runs in its own process group, and the whole group is killed when the cell ends or its
+time is up (bixbase/cellrun.py), so nothing a cell starts outlives it.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
-import subprocess
 import sys
 import tempfile
-import time
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import cellrun
+
 DEFAULT_TIMEOUT_S = 120
 MAX_OUTPUT_CHARS = 20_000
+
+# Variables a code cell never gets: keys, tokens and credentials (the same names the v1 adapter's
+# Modal probe looks for). A cell is code the model wrote; it must not be able to print a key.
+_SECRET_NAME = re.compile(
+    r"(API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)|^(ANTHROPIC|OPENAI|EXA|PAST|HF|HUGGING|AWS|GOOGLE|"
+    r"GCP|AZURE|TINKER|OPENROUTER|MODAL|SUPABASE)_",
+    re.I,
+)
+
+
+def cell_environment() -> dict[str, str]:
+    """This process's environment without anything that looks like a secret."""
+    return {k: v for k, v in os.environ.items() if not _SECRET_NAME.search(k)}
+
 
 _SANDBOX_EXEC = shutil.which("sandbox-exec")
 # Linux: bubblewrap re-mounts the data dir read-only for the child process.
@@ -102,6 +121,8 @@ class Sandbox:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.python = python or sys.executable
         self._cell = 0
+        # Members can run code at the same time (parallel rounds): each cell gets its own number.
+        self._cell_lock = threading.Lock()
         self._profile_path: Path | None = None
 
         self.use_sandbox_exec = enforce_readonly and _SANDBOX_EXEC is not None
@@ -115,11 +136,7 @@ class Sandbox:
             self._profile_path.write_text(_SB_PROFILE_TEMPLATE)
 
     def _listing(self) -> dict[str, float]:
-        return {
-            str(p.relative_to(self.work_dir)): p.stat().st_mtime
-            for p in self.work_dir.rglob("*")
-            if p.is_file() and p.name != ".seatbelt.sb"
-        }
+        return cellrun.listing(self.work_dir)
 
     def _wrap_cmd(self, cmd: list[str]) -> list[str]:
         if self.use_bwrap:
@@ -141,6 +158,12 @@ class Sandbox:
             *cmd,
         ]
 
+    def settings(self) -> dict:
+        """Where this run's code runs, for run_start and result.json (ModalSandbox has the
+        same method)."""
+        guard = "bubblewrap" if self.use_bwrap else "sandbox-exec" if self.use_sandbox_exec else None
+        return {"sandbox": "local", "read_only_guard": guard}
+
     def run_code(
         self, code: str, timeout_s: int = DEFAULT_TIMEOUT_S, language: str = "python"
     ) -> ExecResult:
@@ -151,12 +174,13 @@ class Sandbox:
             interpreter, ext = _RSCRIPT, "R"
         else:
             interpreter, ext = self.python, "py"
-        idx = self._cell
-        self._cell += 1
+        with self._cell_lock:
+            idx = self._cell
+            self._cell += 1
         cell_path = self.work_dir / f"cell_{idx:03d}.{ext}"
         cell_path.write_text(code)
 
-        env = dict(os.environ)
+        env = cell_environment()  # no key reaches a cell
         env["DATA_DIR"] = str(self.data_dir)
         env["MPLBACKEND"] = "Agg"  # headless figures
         env.setdefault("OMP_NUM_THREADS", "4")
@@ -166,36 +190,15 @@ class Sandbox:
         env["TMPDIR"] = tempfile.gettempdir()
 
         before = self._listing()
-        t0 = time.monotonic()
-        timed_out = False
-        try:
-            proc = subprocess.run(
-                self._wrap_cmd([interpreter, str(cell_path.name)]),
-                cwd=self.work_dir,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-            )
-            stdout, stderr, exit_code = proc.stdout, proc.stderr, proc.returncode
-        except subprocess.TimeoutExpired as e:
-            timed_out = True
-            stdout = (e.stdout or b"").decode("utf-8", "replace") if isinstance(
-                e.stdout, bytes
-            ) else (e.stdout or "")
-            stderr = (e.stderr or b"").decode("utf-8", "replace") if isinstance(
-                e.stderr, bytes
-            ) else (e.stderr or "")
-            stderr += f"\n[killed after {timeout_s}s timeout]"
-            exit_code = None
-        duration = time.monotonic() - t0
-
-        after = self._listing()
-        new_files = [
-            name for name in after
-            if name != cell_path.name
-            and (name not in before or after[name] != before[name])
-        ]
+        done = cellrun.run_cell(
+            self._wrap_cmd([interpreter, str(cell_path.name)]),
+            cwd=str(self.work_dir),
+            env=env,
+            timeout_s=timeout_s,
+        )
+        stdout, stderr = done["stdout"], done["stderr"]
+        exit_code, timed_out, duration = done["exit_code"], done["timed_out"], done["duration_s"]
+        new_files = cellrun.new_files(before, self._listing(), cell_path.name)
         return ExecResult(
             cell_index=idx,
             code=code,
@@ -209,51 +212,16 @@ class Sandbox:
 
     def resolve_in_scope(self, path: str, base: Path | None = None) -> Path:
         """Resolve a model-provided path, confined to work_dir or data_dir."""
-        base = base or self.work_dir
-        p = Path(path)
-        if not p.is_absolute():
-            if p.parts and p.parts[0] == "DATA_DIR":
-                p = self.data_dir.joinpath(*p.parts[1:])
-            elif p.parts and p.parts[0] == "WORK_DIR":
-                p = self.work_dir.joinpath(*p.parts[1:])
-            else:
-                p = base / p
-        p = p.resolve()
-        allowed = (self.work_dir, self.data_dir, Path(tempfile.gettempdir()))
-        if not any(p == a or a in p.parents for a in allowed):
-            raise PermissionError(
-                f"path {p} is outside the allowed dirs "
-                f"(WORK_DIR={self.work_dir}, DATA_DIR={self.data_dir})"
-            )
-        return p
+        return cellrun.resolve_in_scope(path, self.work_dir, self.data_dir, base)
 
     def list_dir(self, path: str = ".") -> str:
-        target = self.resolve_in_scope(path)
-        if not target.is_dir():
-            return f"ERROR: {path} is not a directory"
-        rows = []
-        for p in sorted(target.iterdir()):
-            kind = "dir " if p.is_dir() else "file"
-            size = "-" if p.is_dir() else str(p.stat().st_size)
-            rows.append(f"{kind}\t{size}\t{p.name}")
-        header = f"listing of {target}:"
-        return header + ("\n" + "\n".join(rows) if rows else "\n(empty)")
+        return cellrun.list_text(self.resolve_in_scope(path), path)
 
-    def read_file(
-        self, path: str, offset: int = 0, limit: int = 200
-    ) -> str:
-        target = self.resolve_in_scope(path)
-        if not target.is_file():
-            return f"ERROR: {path} is not a file"
-        try:
-            lines = target.read_text(errors="replace").splitlines()
-        except OSError as e:
-            return f"ERROR: could not read {path}: {e}"
-        sliced = lines[offset : offset + limit]
-        body = "\n".join(
-            f"{offset + i + 1}\t{line}" for i, line in enumerate(sliced)
-        )
-        footer = ""
-        if offset + limit < len(lines):
-            footer = f"\n...[{len(lines) - offset - limit} more lines]"
-        return f"{target} ({len(lines)} lines)\n{body}{footer}"
+    def read_file(self, path: str, offset: int = 0, limit: int = 200) -> str:
+        return cellrun.read_text(self.resolve_in_scope(path), path, offset, limit)
+
+
+def settings_of(sandbox) -> dict:
+    """Where a run's code runs ({"sandbox": "local"|"modal", ...}), for any sandbox object."""
+    get = getattr(sandbox, "settings", None)
+    return dict(get()) if callable(get) else {"sandbox": "unknown"}
