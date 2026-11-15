@@ -114,7 +114,7 @@ export function createApp(options: AppOptions = {}) {
     // 204 tells an EventSource to stop reconnecting; there is nothing to stream for a run that does not exist.
     if (!existsSync(file)) { res.writeHead(204); return void res.end() }
     // Each stream holds a file watcher and a timer. An EventSource does not reconnect after an error status.
-    if (false) return json(res, 429, { error: "too many event streams are open; close one" })
+    if (streamCount >= MAX_STREAMS || (streams.get(runId) ?? 0) >= MAX_STREAMS_PER_RUN) return json(res, 429, { error: "too many event streams are open; close one" })
     streamCount++
     streams.set(runId, (streams.get(runId) ?? 0) + 1)
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" })

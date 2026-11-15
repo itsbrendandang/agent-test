@@ -238,7 +238,7 @@ test("over HTTP: the new fields are served, and revealing ideals does not leak i
   writeFileSync(questions, JSON.stringify({ question_id: "n-1-q1", ideal: "IDEAL-N1" }) + "\n")
   process.env.BIXV1_RUNS_DIR = runs2
   process.env.BIXV1_QUESTIONS_FILE = questions
-  const server = createServer((req, res) => void handleBixV1(req, res, new URL(req.url ?? "/", "http://x").pathname.split("/").filter(Boolean)))
+  const server = createServer((req, res) => void handleBixV1(req, res, new URL(req.url ?? "/", "http://x").pathname.split("/").filter(Boolean), { hasToken: () => true })) // a reviewer who holds the session token
   await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok))
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   try {

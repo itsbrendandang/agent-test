@@ -213,7 +213,7 @@ export function createSetup(options: SetupOptions = {}) {
     const bundled = { ...bundledAvailable(), created, running: up[0] }
     // The engine's own commands (`docker info` in glhf/doctor.ts, the local runner) follow the choice made here.
     if (app && env === process.env) { if (using) process.env.DOCKER_HOST = `unix://${using.socket}`; else delete process.env.DOCKER_HOST }
-    return { state: using ? "ready" : created ? "stopped" : "missing", using, bundled, desktopInstalled: exists("/Applications/Docker.app") }
+    return { state: using ? "ready" : created ? "stopped" : "missing", using, bundled, desktopInstalled: env.ASB_SETUP_IGNORE_SYSTEM_DOCKER !== "1" && exists("/Applications/Docker.app") }
   }
 
   const hasImage = async (socket: string, image: string) => { try { return (await docker(socket, "GET", `/images/${image}/json`)).status === 200 } catch { return false } }

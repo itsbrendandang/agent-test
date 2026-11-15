@@ -41,7 +41,11 @@ test("the dashboard may start real-model local runs, but not cloud runs or case 
   assert.equal(request.timeLimit, 2400)
   assert.throws(() => checkRequest({ mode: "cloud", solver: "glhf", model: "anthropic/claude-sonnet-5-5", task: "9", effort: "high", project: "p" }, DASHBOARD), /cloud runs cost money/)
   assert.throws(() => checkRequest({ mode: "local", solver: "glhf", model: "mock", caseDir: "/etc" }, DASHBOARD), /case directory/)
-  assert.equal(checkRequest({ mode: "cloud", solver: "glhf", model: "anthropic/claude-sonnet-5-5", task: "9", effort: "high", project: "p" }, CLI).mode, "cloud")
+  // The command line holds the token, and still has to accept the VM's bill in so many words.
+  const cloud = { mode: "cloud", solver: "glhf", model: "anthropic/claude-sonnet-5-5", task: "9", effort: "high", project: "p" } as const
+  assert.throws(() => checkRequest(cloud, CLI), (e: any) => e.field === "billCloud" && /creates a VM that bills until it is removed/.test(e.message))
+  assert.throws(() => checkRequest({ ...cloud, billCloud: true } as never, CLI), (e: any) => e.field === "maxHours")
+  assert.equal(checkRequest({ ...cloud, billCloud: true, maxHours: 2 } as never, CLI).mode, "cloud")
   assert.equal(checkRequest({ mode: "local", solver: "glhf", model: "mock", task: "9", caseDir: "/tmp/case" }, true).caseDir, "/tmp/case")
 })
 
@@ -162,7 +166,8 @@ test("the tracker lock: a live holder keeps it, a dead or reused pid does not", 
 test("a command is started once, and its state is read from the marker", async () => {
   const dir = tmp()
   assert.equal(processState(dir, "job", 0), "running", "no marker yet: give the launch a few polls")
-  assert.equal(processState(dir, "job", 5), "gone")
+  // After five polls with no pid: the command may never have started or may run unseen, so not "gone".
+  assert.equal(processState(dir, "job", 5), "unknown")
   assert.equal(startOnce(dir, "job", ["sh", "-c", "sleep 0.4; exit 3"], join(dir, "out.log"), null, dir), true)
   assert.equal(startOnce(dir, "job", ["sh", "-c", "echo twice"], join(dir, "out2.log"), null, dir), false, "the marker stops a second start")
   assert.ok(parseStamp(readFileSync(join(dir, "job.pid"), "utf8")), "the marker holds the pid")
@@ -176,5 +181,5 @@ test("a command is started once, and its state is read from the marker", async (
   const crashed = tmp() // a crash between the marker and the spawn: never started, never started again
   writeFileSync(join(crashed, "job.pid"), "")
   assert.equal(startOnce(crashed, "job", ["true"], join(crashed, "o"), null, crashed), false)
-  assert.equal(processState(crashed, "job", 9), "gone")
+  assert.equal(processState(crashed, "job", 9), "unknown", "an empty pid file says nothing about a process")
 })

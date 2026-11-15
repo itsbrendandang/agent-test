@@ -10,7 +10,7 @@ import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { BENCH_IMAGE, createSetup, DATASET, human, offlineReason, OPENABLE, SIZES, SWARM_IMAGE, type Status, type StepId } from "../src/setup.ts"
 
-const HERE = dirname(fileURLToPath(import.meta.url)), REPO = resolve(HERE, "../..")
+const HERE = dirname(fileURLToPath(import.meta.url)), REPO = resolve(HERE, "../.."), MB = 1024 ** 2
 const DASH = "http://127.0.0.1:5317"
 const closers: (() => void)[] = []
 after(() => { for (const close of closers) close() })
@@ -35,9 +35,10 @@ function daemon(socket: string, state: { images: Set<string>; pullError?: string
       res.writeHead(200, { "content-type": "application/json" })
       const send = (event: object) => res.write(`${JSON.stringify(event)}\n`)
       send({ status: `Pulling from ${name}` })
-      send({ status: "Downloading", id: "a", progressDetail: { current: 10, total: 100 } })
+      // Layer sizes of a real image: progress is measured against the image's expected size (tens of MB).
+      send({ status: "Downloading", id: "a", progressDetail: { current: 10 * MB, total: 40 * MB } })
       if (state.pullError) { send({ error: state.pullError }); return void res.end() }
-      const rest = () => { send({ status: "Download complete", id: "a" }); send({ status: "Downloading", id: "b", progressDetail: { current: 50, total: 50 } }); send({ status: "Pull complete", id: "b" }); state.images.add(name); res.end() }
+      const rest = () => { send({ status: "Download complete", id: "a" }); send({ status: "Downloading", id: "b", progressDetail: { current: 5 * MB, total: 5 * MB } }); send({ status: "Pull complete", id: "b" }); state.images.add(name); res.end() }
       if (state.slow) { const timer = setTimeout(rest, 60_000); res.on("close", () => clearTimeout(timer)) } else rest()
       return
     }
@@ -52,7 +53,6 @@ function daemon(socket: string, state: { images: Set<string>; pullError?: string
 function fakeApp(extra: { free?: number; env?: Record<string, string>; uv?: string } = {}) {
   const dir = temp(), data = join(dir, "data"), res = join(dir, "res"), vm = join(dir, "vm"), home = join(dir, "home")
   for (const sub of [data, home, join(res, "bin"), join(res, "python/bixbench/src"), join(res, "python/bixbench/sandbox"), join(res, "python/demo_case")]) mkdirSync(sub, { recursive: true })
-  writeFileSync(join(res, "python/STAMP"), "stamp-1\n")
   writeFileSync(join(res, "python/bixbench/src/x.py"), "print('x')\n")
   writeFileSync(join(res, "python/demo_case/prompt.md"), "demo\n")
   // The fake uv: records what it was given, then makes the virtual environment's python, as `uv sync` would.
@@ -60,6 +60,8 @@ function fakeApp(extra: { free?: number; env?: Record<string, string>; uv?: stri
   writeFileSync(join(res, "bin/uv"), `#!/bin/sh\necho "$@" >> "${dir}/uv.calls"\nenv > "${dir}/uv.env"\n${uv}\n`)
   for (const name of ["colima", "limactl"]) writeFileSync(join(res, "bin", name), `#!${process.execPath}\n${FAKE_COLIMA}`)
   for (const name of ["uv", "colima", "limactl"]) chmodSync(join(res, "bin", name), 0o755)
+  // The stamp is written last: "newer than the stamp" then means "written after the bundle was made".
+  writeFileSync(join(res, "python/STAMP"), "stamp-1\n")
   const env: NodeJS.ProcessEnv = {
     ASB_SETUP: "1", ASB_DATA_DIR: data, ASB_RES_DIR: res, ASB_VM_DIR: vm, HOME: home, PATH: `${join(res, "bin")}:/usr/bin:/bin`,
     UV_PROJECT_ENVIRONMENT: join(data, "python/venv"), UV_OFFLINE: "1", UV_NO_SYNC: "1", ANTHROPIC_API_KEY: "sk-fake-not-a-key", FAKE_DAEMON: join(HERE, "fixtures/setup-daemon.mjs"), ...extra.env,
@@ -230,6 +232,7 @@ test("the built-in runtime: start, use, stop, and start again by itself before a
   assert.ok(step(status, "runtime").actions.includes("start"))
   await app.setup.act("runtime", "start")
   await until(async () => (await app.setup.status()).runtime.state === "ready")
+  await until(() => app.setup.jobs.get("runtime")?.state !== "running") // the socket answers a moment before the start job ends
   status = await app.setup.status()
   assert.equal(status.runtime.using?.kind, "bundled")
   assert.deepEqual(step(status, "runtime").actions, ["stop"])
@@ -245,9 +248,10 @@ test("the built-in runtime: start, use, stop, and start again by itself before a
   await until(() => app.setup.jobs.get("runtime")?.state !== "running")
   await app.setup.act("runtime", "stop")
   await until(async () => (await app.setup.status()).runtime.state === "stopped")
+  await until(() => app.setup.jobs.get("runtime")?.state !== "running") // the stop itself has ended: its step offers buttons again
   status = await app.setup.status()
   assert.equal(status.ready.swarm, true, "a stopped built-in runtime does not send the person back to Set up")
-  assert.ok(step(status, "runtime").actions.includes("start"))
+  assert.ok(step(status, "runtime").actions.includes("start"), JSON.stringify([step(status, "runtime"), status.runtime]))
 
   // The launcher's question before a run: the runtime is started again, nothing is downloaded.
   const result = await app.setup.preflight()

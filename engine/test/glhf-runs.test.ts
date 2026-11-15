@@ -877,7 +877,7 @@ test("M2: a cloud start needs an explicit acknowledgement of the bill (billCloud
 test("M7: the refusal that asks for maxTokens says what it is: the budget the run plans by, with the hard stop a multiple of it", () => {
   const tasks = readFileSync(join(here, "../../glhf/bixbench/src/bixbench3/inspect_harness/tasks.py"), "utf8")
   assert.equal(Number(tasks.match(/^TOKEN_BACKSTOP = ([\d.]+)/m)?.[1]), HARD_STOP, "HARD_STOP in tracker.ts mirrors TOKEN_BACKSTOP of the harness")
-  assert.match(tasks, /token_limit=int\(max_tokens \* TOKEN_BACKSTOP\) if max_tokens else None/, "and that is the limit the harness sets")
+  assert.match(tasks, /token_limit=(?:int|round)\(max_tokens \* TOKEN_BACKSTOP\) if max_tokens else None/, "and that is the limit the harness sets")
   assert.ok(HARD_STOP > 1)
   assert.throws(() => checkRequest({ mode: "local", solver: "glhf", model: "anthropic/claude-sonnet-5-5" }, true), (e: any) => {
     assert.equal(e.field, "maxTokens")
