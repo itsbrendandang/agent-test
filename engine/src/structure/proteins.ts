@@ -90,8 +90,9 @@ const residueLetters = (line: string, anyCase = false): string | undefined => {
 
 /**
  * The residues of the listing that starts on lines[i] (a residue line), and the line after it. When wrapped, the next
- * lines of the same length and case join it, then one shorter last line of at least ten letters if the whole still
- * passes asSequence; a shorter word ("KRAS", "MUTANT") is not taken.
+ * lines of the same length and case join it, then one shorter last line if the whole still passes asSequence and the
+ * line has at least ten letters, follows two full lines, or ends a FASTA record (anyCase) wrapped at WRAP_MIN-WRAP_MAX.
+ * A short word after a single line ("KRAS", "MUTANT") is not taken.
  */
 function listing(lines: string[], i: number, wrapped: boolean, anyCase: boolean): { body: string; next: number } {
   const first = residueLetters(lines[i], anyCase)!
@@ -99,7 +100,8 @@ function listing(lines: string[], i: number, wrapped: boolean, anyCase: boolean)
   let body = first, next = i + 1
   for (let l; wrapped && next < lines.length && (l = residueLetters(lines[next], anyCase)) !== undefined && l.length <= first.length && (l === l.toUpperCase()) === upper; ) {
     if (l.length === first.length) { body += l; next++; continue }
-    if (l.length >= 10 && asSequence(body + l)) { body += l; next++ }
+    const fastaWrap = anyCase && first.length >= WRAP_MIN && first.length <= WRAP_MAX
+    if ((l.length >= 10 || next - i >= 2 || fastaWrap) && asSequence(body + l)) { body += l; next++ }
     break
   }
   return { body, next }

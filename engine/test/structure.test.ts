@@ -88,6 +88,12 @@ test("sequences written in a text: FASTA with UniProt's header, one run, listing
   assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60)}\nThanks.`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a FASTA record, then Thanks.")
   assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN}\nKRAS\n`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a FASTA record, then a gene symbol")
   assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN.slice(0, 60).toLowerCase()}\n${THIOREDOXIN.slice(60).toLowerCase()}\nOK`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a lower-case FASTA record, then a capital word")
+  const LONG = THIOREDOXIN + "KEFLDANLAGSGSGSGHHHH".slice(0, 16)
+  assert.equal(LONG.length, 125)
+  const wrapped = `${LONG.slice(0, 60)}\n${LONG.slice(60, 120)}\n${LONG.slice(120)}`
+  assert.deepEqual(sequencesIn(`>sp|P0AA25|THIO_ECOLI Thioredoxin 1 OS=Escherichia coli (strain K12) OX=83333 GN=trxA PE=1 SV=2\n${wrapped}\n`).map((f) => f.sequence), [LONG], "a FASTA record wrapped at 60, the last line of 5")
+  assert.deepEqual(sequencesIn(`Fold:\n${wrapped}\nThanks.`), [{ sequence: LONG }], "a listing wrapped at 60, the last line of 5")
+  assert.deepEqual(sequencesIn(`>short\n${UBIQUITIN.slice(0, 60)}\n${UBIQUITIN.slice(60)}`), [{ sequence: UBIQUITIN, name: "short" }], "a FASTA record of one full line and a short one")
 })
 
 test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
