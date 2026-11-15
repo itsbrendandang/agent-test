@@ -5,10 +5,10 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Models } from "@earendil-works/pi-ai"
-import { type BoardConfig, MOCK } from "./config.ts"
-import type { Verdict } from "./events.ts"
-import { refusePaid } from "./paid.ts"
-import { type ModelId, parseModelId, VENDOR_KEY } from "./providers.ts"
+import { type BoardConfig, MOCK } from "../config.ts"
+import type { Verdict } from "../events.ts"
+import { refusePaid } from "../paid/paid.ts"
+import { type ModelId, parseModelId, VENDOR_KEY } from "../providers.ts"
 
 /** `checkedBy`: the model that ruled, "vendor/model" (absent for scripted rulings and the Claude Code checker). */
 export interface Ruling { verdict: Verdict; note: string; usd: number; checkedBy?: string }

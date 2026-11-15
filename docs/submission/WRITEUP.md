@@ -109,10 +109,10 @@ model. **They have not been run with a real model. We do not know if they help.*
 
 | Sponsor | Use | Status |
 |---|---|---|
-| Exa | `search_docs` in the swarm (`swarm/tools.py`); literature search in the drug board (`engine/src/exa.ts`). | Guards tested with a stand-in. Live searches: stated in `docs/status.md`, not checked by us again. Not used in the pilot. |
+| Exa | `search_docs` in the swarm (`swarm/tools.py`); literature search in the drug board (`engine/src/search/exa.ts`). | Guards tested with a stand-in. Live searches: stated in `docs/status.md`, not checked by us again. Not used in the pilot. |
 | past.dev | Approved lessons are sent and recalled (`swarm/past_memory.py`). | Calls tested with a stand-in. Live test: stated in `docs/status.md`. Not used inside a full run. |
 | Pi | The coding agent harness we built with (`.pi/`, `docs/pi-setup.md`). | |
-| Pi Durable | Runtime of the run tracker and the drug board (`engine/package.json`, `engine/src/board.ts`). | Crash and resume checked by hand, scripted runs only. |
+| Pi Durable | Runtime of the run tracker and the drug board (`engine/package.json`, `engine/src/board/board.ts`). | Crash and resume checked by hand, scripted runs only. |
 | Modal | Planned. | **Not used.** No code imports it. |
 
 The swarm's own agent loop runs on Inspect AI, the benchmark's framework, not on Pi.

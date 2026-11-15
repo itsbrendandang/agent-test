@@ -1,7 +1,7 @@
 // The free literature search (Europe PMC). No test here reaches the network: fetch is a fake.
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { literatureLive, literatureOnce, parseEuropePmc, plainText, retryQueries, type LiteratureDeps } from "../src/literature.ts"
+import { literatureLive, literatureOnce, parseEuropePmc, plainText, retryQueries, type LiteratureDeps } from "../src/search/literature.ts"
 
 const record = (over: Record<string, unknown> = {}) => ({
   id: "40959979", source: "MED", pmid: "40959979", title: "Identification of KRAS mutants inhibitors.", pubYear: "2025",

@@ -7,7 +7,7 @@ import { createServer } from "node:http"
 import "./env.ts"
 import { bindHost, createApp } from "./app.ts"
 import { startTracker } from "./glhf/routes.ts"
-import { paidCallsLine } from "./paid.ts"
+import { paidCallsLine } from "./paid/paid.ts"
 import { boardKeysLine, boardModeLine } from "./providers.ts"
 import { LOCAL, loadConfig, MOCK } from "./config.ts"
 

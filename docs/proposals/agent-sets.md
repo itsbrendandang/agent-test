@@ -254,8 +254,8 @@ design agent sees only table schemas, never data or summary statistics (section 
 
 ### Board (set b): proposals only
 
-The board's claims are `[literature|computed|brief] text (source: ...)` lines (`engine/src/claims.ts`). A checker returns a
-verdict word (`engine/src/checkers.ts`); `computed` claims are rechecked by code (RDKit). There is no null, no test and no
+The board's claims are `[literature|computed|brief] text (source: ...)` lines (`engine/src/board/claims.ts`). A checker returns a
+verdict word (`engine/src/board/checkers.ts`); `computed` claims are rechecked by code (RDKit). There is no null, no test and no
 p-value. The paper's method applies to `computed` claims backed by a dataset; a `literature` claim has no p-value to
 calibrate, so the paper does not cover it.
 

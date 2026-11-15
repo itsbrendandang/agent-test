@@ -11,8 +11,8 @@ import { after, test } from "node:test"
 
 process.env.DRUG_BOARD_MOCK = "1"
 delete process.env.NO_PAID_CALLS
-const { checkModes, missingMemoSections, runBoard } = await import("../src/board.ts")
-const { loadAgent, loadRoster } = await import("../src/agents.ts")
+const { checkModes, missingMemoSections, runBoard } = await import("../src/board/board.ts")
+const { loadAgent, loadRoster } = await import("../src/board/agents.ts")
 const { loadConfig, MOCK, path } = await import("../src/config.ts")
 const { createApp } = await import("../src/app.ts")
 

@@ -38,7 +38,7 @@ flowchart LR
 | Web search | Exa (paid) | Always the first search. `quick`: exactly 1. `standard`: up to 3. |
 | Literature search | Europe PMC (free) | PubMed abstracts and preprints. Runs after the first web search, at the same time as the other searches. |
 | Database lookups | public databases (free) | `standard` only, up to 2: ClinicalTrials.gov, ChEMBL, openFDA, Open Targets, UniProt, PubChem (`engine/src/sources/`). |
-| Screen | cheap model | The board's own first pass (`engine/src/triage.ts`): is the result about the question, does it report findings, what kind of study is it. |
+| Screen | cheap model | The board's own first pass (`engine/src/board/triage.ts`): is the result about the question, does it report findings, what kind of study is it. |
 | Number | code | Kept sources become `[1]..[n]`, the most relevant first. The order comes from the plan, not from which reply arrived first. |
 | Write | strong model (`models.strong`) | A short answer in Markdown from the numbered sources only. The direct answer comes first. Each finding carries a marker such as `[2]`. |
 | Statement checker | cheap model of **another vendor** than the writer | Every cited sentence is checked against every source it cites. The checker must quote a passage. Code then looks for that passage, and for the sentence's numbers, in the source text. |
@@ -54,7 +54,7 @@ The prompts are plain files you can read and edit: `engine/src/research/prompts/
 - Which sources exist and their numbers.
 - Which markers stand. A marker that names no kept source is removed. Links and web addresses that are not a
   source's own are removed.
-- What the cited sentences are, and the mark of each one (`route` in `engine/src/triage.ts`).
+- What the cited sentences are, and the mark of each one (`route` in `engine/src/board/triage.ts`).
 - That a sentence about what is absent is not a sourced claim. Markers inside the "Not found in these sources:"
   paragraph are removed, so those sentences are the answer's own remarks and are not sent to the quote check.
 - That a sentence is in the text once. A sentence the writer wrote twice is shown once. A phrase that two
@@ -65,7 +65,7 @@ The prompts are plain files you can read and edit: `engine/src/research/prompts/
 - The **What is missing** part (see below), the recommendations that are kept, the limits and the cost.
 
 Text from a source is data. It reaches a model only inside the board's escaped evidence block
-(`evidenceBlock` in `engine/src/board.ts`). The instructions a model gets are the same whatever a source says
+(`evidenceBlock` in `engine/src/board/board.ts`). The instructions a model gets are the same whatever a source says
 (tested with a hostile source).
 
 ## Hypotheses (Standard level)
@@ -181,8 +181,8 @@ origin may ask 6 questions a minute; 3 follow-ups may wait in one thread.
   and what was spent plus the step's worst case fits under the answer's limit. A step that does not pass is not
   started. The answer then ends with what it has and says so (`stopped` and `note` in the record).
 - Every dollar counts against the board's daily limit (`meeting.daily_usd`). The board and the answers share one
-  total (`spentToday` in `engine/src/board.ts`). An answer in progress counts for its whole limit.
-- Every Exa search goes through the Exa ledger and its lifetime ceiling (`engine/src/exaledger.ts`). When Exa
+  total (`spentToday` in `engine/src/board/board.ts`). An answer in progress counts for its whole limit.
+- Every Exa search goes through the Exa ledger and its lifetime ceiling (`engine/src/paid/exaledger.ts`). When Exa
   cannot be used (no key, the ceiling, a service error) the answer does not fail: the step is shown as failed
   with the reason, and the free searches still run.
 - A vendor that refuses a key or a model name ends the answer at once with a plain message.

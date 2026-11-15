@@ -16,12 +16,12 @@
 // the keyword one with a note.
 import { existsSync, readFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { runDir as boardDir } from "./board.ts"
-import { loadConfig } from "./config.ts"
-import "./env.ts"
-import { listRuns as swarmRuns, runDetail, safeId } from "./glhf/store.ts"
-import { HttpError, readJson } from "./http.ts"
-import { paidCallsOff } from "./paid.ts"
+import { runDir as boardDir } from "../board/board.ts"
+import { loadConfig } from "../config.ts"
+import "../env.ts"
+import { listRuns as swarmRuns, runDetail, safeId } from "../glhf/store.ts"
+import { HttpError, readJson } from "../http.ts"
+import { paidCallsOff } from "../paid/paid.ts"
 import { type BoardRun, search } from "./search.ts"
 
 export type Kind = "all" | "swarm" | "board"

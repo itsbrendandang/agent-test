@@ -33,7 +33,7 @@ documents are in `docs/`.
     virtual machine), Exa search (`--exa`, the board's search), the drug board with real
     models or its checkers, the model behind Ask, a BixBench v1 run with a real model
     (`bixbench-v1 run`), and sending lessons to past.dev.
-  - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid.ts`).
+  - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid/paid.ts`).
     Do not edit `.env`, do not export the variable, and do not change or go around `paid.ts`.
   - `npm run preflight` (engine) checks a real run's model ids and keys with the vendors' free model-list requests. It needs real
     keys, so an agent never runs it: only the person who pays does. It refuses when `PAID_SWITCH_LOCKED=1` and in tests.
@@ -49,7 +49,7 @@ documents are in `docs/`.
     calls `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly. Do not use these
     with a real model. Only seven provider keys are blanked; Google, AWS and Azure
     credentials and a saved Hugging Face login are not.
-  - New code that can spend must call `refusePaid()` from `engine/src/paid.ts` (Python:
+  - New code that can spend must call `refusePaid()` from `engine/src/paid/paid.ts` (Python:
     `refuse_paid()` from `bixbench3/paid.py`) right before the paid step. The engine must
     start child processes with `childEnv()`.
   - A test that exercises paid-allowed logic with fakes must set `NO_PAID_CALLS=0` inside
@@ -61,8 +61,8 @@ documents are in `docs/`.
   `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1 DRUG_BOARD_PORT=8811 DRUG_BOARD_RUNS_DIR=/tmp/<you>/board GLHF_RUNS_DIR=/tmp/<you>/glhf node engine/src/server.ts`.
   The two `*_RUNS_DIR` variables keep your practice runs out of that person's saved research. Tests write to a
   temporary folder, never to `board/runs/` or `glhf/runs/`.
-- **Shared files.** `board/config.yaml`, `board/agents/*.md`, `engine/src/board.ts`,
-  `engine/src/agents.ts`, `engine/src/app.ts`, `engine/src/mock.ts` and `package.json` are edited
+- **Shared files.** `board/config.yaml`, `board/agents/*.md`, `engine/src/board/board.ts`,
+  `engine/src/board/agents.ts`, `engine/src/app.ts`, `engine/src/mock.ts` and `package.json` are edited
   by several people and agents. Re-read the file right before you edit it, keep the edit small,
   and never resolve a merge by taking one whole side of these files.
 - **The team list keeps its searcher.** The `board:` list in `board/config.yaml` must include the
@@ -100,7 +100,7 @@ documents are in `docs/`.
 - Durable replay repeats your code, so it repeats your side effects. Any call that costs money
   or acts outside the process (a model, a checker, Exa, a subprocess, a cloud launch) must be
   stored under a stable key before the run can rely on it, and skipped on replay when that key
-  exists. The pattern is in `checkClaims` in `engine/src/board.ts` (key: round, member, hash of
+  exists. The pattern is in `checkClaims` in `engine/src/board/board.ts` (key: round, member, hash of
   the claim) and `startOnce` in `engine/src/glhf/task.ts`. Do not add a paid call without
   one, and add a test that replays and counts the calls.
 - Never call `GET /api/bixv1/runs/:id?ideal=1`, and never open the dataset's question file
@@ -123,21 +123,21 @@ documents are in `docs/`.
   tests. Built; a pilot of 8 questions ran; the full run is not done.
 - Swarm memory: `glhf/memory/` (`lessons.pending.md`, `lessons.md`, `README.md`).
 - Run tracker (Pi Durable): `engine/src/glhf/`. Contract types: `engine/src/glhf/types.ts`.
-- Paid-calls switch: `engine/src/paid.ts`, tests in `engine/test/paid.test.ts`.
+- Paid-calls switch: `engine/src/paid/paid.ts`, tests in `engine/test/paid.test.ts`.
 - BixBench v1 results API (read-only): `engine/src/bixv1/`. It must never return an ideal
   answer by default; see the rule at the top of `engine/src/bixv1/routes.ts`.
 - Engine request handler and request checks: `engine/src/app.ts`, `engine/src/http.ts`.
   `engine/src/server.ts` only listens. Board run lock: `engine/src/runlock.ts`.
-- Search and Ask over runs: `engine/src/search.ts`, `engine/src/ask.ts`.
-- Drug board (the team review): `engine/src/board.ts`, `board/config.yaml` (limits, models, the
-  team list), `board/agents/` (one file per member). The scout's searches: `engine/src/exa.ts`,
-  `engine/src/exaledger.ts` (spend record and ceiling), `engine/src/literature.ts` (free).
+- Search and Ask over runs: `engine/src/search/search.ts`, `engine/src/search/ask.ts`.
+- Drug board (the team review): `engine/src/board/board.ts`, `board/config.yaml` (limits, models, the
+  team list), `board/agents/` (one file per member). The scout's searches: `engine/src/search/exa.ts`,
+  `engine/src/paid/exaledger.ts` (spend record and ceiling), `engine/src/search/literature.ts` (free).
 - The chat on the Search screen: `engine/src/chat/` (catalogue, plans, routes),
   `dashboard/src/views/HomeView.tsx`, `dashboard/src/home/`.
 - Health report: `scripts/check.mjs` (`npm run check`).
 - Swarm view: `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/` (New run form:
   `NewRun.tsx`).
-- Exa search tool (drug board): `engine/src/exa.ts`. Exa's own guidance is the installed skill
+- Exa search tool (drug board): `engine/src/search/exa.ts`. Exa's own guidance is the installed skill
   at `.agents/skills/build-with-exa/`.
 
 ## Documents

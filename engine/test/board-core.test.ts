@@ -6,9 +6,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { BudgetReached, checkClaims, type ClaimDeps, gateRound, MEMO_SECTIONS, type Memo, missingMemoSections, rollDay, runBoard, spentToday, summarize, todaySpend, usdOf } from "../src/board.ts"
-import { claudeCodeCheck } from "../src/checkers.ts"
-import type { Claim } from "../src/claims.ts"
+import { BudgetReached, checkClaims, type ClaimDeps, gateRound, MEMO_SECTIONS, type Memo, missingMemoSections, rollDay, runBoard, spentToday, summarize, todaySpend, usdOf } from "../src/board/board.ts"
+import { claudeCodeCheck } from "../src/board/checkers.ts"
+import type { Claim } from "../src/board/claims.ts"
 import { type BoardConfig, loadConfig, ROOT } from "../src/config.ts"
 
 // These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are

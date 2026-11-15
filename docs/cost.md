@@ -146,7 +146,7 @@ check is **unknown**; `checkers.ts` reads `total_cost_usd` from its JSON output 
 No real board run exists, so this is a model, not a measurement. The model is in `/tmp/costmodel/model.py` and `run5.py`; the
 logic is below so it can be redone by hand.
 
-### Structure (read from `engine/src/board.ts`, `agents.ts`, `board/agents/*.md`, `board/config.yaml`)
+### Structure (read from `engine/src/board/board.ts`, `agents.ts`, `board/agents/*.md`, `board/config.yaml`)
 
 - One lead and **nine members**, in the order `scout, proposer, pilot, experimenter, methods-auditor, critic, reviser,
   finisher, reporter`. Tiers come from each agent's file: `strong` (Sonnet) is proposer, experimenter, methods auditor, reviser,
@@ -221,7 +221,7 @@ $0.23 to $0.38 on Sonnet. Same order of magnitude; it supports the order, not th
 ## 4. What removing Jev does to the cost
 
 Jev was a classifier at about $0.042 per Mtok of input and nothing for output (`[catalog]`, `typesafe/jev-1.14`). It is
-replaced (`engine/src/triage.ts`, `providers.ts`) by a cheap model that answers in strict JSON and must quote the source; code
+replaced (`engine/src/board/triage.ts`, `providers.ts`) by a cheap model that answers in strict JSON and must quote the source; code
 accepts "verified" only if the quote is in the source and contains the claim's numbers. The checker is always from the other
 vendor than the member: Haiku for the critic's claims, `gpt-4o-mini` for everyone else's.
 

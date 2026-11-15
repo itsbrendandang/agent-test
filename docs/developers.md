@@ -260,7 +260,7 @@ sent. Checked on 14 November 2026 against the code and the run records.
 
 | Tool | Where it is in the code | Really called so far |
 |---|---|---|
-| [Exa](https://exa.ai) | The team review's scout (`engine/src/exa.ts`, spend record in `engine/src/exaledger.ts`) and the swarm's documentation search (`--exa`, `search_docs` in `swarm/tools.py`). The app shows "Search powered by Exa" on real Exa results only. | Yes, by hand only: two documentation searches and one key check, about $0.02 in total. No review and no run has used it. |
+| [Exa](https://exa.ai) | The team review's scout (`engine/src/search/exa.ts`, spend record in `engine/src/paid/exaledger.ts`) and the swarm's documentation search (`--exa`, `search_docs` in `swarm/tools.py`). The app shows "Search powered by Exa" on real Exa results only. | Yes, by hand only: two documentation searches and one key check, about $0.02 in total. No review and no run has used it. |
 | [past.dev](https://past.dev) | Long-term memory for the swarm (`--memory` with `PAST_API_KEY`, `swarm/past_memory.py`). Only lessons that a person approved are sent. | Yes, by hand: sending and recalling lessons was tested against the live service. Not used inside a full swarm run. |
 | OpenAI | The team review's critic and second checker (`board/config.yaml`, `engine/src/providers.ts`, `checkers.ts`), and the judge that grades BixBench v1 answers. | Yes: `gpt-4o` judged the 8 pilot questions. The separate baseline in `bixbench/` reports runs with `gpt-5.1` and `gpt-4o`. The team review has not called it in a real run; the free model-list check passed. |
 | [Modal](https://modal.com) | Being built, not in `main`: hosting the app (`deploy/`), serving open models (`glhf/openmodels/`), and a Modal sandbox for the BixBench v1 adapter. | Partly: the account is connected, the weights of one open model (Qwen3.6-35B) were downloaded to a Modal Volume, and a CPU sandbox app was deployed for tests; about $0.04 of credit used. Serving the model stopped at Modal's message "Please add a payment method to use L40S GPU functions". |
@@ -285,7 +285,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `glhf/runs/` | Run folders. Not in git. |
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
 | `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
-| `engine/src/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
+| `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
 | `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |

@@ -17,13 +17,13 @@
 // What it does not change: max_usd, daily_usd, the Exa caps, per-run mode (a run keeps the mode it started in).
 import { appendFileSync, mkdirSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { spentToday } from "./board.ts"
-import { loadRoster } from "./agents.ts"
-import { type BoardConfig, MOCK, LOCAL, path } from "./config.ts"
+import { spentToday } from "../board/board.ts"
+import { loadRoster } from "../board/agents.ts"
+import { type BoardConfig, MOCK, LOCAL, path } from "../config.ts"
 import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "./exaledger.ts"
-import { gate, HttpError, readJson } from "./http.ts"
+import { gate, HttpError, readJson } from "../http.ts"
 import { paidState, paidSwitchLocked, setPaidOverride } from "./paid.ts"
-import { missingKeys } from "./providers.ts"
+import { missingKeys } from "../providers.ts"
 
 export const CONFIRM = "I will be charged"
 export const AUDIT_FILE = ".paid-switch-audit.jsonl"

@@ -61,7 +61,7 @@ If the team wants agents to fetch data, build one tool and give agents no other 
 | Destination | Only `<run folder>/data/<catalogue id>/`, outside git. Run folders are already ignored (`board/runs/`, `glhf/runs/`). |
 | Limits | A size cap per file and per run, a file-type allow-list, no archive unpacking outside the folder, a time limit. |
 | Politeness | The rules of `scripts/common.py`: one identified User-Agent, robots.txt, the rate limit, no credential, redirects checked hop by hop. |
-| Cost | Free public endpoints only. A record whose `notes` say "requester-pays" costs money: treat it as a paid call (`refusePaid()` in `engine/src/paid.ts`). |
+| Cost | Free public endpoints only. A record whose `notes` say "requester-pays" costs money: treat it as a paid call (`refusePaid()` in `engine/src/paid/paid.ts`). |
 | Record | Write `id`, URL, licence, bytes, SHA-256 and time into the run's events. On Durable replay, skip a download whose key (run, catalogue id, URL) is already stored. |
 | Sandbox | The analysis sandbox keeps its network off. The engine downloads; the sandbox gets the folder read-only. |
 
@@ -73,7 +73,7 @@ the reader. One real card started with a call to install a plugin in "your codin
 - `scripts/common.py` replaces a description that reads like instructions with a neutral line,
   and `scripts/schema.py` refuses such a record. This is a keyword filter. It is not complete.
 - Any code that shows catalogue text to a model must wrap it in markers and escape it, as
-  `engine/src/ask.ts` does for run records, and must tell the model that the text is data, not
+  `engine/src/search/ask.ts` does for run records, and must tell the model that the text is data, not
   instructions.
 - Text in the catalogue can never start a download or a run. Those need the tool above and a
   person's confirmation.

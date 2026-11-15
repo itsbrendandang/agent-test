@@ -19,8 +19,8 @@
 // This is the only module that reads the variable. Ask paidCallsOff(), or call refusePaid() right before the
 // paid step. Not covered: a person who runs the Python CLI (uv run bixbench3 ..., python -m bixbench3...) or
 // any other program directly. That does not go through the engine, and it reads .env on its own.
-import "./env.ts" // first: NO_PAID_CALLS=0 may be in .env
-import { isLocalModel, isScripted, localName, localRefusal } from "./local.ts"
+import "../env.ts" // first: NO_PAID_CALLS=0 may be in .env
+import { isLocalModel, isScripted, localName, localRefusal } from "../local.ts"
 
 // THE RUNTIME SWITCH. The state starts from the environment (NO_PAID_CALLS, read as above), and the engine's paid
 // switch (POST /api/paid, paidswitch.ts) can change it for the life of THIS PROCESS only. The override lives in

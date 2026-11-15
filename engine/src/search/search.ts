@@ -1,9 +1,9 @@
 // GET /api/search?q=...  One search over every experiment: swarm runs and drug board runs.
 // Every word in the query must appear somewhere in the run (case-insensitive). An empty query lists all.
 import { existsSync, readFileSync } from "node:fs"
-import { runDir as boardDir } from "./board.ts"
-import { loadConfig } from "./config.ts"
-import { listRuns as swarmRuns, runDetail, safeId } from "./glhf/store.ts"
+import { runDir as boardDir } from "../board/board.ts"
+import { loadConfig } from "../config.ts"
+import { listRuns as swarmRuns, runDetail, safeId } from "../glhf/store.ts"
 
 export interface Hit {
   kind: "swarm" | "board"

@@ -1,7 +1,7 @@
 // Scripted turns for mock mode. Each function reads the agent's own conversation and returns the next
 // step, so mock runs exercise the real harness, tools, checkers, constraints and events.
 import type { TranscriptContext } from "@earendil-works/pi-ai"
-import type { AgentDef } from "./agents.ts"
+import type { AgentDef } from "./board/agents.ts"
 import type { EvidenceItem } from "./events.ts"
 
 export interface Step { text: string; tool?: { name: string; args: Record<string, unknown> } }

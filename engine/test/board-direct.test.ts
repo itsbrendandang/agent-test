@@ -16,20 +16,20 @@ const outbound: string[] = []
 const realFetch = globalThis.fetch
 globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => { outbound.push(String(input instanceof Request ? input.url : input)); throw new Error("a test tried to reach the network") }) as typeof fetch
 
-const { checkClaims, gateRound, loadState, overLimit, runBoard, searchOnce, spentToday, startRun, summarize, totalUsd } = await import("../src/board.ts")
-const { computedCanRun, NOT_RERUN, openaiCheck } = await import("../src/checkers.ts")
+const { checkClaims, gateRound, loadState, overLimit, runBoard, searchOnce, spentToday, startRun, summarize, totalUsd } = await import("../src/board/board.ts")
+const { computedCanRun, NOT_RERUN, openaiCheck } = await import("../src/board/checkers.ts")
 const { loadConfig, mockMode } = await import("../src/config.ts")
-const { loadAgent, loadRoster } = await import("../src/agents.ts")
+const { loadAgent, loadRoster } = await import("../src/board/agents.ts")
 const { EventLog } = await import("../src/events.ts")
-const { exaSearch, MissingExaKey, reportedCost } = await import("../src/exa.ts")
-const { exaLedgerFile, exaTotal, ceilingMessage } = await import("../src/exaledger.ts")
+const { exaSearch, MissingExaKey, reportedCost } = await import("../src/search/exa.ts")
+const { exaLedgerFile, exaTotal, ceilingMessage } = await import("../src/paid/exaledger.ts")
 const { checkTierPrices } = await import("../src/models.ts")
 const { assertBoardKeys, boardModeLine, escalationModel, firstPassModel, MissingTierKey, missingKeys, parseModelId, VENDOR_KEY } = await import("../src/providers.ts")
-const { FirstPass, keepItem, MIN_QUOTE, quoteInSource, quietReasoning, readRulings, readTriage, route } = await import("../src/triage.ts")
+const { FirstPass, keepItem, MIN_QUOTE, quoteInSource, quietReasoning, readRulings, readTriage, route } = await import("../src/board/triage.ts")
 const { buildCatalog } = await import("../src/chat/catalog.ts")
-const { PaidCallsOff } = await import("../src/paid.ts")
+const { PaidCallsOff } = await import("../src/paid/paid.ts")
 import type { BoardConfig } from "../src/config.ts"
-import type { Claim } from "../src/claims.ts"
+import type { Claim } from "../src/board/claims.ts"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "board-direct-"))
 const ALL_KEYS = { NO_PAID_CALLS: "0", ANTHROPIC_API_KEY: "fake", OPENAI_API_KEY: "fake", EXA_API_KEY: "fake" } as NodeJS.ProcessEnv

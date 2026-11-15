@@ -34,8 +34,8 @@ const { createApp } = await import("../src/app.ts")
 const { forgetRoles, handleGlhf, needsToken, paidRun, sessionToken, startTracker, stopTracker, TOKEN_FILE } = await import("../src/glhf/routes.ts")
 const { loadStored, RUNS } = await import("../src/glhf/store.ts")
 const { access, guard } = await import("../src/http.ts")
-const { askDailyCap, ASK_DAILY_CAP, resetDaily } = await import("../src/ask.ts")
-type Entry = import("../src/ask.ts").Entry
+const { askDailyCap, ASK_DAILY_CAP, resetDaily } = await import("../src/search/ask.ts")
+type Entry = import("../src/search/ask.ts").Entry
 
 // After the imports (env.ts fills keys from .env when it loads): no real key is in reach of this file.
 for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "PAST_API_KEY"]) delete process.env[key]

@@ -12,7 +12,7 @@
 // With the engine server running (npm run engine) commands go through it; otherwise this process tracks.
 import { existsSync, readFileSync } from "node:fs"
 import "../env.ts"
-import { paidCallsLine, paidCallsOff } from "../paid.ts"
+import { paidCallsLine, paidCallsOff } from "../paid/paid.ts"
 import { doctor, tools } from "./doctor.ts"
 import { TOKEN_FILE } from "./routes.ts"
 import { type Cell, scoreboard } from "./scoreboard.ts"
