@@ -88,14 +88,14 @@ anything is spent.
 
 | Screen | What it is for |
 |---|---|
-| Overview | The first screen: how much has been run, how much of it is research, and a chart per day. |
+| Overview | The first screen: a question box with the agents waiting around it, then how much has been run, how much of it is research, and a chart per day. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
 | Saved research | Everything that was run before. You can search it and open any result. |
 | Compare | A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
-| Lab | The agents as characters in a lab. They walk only when the engine reports real work. |
+| Agent Lab | The agents as characters in a lab. They walk only when the engine reports real work. |
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, spending limits, how it works. |
 
@@ -116,7 +116,7 @@ it.
 
 ![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
 
-**Lab.** The same run as a scene: who is working, who fetched what, and a log of every step.
+**Agent Lab.** The same run as a scene: who is working, who fetched what, and a log of every step.
 The lab's look is by Anh Lam.
 
 ![The Lab screen: six rooms with the agents as characters, and a side panel for the selected one](docs/images/lab.png)

@@ -9,10 +9,36 @@ export class EngineError extends Error {
   constructor(message: string, status: number) { super(message); this.status = status }
 }
 
+// ---- requests in flight. The shell shows a thin "Working" bar from this (components/WorkingBar.tsx): at once when
+// something was sent (a request that is not a GET), and for a read only when it has been pending for a while, so the
+// views' background polling never makes it flicker. Event streams are not requests of this kind and do not count.
+export interface Pending { /** A request that changes or starts something (not a GET). */ write: boolean; /** When it was sent (ms). */ since: number }
+const pending = new Map<number, Pending>()
+const watchers = new Set<() => void>()
+let nextId = 0
+let snapshot: readonly Pending[] = []
+const changed = () => { snapshot = [...pending.values()]; for (const w of watchers) w() }
+/** The requests in flight now. The same array until something changes. */
+export const pendingRequests = (): readonly Pending[] => snapshot
+export const watchRequests = (fn: () => void) => { watchers.add(fn); return () => { watchers.delete(fn) } }
+/**
+ * Count a request while it is in flight. Wrap the fetch itself, not time spent waiting for a person:
+ * `const r = await tracked(fetch(url, init), init?.method)`. Use it for any request that does not go through
+ * readEngine or engineFetch.
+ */
+export function tracked<T>(request: Promise<T>, method?: string): Promise<T> {
+  const id = nextId++
+  pending.set(id, { write: (method ?? "GET").toUpperCase() !== "GET", since: Date.now() })
+  changed()
+  const done = () => { if (pending.delete(id)) changed() }
+  request.then(done, done)
+  return request
+}
+
 /** GET a JSON reply. Rejects with EngineError; an aborted request rejects with the browser's AbortError. */
 export async function readEngine<T>(path: string, init?: RequestInit): Promise<T> {
   let r: Response
-  try { r = await fetch(ENGINE + path, init) }
+  try { r = await tracked(fetch(ENGINE + path, init), init?.method) }
   catch (error) {
     if ((error as Error)?.name === "AbortError") throw error
     throw new EngineError("The engine cannot be reached.", 0)

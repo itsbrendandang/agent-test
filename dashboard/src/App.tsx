@@ -13,6 +13,8 @@ import { TokenPrompt } from "./components/TokenPrompt"
 import { SidebarProvider, useSidebar } from "./components/ui/sidebar"
 import { TooltipProvider } from "./components/ui/tooltip"
 import { ViewBoundary } from "./components/ViewBoundary"
+import { WorkingBar } from "./components/WorkingBar"
+import { useWorking } from "./lib/working"
 import { getCatalog } from "./home/api"
 import { setOpen } from "./lib/open"
 import { HELP, useShell } from "./lib/shell"
@@ -68,6 +70,7 @@ export default function App() {
   }, [])
   const go = (next: View) => { setView(next); window.location.hash = next }
   const shell = useShell()
+  const working = useWorking() // something was sent, or a read is taking long: the thin bar under the header
   // The loading screen stays until the engine's status and catalog have both answered (or failed); see Splash for the limits.
   const [catalogAnswered, setCatalogAnswered] = useState(false)
   useEffect(() => { const done = () => setCatalogAnswered(true); getCatalog().then(done, done) }, [])
@@ -91,7 +94,8 @@ export default function App() {
             <div className="app-header-title" ref={setTitleEl} />
             <div className="app-header-actions" ref={setActionsEl} />
           </header>
-          <main className="page-host" id="main" tabIndex={-1}>
+          <WorkingBar working={working} />
+          <main className="page-host" id="main" tabIndex={-1} aria-busy={working || undefined}>
             <HeaderProvider value={targets}>
               <EngineNotice shell={shell} />
               <ViewBoundary view={LABEL[view]}>

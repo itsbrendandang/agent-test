@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
 import { forgetScripted } from "@/lib/scripted"
+import { setAsk, takeAsk } from "@/lib/open"
 import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, reply, PLAN } from "@/test/home"
 import { ExperimentsView } from "@/views/ExperimentsView"
@@ -780,5 +781,39 @@ describe("what the engine added after the first real answer", () => {
     const final = { 90: "not dealt with", 91: "reported addressed by the writer, not re-checked", 92: "dealt with" }
     expect(of([...notes, revised, judged])).toEqual(final)
     expect(of([judged, revised, ...notes])).toEqual(final) // the same whatever order they arrive in
+  })
+})
+
+describe("a question handed over from the Overview", () => {
+  const engine = () => routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "POST /api/research": { status: 202, body: { id: "a-1", thread: "t-1", mode: "real" } } })
+  it("is put in the composer with the cursor in it, and is not sent: the person presses Send here", async () => {
+    const sent = engine()
+    setAsk("  Does drug A protect the heart?  ")
+    render(<HomeView onOpen={() => {}} />)
+    const box = screen.getByRole("textbox", { name: "Ask a research question" })
+    expect(box).toHaveValue("Does drug A protect the heart?"); expect(box).toHaveFocus()
+    await screen.findByRole("radio", { name: "Standard" })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(to(sent, "POST", "/api/research")).toHaveLength(0); expect(to(sent, "POST", "/api/chat")).toHaveLength(0) // nothing was sent, so nothing can have cost money
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull()
+    expect(takeAsk()).toBeUndefined() // read once
+    await userEvent.setup().click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() => expect(to(sent, "POST", "/api/research")[0]?.body).toMatchObject({ question: "Does drug A protect the heart?" }))
+  })
+  it("fills the composer of a conversation that is already on screen, and leaves the conversation as it is", () => {
+    engine()
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
+    setAsk("A new one")
+    render(<HomeView onOpen={() => {}} />)
+    expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("A new one")
+    expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1)
+  })
+  it("is capped at the composer's limit, an empty one is nothing, and a saved answer being opened wins over it", () => {
+    setAsk("x".repeat(5000)); expect(takeAsk()).toHaveLength(2000)
+    sessionStorage.clear(); setAsk("   "); expect(takeAsk()).toBeUndefined()
+    engine(); sessionStorage.clear()
+    sessionStorage.setItem("open.answer", JSON.stringify({ id: "a-2", question: "Saved question" })); setAsk("Handed over")
+    render(<HomeView onOpen={() => {}} />)
+    expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("")
   })
 })

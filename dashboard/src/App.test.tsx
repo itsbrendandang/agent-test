@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { HeaderSlot } from "@/components/HeaderSlot"
 import { EngineOffline } from "@/components/Shared"
+import { tracked } from "@/lib/engine"
 import { takeOpen } from "@/lib/open"
 import { routes } from "@/test/engine"
 import App from "./App"
@@ -134,6 +135,22 @@ describe("the navigation", () => {
     expect(screen.getByRole("link", { name: "Skip to the content" })).toHaveFocus()
     await t.user.keyboard("{Enter}")
     expect(screen.getByRole("main")).toHaveFocus()
+  })
+})
+
+describe("the Working bar", () => {
+  it("lies directly under the header while something that was sent is in flight, and marks the content busy", async () => {
+    await show("#Runs")
+    await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull()) // the first reads were quick
+    let finish!: () => void
+    act(() => { void tracked(new Promise<void>((r) => { finish = r }), "POST") })
+    const bar = await screen.findByRole("progressbar", { name: "Working" })
+    expect(screen.getByRole("banner").nextElementSibling).toContainElement(bar) // right under the header row
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true")
+    expect(screen.getByRole("main")).not.toContainElement(bar) // it takes no room in the content
+    await act(async () => { finish() })
+    await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull(), { timeout: 2000 })
+    expect(screen.getByRole("main")).not.toHaveAttribute("aria-busy")
   })
 })
 

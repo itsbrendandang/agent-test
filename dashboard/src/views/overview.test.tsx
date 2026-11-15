@@ -81,3 +81,26 @@ describe("Overview", () => {
     expect(screen.queryByText("Research runs")).toBeNull()
   })
 })
+
+describe("the welcome on the home page", () => {
+  it("hands a typed question to Research without sending anything, and a starter question fills the box", async () => {
+    const onOpen = show({})
+    await screen.findByText("Your research team is ready")
+    const box = screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
+    const ask = screen.getByRole("button", { name: "Ask the team" }) as HTMLButtonElement
+    expect(ask.disabled).toBe(true)
+    await userEvent.click(screen.getByRole("button", { name: "What GLP-1s are working in the market right now?" }))
+    expect(box.value).toBe("What GLP-1s are working in the market right now?")
+    expect(document.activeElement).toBe(box)
+    expect(document.querySelector(".ov-hero")?.getAttribute("data-eager")).toBe("true") // the team perks up
+    const posts = () => (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls.filter(([, init]) => init?.method && init.method !== "GET")
+    await userEvent.click(ask)
+    expect(onOpen).toHaveBeenCalledWith("Home")
+    expect(sessionStorage.getItem("open.ask")).toBe("What GLP-1s are working in the market right now?")
+    expect(posts()).toHaveLength(0) // nothing was sent to the engine from this page
+    sessionStorage.removeItem("open.ask")
+    // The agents are named in text for a screen reader; the moving picture is hidden from it.
+    expect(document.querySelector(".ov-stage")?.getAttribute("aria-hidden")).toBe("true")
+    expect(screen.getByText("Scout: finds sources")).toBeTruthy()
+  })
+})

@@ -9,6 +9,7 @@ import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { plainWhen } from "@/lib/format"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
+import { Hero } from "@/overview/Hero"
 import { KIND_LABEL, KINDS, niceTop, perDay, totalsOf, type Day } from "@/overview/model"
 import "@/overview/overview.css"
 
@@ -81,7 +82,8 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   return (
     <div className="page" aria-busy={!runs}>
       <h1 className="sr-only">Overview</h1>
-      <div className="page-head"><div><p className="page-about">What has been run so far. Practice runs use fixed example text and are counted apart from research.</p></div></div>
+      <Hero onOpen={onOpen} />
+      <p className="page-about">What has been run so far. Practice runs use fixed example text and are counted apart from research.</p>
 
       <section className="ov-tiles" aria-label="Totals">
         <div className="ov-tile" data-lead><b>{runs ? totals.research : "–"}</b><span>Research runs</span><small>Made with real AI models.</small></div>
@@ -91,7 +93,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       </section>
 
       {runs && !runs.length && (
-        <section className="ov-card"><h2>Nothing has been run yet</h2><p>Ask a question on Research to make the first one.</p><button type="button" className="ov-link" onClick={() => onOpen("Home")}>Go to Research</button></section>
+        <section className="ov-card"><h2>Nothing has been run yet</h2><p>Ask the team a question above to make the first one.</p><button type="button" className="ov-link" onClick={() => onOpen("Home")}>Go to Research</button></section>
       )}
 
       {!!runs?.length && (

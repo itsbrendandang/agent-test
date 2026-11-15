@@ -32,3 +32,17 @@ export function takeOpenAnswer(): { id: string; question: string } | undefined {
     return saved && typeof saved.id === "string" && /^[\w.-]{1,120}$/.test(saved.id) && typeof saved.question === "string" ? { id: saved.id, question: saved.question } : undefined
   } catch { return undefined }
 }
+
+// A question typed somewhere else (the Overview's chat box), handed to Research. It is put in the composer and NOT
+// sent: the person presses Send on Research, where the effort and the limits are shown. Read once, then cleared.
+const ASK = "open.ask"
+/** The longest question the composer takes (the engine's own limit). */
+const ASK_MAX = 2000
+export const setAsk = (question: string) => { try { const q = question.trim().slice(0, ASK_MAX); if (q) sessionStorage.setItem(ASK, q); else sessionStorage.removeItem(ASK) } catch { /* storage off: nothing is handed over */ } }
+export function takeAsk(): string | undefined {
+  try {
+    const q = sessionStorage.getItem(ASK)
+    if (q !== null) window.setTimeout(() => sessionStorage.removeItem(ASK), 0) // after this render: a second mount in development reads the same
+    return q ? q.slice(0, ASK_MAX) : undefined
+  } catch { return undefined }
+}

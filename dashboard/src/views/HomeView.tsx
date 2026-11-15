@@ -30,16 +30,19 @@ import { Working } from "@/research/Working"
 import { provenanceOf } from "@/lib/provenance"
 import { groupRecords, stamp } from "@/lib/records"
 import { boardsRead, boardTitles, useBoardScripted } from "@/lib/scripted"
-import { linkTo, setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
+import { linkTo, setOpen, takeAsk, takeOpenAnswer, viewOfKind } from "@/lib/open"
 import { openHelp } from "@/lib/shell"
 
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
 export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
-  // A saved answer opened from Saved research is shown as its question and the answer; otherwise this session's conversation.
-  const [turns, setTurns] = useState<Turn[]>(() => { const saved = takeOpenAnswer(); return saved ? [{ id: 1, role: "user", content: saved.question }, { id: 2, role: "assistant", content: "", research: saved }] : loadTurns() })
-  const [text, setText] = useState("")
+  // What this visit starts from, read once: a saved answer opened from Saved research (shown as its question and the
+  // answer), else this session's conversation; and a question typed on the Overview, which arrives in the box
+  // UNSENT (sending is done here, where the limits are shown). A saved answer being opened wins over that question.
+  const [start] = useState(() => { const saved = takeOpenAnswer(); return { saved, ask: saved ? "" : takeAsk() ?? "" } })
+  const [turns, setTurns] = useState<Turn[]>(() => (start.saved ? [{ id: 1, role: "user", content: start.saved.question }, { id: 2, role: "assistant", content: "", research: start.saved }] : loadTurns()))
+  const [text, setText] = useState(start.ask)
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
   const [problem, setProblem] = useState<Problem>()
   const [picked, setPicked] = useState(AUTO) // "auto", or "provider model"

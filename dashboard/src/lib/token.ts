@@ -4,6 +4,7 @@
 // it is never written to localStorage, never logged, never shown again, and sent only to the engine, as the
 // x-glhf-token header of requests that change something (never on reads).
 import { useSyncExternalStore } from "react"
+import { tracked } from "./engine"
 
 const KEY = "glhf.token"
 export const TOKEN_FILE = "glhf/runs/.token"
@@ -66,7 +67,8 @@ const withToken = (init: RequestInit | undefined, token: string | undefined): Re
  * A token the engine does not accept is forgotten and asked for once more. "Not now" gives back the engine's 401.
  */
 export async function engineFetch(url: string, init?: RequestInit): Promise<Response> {
-  let reply = await fetch(url, withToken(init, getToken()))
+  // Each request is counted while it is in flight (the shell's "Working" bar); waiting for a pasted token is not.
+  let reply = await tracked(fetch(url, withToken(init, getToken())), init?.method)
   for (let attempt = 0; attempt < 2; attempt++) {
     const why = await needsToken(reply)
     if (why === undefined) return reply
@@ -74,7 +76,7 @@ export async function engineFetch(url: string, init?: RequestInit): Promise<Resp
     if (rejected) forgetToken()
     const token = await ask(why, rejected)
     if (token === undefined) return reply
-    reply = await fetch(url, withToken(init, token))
+    reply = await tracked(fetch(url, withToken(init, token)), init?.method)
   }
   if (await needsToken(reply)) forgetToken() // still refused: do not keep a token that does not work
   return reply
