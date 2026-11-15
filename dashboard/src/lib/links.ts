@@ -63,7 +63,7 @@ export const graphLink = (kind: "board" | "swarm", id: string, node?: string) =>
   `#Graph/${kind}/${encodeURIComponent(id)}${query({ node: node && NODE.test(node) ? node : undefined })}`
 export function graphOfHash(hash: string): GraphAddress | undefined {
   const h = split(hash)
-  if (!h || (h.view !== "Graph" && h.view !== "Worlds")) return undefined
+  if (!h || h.view !== "Graph") return undefined
   const [kind, id, ...rest] = h.path
   if (rest.length || (kind !== "board" && kind !== "swarm") || !id || !ID.test(id)) return undefined
   const node = h.params.get("node") ?? undefined

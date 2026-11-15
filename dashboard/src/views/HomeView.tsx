@@ -248,10 +248,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
   // A source or a checked statement chosen in an answer opens the inspector's Evidence tab on it (where there is room
-  // beside the conversation, or when the inspector is already open), and one chosen there is lit in the answer.
+  // beside the conversation, when the inspector is already open, or when a statement's check asks for it), and one
+  // chosen there is lit in the answer.
   const pick = (id: string) => (p: Omit<Picked, "n">) => {
     setChosenItem((old) => ({ ...p, id, n: (old?.n ?? 0) + 1 }))
-    if (!narrow || pane.open) { setInspect({ id, tab: "evidence" }); if (!pane.open) showInspector(true) }
+    if (!narrow || pane.open || p.statement !== undefined) { setInspect({ id, tab: "evidence" }); if (!pane.open) showInspector(true) }
   }
 
   return (

@@ -72,4 +72,10 @@ describe("the Agent Log and one agent", () => {
     expect(onAgent).toHaveBeenLastCalledWith("first-pass")
     expect(screen.queryByRole("link", { name: "About this agent" })).toBeNull()
   })
+  it("an answer's steps have no card in Agents, even one named like a team member", () => {
+    const steps = [row("1", "planner", "Planner", "prepare"), row("2", "critic", "Critic", "check")]
+    render(<EventLog rows={steps} run={{ id: "a-1", kind: "answer" }} connection="ended" agent="critic" />)
+    expect(screen.getByText(/^Only/).closest("p")).toHaveTextContent("Only Critic.")
+    expect(screen.queryByRole("link", { name: "About this agent" })).toBeNull()
+  })
 })

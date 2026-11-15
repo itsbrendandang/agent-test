@@ -127,7 +127,7 @@ export function GraphScreen() {
   }
   // The address says which run is shown and which node is selected, so it can be copied and Back returns here.
   useEffect(() => {
-    if (!current || pending || !/^#(Graph|Worlds)\b/.test(window.location.hash)) return
+    if (!current || pending || !/^#Graph\b/.test(window.location.hash)) return
     replaceAddress(graphLink(current.kind, current.id, selected ?? undefined))
   }, [current, selected, pending])
   const stepBy = useCallback((by: 1 | -1) => {

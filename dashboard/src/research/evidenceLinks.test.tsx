@@ -69,6 +69,14 @@ describe("an answer and its inspector", () => {
     expect(screen.queryByRole("tablist", { name: "Inspector" })).toBeNull()
     expect(answer.querySelector(".answer-sourcelist > li[data-lit]")).not.toBeNull()
   })
+  it("on a narrow window the check's own inspector button still opens the inspector", async () => {
+    const answer = await open(800)
+    const user = userEvent.setup()
+    await user.click(within(answer).getAllByRole("button", { name: /^(Example check|Check): .*Show the quoted passage/ })[0])
+    await user.click(within(answer).getByRole("button", { name: "Show this check in the inspector" }))
+    expect(await screen.findByRole("tab", { name: "Evidence" })).toHaveAttribute("aria-selected", "true")
+    expect(document.querySelector(".inspector-statements > li[data-lit]")).not.toBeNull()
+  })
   it("the answer links to its Agent Log", async () => {
     const answer = await open(1400)
     expect(within(answer).getByRole("link", { name: "Open in the Agent Log" })).toHaveAttribute("href", `#Lab/answer/${ID}`)

@@ -111,15 +111,18 @@ describe("Agents", () => {
     expect(within(panel).getByRole("link", { name: /messages in the Agent Log/ })).toHaveAttribute("href", "#Lab/board?agent=critic")
     expect(window.location.hash).toBe("#Agents/critic?from=board")
   })
-  it("a lab character opens the card of the agent it plays; a benchmark run's name opens the team of nine's card", async () => {
-    window.location.hash = "#Agents/navigator"
-    const { unmount } = show()
-    expect(await screen.findByRole("dialog", { name: "Lead Scientist" })).toBeInTheDocument()
-    unmount()
+  it("a benchmark run's name opens the team of nine's card", async () => {
     window.location.hash = "#Agents/critique?from=swarm"
     show()
     const panel = await screen.findByRole("dialog", { name: "Critic" })
     expect(within(panel).getByRole("link", { name: /messages in the Agent Log/ })).toHaveAttribute("href", "#Lab/swarm?agent=critique")
+  })
+  it("a research answer's step opens no card, even one named like a team member", async () => {
+    window.location.hash = "#Agents/critic?from=answer"
+    show()
+    await screen.findByRole("heading", { name: "Toxicologist" })
+    await waitFor(() => expect(window.location.hash).toBe("#Agents"))
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
   it("the open card is in the address, and closing it takes it out", async () => {
     window.location.hash = "#Agents"

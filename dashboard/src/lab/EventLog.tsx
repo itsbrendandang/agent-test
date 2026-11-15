@@ -202,7 +202,7 @@ export function EventLog({ rows, run, connection, agent, onAgent }: {
         <p className="event-log-focus">
           <AgentAvatar name={focused.agentId.replace(/^specialist:/, "")} size={24} />
           <span>Only <b>{focused.agent}</b>.</span>
-          {hasCard(focused.agentId) && <a href={agentLink(focused.agentId, run.kind)}>About this agent</a>}
+          {run.kind !== "answer" && hasCard(focused.agentId) && <a href={agentLink(focused.agentId, run.kind)}>About this agent</a>}
           <button type="button" className="link-btn" onClick={() => setFilter({ ...filter, agent: "" })}>Show every agent</button>
         </p>
       )}

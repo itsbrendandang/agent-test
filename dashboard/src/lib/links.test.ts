@@ -38,7 +38,6 @@ describe("the graph's address", () => {
     expect(at).toBe("#Graph/board/r-1?node=source%3Ahttps%3A%2F%2Fexample.org%2Fa%3Fb%3Dc")
     expect(graphOfHash(at)).toEqual({ kind: "board", id: "r-1", node: "source:https://example.org/a?b=c" })
     expect(graphOfHash(graphLink("swarm", "s-1"))).toEqual({ kind: "swarm", id: "s-1" })
-    expect(graphOfHash("#Worlds/board/r-1")).toEqual({ kind: "board", id: "r-1" }) // the view's former name
     for (const bad of ["#Graph", "#Graph/answer/a-1", "#Graph/board", "#Graph/board/a b", "#Lab/board/r-1"]) expect(graphOfHash(bad)).toBeUndefined()
     expect(graphOfHash("#Graph/board/r-1?node=a%20b")).toEqual({ kind: "board", id: "r-1" }) // a node id has no spaces
     expect([hasGraph("board"), hasGraph("swarm"), hasGraph("answer")]).toEqual([true, true, false])

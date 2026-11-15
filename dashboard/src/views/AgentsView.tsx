@@ -12,7 +12,7 @@ import { EngineOffline, PageHead } from "@/components/Shared"
 import { ChatRefused, getCatalog, type Catalog, type CatalogAgent } from "@/home/api"
 import { agentText, skillText } from "@/home/chat"
 import { AgentAvatar } from "@/lab/AgentAvatar"
-import { agentIdentity, agentKey } from "@/lab/identity"
+import { agentKey } from "@/lab/identity"
 import type { RunKind } from "@/lab/model"
 import { agentLink, agentOfHash, logLink, replaceAddress } from "@/lib/links"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
@@ -58,15 +58,15 @@ const memberOrder = (a: CatalogAgent, b: CatalogAgent) => {
 }
 
 /**
- * The card an address names: the agent's own name first, else the card of the agent its lab character plays
- * ("navigator" is the lead scientist). A name both teams have opens the card of the team the run belongs to.
+ * The card an address names, by the agent's own name. A name both teams have opens the card of the team the run belongs
+ * to. A research answer's steps have no card.
  */
 function memberFor(members: readonly Member[], name: string, from?: RunKind): Member | undefined {
+  if (from === "answer") return undefined
   const team = from === "swarm" ? members.filter((m) => m.group === "nine") : from ? members.filter((m) => m.group !== "nine") : []
   const pool = team.length ? team : members
   const key = agentKey(name.replace(/^specialist:/, ""))
-  const character = agentIdentity(name).character
-  return pool.find((m) => agentKey(m.agent) === key) ?? (character ? pool.find((m) => agentIdentity(m.agent).character === character) : undefined)
+  return pool.find((m) => agentKey(m.agent) === key)
 }
 /** The Agent Log of the newest run this member works in, filtered to it. */
 const memberLog = (m: Member) => logLink({ kind: m.group === "nine" ? "swarm" : "board" }, m.agent)
