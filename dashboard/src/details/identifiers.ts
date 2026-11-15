@@ -51,6 +51,8 @@ export const idLabel = (id: Pick<Identifier, "scheme" | "value">) => `${SCHEME_N
 
 const UNIPROT = "(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})"
 const trimDoi = (doi: string) => doi.replace(/[.,;:)\]}>'"]+$/, "")
+/** A DOI read from a web address ends where the address goes on to a query, a page format or a version. */
+const doiOfUrl = (id: Identifier): Identifier => id.scheme !== "doi" ? id : make("doi", trimDoi(id.value.replace(/[?#].*$/, "").replace(/(?:\.(?:full|abstract|pdf|html?))+$/i, "").replace(/(\d)v\d+$/, "$1")), id.type)
 
 /** Identifiers in a web address, with the kind of thing when the address's path says it. */
 function fromUrl(url: string): Identifier[] {
@@ -80,12 +82,12 @@ function fromText(text: string): Identifier[] {
   const out: Identifier[] = []
   const all = (re: RegExp, f: (m: RegExpExecArray) => Identifier | undefined) => { for (const m of text.matchAll(re)) { const id = f(m as RegExpExecArray); if (id) out.push(id) } }
   all(/\b(NCT\d{8})\b/g, (m) => make("nct", m[1], "trial"))
-  all(/\b(CHEMBL\d{1,9})\b/gi, (m) => make("chembl", m[1].toUpperCase()))
+  all(/\b(CHEMBL\d{1,9})\b/g, (m) => make("chembl", m[1]))
   all(/\b(?:doi:\s*|https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,9}\/[^\s"<>]+)/gi, (m) => make("doi", trimDoi(m[1]), "paper"))
   all(/\bPMID:?\s*(\d{1,9})\b/gi, (m) => make("pmid", m[1], "paper"))
   all(/\b(PMC\d{5,9})\b/g, (m) => make("pmcid", m[1], "paper"))
   all(new RegExp(`\\bUniProt(?:KB)?(?:\\s+accession)?[:\\s]\\s*(${UNIPROT})\\b`, "g"), (m) => make("uniprot", m[1], "target"))
-  all(/\bPubChem\s+(?:CID)?:?\s*(\d{1,12})\b|\bCID:?\s*(\d{2,12})\b/g, (m) => make("pubchem", m[1] ?? m[2], "drug"))
+  all(/\bPubChem\s+CID:?\s*(\d{1,12})\b|\bCID:?\s*(\d{2,12})\b/g, (m) => make("pubchem", m[1] ?? m[2], "drug"))
   all(/\b(ENSG\d{11})\b/g, (m) => make("ensembl", m[1], "target"))
   all(/\b(EFO_\d{7}|MONDO_\d{7})\b/g, (m) => make(m[1].startsWith("EFO") ? "efo" : "mondo", m[1], "disease"))
   all(/\barXiv:\s*(\d{4}\.\d{4,5})\b/gi, (m) => make("arxiv", m[1], "paper"))
@@ -100,7 +102,7 @@ export function findIdentifiers(...parts: (string | undefined)[]): Identifier[] 
   const found = new Map<string, Identifier>()
   for (const part of parts) {
     if (!part) continue
-    const ids = /^https?:\/\//i.test(part.trim()) && !/\s/.test(part.trim()) ? [...fromUrl(part.trim()), ...fromText(part)] : fromText(part)
+    const ids = /^https?:\/\//i.test(part.trim()) && !/\s/.test(part.trim()) ? [...fromUrl(part.trim()), ...fromText(part)].map(doiOfUrl) : fromText(part)
     for (const id of ids) {
       const key = idKey(id), old = found.get(key)
       if (!old) found.set(key, id)

@@ -847,8 +847,13 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     save()
   }
   /** One agent's own model use so far (its conversation's usage record): read only, so a replay reads the same numbers. */
-  const usageOf = async (conversation: ConversationId | string | number | undefined) =>
-    memberUsage(conversation !== undefined ? await harness.snapshot(UsageDoc, conversation as ConversationId, ctx) : undefined, (models) => (mock ? 0 : usdOf(models, config.meeting.fallback_usd_per_mtok ?? 15, mock).usd))
+  const usageOf = async (conversation: ConversationId | string | number | undefined) => {
+    try {
+      return memberUsage(conversation !== undefined ? await harness.snapshot(UsageDoc, conversation as ConversationId, ctx) : undefined, (models) => (mock ? 0 : usdOf(models, config.meeting.fallback_usd_per_mtok ?? 15, mock).usd))
+    } catch {
+      return undefined
+    }
+  }
   const memberOf = (api: ToolExecutionApi) =>
     Object.entries(state.members).find(([, id]) => id === api.conversationId)?.[0] ?? "lead-scientist"
 
@@ -864,7 +869,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     const usd = await spend()
     save()
     rememberRun(config, runId, state.ledger, mock ? `${runDir(config, runId)}/expertise` : undefined)
-    const members = Object.fromEntries(await Promise.all([[lead.name, leadConversation.id] as const, ...Object.entries(state.members)].map(async ([name, id]) => [name, await usageOf(id)] as const)))
+    const members = Object.fromEntries(await Promise.all([[lead.name, leadConversation.id] as const, ...Object.entries(state.members)].map(async ([name, id]) => [name, await usageOf(id)] as const)).then((all) => all.flatMap(([name, usage]) => (usage ? [[name, usage] as const] : []))))
     log.emit("finished", { type: "run.finished", usd, minutes: (Date.now() - state.startedAt) / 60_000, members })
     state.finished = true
     save()

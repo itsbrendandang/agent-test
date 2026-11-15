@@ -83,6 +83,7 @@ export function runFacts(events: readonly LabEvent[], kind: RunKind): RunFacts {
   const ordered = list.map((e) => (str(e.key) ? latest.get(str(e.key)!)! : e))
   const numbered = new Map<number, string>()
   const steps = new Map<string, LabEvent>()
+  let lastAt: number | undefined
   for (const e of ordered) {
     const type = str(e.type) ?? ""
     const at = num(e.at)
@@ -97,6 +98,7 @@ export function runFacts(events: readonly LabEvent[], kind: RunKind): RunFacts {
       facts.finished = { at, usd: num(e.usd), members: Object.keys(members).length ? members : undefined }
     }
     if (FAILED.has(type)) facts.failed = { at, error: str(e.error) }
+    else if (at !== undefined) lastAt = Math.max(lastAt ?? at, at)
     if (type === "member.replied" && str(e.member)) facts.replies.push({ key: str(e.key) ?? `reply:${facts.replies.length}`, agent: str(e.member)!, round: num(e.round), text: str(e.text) ?? "", summary: str(e.summary), mode: str(e.mode), at, usage: usageOf(e.usage) })
     if (type === "evidence.triaged" && str(e.member)) {
       const agent = str(e.member)!, provider = str(e.provider) ?? (facts.scripted === true ? "fixture" : undefined)
@@ -136,6 +138,7 @@ export function runFacts(events: readonly LabEvent[], kind: RunKind): RunFacts {
       facts.claims.push({ key: str(e.key) ?? `statement:${facts.claims.length}`, agent: "writer", text: str(e.text)!, verdict: str(e.verdict) ?? "unchecked", checker: "checker", checkedBy: str(e.model), note: str(e.note), kind: str(e.stage), sources: urls, quoteFound: typeof e.quoteFound === "boolean" ? e.quoteFound : undefined, at })
     }
   }
+  if (facts.failed?.at !== undefined && lastAt !== undefined && lastAt > facts.failed.at) facts.failed = undefined
   return facts
 }
 

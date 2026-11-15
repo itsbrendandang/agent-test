@@ -42,6 +42,14 @@ describe("identifiers", () => {
     // A compound code, a gene name, a bare accession-shaped word, a number with units: none of them is an identifier.
     expect(findIdentifiers("CMP-0423 binds KRAS at 95 nM; P01116 alone; IC50 10.5/2; https://example.org/mock/kras")).toEqual([])
   })
+  it("does not read a database's name with a year, or a ChEMBL release name, as a record", () => {
+    expect(findIdentifiers("PubChem 2023 update: improved access to chemical data; ChEMBL33 and ChEMBL34 releases")).toEqual([])
+  })
+  it("a DOI inside a publisher's address ends before the query, the page format and the version", () => {
+    const ids = findIdentifiers("https://www.science.org/doi/10.1126/science.abc1234?af=R", "https://www.biorxiv.org/content/10.1101/2024.01.01.123456v1.full.pdf", "https://doi.org/10.1126/science.abc1234")
+    expect(ids.map((i) => [i.scheme, i.value])).toEqual([["doi", "10.1126/science.abc1234"], ["doi", "10.1101/2024.01.01.123456"]])
+    expect(ids[1].href).toBe("https://doi.org/10.1101/2024.01.01.123456")
+  })
   it("counts the same record once, and keeps the kind an address gave it", () => {
     const ids = findIdentifiers("CHEMBL4535757 again", SOTORASIB, "chembl4535757")
     expect(ids).toHaveLength(1)
@@ -76,6 +84,17 @@ describe("an agent's profile", () => {
     expect(at("memo", "lead-scientist").now.text).toBe("Writing the decision memo.")
     // Before the finish event, the tokens are the member's own running total from its newest reply.
     expect(at("reply:1:scout", "scout").usage).toEqual({ tokens: expect.objectContaining({ totalTokens: 1500 }), asOf: "reply", round: 1 })
+  })
+  it("a run that failed and was resumed is not stopped once anything newer is recorded", () => {
+    const all = fixtureEvents(), i = all.findIndex((e) => e.key === "round:1")
+    const T = Number(all[i].at)
+    const failed = { key: "failed:1", at: T + 1, type: "run.failed", error: "The lead wrote no memo." }
+    const resumed = [...all.slice(0, i + 1), failed, ...all.slice(i + 1).map((e) => ({ ...e, at: Number(e.at) + 10_000 }))]
+    const stopped = board([...all.slice(0, i + 1), failed])
+    expect(agentProfile(stopped.facts, stopped.rows, "scout").now.state).toBe("stopped")
+    const { facts, rows } = board(resumed)
+    expect(facts.failed).toBeUndefined()
+    expect(agentProfile(facts, rows, "scout").now).toMatchObject({ state: "done" })
   })
   it("leaves the tokens out for a run recorded before the engine wrote them", () => {
     const old = fixtureEvents().map((e) => { const { usage: _u, members: _m, ...rest } = e; return rest })
