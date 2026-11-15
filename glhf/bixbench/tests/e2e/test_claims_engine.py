@@ -73,7 +73,7 @@ def test_one_claim_dead_on_arrival_one_supported_after_a_send_back(tmp_path: Pat
     events = _events(tmp_path)
     calls = [(e["claim_id"], e["mode"]) for e in events if e["kind"] == "agent.call"]
     assert ("C2", "pilot") in calls and not any(c == "C2" and m != "pilot" for c, m in calls)
-    assert ("C1", "revise") in calls
+    assert ("C1", "revise 1") in calls
     assembled = next(e for e in events if e["kind"] == "finish.assembled")["artifacts"]
     assert all(a["from"] == "C1" for a in assembled)
 
@@ -126,3 +126,45 @@ def test_a_token_budget_is_kept(tmp_path: Path) -> None:
     assert used <= 400_000
     allocated = next(e for e in _events(tmp_path) if e["kind"] == "budget.allocated")
     assert 0 < allocated["pool_tokens"] < 400_000, "the reserves are not in the claims' pool"
+
+
+def test_claim_calls_with_token_usage_are_booked_one_by_one(tmp_path: Path) -> None:
+    """Every scripted answer reports tokens, so the budget is tested with real spend: claims run
+    two at a time, each call's own token limit counts it apart, each call is booked in the run's
+    TokenBook as it ends, and the relevance judge, settled between claim calls, pays only its own
+    tokens."""
+    summary = run_local(
+        DEMO_CASE,
+        tmp_path,
+        solver="glhf",
+        model="mock",
+        engine="claims",
+        max_tokens=1_000_000,  # covers every phase's floor, so the relevance judge runs
+        max_parallel=2,
+        mock_tokens_per_call=2_000,
+    )
+    assert summary["status"] == "done", summary["error"]
+    assert summary["score"] == 1.0
+    used = sum(u["total_tokens"] for u in summary["usage"].values())
+    assert 0 < used <= 1_000_000, (
+        "the run stays within max_tokens (the 1.15x backstop is never near)"
+    )
+
+    calls = [e for e in _events(tmp_path) if e["kind"] == "agent.call"]
+    ran = [e for e in calls if e["outcome"] in ("ok", "failed")]
+    assert ran and all(e["tokens"] > 0 and e["tokens"] % 2_000 == 0 for e in ran)
+
+    ledger = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())
+    events = ledger["events"]
+    settled = [e for e in events if e["kind"] == "claims.settled"]
+    assert sum(e["spent"] for e in settled) == sum(e["tokens"] for e in calls), (
+        "each claim call is booked once, with the tokens its own limit counted"
+    )
+    assert not [e for e in events if e["kind"] == "claims.drift"], "the book matches the run"
+    judged = [
+        e
+        for e in events
+        if e["kind"] == "budget.settled" and str(e["phase"]).startswith("relevance")
+    ]
+    assert judged and all(e["overshoot"] == 0 and not e["borrowed"] for e in judged)
+    assert max(e["used"] for e in events if "used" in e and e["kind"].endswith("settled")) <= used

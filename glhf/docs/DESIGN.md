@@ -166,9 +166,9 @@ acuity. Each claim is then piloted, worked up and reviewed on its own, in its ow
 | Triage | The planner model: `propose_claim` with an acuity (high, medium, low). |
 | Pilot | The experimenter model, mode `pilot`. Code then shape-checks its files. A failure is **dead on arrival**: the claim is rejected at the pilot. |
 | Workup | The experimenter model, mode `workup`, on the full data. Code checks that the files exist. |
-| Methods Auditor, Critic | Their models, on their own. The critic sees code and files, not the experimenter's notes. |
+| Methods Auditor, Critic | Their models, on their own. The critic sees code and files, not the experimenter's notes. A critic works on one claim: it cannot register, record or refute a test on another claim. |
 | Tests | The relevance judge, then the harness runs the registered scripts (as in the phase engine). |
-| Reviser | The experimenter model, mode `revise`, on a claim that was sent back. At most 2 review rounds. |
+| Reviser | The experimenter model, mode `revise N` (N is the review round), on a claim that was sent back. At most 2 review rounds. |
 | Finisher | Code: copies each required file to `/outputs` from the best claim that wrote it (supported, then not established, then rejected). A file no claim wrote stays missing. Nothing is made up. |
 | Reporter | The reporter model writes `METHODS.md`. |
 
@@ -185,6 +185,25 @@ claims share what is left after the report, finish and overshoot reserves and th
 15% is held back, and the rest is split by acuity (3, 2, 1). Inside a claim: pilot 15%, workup 50%,
 review and revise 35%. After each review round, what closed claims did not spend goes to the open
 ones (re-triage). New work stops when one more step would reach the reserves.
+
+The review share is split again, by role and by round (`REVIEW_SPLIT`): audit 30%, critique 45%,
+revise 25%. With R rounds, a role may have spent n/R of its part by the end of round n. So what a
+round does not use rolls forward to the same role, and round 1 cannot empty the review share for
+round 2. A retry gets what the first attempt left, not a second share. When one reviewer is off, the
+other gets its part. Pilot and workup calls keep their stage share, as before.
+
+Each call's token limit is its cap (`call_tokens`). The tokens a call used are read from its own
+token limit, so claims that run at the same time are counted apart. Each call is booked in the run's
+`TokenBook` as soon as it ends (`TokenBook.charge`, ledger event `claims.settled`). Tokens over the
+cap are borrowed from the overshoot reserve, then the finish reserve, never the report's. So the
+book is right between claim calls, and the relevance judge, settled after each critique round, pays
+only its own tokens. After the claims, any difference between the book and the run's counter is
+logged as `claims.drift`, not hidden.
+
+Each call's time limit (`call_seconds`) is its stage share of the claim's seconds. It is at least
+30 s, but never more than the claim has left, so the floor cannot use another claim's time. It is at
+most the run's time left minus what the claim's later stages need, while that leaves room for the
+30 s. Calls that run at the same time share the wall clock, so each one ends before the reserves.
 
 **Ablations** (`swarm/flags.py`): `--no-critic`, `--no-auditor`, `--no-pilot`, `--no-retriage`. They
 do not change the run's budget. With `--no-critic`, only the registered tests can support a claim.

@@ -30,9 +30,10 @@ from bixbench3.inspect_harness.swarm.claim_budget import (
     Held,
     Pool,
     allocate,
+    call_tokens,
     must_stop,
+    parse_mode,
     retriage,
-    stage_tokens,
 )
 from bixbench3.inspect_harness.swarm.flags import SwarmFlags
 from bixbench3.inspect_harness.swarm.ledger import Ledger
@@ -123,15 +124,14 @@ async def run_claims(
             reserved_seconds=limits.reserved_seconds,
         )
 
-    async def call(role: str, mode: str, record: ClaimRecord, stage: str) -> CallResult:
-        """One role on one claim, tried once more after an error, a limit or a malformed ending."""
+    async def call(role: str, mode: str, record: ClaimRecord) -> CallResult:
+        """One role on one claim, tried once more after an error, a limit or a malformed ending.
+        Its token cap comes from its mode (claim_budget.call_tokens): a retry gets what the first
+        attempt left of a review share, never a second share."""
         result = CallResult("error", note="not started")
+        stage = parse_mode(mode)[0]
         for attempt in range(1, RETRIES + 2):
-            tokens = (
-                stage_tokens(record, stage, pilot=flags.pilot, review=flags.review)
-                if budgeted
-                else None
-            )
+            tokens = call_tokens(record, mode, flags) if budgeted else None
             if tokens is not None and tokens <= 0:
                 return CallResult("limit", note=f"no tokens left in the claim's {stage} share")
             record.attempts[mode] = record.attempts.get(mode, 0) + 1
@@ -139,7 +139,7 @@ async def run_claims(
                 result = await hooks.call(role, mode, record, tokens, attempt)
             except Exception as error:  # a role never stops the study
                 result = CallResult("error", note=f"{type(error).__name__}: {error}"[:300])
-            board.spend(record.id, result.tokens, result.seconds)
+            board.spend(record.id, result.tokens, result.seconds, stage)
             board.event(
                 "agent.call",
                 claim_id=record.id,
@@ -183,7 +183,7 @@ async def run_claims(
 
     async def pilot(record: ClaimRecord) -> None:
         board.move(record.id, State.PILOTING, ENGINE, "pilot granted")
-        result = await call("experimenter", "pilot", record, "pilot")
+        result = await call("experimenter", "pilot", record)
         if not result.finished:
             close(
                 record,
@@ -204,9 +204,7 @@ async def run_claims(
             )
 
     async def workup(record: ClaimRecord, mode: str = "workup") -> None:
-        result = await call(
-            "experimenter", mode, record, "revise" if mode == "revise" else "workup"
-        )
+        result = await call("experimenter", mode, record)
         if not result.finished:
             close(
                 record,
@@ -239,14 +237,12 @@ async def run_claims(
         critic_done: dict[str, bool] = {}
 
         async def audit(record: ClaimRecord, n: int = n) -> None:
-            await call("auditor", f"audit {n}", record, "review")
+            await call("auditor", f"audit {n}", record)
 
         async def critique(
             record: ClaimRecord, n: int = n, done: dict[str, bool] = critic_done
         ) -> None:
-            done[record.id] = (
-                await call("critic", f"critique {n}", record, "review")
-            ).status == "ok"
+            done[record.id] = (await call("critic", f"critique {n}", record)).status == "ok"
 
         # The auditor and the critic review on their own; neither waits for the other's report.
         await asyncio.gather(
@@ -273,7 +269,7 @@ async def run_claims(
         held = retriage(board, held, enabled=flags.retriage)
         for record in board.in_state(State.SENT_BACK):
             board.move(record.id, State.IN_WORKUP, ENGINE, f"revise after round {n}")
-        await each(lambda r: workup(r, "revise"), board.in_state(State.IN_WORKUP))
+        await each(lambda r, n=n: workup(r, f"revise {n}"), board.in_state(State.IN_WORKUP))
 
     # -- close -------------------------------------------------------------------------------------
     stopped = stopped or stop_reason()

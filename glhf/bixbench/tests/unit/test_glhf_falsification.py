@@ -423,3 +423,27 @@ def test_the_judge_s_instructions_are_its_own_and_state_the_question_and_the_bar
     others = [v for k, v in vars(roles).items() if k.isupper() and isinstance(v, str)]
     assert others and all(text not in other for other in others)
     assert relevance.ROLE == "relevance"
+
+
+# ------------------------------------------------------------------------------ claims engine
+def test_a_critic_on_one_claim_cannot_test_or_refute_another() -> None:
+    """In the claims engine each critic works on one claim (claims_solver.ClaimHooks)."""
+    ledger = _ledger()
+    ledger.add_claim("C2 raises the stress genes", ["degs"], "no change", "planner")
+    calls = [
+        (
+            tools.register_falsification_test(ledger, "critic", only_claim="C1"),
+            {"test_name": "t", "method": "m", "script_path": PATH, "test_null": "n"},
+        ),
+        (
+            tools.record_falsification_test(ledger, "critic", only_claim="C1"),
+            {"test_name": "t", "p_value": 0.01, "contradicts": True, "note": "n"},
+        ),
+        (tools.report_failed_replication(ledger, "critic", only_claim="C1"), {"note": "n"}),
+    ]
+    for tool, arguments in calls:
+        with pytest.raises(ToolError, match="works on C1 only"):
+            asyncio.run(tool(claim_id="C2", **arguments))  # type: ignore[arg-type]
+    other = ledger.claims["C2"]
+    assert other.registered == [] and other.verdict == "untested"
+    assert not ledger.claims["C1"].registered

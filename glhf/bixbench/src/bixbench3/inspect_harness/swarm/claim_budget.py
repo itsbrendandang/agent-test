@@ -17,11 +17,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from bixbench3.inspect_harness.swarm.board import ACUITY_WEIGHT, Board, ClaimRecord
+from bixbench3.inspect_harness.swarm.flags import SwarmFlags
 
 RETRIAGE_HOLD = 0.15  # of the pool, held back at first and handed out by re-triage
 # How a claim's own allocation is split between its stages. Without a pilot its share goes to the
 # workup; without any review the review share does too.
 STAGE_SPLIT = {"pilot": 0.15, "workup": 0.50, "review": 0.35}
+# How the review share is split between the roles that draw on it. Each role gets 1/rounds of its
+# part per round; what a round does not use rolls forward to the next round of the same role.
+REVIEW_SPLIT = {"audit": 0.30, "critique": 0.45, "revise": 0.25}
+MIN_CALL_SECONDS = 30  # a call gets at least this, when its claim has it
+SKIP_CALL_SECONDS = 10  # under this the call is not started
 
 
 @dataclass
@@ -158,3 +164,86 @@ def stage_seconds(
     """Seconds the claim may spend on `stage` now, like stage_tokens."""
     share = stage_share(stage, pilot=pilot, review=review)
     return min(record.budget.seconds_left, record.budget.seconds_alloc * share)
+
+
+# -- One call: its token cap and its time limit ---------------------------------------------------
+def parse_mode(mode: str) -> tuple[str, int]:
+    """("audit", 2) for "audit 2"; ("pilot", 0) for a mode without a round."""
+    base, _, rest = mode.partition(" ")
+    return base, int(rest) if rest.strip().isdigit() else 0
+
+
+def review_split(*, auditor: bool = True, critic: bool = True) -> dict[str, float]:
+    """REVIEW_SPLIT with a reviewer that is off giving its part to the other one."""
+    split = dict(REVIEW_SPLIT)
+    if not auditor:
+        split["critique"] += split.pop("audit")
+    if not critic:
+        split["audit"] = split.get("audit", 0.0) + split.pop("critique")
+    return split
+
+
+def _review_share(role: str, round_no: int, flags: SwarmFlags) -> float:
+    """The share of the claim's allocation `role` may have spent by the end of round `round_no`."""
+    rounds = max(1, flags.review_rounds)
+    split = review_split(auditor=flags.auditor, critic=flags.critic)
+    done = min(max(round_no, 1), rounds)
+    return (
+        stage_share("review", pilot=flags.pilot, review=flags.review)
+        * split.get(role, 0.0)
+        * (done / rounds)
+    )
+
+
+def _later_share(role: str, round_no: int, flags: SwarmFlags) -> float:
+    """The share of the claim's allocation its stages after this call still need."""
+
+    def share(stage: str) -> float:
+        return stage_share(stage, pilot=flags.pilot, review=flags.review)
+
+    if role == "pilot":
+        return share("workup") + share("review")
+    if role == "workup":
+        return share("review")
+    rounds = max(1, flags.review_rounds)
+    left = max(0, rounds - max(round_no, 1)) / rounds
+    later = share("review") * left
+    if role in ("audit", "critique"):
+        later += share("review") * REVIEW_SPLIT["revise"] / rounds  # this round's revision
+    return later
+
+
+def call_tokens(record: ClaimRecord, mode: str, flags: SwarmFlags) -> int:
+    """The token cap of one call on `record`. A pilot or a workup gets its stage share, as
+    stage_tokens. A review role in round n gets n/rounds of its part of the review share, minus
+    what it already spent on this claim, so round 1 cannot empty the review share."""
+    role, round_no = parse_mode(mode)
+    if role not in REVIEW_SPLIT:
+        return stage_tokens(record, role, pilot=flags.pilot, review=flags.review)
+    allowed = int(record.budget.tokens_alloc * _review_share(role, round_no, flags))
+    spent = record.budget.stage_tokens_spent.get(role, 0)
+    return max(0, min(record.budget.tokens_left, allowed - spent))
+
+
+def call_seconds(record: ClaimRecord, mode: str, flags: SwarmFlags, *, run_left: float) -> float:
+    """The time limit of one call on `record`, `run_left` seconds before the claims must stop.
+
+    - its stage share of the claim's seconds (review roles: per round, as call_tokens);
+    - at least MIN_CALL_SECONDS, but never more than the claim has left, so the floor cannot
+      spend another claim's time;
+    - at most `run_left` minus what the claim's later stages still need, while that leaves room
+      for the floor, so a pilot cannot use the workup's time.
+    Calls that run at the same time share the wall clock, so each one ends by `run_left`."""
+    role, round_no = parse_mode(mode)
+    budget = record.budget
+    if role in REVIEW_SPLIT:
+        allowed = budget.seconds_alloc * _review_share(role, round_no, flags)
+        base = max(
+            0.0, min(budget.seconds_left, allowed - budget.stage_seconds_spent.get(role, 0.0))
+        )
+    else:
+        base = stage_seconds(record, role, pilot=flags.pilot, review=flags.review)
+    floor = min(float(MIN_CALL_SECONDS), budget.seconds_left)
+    later = min(budget.seconds_left, budget.seconds_alloc * _later_share(role, round_no, flags))
+    cap = run_left - later if run_left - later >= floor else run_left
+    return max(0.0, min(max(base, floor), cap))

@@ -388,8 +388,14 @@ async def run_registered_test(entry: Registration, seconds: int) -> Run:
     return Run("ok", command, result.returncode, took, tail, now, parsed[0], parsed[1])
 
 
+def _check_own_claim(only_claim: str | None, claim_id: str) -> None:
+    """In the claims engine a critic works on one claim: it may not test or refute another one."""
+    if only_claim is not None and claim_id != only_claim:
+        raise ToolError(f"this critic works on {only_claim} only, not on {claim_id}")
+
+
 @tool
-def register_falsification_test(ledger: Ledger, role: str) -> Tool:
+def register_falsification_test(ledger: Ledger, role: str, only_claim: str | None = None) -> Tool:
     async def execute(
         claim_id: str, test_name: str, method: str, script_path: str, test_null: str
     ) -> str:
@@ -426,6 +432,7 @@ def register_falsification_test(ledger: Ledger, role: str) -> Tool:
             test_null: The null hypothesis the script's p-value is computed under, in one
                 sentence. It should be true whenever the claim's null is true.
         """
+        _check_own_claim(only_claim, claim_id)
         if claim_id not in ledger.claims:
             raise ToolError(f"unknown claim {claim_id}; known: {', '.join(ledger.claims)}")
         problem = script_path_problem(script_path)
@@ -460,7 +467,7 @@ def register_falsification_test(ledger: Ledger, role: str) -> Tool:
 
 
 @tool
-def record_falsification_test(ledger: Ledger, role: str) -> Tool:
+def record_falsification_test(ledger: Ledger, role: str, only_claim: str | None = None) -> Tool:
     async def execute(
         claim_id: str, test_name: str, p_value: float, contradicts: bool, note: str
     ) -> str:
@@ -478,6 +485,7 @@ def record_falsification_test(ledger: Ledger, role: str) -> Tool:
             contradicts: Must be true.
             note: What you ran (script path) and what you observed.
         """
+        _check_own_claim(only_claim, claim_id)
         if claim_id not in ledger.claims:
             raise ToolError(f"unknown claim {claim_id}; known: {', '.join(ledger.claims)}")
         try:
@@ -492,7 +500,7 @@ def record_falsification_test(ledger: Ledger, role: str) -> Tool:
 
 
 @tool
-def report_failed_replication(ledger: Ledger, role: str) -> Tool:
+def report_failed_replication(ledger: Ledger, role: str, only_claim: str | None = None) -> Tool:
     async def execute(claim_id: str, note: str) -> str:
         """Mark a claim refuted because an independent re-implementation did not reproduce it.
 
@@ -500,6 +508,7 @@ def report_failed_replication(ledger: Ledger, role: str) -> Tool:
             claim_id: Claim id.
             note: What was re-implemented, and the discrepancy (numbers).
         """
+        _check_own_claim(only_claim, claim_id)
         if claim_id not in ledger.claims:
             raise ToolError(f"unknown claim {claim_id}")
         ledger.fail_replication(claim_id, note, role)

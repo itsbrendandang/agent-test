@@ -181,7 +181,7 @@ def test_the_smallest_slice_one_dead_on_arrival_one_supported_after_one_send_bac
     assert ("pilot", "C2") in modes and not any(c == "C2" and m != "pilot" for m, c in modes), (
         "a dead claim costs nothing more"
     )
-    assert ("revise", "C1") in modes
+    assert ("revise 1", "C1") in modes, "a revision carries its round"
 
 
 @pytest.mark.parametrize(
@@ -305,3 +305,18 @@ def test_flags_are_checked() -> None:
         SwarmFlags(review_rounds=9)
     flags = SwarmFlags.from_options(no_critic=True, no_pilot=True)
     assert (flags.critic, flags.pilot, flags.auditor, flags.retriage) == (False, False, True, True)
+
+
+def test_every_review_round_gets_its_own_review_tokens() -> None:
+    """Audit, critique and revise draw on one review share; each round gets its part of it, so a
+    claim sent back twice still has review tokens in round 3."""
+    board, ledger, hooks = _setup(
+        {"C1": Script(issue_rounds={1, 2}, verdicts=["supported", "supported", "supported"])}
+    )
+    _run(board, ledger, hooks, SwarmFlags(review_rounds=3))
+    caps = {mode: tokens for _, mode, claim_id, tokens, _ in hooks.calls if claim_id == "C1"}
+    assert {"audit 3", "critique 3", "revise 1", "revise 2"} <= set(caps)
+    assert all(caps[m] and caps[m] > 0 for m in ("audit 3", "critique 3"))
+    assert caps["critique 3"] > caps["critique 1"], "what a round did not use rolls forward"
+    spent = board.claims["C1"].budget.stage_tokens_spent
+    assert spent["critique"] == 100 * 3 and spent["revise"] == 100 * 2

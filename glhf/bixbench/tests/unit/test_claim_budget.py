@@ -5,17 +5,25 @@ from __future__ import annotations
 
 import pytest
 
+from bixbench3.inspect_harness.swarm import solver
 from bixbench3.inspect_harness.swarm.board import Board, State
 from bixbench3.inspect_harness.swarm.claim_budget import (
+    MIN_CALL_SECONDS,
     RETRIAGE_HOLD,
+    REVIEW_SPLIT,
     STAGE_SPLIT,
     Held,
     Pool,
     allocate,
+    call_seconds,
+    call_tokens,
     must_stop,
+    parse_mode,
     retriage,
+    review_split,
     stage_tokens,
 )
+from bixbench3.inspect_harness.swarm.flags import SwarmFlags
 
 
 def _board(acuities: list[str]) -> Board:
@@ -137,3 +145,135 @@ def test_held_is_returned_and_logged() -> None:
     board = _board(["medium", "medium"])
     held = allocate(board, Pool(1_001, 10.0))
     assert isinstance(held, Held) and held.tokens >= 150
+
+
+# -- One call: review share per round and per role ------------------------------------------------
+REVIEW_ROLES = ("audit", "critique", "revise")
+
+
+def _claim(tokens: int = 100_000, seconds: float = 1_000.0) -> Board:
+    board = _board(["high"])
+    board.claims["C1"].budget.tokens_alloc = tokens
+    board.claims["C1"].budget.seconds_alloc = seconds
+    return board
+
+
+def test_parse_mode() -> None:
+    assert parse_mode("audit 2") == ("audit", 2)
+    assert parse_mode("revise 1") == ("revise", 1)
+    assert parse_mode("pilot") == ("pilot", 0)
+
+
+def test_a_reviewer_that_is_off_gives_its_part_to_the_other() -> None:
+    assert sum(REVIEW_SPLIT.values()) == pytest.approx(1.0)
+    assert review_split(auditor=False) == pytest.approx({"critique": 0.75, "revise": 0.25})
+    assert review_split(critic=False) == pytest.approx({"audit": 0.75, "revise": 0.25})
+
+
+@pytest.mark.parametrize("rounds", [1, 2, 3, 5])
+def test_the_last_round_still_has_review_tokens_when_every_round_spends_its_cap(
+    rounds: int,
+) -> None:
+    board = _claim()
+    record = board.claims["C1"]
+    flags = SwarmFlags(review_rounds=rounds)
+    review = int(100_000 * STAGE_SPLIT["review"])
+    for n in range(1, rounds + 1):
+        for role in REVIEW_ROLES:
+            cap = call_tokens(record, f"{role} {n}", flags)
+            assert cap > 0, f"{role} in round {n} of {rounds} found the review share empty"
+            board.spend("C1", cap, 0.0, role)  # each call spends all it was given
+    spent = sum(record.budget.stage_tokens_spent.get(r, 0) for r in REVIEW_ROLES)
+    assert spent <= review, "the review caps never add up to more than the review share"
+
+
+def test_what_a_round_does_not_use_rolls_forward_to_the_same_role() -> None:
+    record = _claim().claims["C1"]
+    flags = SwarmFlags(review_rounds=2)
+    first = call_tokens(record, "critique 1", flags)
+    assert call_tokens(record, "critique 2", flags) == 2 * first, "round 1 spent nothing"
+
+
+def test_a_review_retry_gets_what_the_first_attempt_left_not_a_second_share() -> None:
+    board = _claim()
+    flags = SwarmFlags(review_rounds=2)
+    cap = call_tokens(board.claims["C1"], "audit 1", flags)
+    board.spend("C1", cap - 100, 0.0, "audit")
+    assert call_tokens(board.claims["C1"], "audit 1", flags) == 100
+
+
+def test_pilot_and_workup_keep_their_stage_share() -> None:
+    record = _claim().claims["C1"]
+    for mode in ("pilot", "workup"):
+        assert call_tokens(record, mode, SwarmFlags()) == stage_tokens(record, mode)
+
+
+def test_spend_per_role_survives_the_board_json() -> None:
+    board = _claim()
+    board.spend("C1", 700, 12.5, "critique")
+    again = Board.from_json(board.to_json())
+    assert again.claims["C1"].budget.stage_tokens_spent == {"critique": 700}
+    assert again.claims["C1"].budget.stage_seconds_spent == {"critique": 12.5}
+
+
+# -- One call: its time limit --------------------------------------------------------------------
+@pytest.mark.parametrize("mode", ["pilot", "workup", "audit 1", "critique 2", "revise 1"])
+@pytest.mark.parametrize("seconds_left", [0.0, 5.0, 29.0, 400.0])
+def test_the_floor_never_spends_more_than_the_claim_has_left(
+    mode: str, seconds_left: float
+) -> None:
+    board = _claim(seconds=seconds_left)
+    seconds = call_seconds(board.claims["C1"], mode, SwarmFlags(), run_left=10_000.0)
+    assert seconds <= seconds_left
+    if seconds_left >= MIN_CALL_SECONDS:
+        assert seconds >= MIN_CALL_SECONDS
+
+
+def test_a_pilot_does_not_use_the_time_its_later_stages_need() -> None:
+    record = _claim(seconds=1_000.0).claims["C1"]
+    later = 1_000.0 * (STAGE_SPLIT["workup"] + STAGE_SPLIT["review"])
+    # Plenty of wall clock: the pilot gets its share.
+    assert call_seconds(record, "pilot", SwarmFlags(), run_left=10_000.0) == pytest.approx(150.0)
+    # Short wall clock: the pilot leaves the workup and the review their time.
+    assert call_seconds(record, "pilot", SwarmFlags(), run_left=later + 40.0) == pytest.approx(40.0)
+    # Too short for both: the pilot still gets what the run has, never more.
+    assert call_seconds(record, "pilot", SwarmFlags(), run_left=20.0) == pytest.approx(20.0)
+
+
+def test_calls_at_the_same_time_each_end_by_the_run_deadline_and_stay_in_their_claims() -> None:
+    board = _board(["high", "low", "medium"])
+    held = allocate(board, Pool(0, 300.0))
+    assert held.seconds >= 0
+    run_left = 300.0
+    calls = {
+        c.id: call_seconds(c, "pilot", SwarmFlags(), run_left=run_left)
+        for c in board.claims.values()
+    }
+    for claim_id, seconds in calls.items():
+        assert seconds <= run_left
+        assert seconds <= board.claims[claim_id].budget.seconds_left
+    assert sum(calls.values()) <= 300.0, "the floor never spends another claim's time"
+
+
+# -- Booking a claim call in the run's TokenBook -------------------------------------------------
+def test_a_claim_call_is_booked_and_its_overshoot_borrowed_never_from_the_report() -> None:
+    book = solver.TokenBook(solver.plan_budget(1_000_000, 24 * 3600))
+    report = book.reserves["report"]
+    within = book.charge("claim C1:pilot:1", 9_000, 10_000)
+    assert (within["used"], within["overshoot"], within["borrowed"]) == (9_000, 0, {})
+    over = book.charge("claim C1:workup:1", 12_000, 10_000)
+    assert over["overshoot"] == 2_000 and sum(over["borrowed"].values()) == 2_000
+    assert book.used == 21_000 and book.reserves["report"] == report
+
+
+def test_the_relevance_judge_pays_only_its_own_tokens_while_claims_run() -> None:
+    """The judge is settled between claim calls (after each critique round). With each claim
+    call booked as it ends, its settle sees only its own tokens: no false overshoot."""
+    book = solver.TokenBook(solver.plan_budget(1_000_000, 24 * 3600))
+    book.used = 50_000  # the triage phase
+    for n in range(4):
+        book.charge(f"claim C{n}:workup:1", 40_000, 60_000)
+    run_total = book.used  # what sample_limits() would report now
+    grant = book.grant("relevance 1", [])
+    settled = book.settle(grant, run_total + 1_000)
+    assert settled["spent"] == 1_000 and settled["overshoot"] == 0 and settled["borrowed"] == {}

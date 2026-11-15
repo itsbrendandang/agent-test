@@ -29,7 +29,7 @@ from inspect_ai.util import Limit, message_limit, sandbox, time_limit, token_lim
 from ..models import ExpectedOutput
 from . import roles
 from .board import ACUITY_WEIGHT, Board, ClaimRecord, State, open_issues_for
-from .claim_budget import stage_seconds
+from .claim_budget import SKIP_CALL_SECONDS, call_seconds
 from .engine import CallResult, Check, Left
 from .flags import SwarmFlags
 from .ledger import Ledger
@@ -47,16 +47,13 @@ from .tools import (
     resolve_issue,
 )
 
-MIN_CALL_SECONDS = 30  # a call gets at least this, when the run has it
-SKIP_CALL_SECONDS = 10  # under this the call is not started
-
-# mode -> (agent name, instructions, model group, budget stage)
-MODES: dict[str, tuple[str, str, str, str]] = {
-    "pilot": ("pilot", roles.PILOT, "experimenter", "pilot"),
-    "workup": ("experimenter", roles.EXPERIMENTER, "experimenter", "workup"),
-    "revise": ("reviser", roles.REVISER, "experimenter", "revise"),
-    "audit": ("auditor", roles.AUDITOR, "critic", "review"),
-    "critique": ("critic", roles.CRITIC, "critic", "review"),
+# mode -> (agent name, instructions, model group)
+MODES: dict[str, tuple[str, str, str]] = {
+    "pilot": ("pilot", roles.PILOT, "experimenter"),
+    "workup": ("experimenter", roles.EXPERIMENTER, "experimenter"),
+    "revise": ("reviser", roles.REVISER, "experimenter"),
+    "audit": ("auditor", roles.AUDITOR, "critic"),
+    "critique": ("critic", roles.CRITIC, "critic"),
 }
 MAKERS = ("pilot", "workup", "revise")  # modes that must end with claim_done
 
@@ -79,6 +76,8 @@ class ClaimHooks:
     after: Callable[[int], Awaitable[None]]  # relevance judge, then the harness runs the tests
     messages: list[ChatMessage]  # the sample's transcript, for the process judge
     max_messages: int | None = None
+    # Books one finished call in the run's TokenBook: (label, tokens used, token cap or None).
+    charge: Callable[[str, int, int | None], None] | None = None
     done: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     async def call(
@@ -86,10 +85,9 @@ class ClaimHooks:
     ) -> CallResult:
         del role  # the mode decides the agent
         base = mode.split()[0]
-        name, instructions, group, stage = MODES[base]
+        name, instructions, group = MODES[base]
         model = self.models.get(group) or self.default_model
-        seconds = stage_seconds(record, stage, pilot=self.flags.pilot, review=self.flags.review)
-        seconds = min(max(seconds, MIN_CALL_SECONDS), self.seconds_left())
+        seconds = call_seconds(record, mode, self.flags, run_left=self.seconds_left())
         if seconds < SKIP_CALL_SECONDS:
             return CallResult(
                 "limit", note=f"{int(seconds)} s left for the run's claims", model=model
@@ -105,9 +103,9 @@ class ClaimHooks:
         if base == "critique":
             extra += [
                 raise_claim_issue(self.ledger, "critic", record.id),
-                register_falsification_test(self.ledger, "critic"),
-                record_falsification_test(self.ledger, "critic"),
-                report_failed_replication(self.ledger, "critic"),
+                register_falsification_test(self.ledger, "critic", only_claim=record.id),
+                record_falsification_test(self.ledger, "critic", only_claim=record.id),
+                report_failed_replication(self.ledger, "critic", only_claim=record.id),
             ]
         who = self.make_agent(f"{name}-{record.id}", instructions, self.models.get(group), extra)
         folder = record.work_dir
@@ -130,7 +128,22 @@ class ClaimHooks:
         if self.max_messages:
             limits.append(message_limit(self.max_messages))
         before, began = self.tokens_used(), time.monotonic()
-        result = await run(who.agent, prompt, limits=limits)
+
+        def call_usage() -> int:
+            if limit_tokens is not None:
+                try:
+                    return int(limit_tokens.usage)
+                except Exception:
+                    pass  # fall back to the run's counter (exact when calls run one by one)
+            return self.tokens_used() - before
+
+        try:
+            result = await run(who.agent, prompt, limits=limits)
+        except Exception:
+            # The engine records the error; the tokens the call spent are still booked.
+            if self.charge is not None:
+                self.charge(f"claim {key}", call_usage(), tokens)
+            raise
         agent_state, limit_error = result if isinstance(result, tuple) else (result, None)
         assert isinstance(agent_state, AgentState)
         # One call's transcript is added in one piece, under a header naming the claim.
@@ -138,13 +151,10 @@ class ClaimHooks:
             ChatMessageUser(content=f"=== GLHF claim {record.id}: {mode} (attempt {attempt}) ===")
         )
         self.messages.extend(m for m in agent_state.messages if m.role != "system")
-        used = self.tokens_used() - before
-        if limit_tokens is not None:
-            try:
-                used = int(limit_tokens.usage)
-            except Exception:  # fall back to the run's counter (exact when claims run one by one)
-                pass
+        used = call_usage()
         elapsed = time.monotonic() - began
+        if self.charge is not None:
+            self.charge(f"claim {key}", used, tokens)
         if limit_error is not None:
             kind = str(getattr(limit_error, "type", "limit"))
             return CallResult("limit", used, elapsed, f"stopped by the {kind} limit", model)

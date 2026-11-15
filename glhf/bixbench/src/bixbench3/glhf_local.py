@@ -36,7 +36,14 @@ from pathlib import Path
 from typing import Any
 
 from inspect_ai import eval as inspect_eval
-from inspect_ai.model import ChatMessage, GenerateConfig, Model, ModelOutput, get_model
+from inspect_ai.model import (
+    ChatMessage,
+    GenerateConfig,
+    Model,
+    ModelOutput,
+    ModelUsage,
+    get_model,
+)
 from inspect_ai.tool import ToolChoice, ToolInfo
 
 from bixbench3 import paid
@@ -371,12 +378,35 @@ def claim_of(messages: list[ChatMessage]) -> str | None:
 
 def by_claim_role(
     script: dict[str, list[ModelOutput]],
+    tokens_per_call: int | None = None,
 ) -> Callable[[list[ChatMessage], list[ToolInfo], ToolChoice, GenerateConfig], ModelOutput]:
-    """Like by_role, but a call on a claim plays the lines under "<role>:<claim>" when there are any."""
+    """Like by_role, but a call on a claim plays the lines under "<role>:<claim>" when there are any.
+
+    With `tokens_per_call`, every scripted answer reports that many tokens used, so the token
+    budget of the claims engine is tested with spend other than zero (tests only)."""
     plain = by_role(script)
     keyed = {name: list(lines) for name, lines in script.items() if ":" in name}
 
     def answer(
+        messages: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+    ) -> ModelOutput:
+        output = scripted(messages, tools, tool_choice, config)
+        if tokens_per_call:
+            output = output.model_copy(
+                update={
+                    "usage": ModelUsage(
+                        input_tokens=tokens_per_call - 1,
+                        output_tokens=1,
+                        total_tokens=tokens_per_call,
+                    )
+                }
+            )
+        return output
+
+    def scripted(
         messages: list[ChatMessage],
         tools: list[ToolInfo],
         tool_choice: ToolChoice,
@@ -609,8 +639,11 @@ def run_local(
     no_pilot: bool = False,
     no_retriage: bool = False,
     max_parallel: int = 2,
+    mock_tokens_per_call: int | None = None,
 ) -> dict[str, Any]:
-    """`mock_outputs` replaces the fixed script of `--model mock` (tests only)."""
+    """`mock_outputs` replaces the fixed script of `--model mock` (tests only).
+    `mock_tokens_per_call` makes each answer of the claims engine's script report that many
+    tokens (tests only)."""
     # NO_PAID_CALLS (paid.py): before anything is created or started.
     paid.refuse_run(model, (role_models or {}).values(), exa=exa)
     case_dir, out_dir = case_dir.resolve(), out_dir.resolve()
@@ -654,7 +687,7 @@ def run_local(
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
         scripted: Any = mock_outputs
         if scripted is None and solver == "glhf" and engine == "claims":
-            scripted = by_claim_role(claims_role_script(truths))
+            scripted = by_claim_role(claims_role_script(truths), mock_tokens_per_call)
         elif scripted is None and solver == "glhf":
             scripted = by_role(role_script(truths, review_rounds, exa, memory_dir is not None))
         resolved: Model = get_model(
