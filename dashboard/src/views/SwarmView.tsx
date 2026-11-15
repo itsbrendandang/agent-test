@@ -21,7 +21,8 @@ import {
 } from "@/swarm/api"
 import { CancelRun } from "@/swarm/CancelRun"
 import { NewRun } from "@/swarm/NewRun"
-import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
+import { lastRun, linkTo, showing, takeOpen } from "@/lib/open"
+import { graphLink, logLink } from "@/lib/links"
 import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
 import "@/design/swarm.css"
 
@@ -421,7 +422,8 @@ export function SwarmView() {
           <p className="story-eyebrow">{live ? "While you wait" : "What next?"}</p>
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)} disabled={live}>Run it again, both ways</button>
           <button type="button" className="btn" aria-pressed={details} onClick={() => setDetails(!details)}>{details ? "Hide the tests, problems and reports" : "See how each statement was tested"}</button>
-          <a className="btn" href="#Graph" onClick={() => setOpen("swarm", run.id)}>See this run as a graph</a>
+          <a className="btn" href={graphLink("swarm", run.id)}>See this run as a graph</a>
+          <a className="btn" href={logLink({ kind: "swarm", id: run.id })}>Open in the Agent Log</a>
           <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(linkTo("swarm", run.id)).then(() => setCopied(true), () => setCopied(false)) }}>{copied ? "Link copied" : "Copy a link to this run"}</button>
         </nav>
       )}

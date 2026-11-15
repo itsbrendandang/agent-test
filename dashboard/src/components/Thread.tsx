@@ -29,6 +29,8 @@ export interface Checked {
   quote?: { text?: string; found: boolean }
   /** Where that source came from, when the run recorded it. */
   sourceProvider?: SearchProvider
+  /** The address of this statement's node in the run's graph (lib/links.ts graphLink). */
+  graph?: string
 }
 
 /**
@@ -110,6 +112,7 @@ export function TeamMessage({ name, job, text, short, state, fullLabel = "Show f
               <dt>Why</dt><dd>{shown.why || "The check gave no reason."}</dd>
               {shown.by && <><dt>Checked by</dt><dd>{shown.by}</dd></>}
               <dt>Source</dt><dd>{shown.source ? <><SourceRef source={shown.source} />{shown.sourceProvider && <> · <SearchCredit provider={shown.sourceProvider} /></>}</> : "No source was recorded."}</dd>
+              {shown.graph && <><dt>In the graph</dt><dd><a href={shown.graph}>Show this statement and its checks in the graph</a></dd></>}
               {shown.quote && <><dt>Quoted passage</dt><dd data-found={shown.quote.found}>{shown.quote.found ? <>Found in the source{shown.quote.text ? <>: “{shown.quote.text}”</> : "."}</> : "The quoted passage was not found in the source."}</dd></>}
             </dl>
           )}

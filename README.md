@@ -122,6 +122,26 @@ the key, so a typo cannot switch the limit off.
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
 
+### How the screens connect
+
+The same agent, run, source or statement appears on several screens. Each one links to the others:
+
+- **An agent.** A face or a name in the Agent Log shows only that agent's messages. The line above the log then links
+  to its card in Agents. A card's Details link to its messages in the Agent Log. In the Overview Lab, the selected
+  teammate links to its steps in the Agent Log. In a team review, each member under "Who took part" opens its
+  messages, and each name in "The team" opens its card.
+- **A run.** The Agent Log links to the run's own screen (Research, Team review or Compare) and to its graph. Team
+  review, Compare and the Graph link back to the Agent Log. Each row in Saved research has Agent Log and Graph links.
+  An answer in Research has "Open in the Agent Log". Answers have no graph.
+- **A source or a statement.** In Research, a citation number opens the inspector's Evidence tab with that source lit.
+  "Show in the answer" in the inspector lights the source or opens the statement's check in the answer. On a narrow
+  window the citation stays in the answer. In a team review, each source and each checked statement has an "In the
+  graph" link that selects its node.
+
+The address bar always says what is shown, so Back, Forward and a copied link return to it:
+`#Lab/<kind>/<run id>?agent=<name>`, `#Graph/<kind>/<run id>?node=<node id>`, `#Agents/<name>`, `#Board/<run id>`,
+`#Compare/<run id>`. The code is in `dashboard/src/lib/links.ts`.
+
 The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
 Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
 below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.

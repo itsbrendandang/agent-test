@@ -1,4 +1,6 @@
 import { useMemo } from "react"
+import { hasCard } from "@/lab/agentFocus"
+import { agentLink, logLink } from "@/lib/links"
 import { safeUrl } from "./model"
 import { connectionsOf } from "./view"
 import type { GraphLink, GraphModel, GraphNode } from "./types"
@@ -13,6 +15,9 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
   const conns = useMemo(() => connectionsOf(node.id, nodes, links), [node.id, nodes, links])
   const href = node.url ? safeUrl(node.url) : undefined
   const where = model.kind === "swarm" ? "Compare" : "Board"
+  // A team member of a review: its messages in the Agent Log and its card in Agents. (A benchmark run's agent nodes are
+  // model groups, not roles, so they have neither.)
+  const member = model.kind === "board" && node.kind === "agent" && node.id.startsWith("agent:") ? node.id.slice("agent:".length) : undefined
   return (
     <aside className="graph-panel graph-sheet" aria-label="Selected node" data-testid="node-panel">
       <span className="graph-sheet-handle" aria-hidden="true" />
@@ -41,7 +46,14 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
         ))}
         {conns.length === 0 && <li className="muted">No recorded connections at this step.</li>}
       </ul>
+      {member && (
+        <p className="graph-agent-links">
+          <a href={logLink({ kind: "board", id: model.runId }, member)}>{node.label}'s messages in the Agent Log</a>
+          {hasCard(member) && <> · <a href={agentLink(member, "board")}>About this agent</a></>}
+        </p>
+      )}
       <button type="button" className="btn btn-primary" onClick={onOpenRun}>Open this run in {where}</button>
+      <a className="btn" href={logLink({ kind: model.kind, id: model.runId })}>Open in the Agent Log</a>
     </aside>
   )
 }

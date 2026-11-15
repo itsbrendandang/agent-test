@@ -20,7 +20,7 @@ import { cancelResearch, DIRECT_ANSWERS_OFF, DirectAnswersOff, ResearchRefused, 
 import { AgentsWorking } from "@/research/AgentsWorking"
 import { AskBox } from "@/research/AskBox"
 import { TryAsking } from "@/research/TryAsking"
-import { ResearchAnswer } from "@/research/Answer"
+import { ResearchAnswer, type Picked } from "@/research/Answer"
 import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
 import { Inspector } from "@/research/Inspector"
@@ -58,6 +58,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [stopNote, setStopNote] = useState<string>() // what the engine answered to Stop
   const [pane, setPane] = useState(loadInspector) // the inspector: shown or not, and how wide; remembered
   const [inspect, setInspect] = useState<{ id?: string; tab?: InspectorTab }>({}) // which answer and tab; none = the latest answer
+  const [chosenItem, setChosenItem] = useState<Picked & { id: string }>() // the source or statement chosen in an answer or in the inspector
   const narrow = useNarrow()
   const [copied, setCopied] = useState<number>()
   const [statuses, setStatuses] = useState<Record<string, string>>({}) // each direct answer's status, as its own events report it
@@ -246,6 +247,12 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const canInspect = !!inspected && tabsOf(seenState, seenEvents).length > 0
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
+  // A source or a checked statement chosen in an answer opens the inspector's Evidence tab on it (where there is room
+  // beside the conversation, or when the inspector is already open), and one chosen there is lit in the answer.
+  const pick = (id: string) => (p: Omit<Picked, "n">) => {
+    setChosenItem((old) => ({ ...p, id, n: (old?.n ?? 0) + 1 }))
+    if (!narrow || pane.open) { setInspect({ id, tab: "evidence" }); if (!pane.open) showInspector(true) }
+  }
 
   return (
     <div className="page search" data-wide data-empty={empty || undefined}>
@@ -276,6 +283,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                     <MessageContent>
                       <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops fresh={started.includes(t.research.id)}
                         onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
+                        picked={chosenItem?.id === t.research.id ? chosenItem : undefined} onPick={pick(t.research.id)}
                         onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
                         onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
                         onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
@@ -366,7 +374,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
         </section>
         {showPane && inspected && seenState && (
           <InspectorPane narrow={narrow} width={pane.width} onClose={() => showInspector(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
-            <Inspector id={inspected} state={seenState} events={seenEvents} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })} />
+            <Inspector id={inspected} state={seenState} events={seenEvents} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
+              picked={chosenItem?.id === inspected ? chosenItem : undefined} onPick={pick(inspected)} />
           </InspectorPane>
         )}
       </div>

@@ -6,7 +6,8 @@
 //  Lab:      the team at work, drawn from the same events.
 // A tab exists only when it has content. Nothing here is a placeholder.
 import { tracked } from "@/lib/engine"
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useEffect, useId, useState } from "react"
+import type { Picked } from "./Answer"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
 import { HypothesesTable } from "./Hypotheses"
@@ -24,7 +25,13 @@ const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypothese
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
-export function Inspector({ id, state, events, tab, onTab }: { id: string; state: AnswerState; events: ResearchEvent[]; tab: InspectorTab | undefined; onTab: (tab: InspectorTab) => void }) {
+export function Inspector({ id, state, events, tab, onTab, picked, onPick }: {
+  id: string; state: AnswerState; events: ResearchEvent[]; tab: InspectorTab | undefined; onTab: (tab: InspectorTab) => void
+  /** The source or statement chosen in the answer (or here): lit in the Evidence tab. */
+  picked?: Picked
+  /** Choose a source or a statement here: the answer shows it too. */
+  onPick?: (pick: Omit<Picked, "n">) => void
+}) {
   const tabs = tabsOf(state, events)
   const current = tab && tabs.includes(tab) ? tab : tabs[0]
   if (!current) return <p className="muted small inspector-empty">Nothing to inspect yet. It fills in as the answer is made.</p>
@@ -40,7 +47,7 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
         ))}
       </div>
       <div className="inspector-panel" id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${current}`} tabIndex={0}>
-        {current === "evidence" && <Evidence state={state} />}
+        {current === "evidence" && <Evidence state={state} picked={picked} onPick={onPick} />}
         {current === "hypotheses" && <HypothesesTable state={state} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
@@ -50,9 +57,18 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
   )
 }
 
-function Evidence({ state: s }: { state: AnswerState }) {
+function Evidence({ state: s, picked, onPick }: { state: AnswerState; picked?: Picked; onPick?: (pick: Omit<Picked, "n">) => void }) {
   const c = sourceCounts(s)
   const demo = s.mode === "demo"
+  const uid = useId()
+  // What was chosen is brought into view here, whichever side it was chosen on.
+  useEffect(() => {
+    const at = picked?.source !== undefined ? `${uid}-src-${picked.source}` : picked?.statement !== undefined ? `${uid}-st-${picked.statement}` : undefined
+    if (at) document.getElementById(at)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" })
+  }, [picked?.n]) // eslint-disable-line react-hooks/exhaustive-deps -- one run per choice
+  const cite = (n: number) => onPick && s.sources.some((x) => x.n === n)
+    ? <button key={n} type="button" className="answer-cite" aria-label={`Source ${n}`} onClick={() => onPick({ source: n })}>{n}</button>
+    : <span key={n}>{n}</span>
   return (
     <>
       {s.sources.length > 0 && (
@@ -63,7 +79,7 @@ function Evidence({ state: s }: { state: AnswerState }) {
           </p>
           <ol className="inspector-sources">
             {s.sources.map((src) => { const url = safeUrl(src.url); const why = s.selection?.selected.find((x) => x.n === src.n); const cited = s.cited?.includes(src.n); return (
-              <li key={src.n} data-cited={cited ?? undefined}>
+              <li key={src.n} id={`${uid}-src-${src.n}`} data-cited={cited ?? undefined} data-lit={picked?.source === src.n || undefined}>
                 <span className="source-n" aria-hidden="true">{src.n}</span>
                 <span className="source-what">
                   <span className="inspector-title">{url ? <a href={url} target="_blank" rel="noopener noreferrer">{src.title || url}</a> : src.title || src.url}</span>
@@ -71,6 +87,7 @@ function Evidence({ state: s }: { state: AnswerState }) {
                   {(/preprint/i.test(src.note ?? "") || /\[preprint\]\s*$/i.test(src.title)) && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   {s.cited && <span className="source-use small" data-cited={!!cited}>{cited ? "Cited in the answer" : "Selected, but not cited"}</span>}
                   {why && <span className="small">{why.why}{why.limitation && <span className="muted"> Limit: {why.limitation}</span>}</span>}
+                  {onPick && <button type="button" className="link-btn small inspector-goto" onClick={() => onPick({ source: src.n })} aria-label={`Show source ${src.n} in the answer`}>Show in the answer</button>}
                 </span>
               </li>
             ) })}
@@ -91,14 +108,15 @@ function Evidence({ state: s }: { state: AnswerState }) {
           <p className="muted small">{demo ? "Example checks of a practice answer, not real ones. " : ""}{s.statements.filter((x) => markOf(x.verdict) !== "unchecked").length} of {s.statements.length} cited statements checked.</p>
           <ol className="inspector-statements">
             {s.statements.map((st) => { const m = markOf(st.verdict); return (
-              <li key={st.index}>
+              <li key={st.index} id={`${uid}-st-${st.index}`} data-lit={picked?.statement === st.index || undefined}>
                 <span className="answer-markword" data-mark={m}><span aria-hidden="true">{MARK_GLYPH[m]}</span> {MARK_WORD[m]}</span>
                 <span>{st.text}</span>
                 <span className="muted small" data-found={st.quote ? st.quoteFound : undefined}>
                   {st.quote ? <>“{st.quote}” {st.quoteFound ? `Found in source ${st.quoteSource ?? st.sources[0]}.` : "The quoted passage was not found in the source."}</> : "The checker quoted no passage."}
                   {st.note && ` ${st.note}`}
                 </span>
-                <span className="muted small">Checked by {st.checker === "scripted" ? "nobody: practice text" : st.checker || "not recorded"} · sources {st.sources.join(", ") || "none"}</span>
+                <span className="muted small">Checked by {st.checker === "scripted" ? "nobody: practice text" : st.checker || "not recorded"} · sources {st.sources.length ? st.sources.map((n, i) => <span key={n}>{i > 0 && ", "}{cite(n)}</span>) : "none"}</span>
+                {onPick && <button type="button" className="link-btn small inspector-goto" onClick={() => onPick({ statement: st.index })} aria-label={`Show in the answer: ${st.text.length > 60 ? `${st.text.slice(0, 59)}…` : st.text}`}>Show in the answer</button>}
               </li>
             ) })}
           </ol>

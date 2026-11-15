@@ -137,7 +137,9 @@ describe("a review's sources", () => {
     expect(sources).toHaveTextContent('<img src=x onerror="window.__s=1">')
     expect(sources).toHaveTextContent("not a web address")
     expect(container.querySelector("img, script")).toBeNull()
-    expect(new Set([...sources.querySelectorAll("a")].map((a) => a.getAttribute("href")))).toEqual(new Set(["https://exa.ai"])) // only the credit is a link
+    const hrefs = [...sources.querySelectorAll("a")].map((a) => a.getAttribute("href") ?? "")
+    expect(new Set(hrefs.filter((h) => !h.startsWith("#Graph/")))).toEqual(new Set(["https://exa.ai"])) // only the credit leaves the app
+    for (const h of hrefs.filter((x) => x.startsWith("#Graph/"))) expect(h).toMatch(/^#Graph\/board\/run-1\?node=source%3A/) // "In the graph": an address inside the app, the source's text escaped
     expect((window as { __s?: number }).__s).toBeUndefined()
   })
 })

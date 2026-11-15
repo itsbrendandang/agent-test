@@ -1,6 +1,7 @@
 // Agent Lab design by Anh Lam. Which run the Lab shows. Pure: the three lists the engine serves in, one list of
 // runs out, newest first, and the choice: the run in progress if there is one, else the newest finished run (which
 // the view offers as a replay).
+import { logOfHash } from "@/lib/links"
 import { provenanceOf } from "@/lib/provenance"
 import { clip, type Provenance, type RunKind } from "./model"
 
@@ -53,11 +54,9 @@ export const mergeRuns = (...lists: RunRef[][]): RunRef[] => lists.flat().sort((
 /** The run to show when none was chosen: the newest one in progress, else the newest of all. */
 export const pickRun = (runs: readonly RunRef[]): RunRef | undefined => runs.find((r) => r.live) ?? runs[0]
 
-/** "#Lab/<kind>/<run id>": the run an address names. Only the characters a run id can have are accepted. */
+/** "#Lab/<kind>/<run id>": the run an address names (lib/links.ts reads it). Only the characters a run id can have are accepted. */
 export function runOfLabHash(hash: string): { kind: RunKind; id: string } | undefined {
-  let text = hash
-  try { text = decodeURIComponent(hash) } catch { return undefined }
-  const m = /^#Lab\/(board|answer|swarm)\/([\w.-]{1,200})$/.exec(text)
-  return m ? { kind: m[1] as RunKind, id: m[2] } : undefined
+  const named = logOfHash(hash)
+  return named?.kind && named.id ? { kind: named.kind, id: named.id } : undefined
 }
 export const labHash = (kind: RunKind, id: string) => `#Lab/${kind}/${encodeURIComponent(id)}`
