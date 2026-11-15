@@ -80,6 +80,15 @@ test("the specialist's model follows the effort: the cheap tier at quick, the st
   } finally { await quick.close(); await strong.close() }
 })
 
+test("a cheap tier on another vendor than the writer is not used: the checker must not be the specialist's own model", async () => {
+  const e = await engine({ deps: { specialists: forHerg }, config: (c) => ({ ...c, models: { ...c.models, cheap: "openai/gpt-4o-mini" } }) })
+  try {
+    await paidAllowed(() => e.answer({ question: Q, effort: "quick" }))
+    const specialist = e.calls.find((x) => x.role === "specialist")!, writer = e.calls.find((x) => x.role === "write")!
+    assert.equal(`${specialist.provider}/${specialist.model}`, `${writer.provider}/${writer.model}`)
+  } finally { await e.close() }
+})
+
 test("a specialist never takes money the answer needs: under a tight cap it is not asked, and the answer is still written", async () => {
   // The harness's prices are fixed: at this cap the draft fits, and the draft with a specialist held beside it does not.
   const e = await engine({ deps: { specialists: forHerg }, research: { quick: { max_usd: 0.04 } } })
