@@ -10,7 +10,7 @@
 //   POST /api/glhf/runs          start a run. Needs the dashboard's Origin or the session token (403 without), also
 //                                for the scripted demo. Anything that can spend or touches shared state needs the
 //                                TOKEN (needsToken below): a real model, role models, Exa, memory, cloud, a case
-//                                directory, analyses on Modal (ANALYSIS_BACKEND=modal, or analysisBackend "modal").
+//                                directory, analyses on Modal (ANALYSIS_BACKEND=modal).
 //                                The Origin alone gets 401 {error, field: "token", needsToken: true}.
 //                                With NO_PAID_CALLS on, what is paid is refused first (400), whoever asks.
 //                                Body: a RunRequest; `solvers: ["glhf", "single"]` instead of `solver` starts a
@@ -126,9 +126,8 @@ export const requireTrust = (req: IncomingMessage, res: ServerResponse, need: Ne
   gate(req, res, need, what, { hasToken: hasSessionToken, tokenFile: TOKEN_FILE, ...options })
 
 const has = (value: unknown) => value !== undefined && value !== null && value !== false && value !== "" && value !== 0
-/** Would this body run its analyses on Modal: it says so, or it says nothing and ANALYSIS_BACKEND is modal (or not readable)? */
+/** Would this body run its analyses on Modal: a local run while ANALYSIS_BACKEND is modal (or not readable)? */
 function asksModal(b: Record<string, unknown>): boolean {
-  if (b.analysisBackend !== undefined) return b.analysisBackend !== "local"
   if (b.mode === "cloud") return false
   try { return analysisBackend() === "modal" } catch { return true } // a bad setting is refused by checkStart; until then, the stricter rule
 }

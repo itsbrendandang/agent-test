@@ -10,7 +10,7 @@ import { spentToday } from "../board/board.ts"
 import { loadConfig } from "../config.ts"
 import { HttpError } from "../http.ts"
 import { HOW_TO_ALLOW, paidCallsOff } from "../paid/paid.ts"
-import { analysisBackend, BACKENDS, BadSetting, modalMaxUsd, onModal } from "./modal.ts"
+import { analysisBackend, BadSetting, modalMaxUsd, onModal } from "./modal.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { DEMO_CASE, type Stored, listStored, loadStored, newRunId, patchRun, publicRun, runDir, RUNS, safeId, saveStored, settingsOf, trackerLog } from "./store.ts"
 import { cancelDetail, cancelledWith, failUntracked, LOCAL_POLL, localEnded, localUsage, modalRecord, type RunInput, type RunResult, runnerAlive, RunTask, stopRun } from "./task.ts"
@@ -171,18 +171,16 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   if (body.mode !== "local" && body.mode !== "cloud") bad('mode must be "local" or "cloud"', "mode")
   if (body.solver !== "single" && body.solver !== "glhf") bad('solver must be "single" or "glhf"', "solver")
   if (typeof body.model !== "string" || !MODEL_ID.test(body.model)) bad("model is required (a model id such as anthropic/claude-sonnet-5-5, or mock)", "model")
-  // Where the analyses run: the request's choice, else ANALYSIS_BACKEND (modal.ts), else this machine. Never another
-  // place than the one asked for: a value that is not known is refused, and so is Modal when it cannot be used.
-  let backend: string
-  try { backend = body.analysisBackend ?? (body.mode === "cloud" ? "local" : analysisBackend()) } catch (error) { return bad(error instanceof BadSetting ? error.message : String(error), "analysisBackend") }
-  if (!(BACKENDS as readonly unknown[]).includes(backend)) bad('analysisBackend must be "local" (Docker on this machine) or "modal" (a Modal sandbox)', "analysisBackend")
-  const modal = backend === "modal"
+  // Where the analyses run: ANALYSIS_BACKEND (modal.ts), else this machine; a cloud run's run on its own VM. Never
+  // another place than the one set: a value that is not known is refused, and so is Modal when it cannot be used.
+  let modal: boolean
+  try { modal = body.mode !== "cloud" && analysisBackend() === "modal" } catch (error) { return bad(error instanceof BadSetting ? error.message : String(error), "analysisBackend") }
   // The kill switch, before anything else is weighed: nobody starts a run that can spend, whoever they are.
   if (paidCallsOff()) {
     if (body.model !== "mock") bad(`${body.mode === "cloud" ? "cloud runs and runs" : "runs"} with a real model are refused; only the scripted model "mock" may run. ${HOW_TO_ALLOW}`, "model")
     if (body.mode === "cloud") bad(`cloud runs are refused. ${HOW_TO_ALLOW}`, "mode")
     if (body.exa) bad(`exa (documentation search through Exa) is refused. ${HOW_TO_ALLOW}`, "exa")
-    if (modal) bad(`analyses in a Modal sandbox (ANALYSIS_BACKEND=modal) are billed by Modal, also with the scripted model, and are refused. They were not run on this machine instead: to run them here, set ANALYSIS_BACKEND=local (or send analysisBackend "local"). ${HOW_TO_ALLOW}`, "analysisBackend")
+    if (modal) bad(`analyses in a Modal sandbox (ANALYSIS_BACKEND=modal) are billed by Modal, also with the scripted model, and are refused. They were not run on this machine instead: to run them here, set ANALYSIS_BACKEND=local. ${HOW_TO_ALLOW}`, "analysisBackend")
   }
   if (body.task !== undefined && (typeof body.task !== "string" || body.task.length > 100)) bad("task must be a short text")
   if (body.task !== undefined && !ARG.task.test(body.task!)) bad("task must start with a letter or digit and hold only letters, digits, '.', '_' and '-'")
@@ -214,8 +212,7 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   // times that. So the message names both. (The cloud runner has its own limit.)
   if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad(`maxTokens is required for a real model: it is the token budget the run plans by. It is not a hard limit: the run is cut off only once ${HARD_STOP} x maxTokens is passed (checked after each model call), so count on that much being spent`, "maxTokens")
   if ((body.exa || body.memory) && !known) bad(`exa and memory are not open to unknown callers: ${cli}`, body.exa ? "exa" : "memory")
-  if (modal && body.mode === "cloud") bad("analysisBackend modal is for local runs: a cloud run's analyses run on its own VM", "analysisBackend")
-  if (modal && !known) bad(`analyses on Modal cost money (Modal bills the sandbox by the second): ${cli}. To run them on this machine instead, send analysisBackend "local"`, "analysisBackend")
+  if (modal && !known) bad(`analyses on Modal cost money (Modal bills the sandbox by the second): ${cli}. To run them on this machine instead, set ANALYSIS_BACKEND=local`, "analysisBackend")
   const request: RunRequest = { mode: body.mode!, task: body.task ?? "demo", solver: body.solver!, model: body.model!, roleModels }
   if (modal) {
     request.analysisBackend = "modal"

@@ -101,13 +101,16 @@ test("while paid calls are off, Modal is refused with the reason and is not repl
   withEnv({ ANALYSIS_BACKEND: "modal" }, () => {
     assert.throws(() => checkRequest(LOCAL, CLI), (e: any) => e instanceof BadRequest && e.field === "analysisBackend"
       && /billed by Modal, also with the scripted model/.test(e.message) && /not run on this machine instead/.test(e.message) && /NO_PAID_CALLS/.test(e.message))
-    // Asking for this machine explicitly is allowed: it is free, and it is what the caller chose.
-    const here = checkRequest({ ...LOCAL, analysisBackend: "local" }, NOBODY)
-    assert.equal(here.analysisBackend, undefined)
+    // Only the engine's setting chooses: a body that asks for this machine is still refused.
+    assert.throws(() => checkRequest({ ...LOCAL, analysisBackend: "local" } as Partial<RunRequest>, NOBODY), (e: any) => e.field === "analysisBackend")
     assert.equal(paidRun({ ...LOCAL, analysisBackend: "modal" })?.includes("analyses on Modal"), true)
     assert.equal(paidRun({ ...LOCAL }), undefined)
   })
-  assert.throws(() => checkRequest({ ...LOCAL, analysisBackend: "modal" }, CLI), /Modal/)
+  withEnv({ ANALYSIS_BACKEND: "local" }, () => {
+    // ANALYSIS_BACKEND=local is free, and a body that asks for Modal does not change that.
+    assert.equal(checkRequest(LOCAL, NOBODY).analysisBackend, undefined)
+    assert.equal(checkRequest({ ...LOCAL, analysisBackend: "modal" } as Partial<RunRequest>, NOBODY).analysisBackend, undefined)
+  })
 })
 
 test("with paid calls on, Modal needs a known caller and gets the run's cap", () => {
@@ -127,9 +130,7 @@ test("with paid calls on, Modal needs a known caller and gets the run's cap", ()
     })
     withEnv({ ANALYSIS_BACKEND: "modl" }, () => assert.throws(() => checkRequest(LOCAL, CLI), (e: any) => e.field === "analysisBackend" && /ANALYSIS_BACKEND must be/.test(e.message)))
     withEnv({ ANALYSIS_BACKEND: "modal", GLHF_MODAL_MAX_USD: "free" }, () => assert.throws(() => checkRequest(LOCAL, CLI), /GLHF_MODAL_MAX_USD/))
-    assert.throws(() => checkRequest({ ...LOCAL, analysisBackend: "gpu" as never }, CLI), /analysisBackend must be/)
     const cloud = { mode: "cloud", solver: "glhf", model: "openai/gpt-5.5", task: "9", effort: "high", project: "p", billCloud: true, maxHours: 1 }
-    assert.throws(() => checkRequest({ ...cloud, analysisBackend: "modal" } as never, CLI), /its own VM/)
     withEnv({ ANALYSIS_BACKEND: "modal" }, () => assert.equal(checkRequest(cloud as never, CLI).analysisBackend, undefined, "a cloud run ignores the setting"))
   } finally { paidOff() }
 })
@@ -137,11 +138,12 @@ test("with paid calls on, Modal needs a known caller and gets the run's cap", ()
 test("Modal needs the token over HTTP, and a run on Modal is stopped only by the token", () => {
   withEnv({ ANALYSIS_BACKEND: "modal" }, () => {
     assert.equal(needsToken(LOCAL), true)
-    assert.equal(needsToken({ ...LOCAL, analysisBackend: "local" }), false)
+    assert.equal(needsToken({ ...LOCAL, analysisBackend: "local" }), true, "the body does not choose")
+    assert.equal(needsToken({ ...LOCAL, mode: "cloud" }), true, "a cloud run needs the token for itself")
   })
   withEnv({ ANALYSIS_BACKEND: "local" }, () => {
     assert.equal(needsToken(LOCAL), false)
-    assert.equal(needsToken({ ...LOCAL, analysisBackend: "modal" }), true)
+    assert.equal(needsToken({ ...LOCAL, analysisBackend: "modal" }), false, "the body does not choose")
   })
   withEnv({ ANALYSIS_BACKEND: "nonsense" }, () => assert.equal(needsToken(LOCAL), true, "a bad setting gets the stricter rule"))
   const run = { id: "x", mode: "local", task: "demo", solver: "glhf", model: "mock", roleModels: {}, phase: "running", startedAt: 0 } as GlhfRun

@@ -95,7 +95,7 @@ export interface RunRequest {
   seed?: number
   /** Start only when this run is settled. Set by the tracker for the second run of a pair, never by a caller. */
   after?: string
-  /** Where the analyses run (local runs). Default: ANALYSIS_BACKEND, else "local". "modal" is billed and needs the token. */
+  /** "modal" when the analyses run in a Modal sandbox (ANALYSIS_BACKEND=modal, local runs; billed, needs the token). Set by the tracker, never by a caller. */
   analysisBackend?: AnalysisBackend
   /** Modal runs: the most this run may cost on Modal, in USD (GLHF_MODAL_MAX_USD when the run was started). Set by the tracker, never by a caller. */
   modalMaxUsd?: number
@@ -105,7 +105,7 @@ export interface RunRequest {
  * POST /api/glhf/runs body: a RunRequest, where `solvers` may replace `solver`. Two solvers start a matched pair of
  * local runs, one after the other in the order given, with the same task, model, time limit, token budget and seed.
  */
-export type StartBody = Partial<Omit<RunRequest, "after" | "modalMaxUsd">> & { solvers?: Solver[] }
+export type StartBody = Partial<Omit<RunRequest, "after" | "analysisBackend" | "modalMaxUsd">> & { solvers?: Solver[] }
 
 /** A field of the New-run form that a refusal is about, so the form can show the message next to the right input. */
 export type Field = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver" | "analysisBackend"
