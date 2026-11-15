@@ -205,6 +205,11 @@ def test_the_brief_s_column_names_are_read_per_artifact() -> None:
             "`log2FoldChange`, `notes.md`\n## Software\ncolumns `version`\n",
             ["gene", "log2FoldChange"],
         ),
+        (
+            "## Required Outputs\n- `outputs/de.csv` with columns `gene_id`, `padj`; keep rows "
+            "with `padj` below `0.05` or `1e-3`\n",
+            ["gene_id", "padj"],
+        ),
         ("## Method\ncolumns `gene_id`\n", None),  # no Required Outputs section
     ],
 )

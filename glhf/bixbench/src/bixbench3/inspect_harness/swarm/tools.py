@@ -156,6 +156,7 @@ _NOT_A_NAME = re.compile(r"[\s/\\<>=!()\[\]{}*|,;:'\"]")
 _FILE_NAME = re.compile(
     r"\.(csv|tsv|tab|txt|json|md|bed|gz|h5ad|h5|rds|parquet|xlsx?)$", re.IGNORECASE
 )
+_NUMBER = re.compile(r"[-+]?\d*\.?\d+(e[-+]?\d+)?", re.IGNORECASE)
 MAX_REQUIRED_COLUMNS = 40  # per artifact; a brief that names more is not listing columns
 
 
@@ -217,6 +218,7 @@ def required_columns(brief: str, outputs: list[ExpectedOutput]) -> dict[str, lis
                     and token not in files
                     and not _NOT_A_NAME.search(token)
                     and not _FILE_NAME.search(token)
+                    and not _NUMBER.fullmatch(token)
                     and token not in names
                 ):
                     names.append(token)
