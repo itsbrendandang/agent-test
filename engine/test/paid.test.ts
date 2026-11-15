@@ -190,6 +190,9 @@ test("glhf: the runner gets blank keys, and the scripted run still works", async
   const env = JSON.parse(readFileSync(join(runs, sent.body.id, "env.json"), "utf8"))
   assert.deepEqual(env, { NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
     "blank, not absent: Inspect reads an absent key back from .env; past.dev is out of reach without PAST_API_KEY")
+  assert.equal(process.env.OPENROUTER_API_KEY, "fake-key-for-tests", "a stray key IS in the engine's own environment ...")
+  assert.equal(env.OPENROUTER_API_KEY, "", "... and is blank in the spawned runner: blanked defensively, although no provider uses it")
+  assert.equal(env.TYPESAFE_API_KEY, "")
 
   const child = paid.childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "a", HF_TOKEN: "h", VSCODE_PID: "1", VSCODE_CWD: "/x", TERM_PROGRAM: "vscode", UV_ENV_FILE: ".env", OTHER: "kept" })
   assert.deepEqual(child, { PATH: "/bin", OTHER: "kept", NO_PAID_CALLS: "1", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", EXA_API_KEY: "", PAST_API_KEY: "", HF_TOKEN: "", TINKER_API_KEY: "", OPENROUTER_API_KEY: "", TYPESAFE_API_KEY: "" },
