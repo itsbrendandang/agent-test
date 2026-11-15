@@ -112,6 +112,9 @@
 .home-plan-limits dd { margin: 0; font-size: 15px; font-weight: 650; }
 @media (max-width: 640px) { .home-plan-limits { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .md [data-streamdown="strong"], .md span[class*="font-semibold"], .md .font-semibold { font-weight: 650; }
+/* The caret at the end of text still being written (SafeMarkdown `live`). Streamdown sets --streamdown-caret and draws it
+   with Tailwind classes from its own package, which this build does not scan, so the rule is written out here. */
+.md[data-live] [style*="--streamdown-caret"] > :last-child:not([data-sd-caret-hidden])::after { content: var(--streamdown-caret); display: inline; vertical-align: baseline; }
 
 .search-thread .thread-user { scroll-margin-top: 10px; }
 .search-log > div { scroll-padding-top: 10px; }
