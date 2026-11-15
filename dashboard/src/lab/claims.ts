@@ -15,7 +15,7 @@
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { Build, num, str, swarmProvenance, type LabEvent, type SwarmNotes, type SwarmRun } from "./adapter"
 import {
-  CHARACTER_IDS, CLAIM_GLYPH, CLAIM_ROOM, CLAIM_WORD, characterOf, claimOpen, clip, plural,
+  CHARACTER_IDS, CLAIM_GLYPH, CLAIM_ROOM, CLAIM_WORD, claimOpen, clip, plural,
   type CharacterId, type ClaimCard, type ClaimState, type LabModel,
 } from "./model"
 
@@ -72,7 +72,7 @@ function cardOf(raw: unknown): ClaimCard | undefined {
   const b = (r.budget ?? {}) as Record<string, unknown>
   const history = Array.isArray(r.history) ? (r.history as Record<string, unknown>[]) : []
   const last = history.at(-1)
-  const attempts = Object.fromEntries(Object.entries((r.attempts ?? {}) as Record<string, unknown>).flatMap(([k, v]) => (num(v) !== undefined ? [[k, num(v)!]] : [])))
+  const attempts = Object.fromEntries(Object.entries((r.attempts ?? {}) as Record<string, unknown>).flatMap(([k, v]) => (num(v) ? [[k, num(v)!]] : []))) // a mode with no call yet is left out
   return {
     id, text: str(r.text) ?? "", acuity: str(r.acuity), state, room: CLAIM_ROOM[state], reason: str(last?.reason), movedAt: ms(last?.at), activity: "",
     budget: { tokensSpent: num(b.tokens_spent) ?? 0, tokensAlloc: num(b.tokens_alloc), secondsSpent: num(b.seconds_spent) ?? 0, secondsAlloc: num(b.seconds_alloc) },
@@ -161,6 +161,7 @@ export function claimsLab(input: ClaimsInput, options: { upTo?: number } = {}): 
   let flags: LabEvent | undefined
   const piloting = new Set<string>() // claims whose pilot call is known to be running
   let who: CharacterId | undefined
+  let noteFinished = false // the ledger's own last note: the whole run is over
 
   for (const step of steps) {
     const at = step.at
@@ -189,6 +190,7 @@ export function claimsLab(input: ClaimsInput, options: { upTo?: number } = {}): 
       } else if (kind === "issue.raised") b.log(at, `${by ? clip(by, 20) : "A reviewer"} raised a ${clip(str(n.severity) ?? "", 12)} problem: ${clip(str(n.problem) ?? "", 140)}`, undefined, "warn")
       else if (kind === "issue.resolved") b.log(at, `Problem ${clip(str(n.issue) ?? "", 12)} was marked ${clip(str(n.status) ?? "resolved", 12)}${by ? ` by the ${clip(by, 20)}` : ""}.`)
       else if (kind === "phase.started" && phase === "report") { b.set("reporter", "working", "Writing up what was done (one model call).", at); b.log(at, "Reporter started the write-up.", "Reporter") }
+      else if (kind === "finished") noteFinished = true
       else if (kind === "phase.finished" && phase === "report") { b.set("reporter", "done", n.limit_hit === true ? "The write-up stopped at its limit." : "Finished the write-up.", at); b.log(at, "Reporter finished the write-up.", "Reporter") }
       continue
     }
@@ -273,7 +275,8 @@ export function claimsLab(input: ClaimsInput, options: { upTo?: number } = {}): 
   // ── What is known about each claim now, and who may be at work ──
   const off: CharacterId[] = flags ? ([["critic", flags.critic], ["auditor", flags.auditor], ["pilot", flags.pilot]] as const).flatMap(([id, on]) => (on === false ? [id] : [])) : []
   for (const id of off) { const a = b.who(id); a.inRun = false; a.state = "idle"; a.doing = ""; a.standsFor = `${STANDS[id]} Switched off for this run.` }
-  const ended = whole && (run?.phase === "done" || run?.phase === "failed" || run?.phase === "cancelled")
+  const phase = run?.phase ?? (noteFinished ? "done" : undefined) // without a tracker record, the ledger's last note ends the run
+  const ended = whole && (phase === "done" || phase === "failed" || phase === "cancelled")
   const maybe = new Map<CharacterId, string[]>()
   for (const c of cards.values()) {
     if (!claimOpen(c.state)) { c.activity = "Closed. Nothing more is done on it."; continue }
@@ -282,6 +285,7 @@ export function claimsLab(input: ClaimsInput, options: { upTo?: number } = {}): 
     const expected: CharacterId[] = c.state === "under_review" ? ["auditor", "critic"] : c.state === "in_workup" ? [c.attempts.workup ? "reviser" : "experimenter"] : []
     for (const id of expected) if (!off.includes(id)) maybe.set(id, [...(maybe.get(id) ?? []), c.id])
   }
+  if (m.status === "running" && piloting.size && !off.includes("pilot") && ended) b.set("pilot", "working", `Pilot call on ${plural(piloting.size, "claim")} (${[...piloting].join(", ")}).`, b.who("pilot").since ?? m.at) // what was running when the run ended
   if (m.status === "running" && !ended) {
     if (piloting.size && !off.includes("pilot")) b.set("pilot", "working", `Pilot call on ${plural(piloting.size, "claim")} (${[...piloting].join(", ")}): a pilot starts right after the claim is moved to piloting.`, b.who("pilot").since ?? m.at)
     for (const [id, ids] of maybe) {
@@ -308,18 +312,15 @@ export function claimsLab(input: ClaimsInput, options: { upTo?: number } = {}): 
   if (runId && !m.runId) m.runId = runId
 
   // ── The end of the run, from the tracker's record ──
-  if (whole && run?.phase === "done") { m.status = "done"; b.finish(run.finishedAt ?? m.at, "Had nothing to do in this run."); b.log(run.finishedAt ?? m.at, "The run finished.", undefined, "good") }
-  else if (whole && run?.phase === "failed") {
-    const why = clip((run.error ?? "The run failed.").split("\n")[0], 300)
+  if (whole && phase === "done") { m.status = "done"; b.finish(run?.finishedAt ?? m.at, "Had nothing to do in this run."); b.log(run?.finishedAt ?? m.at, "The run finished.", undefined, "good") }
+  else if (whole && phase === "failed") {
+    const why = clip((run?.error ?? "The run failed.").split("\n")[0], 300)
     m.status = "failed"; m.note = why
-    for (const id of CHARACTER_IDS) { const a = b.who(id); if (a.inRun && a.state === "working") { b.set(id, "failed", `The run failed during this step: ${why}`, run.finishedAt ?? m.at); a.problem = { text: why, at: run.finishedAt ?? m.at ?? 0 } } }
-    b.log(run.finishedAt ?? m.at, `The run failed: ${why}`, undefined, "bad")
-  } else if (whole && run?.phase === "cancelled") {
-    b.cancel(run.finishedAt ?? m.at, "This run was cancelled.")
-    b.log(run.finishedAt ?? m.at, "The run was cancelled. Everyone is back at their desks.", undefined, "warn")
+    for (const id of CHARACTER_IDS) { const a = b.who(id); if (a.inRun && a.state === "working") { b.set(id, "failed", `The run failed during this step: ${why}`, run?.finishedAt ?? m.at); a.problem = { text: why, at: run?.finishedAt ?? m.at ?? 0 } } }
+    b.log(run?.finishedAt ?? m.at, `The run failed: ${why}`, undefined, "bad")
+  } else if (whole && phase === "cancelled") {
+    b.cancel(run?.finishedAt ?? m.at, "This run was cancelled.")
+    b.log(run?.finishedAt ?? m.at, "The run was cancelled. Everyone is back at their desks.", undefined, "warn")
   }
-  // captions follow the engine's own actor names
-  for (const id of CHARACTER_IDS) if (!b.who(id).inRun && id !== "librarian" && !off.includes(id)) b.who(id).standsFor = STANDS[id] ?? "The claims engine has no such role."
-  void characterOf
   return m
 }

@@ -85,7 +85,7 @@ describe("characters", () => {
     const { container } = render(<Mascots />)
     const row = container.querySelector(".mascots")!
     expect(row).toHaveAttribute("aria-hidden", "true")
-    expect(row.querySelectorAll("svg.buddy")).toHaveLength(3)
+    expect(row.querySelectorAll("svg.buddy")).toHaveLength(4)
     expect(container.textContent).toBe("") // they say nothing: no role, no claim to be an agent
   })
   it("the waiting state always has its status in text, with or without characters", () => {

@@ -128,7 +128,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               {err("model")}
               {off && (
                 <p className="muted small" id={`${uid}-paid-off`}>
-                  You are in Demo mode, so only a practice run can start. To use a real model, choose Real at the top of the page first.
+                  You are in Demo mode, so only a practice run can start. To use a real model, choose Real in Settings first.
                 </p>
               )}
               {!off && models.length === 1 && <p className="muted small">The engine has no key for an AI model, so only the practice option is listed. The person who runs the app can add one (Settings, Technical).</p>}

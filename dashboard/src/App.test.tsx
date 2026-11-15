@@ -30,12 +30,13 @@ const show = async (hash = "", table: Parameters<typeof routes>[0] = ONLINE) => 
 beforeEach(() => { width(1280); window.location.hash = "" })
 
 describe("one header row", () => {
-  it("names the place, holds the Next run selector, and has none of the old top strip", async () => {
+  it("names the place, and has no Demo or Real selector (that is in Settings) and none of the old top strip", async () => {
     await show("#Runs")
     const header = within(screen.getByRole("banner"))
     expect(header.getByTestId("place")).toHaveTextContent("Saved research")
-    expect(await header.findByRole("radiogroup", { name: "Next run: Demo or Real" })).toBeInTheDocument()
-    await waitFor(() => expect(header.getByRole("radio", { name: "Demo" })).toBeChecked())
+    await screen.findByText("saved view")
+    expect(header.queryByRole("radiogroup")).toBeNull(); expect(header.queryByRole("radio")).toBeNull() // the owner removed the selector from the header
+    for (const gone of ["Next run", "Demo", "Real"]) expect(header.queryByText(gone)).toBeNull()
     for (const gone of ["Engine online", "How this works", "Demo mode", "Real mode"]) expect(header.queryByText(gone)).toBeNull()
     expect(header.queryByRole("button", { name: "Settings" })).toBeNull() // Settings has one entry point: the navigation
     expect(screen.getByRole("main")).toHaveTextContent("saved view")
@@ -136,8 +137,9 @@ describe("the navigation", () => {
 
 describe("the engine notice", () => {
   it("says nothing while the engine answers", async () => {
-    await show("#Runs")
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Demo" })).toBeChecked())
+    const t = await show("#Runs")
+    await waitFor(() => expect(t.sent.some((s) => s.url.endsWith("/api/glhf/status"))).toBe(true))
+    await screen.findByText("saved view")
     expect(screen.queryByText(/Engine offline/)).toBeNull()
   })
   it("an engine that cannot be reached is said in the page, with Try again, which reads the engine again", async () => {
@@ -149,7 +151,6 @@ describe("the engine notice", () => {
     up = true
     await t.user.click(within(notice).getByRole("button", { name: "Try again" }))
     await waitFor(() => expect(screen.queryByText(/Engine offline/)).toBeNull())
-    expect(screen.getByRole("radio", { name: "Demo" })).toBeChecked()
   })
   it("an engine that answers with an error shows its own words", async () => {
     await show("#Runs", { "GET /api/glhf/status": { status: 500, body: { error: "the run folder cannot be read" } } })

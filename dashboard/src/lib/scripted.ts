@@ -40,8 +40,10 @@ export const boardScripted = async (id: string, signal?: AbortSignal): Promise<S
 
 const known = new Map<string, Scripted>()
 const starts = new Map<string, RunStart>()
+/** Runs whose first event was asked for and the engine answered, with or without one. */
+const asked = new Set<string>()
 /** For tests. */
-export const forgetScripted = () => { known.clear(); starts.clear() }
+export const forgetScripted = () => { known.clear(); starts.clear(); asked.clear() }
 /** The engine allows only so many event streams at once, so the runs are read a few at a time. */
 const AT_ONCE = 4
 
@@ -55,9 +57,12 @@ export function useBoardScripted(ids: string[]): Record<string, Scripted> {
     const worker = async () => {
       for (let id = todo.shift(); id !== undefined && !stop.signal.aborted; id = todo.shift()) {
         const start = await boardStart(id, stop.signal)
+        if (stop.signal.aborted) return
         if (start) starts.set(id, start)
+        asked.add(id)
         const flag = start?.scripted
-        if (flag !== undefined) { known.set(id, flag); setTick((n) => n + 1) } // a run that could not be read is tried again later
+        if (flag !== undefined) known.set(id, flag) // a run that could not be read is tried again later
+        setTick((n) => n + 1)
       }
     }
     for (let i = 0; i < AT_ONCE; i++) void worker()
@@ -68,3 +73,5 @@ export function useBoardScripted(ids: string[]): Record<string, Scripted> {
 
 /** The title each of these board runs gave itself (the question that was asked), for the ones already read by useBoardScripted. */
 export const boardTitles = (ids: string[]): Record<string, string | undefined> => Object.fromEntries(ids.map((id) => [id, starts.get(id)?.title]))
+/** True once every one of these board runs has been asked for (useBoardScripted does the asking): its title and flag will not change after that. */
+export const boardsRead = (ids: string[]): boolean => ids.every((id) => asked.has(id))

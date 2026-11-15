@@ -1,8 +1,8 @@
 // The walking simulation, without a browser: routes, the wait at a pick-up point, the parcel, the queue, and the
 // rule that nothing moves unless the model holds a trip.
 import { describe, expect, it } from "vitest"
-import { emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
-import { MAX_WAITING, active, advance, createSim, dropPoint, pickupPoint, settle, stationPoint, syncTrips, type Sim } from "./motion"
+import { TALL, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
+import { MAX_WAITING, active, advance, claimPlace, createSim, dropPoint, pickupPoint, searchPoint, settle, stationPoint, syncTrips, type Sim } from "./motion"
 
 const withTrips = (trips: Partial<Record<CharacterId, Trip[]>>, runId = "r1", more: Partial<LabModel> = {}): LabModel => {
   const m = { ...emptyLab(), runId, status: "running" as const, ...more }
@@ -26,11 +26,11 @@ const all = () => true
 describe("the lab's walking", () => {
   it("puts the twelve teammates at Anh's desks: two a room", () => {
     const sim = createSim()
-    expect(sim.walkers.scout.home).toEqual({ x: 145, y: 165 })
-    expect(sim.walkers.librarian.home).toEqual({ x: 335, y: 165 })
-    expect(sim.walkers.finisher.home).toEqual({ x: 875, y: 645 })
+    expect(sim.walkers.scout.home).toEqual({ x: 145, y: 174 })
+    expect(sim.walkers.librarian.home).toEqual({ x: 335, y: 174 })
+    expect(sim.walkers.finisher.home).toEqual({ x: 875, y: 654 })
     expect(new Set(Object.values(sim.walkers).map((w) => `${w.home.x},${w.home.y}`)).size).toBe(12)
-    expect(stationPoint({ room: "planning", slot: 0 })).toEqual({ x: 685, y: 165 })
+    expect(stationPoint({ room: "planning", slot: 0 })).toEqual({ x: 685, y: 174 })
   })
 
   it("moves nobody when the model holds no trip", () => {
@@ -175,6 +175,43 @@ describe("the lab's walking", () => {
     expect(active(sim)).toBe(false)
     syncTrips(sim, model, all)
     expect(active(sim)).toBe(false)
+  })
+
+  it("walks the same routes on the narrow map: one column of rooms beside the corridor", () => {
+    const sim = createSim(TALL)
+    expect(new Set(Object.values(sim.walkers).map((w) => w.home.x)).size).toBe(2) // every room has the same two desks
+    expect(Object.values(sim.walkers).every((w) => w.home.x < TALL.corridorX && w.home.y < TALL.height)).toBe(true)
+    syncTrips(sim, withTrips({ guardian: [fetch("t1", "review", 0)] }), all)
+    const path = run(sim, "guardian")
+    const spot = pickupPoint("review", sim.walkers.guardian.index, TALL)
+    expect(path.some((p) => p.x === TALL.corridorX)).toBe(true)
+    expect(path.some((p) => p.x === spot.x && p.y === spot.y)).toBe(true)
+    expect(path.every((p) => p.x >= 0 && p.x <= TALL.width && p.y >= 0 && p.y <= TALL.height)).toBe(true)
+    expect(path.at(-1)).toMatchObject(sim.walkers.guardian.home)
+  })
+
+  it("picks a real search up at its own point in Discovery: the web by the door, papers by the far wall", () => {
+    const sim = createSim()
+    const web: Trip = { ...fetch("w", "discovery", 0), provider: "exa" }, papers: Trip = { ...fetch("p", "discovery", 0), provider: "europepmc" }
+    syncTrips(sim, withTrips({ scout: [web] }), all)
+    const toWeb = run(sim, "scout")
+    expect(Math.max(...toWeb.map((p) => p.x))).toBe(searchPoint("web", 0).x)
+    syncTrips(sim, withTrips({ scout: [web, papers] }), all)
+    const toPapers = run(sim, "scout")
+    expect(Math.min(...toPapers.map((p) => p.x))).toBe(searchPoint("papers", 0).x)
+    expect(searchPoint("web", 0).x).toBeGreaterThan(searchPoint("papers", 0).x + 300) // a walk across the room either way
+  })
+
+  it("carries a claim from the room of its old state to the room of its new one", () => {
+    const sim = createSim()
+    const move: Trip = { id: "m1", kind: "carry", from: "bench", room: "review", claim: "C1", label: "claim C1", short: "C1", at: 0, back: 0, outcome: "carried" }
+    syncTrips(sim, withTrips({ navigator: [move] }), all)
+    expect(claimPlace(sim, "C1")).toBe("bench") // still where it was while the Engine walks to it
+    const places = new Set<string | undefined>()
+    for (let t = 0; t < 4000 && advance(sim, 0.05); t++) places.add(claimPlace(sim, "C1"))
+    expect([...places]).toEqual(["bench", "carried", undefined]) // picked up, carried, put down where the model says
+    expect(claimPlace(sim, "C2")).toBeUndefined()
+    expect(sim.walkers.navigator).toMatchObject({ ...sim.walkers.navigator.home, carrying: false })
   })
 
   it("walks faster at a higher speed", () => {

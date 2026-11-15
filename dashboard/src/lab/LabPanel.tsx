@@ -1,18 +1,18 @@
 // Agent Lab design by Anh Lam. The side panel of the lab: the selected teammate (who it is, which real agent or step
-// it stands for, what it is doing now, since when, what it last fetched) and the activity log. Both are read from
-// the same activity model the scene draws, so the words and the picture cannot disagree about what was reported.
+// it stands for, what it is doing now, since when, what it last fetched), where the run's searches looked, and the
+// activity log. All of it is read from the same activity model the scene draws, so the words and the picture
+// cannot disagree about what was reported.
 import { SearchCredit } from "@/components/Shared"
 import type { SearchProvider } from "@/board/api"
 import { Mascot } from "./Mascot"
-import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
+import { CLAIM_GLYPH, CLAIM_WORD, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
 import "./lab.css"
 
 const IDLE_HINT = "Teammates stay at their desks until the engine reports work. Each search, screening, check and hand-off the engine reports sends one of them to a room and back."
 
 export function LabPanel({ model, selected, compact = false }: { model: LabModel; selected: CharacterId; compact?: boolean }) {
   const c = characterOf(selected), a = model.characters[selected]
-  const room = roomOf(c.room).name
-  const newest = [...model.log].reverse().slice(0, compact ? 12 : 60)
+  const newest = [...model.log].reverse().slice(0, compact ? 12 : 80)
   return (
     <aside className="lab-panel" aria-label="Selected teammate and lab activity">
       <div className="lab-eyebrow">Selected teammate</div>
@@ -24,21 +24,57 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
         </span>
       </div>
       <dl className="lab-facts">
-        {a.label && <div><dt>Character</dt><dd>The {c.name}</dd></div>}
-        <div><dt>Home room</dt><dd>{room}</dd></div>
+        <div><dt>{a.label ? "Character and home room" : "Home room"}</dt><dd>{a.label ? `The ${c.name}, in ${roomOf(c.room).name}` : roomOf(c.room).name}</dd></div>
         {a.standsFor && <div><dt>Stands for</dt><dd>{a.standsFor}</dd></div>}
         {a.inRun && a.doing && <div><dt>Doing now</dt><dd>{a.doing}</dd></div>}
         {a.inRun && a.since !== undefined && model.status !== "empty" && <div><dt>Since</dt><dd><time dateTime={new Date(a.since).toISOString()}>{clockTime(a.since)}</time></dd></div>}
-        {a.lastFetched && <div><dt>Last fetched</dt><dd>{a.lastFetched.label} <span className="muted">(in {roomOf(a.lastFetched.room).name}, {clockTime(a.lastFetched.at)})</span>{a.lastFetched.provider && <><br /><SearchCredit provider={a.lastFetched.provider as SearchProvider} /></>}</dd></div>}
+        {a.lastFetched && <div><dt>Last fetched</dt><dd>{a.lastFetched.label} <span className="muted">(in {roomOf(a.lastFetched.room).name}, {clockTime(a.lastFetched.at)})</span></dd></div>}
         {a.problem && <div><dt>A step of its own failed</dt><dd data-tone="bad">✕ {a.problem.text}</dd></div>}
       </dl>
       {model.searches && (
         <>
           <hr />
           <h3>Searches reported so far</h3>
-          <ul className="lab-visitors">
-            {Object.entries(model.searches).map(([provider, n]) => <li key={provider}>{n} {n === 1 ? "search" : "searches"}: <SearchCredit provider={provider as SearchProvider} /></li>)}
+          <ul className="lab-credits">
+            {Object.entries(model.searches).map(([provider, n]) => <li key={provider} data-provider={provider}><b>{n}</b> <SearchCredit provider={provider as SearchProvider} /></li>)}
           </ul>
+        </>
+      )}
+      {model.labels && model.labels.length > 0 && (
+        <>
+          <hr />
+          <h3>This run</h3>
+          <ul className="lab-labels">{model.labels.map((l) => <li key={l} data-strong={l.startsWith("Practice") || undefined}>{l}</li>)}</ul>
+        </>
+      )}
+      {model.claims && (
+        <>
+          <hr />
+          <h3>Claims</h3>
+          {model.claims.length === 0 ? <p className="lab-hint">No claim has been proposed yet.</p> : (
+            <ul className="lab-claims" aria-label="Claims of this run">
+              {model.claims.map((claim) => {
+                const attempts = Object.entries(claim.attempts)
+                return (
+                  <li key={claim.id} data-claim={claim.id}>
+                    <div className="lab-claim-head">
+                      <span className="lab-claim" data-state={claim.state}><b>{claim.id}</b> {CLAIM_GLYPH[claim.state] && <span aria-hidden="true">{CLAIM_GLYPH[claim.state]} </span>}{CLAIM_WORD[claim.state]}</span>
+                      {claim.acuity && <span className="muted">acuity {claim.acuity}</span>}
+                      <span className="muted">in {roomOf(claim.room).name}</span>
+                    </div>
+                    <div>{claim.text}</div>
+                    {claim.reason && <div><span className="muted">Why it is here: </span>{claim.reason}</div>}
+                    <div className="muted">{claim.activity}</div>
+                    <div className="muted">
+                      Budget: {claim.budget.tokensSpent.toLocaleString("en-US")}{claim.budget.tokensAlloc ? ` of ${claim.budget.tokensAlloc.toLocaleString("en-US")}` : ""} tokens spent{claim.budget.tokensAlloc ? "" : " (no token budget set)"}; {claim.budget.secondsSpent.toFixed(1)} seconds of calls.
+                    </div>
+                    <div className="muted">Calls: {attempts.length ? attempts.map(([mode, n]) => `${mode}${n > 1 ? ` ×${n}` : ""}`).join(", ") : "none ended yet"}.</div>
+                    {claim.errors.length > 0 && <div style={{ color: "var(--lab-fail)" }}>✕ {claim.errors.length === 1 ? "1 error" : `${claim.errors.length} errors`}: {claim.errors.join("; ")}</div>}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </>
       )}
       {model.visitors.length > 0 && (
@@ -55,9 +91,9 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
       <hr />
       <h3 id="lab-activity">Lab activity</h3>
       {newest.length
-        ? <ol className="lab-log" role="log" aria-labelledby="lab-activity" reversed>{newest.map((l) => <li key={l.id} data-tone={l.tone}>{l.at > 0 && <time dateTime={new Date(l.at).toISOString()}>{clockTime(l.at)}</time>}{l.text}</li>)}</ol>
+        ? <ol className="lab-log" role="log" aria-labelledby="lab-activity" reversed>{newest.map((l) => <li key={l.id} data-tone={l.tone} title={l.text}>{l.at > 0 ? <time dateTime={new Date(l.at).toISOString()}>{clockTime(l.at)}</time> : <time />}<span>{l.text}</span></li>)}</ol>
         : <p className="lab-hint">{model.status === "empty" ? "No run yet. " : "Nothing reported yet. "}{IDLE_HINT}</p>}
-      {!compact && newest.length > 0 && <p className="lab-hint">{IDLE_HINT} On a small screen, scroll the lab sideways. Reduced-motion preferences are respected.</p>}
+      {!compact && newest.length > 0 && <p className="lab-hint">{IDLE_HINT} Marks: … working, ⇄ fetching, → handed off, ✓ done, ✕ failed, ■ cancelled. A faded teammate is not in this run.</p>}
     </aside>
   )
 }

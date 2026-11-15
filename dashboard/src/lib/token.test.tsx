@@ -77,7 +77,7 @@ describe("engineFetch", () => {
     const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "info"), vi.spyOn(console, "warn"), vi.spyOn(console, "error"), vi.spyOn(console, "debug")]
     routes({ "POST /api/glhf/runs": [NEEDS, { status: 201, body: { id: "a" } }] })
     const user = userEvent.setup()
-    const { container } = render(<><TokenPrompt /><ul><TokenRow /></ul></>)
+    const { container } = render(<><TokenPrompt /><TokenRow /></>)
     const asked = post()
     await prompt()
     await user.type(screen.getByLabelText("Session token"), "s3cr3t-value{Enter}")
@@ -149,15 +149,15 @@ describe("engineFetch", () => {
 describe("Settings: forget token", () => {
   it("shows whether a token is held, never the token, and forgets it", async () => {
     const user = userEvent.setup()
-    const { container } = render(<ul><TokenRow /></ul>)
-    expect(screen.getByText("not held")).toBeInTheDocument()
+    const { container } = render(<TokenRow />)
+    expect(screen.getByText("Not entered yet")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Forget token" })).toBeNull()
     keepToken("s3cr3t")
-    expect(await screen.findByText("held for this tab")).toBeInTheDocument()
+    expect(await screen.findByText("Entered for this tab")).toBeInTheDocument()
     expect(container.innerHTML).not.toContain("s3cr3t")
     await user.click(screen.getByRole("button", { name: "Forget token" }))
     expect(getToken()).toBeUndefined()
-    expect(screen.getByText("not held")).toBeInTheDocument()
+    expect(screen.getByText("Not entered yet")).toBeInTheDocument()
   })
 })
 

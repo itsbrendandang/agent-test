@@ -331,6 +331,7 @@ const ANSWER_STANDS: Partial<Record<CharacterId, string>> = {
 export function stepCharacter(kind: string | undefined, provider: string | undefined): CharacterId | undefined {
   switch (kind) {
     case "prepare": return "navigator"
+    case "hypothesize": return "proposer"
     case "search": case "fetch": return searcherOf(provider)
     case "evaluate": return "auditor"
     case "write": return "reporter"
@@ -342,7 +343,7 @@ export function stepCharacter(kind: string | undefined, provider: string | undef
   }
 }
 /** What a finished step leaves for the next teammate. */
-const MADE: Record<string, string> = { prepare: "the search plan", search: "the search results", fetch: "the source text", evaluate: "the kept sources", write: "the draft", check: "the check results", review: "its review notes", revise: "the revised answer", save: "the saved answer" }
+const MADE: Record<string, string> = { hypothesize: "the hypotheses to test", prepare: "the search plan", search: "the search results", fetch: "the source text", evaluate: "the kept sources", write: "the draft", check: "the check results", review: "its review notes", revise: "the revised answer", save: "the saved answer" }
 const isFetch = (kind: string) => kind === "search" || kind === "fetch" || kind === "evaluate"
 
 interface StepSeen { id: string; kind: string; label: string; provider?: string; who: CharacterId; at: number; running: boolean }
@@ -371,11 +372,12 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
   /** The finished steps a starting step builds on. */
   const feeds = (id: string, kind: string): (StepSeen | undefined)[] => {
     switch (kind) {
-      case "search": case "fetch": return [latest("prepare")]
+      case "hypothesize": return [latest("prepare")]
+      case "search": case "fetch": return [latest("hypothesize", "prepare")]
       case "evaluate": { const twin = finished.find((s) => s.id === id.replace(/^evaluate:/, "search:")); return [twin ?? latest("search", "fetch")] }
       case "write": return [latest("evaluate")]
       case "check": return [latest("write", "revise")]
-      case "review": return [latest("write")]
+      case "review": return [latest("write", "revise")] // "review:2" reads the revised text
       case "revise": return [latest("check"), latest("review")]
       case "save": return [latest("revise", "check", "review", "write")]
       default: return []
@@ -403,6 +405,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         if (!id || steps.has(id)) break
         const provider = str(e.provider), who = stepCharacter(kind, provider)
         if (!who) { b.log(at, `${label}.`); break }
+        if (who === "proposer" && !b.who(who).inRun) b.who(who).standsFor = "The hypotheses step of a Standard answer: writes down what the answer will test against published sources."
         // the hand-off into this step
         for (const from of feeds(id, kind)) {
           if (!from || from.who === who || handed.has(`${from.id}>${who}`)) continue
@@ -461,6 +464,17 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         break
       }
       case "review.note": if (str(e.text)) b.log(at, `${b.name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, b.name("critic"), e.severity === "blocking" ? "warn" : undefined); break
+      case "hypotheses": if (Array.isArray(e.items)) b.log(at, e.items.length ? `${plural(e.items.length, "hypothesis", "hypotheses")} set up to test against published sources.` : "No hypothesis was needed for this question.", b.name("proposer")); break
+      case "hypothesis.checked": {
+        const id = clip(str(e.id) ?? "", 8), mark = markOf(e.verdict)
+        const count = (v: unknown) => (Array.isArray(v) ? v.length : 0)
+        const label = `the mark of hypothesis ${id}: ${MARK_GLYPH[mark]} ${MARK_WORD[mark]} (${plural(count(e.for), "source")} for, ${count(e.against)} against)`
+        // code works the mark out; the Guardian carries it to where the hypotheses were set up
+        b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: "planning", to: "proposer", label, short: `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
+        b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        break
+      }
+      case "review.resolved": if (Array.isArray(e.notes)) { const closed = (e.notes as Record<string, unknown>[]).filter((x) => x?.resolved === true).length; b.log(at, `${b.name("critic")} judged its notes against the revised answer: ${closed} of ${e.notes.length} resolved.`, b.name("critic")) } break
       case "sources": if (Array.isArray(e.items)) b.log(at, `${plural(e.items.length, "source")} numbered for the writer.`); break
       case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, b.name("auditor")); break
       case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${b.name("finisher")} saved ${clip(file, 60)}.`, b.name("finisher")); break }

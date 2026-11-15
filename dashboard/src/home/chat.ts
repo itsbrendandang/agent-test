@@ -16,6 +16,15 @@ export const MODE_MEANS: Record<ChatMode, string> = {
   scripted: "Fixed example text. Not an AI answer and not research.",
 }
 export const MODE_KIND: Record<ChatMode, string> = { ai: "info", keyword: "outline", scripted: "neutral" }
+/**
+ * The words over the saved runs listed under a reply. Only an AI answer was written from them, so only it may say
+ * "this answer used". Under any other reply they are runs that share words with the question: nothing read them,
+ * and the words claim no support for a conclusion.
+ */
+export function sourcesWords(mode: string): { heading: string; about: string; label: string } {
+  if (mode === "ai") return { heading: "Sources", about: "Saved research this answer used. Open one to read it and see how each statement in it was checked.", label: "Saved research this answer used" }
+  return { heading: "Related saved research", about: "Saved research that shares words with your question. Nothing read it to write this reply. Open one to read it and see how each statement in it was checked.", label: "Related saved research" }
+}
 
 export const EXAMPLES = [
   "Should we advance a KRAS G12C hit with a hERG risk?",

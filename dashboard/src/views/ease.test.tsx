@@ -44,9 +44,9 @@ describe("first visit", () => {
   it("has no setup cards, model names, key status or agent lists: those are in Settings", async () => {
     home(CATALOG_ON)
     await screen.findByRole("radio", { name: "Standard" })
-    expect(screen.queryByRole("complementary", { name: "What this can use" })).toBeNull()
+    expect(screen.queryByRole("complementary", { name: "Connections" })).toBeNull()
     // nothing technical in the open; the one model list sits inside the closed "Research options"
-    expect(screen.queryAllByText(/key present|key missing|claude-|gpt-|ANTHROPIC|\.env/i).filter((e) => !e.closest("details:not([open])"))).toEqual([])
+    expect(screen.queryAllByText(/key present|key missing|Not connected|claude-|gpt-|ANTHROPIC|\.env/i).filter((e) => !e.closest("details:not([open])"))).toEqual([])
   })
   it("explains Demo mode once, in the owner's words", async () => {
     home(CATALOG_OFF)

@@ -753,7 +753,7 @@ describe("what the engine added after the first real answer", () => {
   const base = lines(S_REAL)
   const at = (seq: number, type: string, rest: object): ResearchEvent => ({ seq, at: 1, run: "a-1", type, ...rest } as ResearchEvent)
   it("a source shows the year the search gave for it, and none when it gave none", async () => {
-    const events = base.map((e) => (e.type === "sources" ? { ...e, items: (e as unknown as { items: object[] }).items.map((x, i) => (i === 0 ? { ...x, published: "2025" } : x)) } as ResearchEvent : e))
+    const events = base.map((e) => (e.type === "sources" ? { ...e, items: (e as unknown as { items: object[] }).items.map((x, i) => ({ ...x, published: i === 0 ? "2025" : undefined })) } as ResearchEvent : e))
     await show(events)
     const rows = within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")
     expect(rows[0]).toHaveTextContent(/· 2025 ·/); expect(rows[1]).not.toHaveTextContent(/· 20\d\d ·/)

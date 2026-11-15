@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ENGINE } from "@/lib/engine"
 import { answerLab, boardLab, swarmLab, type LabEvent, type SwarmNotes, type SwarmRun } from "./adapter"
+import { claimsLab, type ClaimsBoard } from "./claims"
 import { emptyLab, type LabModel, type RunKind } from "./model"
 
 /** "connecting": no event yet. "live": the stream is open. "ended": the run's last event arrived. "lost": the stream broke; a new try is on its way. "offline": this browser cannot open a stream. */
@@ -110,6 +111,65 @@ export function useSwarmRun(id: string | undefined): SwarmSeen {
     return () => { stopped = true; stop.abort(); if (timer) clearTimeout(timer) }
   }, [id])
   return useMemo(() => (got && got.id === id ? got : { notes: null, seenAt: [], connection: id ? "connecting" : "idle" }), [got, id])
+}
+
+export interface ClaimsSeen {
+  /** undefined: not asked yet. false: this run has no claims board (it is not a claims-engine run, or this engine does not serve it). */
+  board: ClaimsBoard | false | undefined
+  events: LabEvent[]
+  /** The host ledger's events, when the engine serves them with the board. */
+  notes: SwarmNotes | null
+  seenAt: (number | undefined)[]
+}
+const listOf = (body: unknown): LabEvent[] => (Array.isArray(body) ? body : Array.isArray((body as { events?: unknown })?.events) ? ((body as { events: unknown[] }).events) : []).filter((e): e is LabEvent => !!e && typeof e === "object")
+
+/**
+ * A claims-engine run, read the way its files ask to be read: the board snapshot first, then the events with a
+ * higher seq; when an event is missing between them (a gap), the snapshot is read again. Only GET requests; a run
+ * that has no board answers 404 once and is not asked again.
+ *   GET /api/glhf/runs/:id/board                  { run_id, seq, claims } (with `ledgerEvents` when the engine sends them)
+ *   GET /api/glhf/runs/:id/claims-events?after=N  the events after seq N
+ */
+export function useClaimsRun(id: string | undefined, live: boolean): ClaimsSeen {
+  const [got, setGot] = useState<{ id: string } & ClaimsSeen>()
+  useEffect(() => {
+    if (!id) return
+    let stopped = false, timer: ReturnType<typeof setTimeout> | undefined
+    const stop = new AbortController()
+    const base = `${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}`
+    let board: ClaimsBoard | undefined, events: LabEvent[] = [], seen: (number | undefined)[] = [], polls = 0
+    const read = async (path: string) => { const r = await fetch(base + path, { signal: stop.signal }); if (r.status === 404) return undefined; if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as unknown }
+    const tick = async () => {
+      try {
+        if (!board) {
+          const body = (await read("/board")) as (ClaimsBoard & { board?: ClaimsBoard }) | undefined
+          if (stopped) return
+          if (!body) { setGot({ id, board: false, events: [], notes: null, seenAt: [] }); return } // not a claims run: ask no more
+          board = body.board ?? body
+          events = events.filter((e) => e.run_id === board!.run_id)
+        }
+        const last = events.reduce((n, e) => Math.max(n, typeof e.seq === "number" ? e.seq : 0), 0)
+        const more = listOf(await read(`/claims-events?after=${last}`)).filter((e) => e.run_id === undefined || e.run_id === board!.run_id)
+        if (stopped) return
+        const have = new Set(events.map((e) => e.seq))
+        events = [...events, ...more.filter((e) => !have.has(e.seq))]
+        const whole = board as ClaimsBoard & { ledgerEvents?: unknown; notes?: unknown }
+        const notes = Array.isArray(whole.ledgerEvents) ? whole.ledgerEvents : Array.isArray(whole.notes) ? whole.notes : []
+        for (let i = seen.length; i < notes.length; i++) seen.push(polls === 0 ? undefined : Date.now())
+        polls++
+        const model = claimsLab({ board, events })
+        setGot({ id, board, events, notes: notes.length ? { events: notes } : null, seenAt: [...seen] })
+        if (model.needsSync || live) board = undefined // a gap, or a run still going: the next read starts from a new snapshot
+      } catch {
+        if (stopped) return
+        setGot((old) => (old?.id === id && old.board ? old : { id, board: false, events: [], notes: null, seenAt: [] })) // could not be read: shown as a run without a board
+      }
+      if (live) timer = setTimeout(tick, 2000)
+    }
+    void tick()
+    return () => { stopped = true; stop.abort(); if (timer) clearTimeout(timer) }
+  }, [id, live])
+  return useMemo(() => (got && got.id === id ? got : { board: undefined, events: [], notes: null, seenAt: [] }), [got, id])
 }
 
 /**

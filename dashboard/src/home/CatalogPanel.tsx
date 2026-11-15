@@ -1,19 +1,17 @@
-// "What this can use": the engine's catalog, read-only. Keys are shown as present or missing, never as values.
+// "Connections": the engine's catalog, read-only. What the app is connected to (models and search) and the agents
+// and skills on this computer. A key is shown as connected or not, never as a value. Shown in Settings, under Technical.
 import { EngineOffline, SearchCredit } from "@/components/Shared"
-import { HOW_TO_TURN_ON, PAID_LABEL } from "@/lib/paid"
 import type { Catalog, CatalogAgent, ProviderId } from "./api"
 
 const PROVIDER_NAME: Record<ProviderId, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI" }
 const usd = (n: number) => `$${n.toFixed(2).replace(/\.00$/, "")}`
 
-/** A key that is present is only usable while paid calls are on: then green. With paid calls off it is neutral and says so. */
+/** A key the engine holds is "Connected". It is only used while the run mode is Real: in Demo the pill is neutral and its tooltip says so. */
 function Key({ present, usable }: { present: boolean; usable: boolean }) {
   return (
-    <>
-      <span className="pill" data-kind={!present ? "warning" : usable ? "success" : "neutral"} title={present && !usable ? "The key is there, but it is not used in Demo mode." : undefined}>
-        {!present ? "key missing" : usable ? "key present" : "key present · off"}
-      </span>
-    </>
+    <span className="pill" data-kind={!present ? "warning" : usable ? "success" : "neutral"} title={present && !usable ? "Connected, and not used while the run mode is Demo." : undefined}>
+      {present ? "Connected" : "Not connected"}
+    </span>
   )
 }
 
@@ -47,23 +45,19 @@ interface Props {
 }
 
 export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
+  const exa = catalog?.search.exa
+  const budget = exa && typeof exa.usedUsd === "number" && typeof exa.ceilingUsd === "number" && exa.ceilingUsd > 0 ? { used: exa.usedUsd, ceiling: exa.ceilingUsd } : undefined
   return (
     <aside className="home-catalog card-surface" aria-labelledby="home-catalog-title">
-      <h2 id="home-catalog-title">What this can use</h2>
-      <p className="muted small">The models, team members and skills on this computer. You do not need any of this to ask a question.</p>
+      <h3 id="home-catalog-title">Connections</h3>
+      <p className="muted small">Models, agents and skills available on this computer.</p>
       {catalog === undefined && <p className="muted small" role="status">Asking the engine…</p>}
       {catalog === null && !why && <EngineOffline needs="The engine lists the models, agents and skills." onRetry={onRetry} />}
       {catalog === null && why && <div role="alert"><p className="home-paidoff">{why}</p><button type="button" className="btn" onClick={onRetry}>Try again</button></div>}
       {catalog && (
         <>
-          <section aria-label="Paid calls">
-            <p><span className="pill" data-kind={catalog.paidCalls ? "warning" : "neutral"}>{PAID_LABEL[catalog.paidCalls ? "on" : "off"]}</span></p>
-            <p className="muted small">
-              {catalog.paidCalls ? "A started plan can spend money, up to the limits shown on its card." : `Replies are word searches of past runs or fixed practice text. A plan that needs a paid model cannot start. ${HOW_TO_TURN_ON}`}
-            </p>
-          </section>
           <section aria-label="Models and search">
-            <h3>Models and search</h3>
+            <h4>Models and search</h4>
             {boardWhy && <p className="home-paidoff" role="note">{boardWhy}.</p>}
             <ul className="home-keys">
               {catalog.providers.map((p) => (
@@ -74,23 +68,24 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
               ))}
               <li>
                 <span>Web search (Exa)</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} />
-                {typeof catalog.search.exa.usedUsd === "number" && typeof catalog.search.exa.ceilingUsd === "number" && (
-                  <span className="muted small home-models">{usd(catalog.search.exa.usedUsd)} of {usd(catalog.search.exa.ceilingUsd)} used</span>
+                {budget && (
+                  <span className="muted small home-models home-budget">
+                    <span id="home-budget-label">Search budget</span>
+                    <progress aria-labelledby="home-budget-label" aria-describedby="home-budget-text" value={Math.min(budget.used, budget.ceiling)} max={budget.ceiling} />
+                    <span id="home-budget-text" className="mono">{usd(budget.used)} of {usd(budget.ceiling)} used</span>
+                  </span>
                 )}
+                {catalog.search.provider && <span className="muted small home-models" data-testid="search-credit"><SearchCredit provider={catalog.search.provider} />{catalog.search.provider === "fixture" && ": in Demo a review uses example sources, not a live web search."}</span>}
               </li>
-              {catalog.search.literature?.available && <li><span>Research papers (Europe PMC)</span><span className="pill" data-kind="success">free, no key needed</span></li>}
+              {catalog.search.literature?.available && <li><span>Research papers (Europe PMC)</span><span className="pill" data-kind="success">Free</span></li>}
             </ul>
-            {catalog.search.provider && <p className="muted small" data-testid="search-credit"><SearchCredit provider={catalog.search.provider} />{catalog.search.provider === "fixture" && ": in Demo a review uses example sources, not a live web search."}</p>}
-            <p className="muted small">Keys are held by the engine. This page never shows or asks for one.</p>
+            <p className="muted small" data-testid="key-note">API keys stay in the engine and are never shown here.</p>
           </section>
-          <section aria-label="Agents">
-            <h3>Agents</h3>
+          <section aria-label="Agents and skills">
+            <h4>Agents and skills</h4>
             {catalog.agents.length === 0 && <p className="muted small">The engine listed no agents.</p>}
             <Agents title="Board" agents={catalog.agents.filter((a) => a.source === "board")} />
             <Agents title="Specialists" agents={catalog.agents.filter((a) => a.source === "specialist")} />
-          </section>
-          <section aria-label="Skills">
-            <h3>Skills</h3>
             {catalog.skills.length === 0 ? <p className="muted small">The engine listed no skills.</p> : (
               <details className="home-group">
                 <summary>Skills <span className="muted">({catalog.skills.filter((s) => s.installed).length} installed of {catalog.skills.length})</span></summary>

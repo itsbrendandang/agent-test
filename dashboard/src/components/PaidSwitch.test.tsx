@@ -31,6 +31,10 @@ describe("the control", () => {
     expect(group).toHaveAccessibleDescription("Practice runs. Fixed example answers. Free.")
     const label = screen.getByRole("button", { name: "Next run: what Demo and Real mean" })
     expect(label).toHaveTextContent("Next run")
+    // A phone header has no room for the words: it shows the short cue instead (index.css, under 480 px), and the name read aloud stays whole.
+    const cue = label.querySelector(".next-run-short")!
+    expect(cue).toHaveTextContent("Next:"); expect(cue).toHaveAttribute("aria-hidden", "true")
+    expect(label.querySelector(".next-run-long")).toHaveTextContent("Next run")
     fireEvent.click(label) // a press (touch has no hover); keyboard focus and hover open it too
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Demo: fixed example answers, free. Real: real models and searches, costs money.")
     fireEvent.click(label)

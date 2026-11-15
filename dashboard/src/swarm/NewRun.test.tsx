@@ -23,7 +23,7 @@ describe("paid calls off", () => {
     expect([...model.options].find((o) => o.value === "other")).toBeDisabled()
     expect(form.queryByLabelText("Model id")).toBeNull()
     expect(form.getByText(/You are in Demo mode, so only a practice run can start/)).toHaveTextContent("Real")
-    expect(form.getByText(/You are in Demo mode, so only a practice run can start/)).toHaveTextContent("choose Real at the top of the page first")
+    expect(form.getByText(/You are in Demo mode, so only a practice run can start/)).toHaveTextContent("choose Real in Settings first")
   })
   it("disables the Exa box with the reason", () => {
     const { form } = open(PAID_OFF)

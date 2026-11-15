@@ -5,11 +5,18 @@
 // What differs from Anh's page: the scene has no clock of its own for work. It draws an activity model (model.ts)
 // that is made from engine events, and a teammate walks only when that model holds a trip it has not walked yet.
 // With no event nothing moves and no animation frame is requested.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
+//
+// How it is laid out so nothing collides: each desk has a fixed name plate under it (the button a person selects),
+// and each teammate has a status chip above its head. A teammate that is away from its desk carries its name in the
+// chip, and the chip moves to a free side when something is in the way.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { LabMap } from "./LabMap"
 import { Mascot } from "./Mascot"
-import { CHARACTERS, FRESH_MS, MAP, ROOMS, SEARCH_SPOTS, STATE_GLYPH, STATE_WORD, captionOf, describeActivity, roomOf, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
-import { active, advance, createSim, moving, settle, syncTrips, visitorPoint, type Sim } from "./motion"
+import {
+  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, SEARCH_SPOTS, SPOT, STATE_GLYPH, STATE_WORD, TALL, WIDE, captionOf, describeActivity,
+  type CharacterId, type LabLayout, type LabModel, type LabState, type Shape, type Trip,
+} from "./model"
+import { active, advance, claimPlace, createSim, moving, settle, stationPoint, syncTrips, visitorPoint } from "./motion"
 import "./lab.css"
 
 export interface LabSceneProps {
@@ -26,16 +33,23 @@ export interface LabSceneProps {
   speed?: number
   /** When this changes, everyone is put at their desks without walking (a jump in a replay). */
   settleKey?: string | number
-  /** A small scene for a side panel: it shrinks to its container and shows fewer words. */
+  /** A small scene for a side panel: fewer words around the map. */
   compact?: boolean
+  /** "auto" (the default): Anh's wide map, or the same rooms in one column when the scene is narrower than 600 px. */
+  layout?: "auto" | "wide" | "tall"
+  /** Shown in the bar under the map, before the status and "Pause motion": a replay's controls. */
+  footer?: ReactNode
   className?: string
 }
 
 const PAUSED = "lab.paused"
-
 const STATUS: Record<LabModel["status"], string> = { empty: "Team idle", waiting: "Waiting to start", running: "Team at work", done: "Run finished", failed: "Run failed", cancelled: "Run cancelled" }
 const STATUS_GLYPH: Record<LabModel["status"], string> = { empty: "", waiting: "…", running: "●", done: "✓", failed: "✕", cancelled: "■" }
 const VISITOR_SHAPES: Shape[] = ["mushroom", "acorn", "tree", "owl"]
+/** What the chip above a teammate's head says for each state: a mark and a word, never colour alone. Idle says nothing. */
+const CHIP: Record<LabState, string> = { idle: "", working: "… working", fetching: "⇄ fetching", "handing-off": "→ handed off", done: "✓ done", failed: "✕ failed", cancelled: "■ cancelled" }
+/** A character's drawing, in map units (lab.css sizes it the same). */
+const ART = { w: 60, h: 65 }
 
 const motionQuery = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : undefined)
 /** True when the person asked the system for less motion. Follows a change of the setting. */
@@ -52,29 +66,47 @@ function useReducedMotion(): boolean {
   return reduced
 }
 
-interface Nodes { button: HTMLButtonElement | null; art: HTMLSpanElement | null; feet: SVGGElement | null; tag: HTMLSpanElement | null }
+interface Box { x1: number; y1: number; x2: number; y2: number }
+const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1))
+/** A label of this many characters at 12 px, in px: an estimate that errs on the wide side. */
+const textWidth = (text: string) => text.length * 7 + 16
 
-export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, className = "" }: LabSceneProps) {
+interface Nodes { walker: HTMLElement | null; art: HTMLElement | null; feet: SVGGElement | null; chip: HTMLElement | null }
+
+export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, layout: wanted = "auto", footer, className = "" }: LabSceneProps) {
   const reduced = useReducedMotion()
   const canAnimate = typeof requestAnimationFrame === "function"
   const [paused, setPaused] = useState(() => { try { return localStorage.getItem(PAUSED) === "true" } catch { return false } })
   const still = reduced || !canAnimate // no walking at all; states still show
-  const [sim] = useState<Sim>(createSim) // one simulation for the life of the scene; it is changed in place, outside React
+
+  // Which map: Anh's wide one, or one column of rooms when the scene is narrow. Measured, not guessed from the window.
+  const root = useRef<HTMLElement>(null), lab = useRef<HTMLDivElement>(null)
+  const [narrow, setNarrow] = useState(false)
+  const scale = useRef(1) // px for one map unit
+  const layout: LabLayout = wanted === "tall" || (wanted === "auto" && narrow) ? TALL : WIDE
+  const sim = useMemo(() => createSim(layout), [layout]) // one simulation a map; it is changed in place, outside React
+
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})
   /** A ref callback that files one element of one teammate. */
-  const keep = <K extends keyof Nodes>(id: CharacterId, part: K) => (el: Nodes[K]) => { (nodes.current[id] ??= { button: null, art: null, feet: null, tag: null })[part] = el }
+  const keep = <K extends keyof Nodes>(id: CharacterId, part: K) => (el: Nodes[K]) => { (nodes.current[id] ??= { walker: null, art: null, feet: null, chip: null })[part] = el }
+  /** The claim cards: every room's tray holds one for each claim, and only the one in the claim's place is shown. */
+  const cards = useRef(new Map<string, HTMLElement>())
   const frame = useRef(0)
   const previous = useRef<number | null>(null)
   // What the frame loop reads: always the latest props, without restarting the loop.
   const live = useRef({ model, speed, paused, still })
   useEffect(() => { live.current = { model, speed, paused, still } })
 
-  /** Write every teammate's place and pose to the page. Done outside React so a frame costs twelve style writes. */
+  /** Write every teammate's place, pose and chip to the page. Done outside React so a frame costs a few style writes. */
   const paint = useCallback(() => {
     const { model: m, still: stand, paused: held } = live.current
+    const s = scale.current || 1, unit = (px: number) => px / s
+    const at = sim.layout
+    const taken: (Box & { of?: CharacterId })[] = []
+    const chips: { id: CharacterId; text: string; x: number; y: number; away: boolean; cargo: boolean }[] = []
     for (const w of Object.values(sim.walkers)) {
       const n = nodes.current[w.id]
-      if (!n?.button) continue
+      if (!n?.walker) continue
       const a = m.characters[w.id]
       const walking = !stand && !held && moving(sim, w)
       // Without motion the parcel is shown at the desk while the model says the teammate fetches or hands over.
@@ -82,15 +114,60 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       const holds = stand ? (a.state === "fetching" && last?.outcome === "carried") || a.state === "handing-off" : w.carrying
       const tag = stand ? (holds ? last?.short ?? "" : "") : w.tag
       const stride = walking ? Math.sin(sim.clock * 15 + w.index) : 0
-      n.button.style.left = `${(w.x / MAP.width) * 100}%`
-      n.button.style.top = `${(w.y / MAP.height) * 100}%`
-      n.button.style.zIndex = String(Math.round(w.y))
-      n.button.dataset.moving = String(walking)
-      n.button.dataset.carrying = String(holds)
-      n.button.dataset.out = String(!stand && (w.route.length > 0 || w.waiting))
+      n.walker.style.left = `${(w.x / at.width) * 100}%`
+      n.walker.style.top = `${(w.y / at.height) * 100}%`
+      n.walker.style.zIndex = String(10 + Math.round(w.y))
+      n.walker.dataset.moving = String(walking)
+      n.walker.dataset.carrying = String(holds)
+      n.walker.dataset.out = String(!stand && (w.route.length > 0 || w.waiting))
       if (n.art) n.art.style.transform = walking ? `translateY(${-Math.abs(stride) * 2}px) rotate(${stride * 3}deg)` : ""
       n.feet?.setAttribute("transform", `translate(${stride * 1.5} 0)`)
-      if (n.tag && n.tag.textContent !== tag) n.tag.textContent = tag
+      taken.push({ x1: w.x - ART.w / 2, y1: w.y - ART.h / 2, x2: w.x + ART.w / 2, y2: w.y + ART.h / 2, of: w.id })
+      const away = !stand && Math.hypot(w.x - w.home.x, w.y - w.home.y) > 8
+      // At its desk the chip says the state, or what is in the parcel. Away from it, the chip also says who it is
+      // (the name plate stayed at the desk): the name, and what it carries or the mark of its state.
+      const says = !a.inRun ? "" : holds && tag ? tag : CHIP[a.state]
+      const text = !away ? says : holds && tag ? `${captionOf(a)}: ${tag}` : `${captionOf(a)}${a.inRun && STATE_GLYPH[a.state] ? ` ${STATE_GLYPH[a.state]}` : ""}`
+      chips.push({ id: w.id, text, x: w.x, y: w.y, away, cargo: holds && !!tag })
+    }
+    // The fixed name plates under the desks are never covered.
+    for (const c of CHARACTERS) {
+      const home = stationPoint(c, at), half = unit(textWidth(captionOf(m.characters[c.id]))) / 2
+      taken.push({ x1: home.x - half, y1: home.y + (SPOT.plate - SPOT.stand) - unit(11), x2: home.x + half, y2: home.y + (SPOT.plate - SPOT.stand) + unit(11) })
+    }
+    // Chips: a teammate at its desk has its chip above its head (that row is kept free). One that is away tries
+    // above, then each side, then below, and takes the first place where nothing else is.
+    for (const chip of chips.sort((a, b) => Number(a.away) - Number(b.away))) {
+      const el = nodes.current[chip.id]?.chip
+      if (!el) continue
+      if (el.textContent !== chip.text) el.textContent = chip.text
+      el.hidden = !chip.text
+      el.dataset.cargo = String(chip.cargo)
+      if (!chip.text) continue
+      const w = unit(textWidth(chip.text)), h = unit(20), gap = unit(3)
+      const spots = [
+        { x: chip.x, y: chip.y - ART.h / 2 - h / 2 - gap },
+        ...(chip.away ? [
+          { x: chip.x + ART.w / 2 + w / 2 + gap, y: chip.y - 6 }, { x: chip.x - ART.w / 2 - w / 2 - gap, y: chip.y - 6 }, // right, left
+          { x: chip.x, y: chip.y + ART.h / 2 + h / 2 + gap }, // below
+          { x: chip.x + w / 2, y: chip.y - ART.h / 2 - h * 1.5 - gap * 2 }, { x: chip.x - w / 2, y: chip.y - ART.h / 2 - h * 1.5 - gap * 2 }, // higher, to either side
+          { x: chip.x + ART.w / 2 + w / 2 + gap, y: chip.y + ART.h / 2 }, { x: chip.x - ART.w / 2 - w / 2 - gap, y: chip.y + ART.h / 2 }, // lower corners
+        ] : []),
+      ]
+      const box = (p: { x: number; y: number }): Box => ({ x1: p.x - w / 2, y1: p.y - h / 2, x2: p.x + w / 2, y2: p.y + h / 2 })
+      // its own drawing is not in its way; a place that sticks out of the map is the last choice
+      const cost = (p: { x: number; y: number }) => taken.reduce((sum, b) => (b.of === chip.id ? sum : sum + overlap(box(p), b)), 0) + (p.x - w / 2 < 0 || p.x + w / 2 > at.width ? 1e6 : 0)
+      const best = spots.reduce((a, b) => (cost(b) < cost(a) ? b : a))
+      el.style.left = `${(best.x / at.width) * 100}%`
+      el.style.top = `${(best.y / at.height) * 100}%`
+      el.style.zIndex = String(2000 + Math.round(best.y))
+      taken.push(box(best))
+    }
+    // A claim is shown in one room: where it is being fetched from while the Engine walks to it, nowhere while it
+    // is carried, else the room of the state the model gives it.
+    for (const c of m.claims ?? []) {
+      const place = stand ? c.room : claimPlace(sim, c.id) ?? c.room
+      for (const r of ROOMS) { const card = cards.current.get(`${r.id}/${c.id}`); if (card) card.hidden = place !== r.id }
     }
   }, [sim])
 
@@ -114,78 +191,105 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   }, [paint, sim])
 
   // Take the model in: new trips are queued (or only noted, without motion), then the page is painted.
-  const settled = useRef<string | number | undefined>(settleKey)
+  const settled = useRef<{ key: string | number | undefined; sim: typeof sim }>({ key: settleKey, sim })
   useLayoutEffect(() => {
     live.current = { model, speed, paused, still }
-    if (settled.current !== settleKey || (still && active(sim))) { settled.current = settleKey; settle(sim, model) }
+    if (lab.current?.clientWidth) scale.current = lab.current.clientWidth / sim.layout.width
+    const other = settled.current.sim !== sim // the map changed: everyone starts at home on the new one
+    if (other || settled.current.key !== settleKey || (still && active(sim))) { settled.current = { key: settleKey, sim }; settle(sim, model) }
     const present = clock ?? Date.now()
     syncTrips(sim, model, (trip) => !still && (trip.kind === "fetch" && trip.back === undefined ? true : present - (trip.back ?? trip.at) <= FRESH_MS))
     paint()
     if (still || paused || !active(sim)) stop(); else kick()
   }, [model, clock, speed, paused, still, settleKey, paint, kick, stop, sim])
 
-  // A hidden tab gets no frames. Every frame and listener is gone when the scene is.
+  // A hidden tab gets no frames. Every frame, listener and observer is gone when the scene is.
   useEffect(() => {
     const seen = () => { if (document.hidden) stop(); else kick() }
     document.addEventListener("visibilitychange", seen)
     return () => { document.removeEventListener("visibilitychange", seen); stop() }
   }, [kick, stop])
+  useEffect(() => {
+    const el = root.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const measure = () => {
+      const width = el.getBoundingClientRect().width
+      if (width > 0) setNarrow(width < 600)
+      if (lab.current?.clientWidth) { scale.current = lab.current.clientWidth / sim.layout.width; paint() }
+    }
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    measure()
+    return () => watch.disconnect()
+  }, [paint, sim])
 
   const toggle = () => setPaused((was) => { try { localStorage.setItem(PAUSED, String(!was)) } catch { /* private mode */ } return !was })
   const perRoom = new Map<string, number>()
+  const place = (x: number, y: number): CSSProperties => ({ left: `${(x / layout.width) * 100}%`, top: `${(y / layout.height) * 100}%` })
+  const discovery = layout.at.discovery
 
   return (
-    <section className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} aria-label="Lab view">
-      <div className="lab-toolbar">
-        <strong>Lab view</strong>
+    <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} aria-label="Lab view">
+      <div className="lab-viewport">
         <span className="lab-badge" data-status={model.status}>{STATUS_GLYPH[model.status] && <span aria-hidden="true">{STATUS_GLYPH[model.status]} </span>}{STATUS[model.status]}</span>
-        <button type="button" className="btn lab-pause" onClick={toggle} disabled={still} aria-pressed={paused || still}>
-          {reduced ? "Reduced motion enabled" : !canAnimate ? "Motion not available" : paused ? "Resume motion" : "Pause motion"}
-        </button>
-      </div>
-      {!compact && <p className="lab-scroll-hint">Scroll the lab sideways to see every room.</p>}
-      <div className="lab-viewport" tabIndex={compact ? undefined : 0} role="group" aria-label="The six rooms of the lab. Scroll sideways on a small screen.">
-        <div className="lab" data-still={still || undefined} data-paused={paused || undefined}>
-          <LabMap />
-          {ROOMS.map((r) => <span key={r.id} className="lab-room-name" style={{ left: `${((r.x + 46) / MAP.width) * 100}%`, top: `${((r.y + 31) / MAP.height) * 100}%` }}>{r.name}</span>)}
-          {Object.values(SEARCH_SPOTS).map((spot) => <span key={spot.sign} className="lab-spot-name" title={spot.about} style={{ left: `${((roomOf("discovery").x + spot.dx) / MAP.width) * 100}%`, top: `${((roomOf("discovery").y + spot.dy - 72) / MAP.height) * 100}%` }}>{spot.sign}</span>)}
+        <div ref={lab} className="lab" data-still={still || undefined} data-paused={paused || undefined} style={{ "--lab-w": layout.width, "--lab-h": layout.height } as CSSProperties}>
+          <LabMap layout={layout} />
+          {ROOMS.map((r) => <span key={r.id} className="lab-room-name" style={place(layout.at[r.id].x + 44, layout.at[r.id].y + 28)}>{r.name}</span>)}
+          {Object.values(SEARCH_SPOTS).map((spot) => <span key={spot.sign} className="lab-spot-name" title={spot.about} style={place(discovery.x + (discovery.door === "right" ? spot.signDx : ROOM.width - spot.signDx), discovery.y + spot.signDy)}>{spot.sign}</span>)}
+          {model.claims && ROOMS.map((r) => (
+            <ul key={r.id} className="lab-tray" aria-label={`Claims in ${r.name}`} style={{ ...place(layout.at[r.id].x + 232, layout.at[r.id].y + 13), width: `${(176 / layout.width) * 100}%` }}>
+              {model.claims!.map((c) => (
+                <li key={c.id} className="lab-claim" data-claim={c.id} data-state={c.state} hidden={c.room !== r.id} title={`${c.text}${c.reason ? ` Why it is here: ${c.reason}` : ""}`}
+                  ref={(el) => { if (el) cards.current.set(`${r.id}/${c.id}`, el); else cards.current.delete(`${r.id}/${c.id}`) }}>
+                  <b>{c.id}</b> {CLAIM_GLYPH[c.state] && <span aria-hidden="true">{CLAIM_GLYPH[c.state]} </span>}{CLAIM_WORD[c.state]}
+                </li>
+              ))}
+            </ul>
+          ))}
+          {/* The name plate under each desk: the control a person selects a teammate with. It never moves. */}
           {CHARACTERS.map((c) => {
-            const a = model.characters[c.id]
-            const word = !a.inRun ? "not in this run" : a.state === "failed" ? "failed" : a.state === "cancelled" ? "cancelled" : ""
+            const a = model.characters[c.id], home = stationPoint(c, layout)
+            const told = describeActivity(captionOf(a), a)
             return (
-              <button key={c.id} type="button" className="lab-agent" ref={keep(c.id, "button")}
+              <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + (SPOT.plate - SPOT.stand))}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
-                aria-pressed={selected === c.id} aria-label={`Inspect ${describeActivity(captionOf(a), a)}`} title={describeActivity(captionOf(a), a)} onClick={() => onSelect?.(c.id)}>
-                <span className="lab-cargo" aria-hidden="true"><span className="lab-cargo-tag" ref={keep(c.id, "tag")} /></span>
-                {a.problem && <span className="lab-alert" aria-hidden="true">!</span>}
-                <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} feetRef={keep(c.id, "feet")} /></span>
-                <span className="lab-name">
-                  {a.inRun && STATE_GLYPH[a.state] && <span className="lab-glyph" aria-hidden="true">{STATE_GLYPH[a.state]} </span>}
-                  {captionOf(a)}
-                  {word && <span className="lab-word">{word}</span>}
-                </span>
+                aria-pressed={selected === c.id} aria-label={`Inspect ${told}`} title={told} onClick={() => onSelect?.(c.id)}>
+                {captionOf(a)}
               </button>
             )
           })}
+          {/* The teammates themselves. Decoration for a screen reader: the plate above says who and what. */}
+          {CHARACTERS.map((c) => {
+            const a = model.characters[c.id]
+            return (
+              <span key={c.id} className="lab-agent" ref={keep(c.id, "walker")} data-walker={c.id} data-state={a.state} data-in-run={a.inRun} data-selected={selected === c.id || undefined}
+                aria-hidden="true" title={a.inRun ? captionOf(a) : `${captionOf(a)}: ${NOT_IN_RUN.toLowerCase()}`} onClick={() => onSelect?.(c.id)}>
+                <span className="lab-cargo" />
+                {a.problem && <span className="lab-alert">!</span>}
+                <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} feetRef={keep(c.id, "feet")} /></span>
+              </span>
+            )
+          })}
+          {CHARACTERS.map((c) => <span key={c.id} className="lab-chip" ref={keep(c.id, "chip")} data-chip={c.id} data-state={model.characters[c.id].state} aria-hidden="true" hidden />)}
           {model.visitors.map((v, i) => {
             const n = perRoom.get(v.room) ?? 0
             perRoom.set(v.room, n + 1)
-            const at = visitorPoint(v.room, n)
-            const place = { left: `${(at.x / MAP.width) * 100}%`, top: `${((at.y + Math.floor(n / 2) * 8) / MAP.height) * 100}%`, zIndex: Math.round(at.y) } satisfies CSSProperties
+            const at = visitorPoint(v.room, n, layout)
             return (
-              <span key={v.id} className="lab-agent lab-visitor" style={place} data-state={v.state} data-visitor={v.id} role="img" aria-label={`Visitor ${v.name}: ${STATE_WORD[v.state]}. ${v.doing}`} title={`Visiting specialist: ${v.name}. ${v.doing}`}>
+              <span key={v.id} className="lab-agent lab-visitor" style={{ ...place(at.x, at.y + Math.floor(n / 2) * 8), zIndex: 10 + Math.round(at.y) }} data-state={v.state} data-visitor={v.id} role="img" aria-label={`Visitor ${v.name}: ${STATE_WORD[v.state]}. ${v.doing}`} title={`Visiting specialist: ${v.name}. ${v.doing}`}>
                 <span className="lab-art"><Mascot shape={VISITOR_SHAPES[i % VISITOR_SHAPES.length]} color="#d9d2c0" /></span>
-                <span className="lab-name">{STATE_GLYPH[v.state] && <span className="lab-glyph" aria-hidden="true">{STATE_GLYPH[v.state]} </span>}{v.name}</span>
+                <span className="lab-visitor-name">{STATE_GLYPH[v.state] && <span aria-hidden="true">{STATE_GLYPH[v.state]} </span>}{v.name}</span>
               </span>
             )
           })}
         </div>
       </div>
-      {!compact && (
-        <p className="lab-legend">
-          <span>… working</span><span>⇄ fetching</span><span>→ handed off</span><span>✓ done</span><span>✕ failed</span><span>■ cancelled</span><span className="lab-legend-off">faded: not in this run</span>
-        </p>
-      )}
+      <div className="lab-foot">
+        {footer}
+        <button type="button" className="btn lab-pause" onClick={toggle} disabled={still} aria-pressed={paused || still}>
+          {reduced ? "Reduced motion enabled" : !canAnimate ? "Motion not available" : paused ? "Resume motion" : "Pause motion"}
+        </button>
+      </div>
     </section>
   )
 }

@@ -1,4 +1,4 @@
-// The app's three characters: Momo, Ember and Fuji. They are decoration: the friendly face of the app on the
+// The app's four characters: Momo, Ember, Fuji and Sage. They are decoration: the friendly face of the app on the
 // loading screen, on Home and wherever something is loading. They are never the agents that did the work (those
 // are named in the conversation and the steppers) and never the only sign of anything: the status is always in
 // text beside them. A person can turn them off in Settings ("Show characters"); the choice is remembered.
@@ -10,6 +10,7 @@ export const MASCOTS: Mascot[] = [
   { id: "momo", name: "Momo", species: "bunny" },
   { id: "ember", name: "Ember", species: "flame" },
   { id: "fuji", name: "Fuji", species: "mountain" },
+  { id: "sage", name: "Sage", species: "sprout" },
 ]
 
 const KEY = "app.characters" // "0" = hidden; anything else, or nothing, = shown

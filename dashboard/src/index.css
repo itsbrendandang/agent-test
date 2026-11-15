@@ -243,12 +243,22 @@ td { border-bottom: 1px solid var(--line); }
 .runs { display: flex; flex-direction: column; gap: 14px; font-variant-numeric: tabular-nums; }
 .usage { display: flex; gap: 22px; margin-left: auto; font-variant-numeric: tabular-nums; }
 
-/* settings: API keys */
-.settings { gap: 28px; }
+/* settings: one heading style and one container for every section; a hairline between sections, nothing heavier */
+.settings { gap: 0; }
+.set-section { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-5) 0; border-top: 1px solid var(--line); }
+.settings > .page-head + .set-section { border-top: 0; padding-top: var(--space-3); }
+.set-section h2 { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.set-section > p, .set-token > p { max-width: 75ch; }
+.set-modes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; max-width: 75ch; }
+.set-token { display: flex; flex-direction: column; gap: var(--space-2); }
+.set-section .btn { align-self: flex-start; }
+details.set-section > summary { cursor: pointer; width: fit-content; border-radius: 4px; }
+details.set-section > summary h2 { display: inline; }
+details.set-section[open] > summary { margin-bottom: var(--space-3); }
+details.set-section > * + * { margin-top: var(--space-3); }
 .keys { display: flex; flex-direction: column; gap: 10px; }
-.keys h2 { font-size: 16px; font-weight: 600; }
-.keys ul { list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--ink); }
-.keys li { display: grid; grid-template-columns: 180px 1fr; gap: 4px 20px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.keys ul, ul.engine-facts { list-style: none; margin: 0; padding: 0; }
+.keys li, ul.engine-facts li { display: grid; grid-template-columns: 180px 1fr; gap: 4px 20px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .keys-name { display: flex; flex-direction: column; font-size: 13px; }
 .keys-name span { font-size: 12px; color: var(--text-muted); }
 .keys-name span[data-on] { color: var(--success); }
@@ -317,9 +327,7 @@ code, kbd, .run-id, .swarm-elapsed, .exp-score { font-family: var(--font-mono); 
 .page .engine-offline h2 { font-size: 16px; font-weight: 650; text-transform: none; letter-spacing: 0; color: var(--text); }
 
 .engine-how { grid-column: 1 / -1; max-width: 80ch; }
-details.technical > summary { cursor: pointer; font-size: 16px; font-weight: 600; width: fit-content; border-radius: 4px; }
 details.technical > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-details.technical[open] > summary { margin-bottom: var(--space-2); }
 details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .board-scripted { max-width: 70ch; }
 .token-row { display: flex; align-items: center; gap: 10px; }
@@ -395,12 +403,19 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .home-run { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; border-top: 1px solid var(--edge); padding-top: 10px; font-size: 13px; }
 .home-run p { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .home-decision { font-weight: 600; }
-.home-catalog { display: flex; flex-direction: column; gap: 12px; padding: 14px; font-size: 13px; flex-shrink: 0; }
-.home-catalog h2, .home-checked h2 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
-.home-catalog h3 { font-size: 13px; font-weight: 650; margin-bottom: 4px; }
+.home-catalog { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); font-size: 13px; flex-shrink: 0; }
+.home-catalog h3 { font-size: 15px; font-weight: 600; }
+.home-catalog h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.home-checked h2 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.home-budget { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); }
+.home-budget progress { appearance: none; -webkit-appearance: none; width: 120px; height: 4px; border: 0; border-radius: 2px; background: var(--hover); overflow: hidden; }
+.home-budget progress::-webkit-progress-bar { background: var(--hover); border-radius: 2px; }
+.home-budget progress::-webkit-progress-value { background: var(--ink); border-radius: 2px; }
+.home-budget progress::-moz-progress-bar { background: var(--ink); border-radius: 2px; }
 .home-catalog section { display: flex; flex-direction: column; gap: 4px; }
 .home-keys { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.home-keys li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; }
+.home-keys li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 6px 0; }
+.home-keys li + li { border-top: 1px solid var(--line); }
 .home-models { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .home-group summary { cursor: pointer; font-weight: 600; width: fit-content; border-radius: 6px; }
 .home-group ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -468,6 +483,7 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .next-run { position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .next-run-label { border: 0; background: none; padding: 4px 2px; font: inherit; font-size: 12px; color: var(--text-muted); cursor: help; border-radius: 4px; white-space: nowrap; text-decoration: underline dotted; text-underline-offset: 3px; }
 .next-run-tip { max-width: 260px; line-height: 1.4; }
+.next-run-short { display: none; }
 .mode[data-header] { flex-wrap: nowrap; gap: 0; }
 .mode[data-header] .mode-note { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: min(340px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid var(--edge); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-pop); font-size: 13px; font-weight: 500; line-height: 1.45; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 
@@ -488,6 +504,8 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .page:not(.search) summary, dialog summary { padding-block: 4px; min-height: 28px; }
 .newrun-check { min-height: 28px; display: flex; align-items: center; gap: var(--space-2); }
 .graph-linkbtn { min-height: 24px; }
+.page:not(.search) .link-btn { min-height: 24px; }
+.swarm-cell { min-height: 28px; }
 .page:not(.search) summary:focus-visible, dialog summary:focus-visible, .page:not(.search) a:focus-visible, .page:not(.search) .link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 767px) {
   .page:not(.search) .btn, dialog .btn, .page:not(.search) select, .page:not(.search) input[type="search"], .page:not(.search) input[type="number"], dialog select, dialog input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
@@ -830,11 +848,13 @@ dialog.how { margin: auto; }
 .decision-why > summary:hover { color: var(--text); }
 .decision-why > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .decision-whyb { margin-top: var(--space-2); max-width: 75ch; line-height: 1.6; overflow-x: auto; }
-/* a narrow header keeps every control inside the window: the conversation title gives up its place, the
-   "Next run" words stay for screen readers (the switch carries the same name), and the buttons get tighter */
+/* a narrow header keeps every control inside the window: the conversation title gives up its place, "Next run"
+   shortens to "Next:" (the whole name stays for screen readers and in the tooltip), and the buttons get tighter */
 @media (max-width: 479px) {
   .app-header-title { display: none; }
   .app-place { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .app-header .next-run-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .app-header .next-run-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .app-header .next-run-short { display: inline; }
+  .app-header .next-run { gap: 4px; }
   .app-header-actions .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
 }

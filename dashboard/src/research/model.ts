@@ -7,10 +7,17 @@ import type { Verdict } from "@/board/api"
 import { PROVIDERS } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
-export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string }
+export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[] }
 export interface Statement {
   stage: "draft" | "final"; index: number; text: string; sources: number[]; verdict: Verdict
   quote?: string; quoteFound: boolean; quoteSource?: number; checker: string; note?: string; carried?: boolean
+  /** The hypothesis this sentence was filed under, on which side, and which way a second model says it points. */
+  hypothesis?: string; side?: "for" | "against"; stance?: "supports" | "contradicts" | "neither" | "unchecked"
+}
+/** One hypothesis the answer tests against published sources. `result` exists only once the engine reported `hypothesis.checked`. */
+export interface Hypothesis {
+  id: string; text: string; supportIf: string; contradictIf: string; origin?: "planner" | "user"
+  result?: { verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; note?: string }
 }
 export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string
   /** Who says so: the critic re-reading the revision ("reviewer"), the engine's code ("code"), or only the writer's own report ("writer"). */
@@ -19,6 +26,8 @@ export interface Searched { provider: Provider; query: string; ran?: boolean; fo
 /** One step of the work, as the engine reports it: started, maybe progress, then finished with how it ended. */
 export interface Step {
   step: string; kind: string; label: string; provider?: Provider; query?: string
+  /** The hypothesis this search or screening belongs to, when it belongs to one. */
+  hypothesis?: string
   /** A safe summary of what the step was given (never a key or a prompt), for a details view. */
   input?: Record<string, string | number | boolean>
   status: "running" | "completed" | "empty" | "failed" | "cancelled"
@@ -38,6 +47,8 @@ export interface AnswerState {
   /** The source numbers the final text cites, when the engine said. */
   cited?: number[]
   recommendations: Recommendation[]; artifacts: Artifact[]
+  /** The hypotheses being tested (empty: the question needed none, or the level sets none), why none, and those left out. */
+  hypotheses: Hypothesis[]; hypothesesNote?: string; hypothesesCut: { text: string; reason: string }[]
   /** "What is missing": plain sentences the engine's code wrote (searches that did not run, failed checks, open concerns). */
   missing: string[]
   /** Why these sources were chosen, and what was found but left out. Written by the engine's code, not by a model. */
@@ -61,9 +72,11 @@ const VERDICTS = ["verified", "contradicted", "unsupported", "unchecked"]
 
 /** What the events so far add up to. Unknown event types and malformed fields are ignored, never guessed at. */
 export function foldAnswer(events: ResearchEvent[]): AnswerState {
-  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], missing: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
+  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], hypotheses: [], hypothesesCut: [], missing: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
   let deltas = "", written: string | undefined, revised: string | undefined
   const draft: Statement[] = [], final: Statement[] = []
+  const results = new Map<string, Hypothesis["result"]>()
+  const nums = (v: unknown): number[] => (Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [])
   const judged = new Set<number>() // notes the critic has judged after the revision
   const by = (v: unknown): Note["by"] => (v === "reviewer" || v === "code" || v === "writer" ? v : undefined)
   // In order of seq, each seq once: a replay after a reconnect, or events that arrive out of order, change nothing.
@@ -80,7 +93,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       case "research.queued": s.status = "queued"; s.queuedAfter = str(e.after); break
       case "step.started":
-        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), status: "running",
+        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), hypothesis: str(e.hypothesis), status: "running",
           input: e.input && typeof e.input === "object" ? Object.fromEntries(Object.entries(e.input as object).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v))) as Step["input"] : undefined })
         break
       case "step.progress": { const st = s.steps.find((x) => x.step === e.step); if (st) { st.done = num(e.done); st.total = num(e.total) } break }
@@ -120,7 +133,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "sources":
-        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20) }] : []))
+        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20), hypotheses: Array.isArray(i.hypotheses) ? (i.hypotheses as unknown[]).filter((h): h is string => typeof h === "string") : undefined }] : []))
         break
       case "answer.delta": deltas += str(e.text) ?? ""; break
       case "answer.written": written = str(e.markdown); break
@@ -132,12 +145,27 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
       case "review.resolved":
         if (Array.isArray(e.notes)) for (const n of e.notes as Record<string, unknown>[]) { const hit = s.notes.find((x) => x.index === n?.index); if (hit) { hit.resolved = n.resolved === true; hit.how = str(n.how); hit.by = by(n.by); judged.add(hit.index) } }
         break
+      case "hypotheses":
+        s.hypotheses = (Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []).flatMap((h) => (str(h?.id) && str(h.text) ? [{ id: str(h.id)!, text: str(h.text)!, supportIf: str(h.supportIf) ?? "", contradictIf: str(h.contradictIf) ?? "", origin: h.origin === "user" ? "user" as const : h.origin === "planner" ? "planner" as const : undefined, result: results.get(str(h.id)!) }] : []))
+        s.hypothesesNote = e.needed === false ? str(e.reason) ?? "This question needed no hypotheses." : undefined
+        s.hypothesesCut = (Array.isArray(e.cut) ? (e.cut as Record<string, unknown>[]) : []).flatMap((c) => (str(c?.text) ? [{ text: str(c.text)!, reason: str(c.reason) ?? "" }] : []))
+        break
+      // The result of testing one hypothesis, computed by the engine's code from the checked statements. The only place a hypothesis's mark comes from.
+      case "hypothesis.checked": {
+        if (!str(e.id) || !VERDICTS.includes(e.verdict as string)) break
+        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, note: str(e.note) }
+        results.set(str(e.id)!, result)
+        const hit = s.hypotheses.find((h) => h.id === e.id); if (hit) hit.result = result
+        break
+      }
       case "review.started": if (str(e.reviewer)) s.reviewing.push(str(e.reviewer)!); break
       case "statement.checked": {
         if (num(e.index) === undefined || str(e.text) === undefined || !VERDICTS.includes(e.verdict as string)) break
         const st: Statement = {
           stage: e.stage === "final" ? "final" : "draft", index: num(e.index)!, text: str(e.text)!, sources: Array.isArray(e.sources) ? (e.sources as unknown[]).filter((n): n is number => typeof n === "number") : [],
           verdict: e.verdict as Verdict, quote: str(e.quote), quoteFound: e.quoteFound === true, quoteSource: num(e.quoteSource), checker: str(e.checker) ?? "", note: str(e.note), carried: e.carried === true ? true : e.carried === false ? false : undefined,
+          hypothesis: str(e.hypothesis), side: e.side === "for" || e.side === "against" ? e.side : undefined,
+          stance: e.stance === "supports" || e.stance === "contradicts" || e.stance === "neither" || e.stance === "unchecked" ? e.stance : undefined,
         }
         const list = st.stage === "final" ? final : draft
         const at = list.findIndex((x) => x.index === st.index); if (at >= 0) list[at] = st; else list.push(st)
@@ -256,6 +284,20 @@ export const preparation = (s: AnswerState): { running: boolean; ms?: number; fa
   return p ? { running: p.status === "running", ms: p.ms, failed: p.status === "failed" } : undefined
 }
 /** Found, selected and cited are three different things. Counts only what the engine reported. */
+/**
+ * What is being done for one hypothesis right now, from the steps that carry its tag: "Searching" or "Screening
+ * results" while one of its own steps runs, "Checking" while a check step runs after its searches. undefined when
+ * nothing reported says so. Never a result: that comes only from `hypothesis.checked`.
+ */
+export function hypothesisDoing(s: AnswerState, id: string): string | undefined {
+  if (s.status !== "running") return undefined
+  const mine = s.steps.filter((x) => x.hypothesis === id)
+  if (mine.some((x) => x.status === "running" && x.kind === "search")) return "Searching"
+  if (mine.some((x) => x.status === "running")) return "Screening results"
+  if (mine.length > 0 && s.steps.some((x) => x.status === "running" && x.kind === "check")) return "Checking"
+  return undefined
+}
+
 /** How a critic's note ended, in words. Only a check (the critic re-reading, or the engine's code) makes it "dealt with"; the writer saying so is only a report. */
 export const noteOutcome = (n: Note): { word: string; kind: "success" | "warning" | "neutral" } =>
   n.resolved === undefined ? { word: "raised", kind: "neutral" }
@@ -280,7 +322,7 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   if (!r || typeof r.id !== "string") return undefined
   const events: ResearchEvent[] = []
   let seq = 0
-  const push = (type: string, rest: object) => events.push({ type, seq: ++seq, ...rest })
+  const push = (type: string, rest: object) => events.push({ ...rest, type, seq: ++seq }) // a record field named "type" or "seq" cannot displace these
   push("research.started", { id: r.id, thread: r.thread, question: r.question, effort: r.effort, mode: r.mode, caps: r.caps, models: r.models })
   if (r.status === "queued") push("research.queued", { after: r.after })
   for (const st of Array.isArray(r.steps) ? (r.steps as Record<string, unknown>[]) : []) { push("step.started", st); if (st.status !== "running") push("step.finished", st) }
@@ -298,6 +340,10 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   for (const st of statements) push("statement.checked", { ...st, stage: revised ? "final" : st.stage ?? "draft" })
   const cited = (Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).filter((x) => x.cited === true).map((x) => x.n)
   if ((Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).some((x) => typeof x.cited === "boolean")) push("sources.cited", { n: cited })
+  if (Array.isArray(r.hypotheses)) {
+    push("hypotheses", { items: r.hypotheses, ...(r.hypotheses.length === 0 && typeof r.hypothesesNote === "string" ? { needed: false, reason: r.hypothesesNote } : {}) })
+    for (const h of r.hypotheses as Record<string, unknown>[]) if (h && typeof h.verdict === "string") push("hypothesis.checked", h)
+  }
   if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
   if (Array.isArray(r.missing)) push("missing", { items: r.missing })
   for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })

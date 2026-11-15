@@ -7,7 +7,6 @@ import { AppSidebar } from "./components/AppSidebar"
 import { Loading } from "./components/Crew"
 import { HeaderProvider } from "./components/HeaderSlot"
 import { HowItWorks } from "./components/HowItWorks"
-import { NextRun } from "./components/PaidSwitch"
 import { EngineNotice } from "./components/Shared"
 import { Splash } from "./components/Splash"
 import { TokenPrompt } from "./components/TokenPrompt"
@@ -88,7 +87,6 @@ export default function App() {
             <MenuButton />
             <p className="app-place" data-testid="place">{LABEL[view]}</p>
             <div className="app-header-title" ref={setTitleEl} />
-            <NextRun paid={shell.paid} locked={shell.locked} />
             <div className="app-header-actions" ref={setActionsEl} />
           </header>
           <main className="page-host" id="main" tabIndex={-1}>

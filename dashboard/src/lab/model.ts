@@ -4,21 +4,39 @@
 // no event mentions stays idle at its desk.
 import type { ProvenanceKind } from "@/lib/provenance"
 
-/** The map is drawn in a 1000 x 740 box (Anh's coordinates). Everything on it is placed in these units. */
-export const MAP = { width: 1000, height: 740, corridorX: 500 } as const
-
 export type RoomId = "discovery" | "planning" | "bench" | "review" | "quality" | "report"
-export interface Room { id: RoomId; name: string; x: number; y: number; accent: string }
-/** Anh's six rooms, with their positions and accent colours. Each is 420 x 220 with a door on the corridor side. */
+export interface Room { id: RoomId; name: string; accent: string }
+/** Anh's six rooms and their accent colours. Each is 420 x 220 with a door on the corridor side. */
 export const ROOMS: readonly Room[] = [
-  { id: "discovery", name: "Discovery", x: 20, y: 20, accent: "#edb7cb" },
-  { id: "planning", name: "Planning", x: 560, y: 20, accent: "#7496e8" },
-  { id: "bench", name: "Experiment bench", x: 20, y: 260, accent: "#ef8262" },
-  { id: "review", name: "Evidence review", x: 560, y: 260, accent: "#a99be0" },
-  { id: "quality", name: "Quality control", x: 20, y: 500, accent: "#9ccc8f" },
-  { id: "report", name: "Report studio", x: 560, y: 500, accent: "#f2b35e" },
+  { id: "discovery", name: "Discovery", accent: "#edb7cb" },
+  { id: "planning", name: "Planning", accent: "#7496e8" },
+  { id: "bench", name: "Experiment bench", accent: "#ef8262" },
+  { id: "review", name: "Evidence review", accent: "#a99be0" },
+  { id: "quality", name: "Quality control", accent: "#9ccc8f" },
+  { id: "report", name: "Report studio", accent: "#f2b35e" },
 ]
 export const roomOf = (id: RoomId): Room => ROOMS.find((r) => r.id === id)!
+export const ROOM = { width: 420, height: 220 } as const
+
+/**
+ * Where the rooms are. "wide" is Anh's map: 1000 x 740, three rooms on each side of a central corridor. "tall" is
+ * the same rooms in one column beside the corridor, for a narrow screen, so the lab never needs a sideways scroll.
+ * Everything on the map is placed in these units.
+ */
+export interface LabLayout { id: "wide" | "tall"; width: number; height: number; corridorX: number; at: Record<RoomId, { x: number; y: number; door: "left" | "right" }> }
+const column = (ids: RoomId[], x: number, door: "left" | "right") => Object.fromEntries(ids.map((id, i) => [id, { x, y: 20 + i * 240, door }]))
+export const WIDE: LabLayout = {
+  id: "wide", width: 1000, height: 740, corridorX: 500,
+  at: { ...column(["discovery", "bench", "quality"], 20, "right"), ...column(["planning", "review", "report"], 560, "left") } as LabLayout["at"],
+}
+export const TALL: LabLayout = {
+  id: "tall", width: 580, height: 1460, corridorX: 500,
+  at: column(["discovery", "planning", "bench", "review", "quality", "report"], 20, "right") as LabLayout["at"],
+}
+/** Anh's map, for code that asks for "the" map. */
+export const MAP = WIDE
+/** Inside a room, from its corner: where the two teammates stand, and the rows above and below them. */
+export const SPOT = { desk: [125, 315], stand: 154, deskTop: 46, deskHeight: 40, plate: 202 } as const
 
 /**
  * Two pick-up points in Discovery for real searches: the web by the door, papers and databases by the far wall. They
@@ -26,8 +44,8 @@ export const roomOf = (id: RoomId): Room => ROOMS.find((r) => r.id === id)!
  * `dx`, `dy`: where a teammate stands, from the room's corner.
  */
 export const SEARCH_SPOTS = {
-  web: { dx: 384, dy: 158, sign: "Web", about: "Web search" },
-  papers: { dx: 42, dy: 158, sign: "Papers", about: "Literature and public databases" },
+  web: { dx: 388, dy: 158, sign: "Web", about: "Web search", signDx: 399, signDy: 51 },
+  papers: { dx: 34, dy: 160, sign: "Papers", about: "Literature and public databases", signDx: 34, signDy: 88 },
 } as const
 /** Which pick-up point a search uses. A practice run's example sources, and anything that is not a search, use the middle of the room. */
 export const searchSpot = (provider: string | undefined): keyof typeof SEARCH_SPOTS | undefined =>

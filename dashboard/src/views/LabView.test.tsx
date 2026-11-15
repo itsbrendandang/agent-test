@@ -2,6 +2,7 @@
 // provenance, the picker, reconnecting without counting an event twice, and that it only ever reads.
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { CLAIMS_BOARD, CLAIMS_EVENTS, CLAIMS_NOTES } from "@/lab/fixtures/claims"
 import { PRACTICE_ANSWER, PRACTICE_REVIEW } from "@/lab/fixtures/practice"
 import { REAL_ANSWER, REVIEW_WITH_VISITOR, SWARM_NOTES, SWARM_RUN, T0 } from "@/lab/fixtures/streams"
 import type { LabEvent } from "@/lab/adapter"
@@ -92,7 +93,7 @@ describe("LabView", () => {
     expect(document.querySelector('[data-provenance="practice"]')).toHaveTextContent("Practice") // mode demo, from the record
     expect(screen.getByText("Research answer")).toBeInTheDocument()
     // a run that was over in milliseconds is played one event at a time, and the view says so
-    expect(within(replay).getByText(/One event at a time, 0\.7 seconds apart\. The run itself took less than a second\./)).toBeInTheDocument()
+    expect(screen.getByText(/One event at a time, 0\.7 seconds apart\. The run itself took less than a second\./)).toBeInTheDocument()
     expect(within(replay).getByRole("button", { name: "Step by step" })).toHaveAttribute("aria-pressed", "true")
     expect(within(replay).getByText("Event 1 of 41")).toBeInTheDocument()
     expect(agent("Navigator")).toHaveAttribute("data-state", "idle") // the replay starts before anyone worked
@@ -112,13 +113,13 @@ describe("LabView", () => {
     await tick(0)
     await emit(FakeSource.to("/api/runs/r-long/events")[0], ...REVIEW_WITH_VISITOR)
     const replay = screen.getByRole("group", { name: "Replay" })
-    expect(within(replay).getByText(/At its real timing\. The run took 2 minutes 1 second\./)).toBeInTheDocument()
+    expect(screen.getByText(/At its real timing\. The run took 2 minutes 1 second\./)).toBeInTheDocument()
     expect(within(replay).getByRole("button", { name: "1×" })).toHaveAttribute("aria-pressed", "true")
     expect(within(replay).getByText("Event 1 of 25")).toBeInTheDocument()
     await tick(4200) // round 1 starts 4 seconds in
     expect(within(replay).getByText("Event 3 of 25")).toBeInTheDocument()
     fireEvent.click(within(replay).getByRole("button", { name: "4×" })) // starts again, four times as fast
-    expect(within(replay).getByText(/At 4 times its real timing/)).toBeInTheDocument()
+    expect(screen.getByText(/At 4 times its real timing/)).toBeInTheDocument()
     await tick(2400) // 9.6 seconds of the run: the web search at 9 s has happened
     expect(within(replay).getByText("Event 4 of 25")).toBeInTheDocument()
     fireEvent.click(within(replay).getByRole("button", { name: "Pause replay" }))
@@ -146,17 +147,19 @@ describe("LabView", () => {
     engine({ board: [DONE_REVIEW], answers: [DONE_ANSWER] })
     const { unmount } = render(<LabView />)
     await tick(0)
-    const picker = screen.getByRole("combobox")
+    const picker = screen.getByRole("combobox", { name: "Run shown in the lab" })
     const options = within(picker).getAllByRole("option").map((o) => o.textContent)
-    expect(options[0]).toBe("Automatic: the run in progress, else the newest")
-    expect(options[1]).toMatch(/^Research answer: Is hERG a risk for KRAS G12C inhibitors\? · .* · Practice · finished$/)
-    expect(options[2]).toMatch(/^Team review: Kras g12c hit to lead · .* · finished$/)
+    expect(options[0]).toMatch(/^Is hERG a risk for KRAS G12C inhibitors\? · Research answer · .* · Practice · finished$/)
+    expect(options[1]).toMatch(/^Kras g12c hit to lead · Team review · .* · finished$/)
+    expect(picker).toHaveValue("answer/a-practice") // the run that is shown
+    expect(screen.getByRole("button", { name: "Follow newest" })).toHaveAttribute("aria-pressed", "true")
     fireEvent.change(picker, { target: { value: "board/r-practice" } })
     await tick(0)
     await emit(FakeSource.to("/api/runs/r-practice/events")[0], ...PRACTICE_REVIEW)
     expect(screen.getByRole("heading", { name: "KRAS G12C hit-to-lead (illustrative data)" })).toBeInTheDocument()
     expect(document.querySelector('[data-provenance="practice"]')).toHaveTextContent("Practice")
     expect(window.location.hash).toBe("#Lab/board/r-practice")
+    expect(screen.getByRole("button", { name: "Follow newest" })).toHaveAttribute("aria-pressed", "false")
     expect(FakeSource.to("a-practice")[0].closed).toBe(true) // the stream of the run that is no longer shown is closed
     unmount()
     FakeSource.all = []
@@ -224,6 +227,36 @@ describe("LabView", () => {
     await tick(2000)
     expect(screen.getByText("Run finished")).toBeInTheDocument()
     expect(agent("Navigator")).toHaveAccessibleName("Inspect Navigator: Not in this run.")
+  })
+
+  it("shows a claims-engine run from its board and its events, reads the board again while it runs, and only ever reads", async () => {
+    const running = { id: "s-claims", solver: "glhf", model: "mock", task: "demo", phase: "running", startedAt: T0 }
+    const upTo = (seq: number) => CLAIMS_EVENTS.filter((e) => (e.seq as number) <= seq)
+    const early = { run_id: CLAIMS_BOARD.run_id, seq: 7, claims: CLAIMS_BOARD.claims.map((c) => ({ ...c, state: "piloting", history: [{ reason: "pilot granted", at: 1 }], attempts: {}, verdicts: [] })) }
+    const sent = engine({ swarm: [running] }, {
+      "GET /api/glhf/runs/s-claims": [ok({ run: running, ledger: null }), ok({ run: running, ledger: null }), ok({ run: { ...running, phase: "done", finishedAt: T0 + 9000 }, ledger: null })],
+      "GET /api/glhf/runs/s-claims/board": [ok({ ...early, ledgerEvents: CLAIMS_NOTES.slice(0, 8) }), ok({ ...CLAIMS_BOARD, ledgerEvents: CLAIMS_NOTES })],
+      "GET /api/glhf/runs/s-claims/claims-events": [ok({ events: upTo(9) }), ok({ events: CLAIMS_EVENTS.filter((e) => (e.seq as number) > 9) })],
+    })
+    render(<LabView />)
+    await tick(0); await tick(0); await tick(0)
+    expect(screen.getByText("Swarm run")).toBeInTheDocument()
+    expect(screen.getAllByText("Practice: scripted run, not a benchmark result").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Model: mockllm/model").length).toBeGreaterThan(0)
+    const list = screen.getByRole("list", { name: "Claims of this run" })
+    expect(within(list).getAllByRole("listitem").map((li) => li.getAttribute("data-claim"))).toEqual(["C1", "C2"])
+    expect(within(list).getAllByRole("listitem")[0]).toHaveTextContent("C1 Piloting")
+    expect(agent("Pilot")).toHaveAttribute("data-state", "working")
+    expect(agent("Engine")).toHaveAttribute("data-state", "working")
+    expect(sent.filter((r) => r.url.includes("claims-events")).map((r) => r.query)).toEqual(["?after=0"])
+    await tick(2100) // the next read: a new snapshot and the events after the last seq held
+    await tick(0)
+    expect(sent.filter((r) => r.url.includes("claims-events")).map((r) => r.query)).toEqual(["?after=0", "?after=9"])
+    expect(within(screen.getByRole("list", { name: "Claims of this run" })).getAllByRole("listitem")[0]).toHaveTextContent("C1 ✓ Supported")
+    expect(within(screen.getByRole("list", { name: "Claims in Report studio" })).getByRole("listitem")).toHaveTextContent("C1 ✓ Supported")
+    await tick(2100)
+    expect(screen.getByText("Run finished")).toBeInTheDocument()
+    expect(sent.every((r) => r.method === "GET")).toBe(true)
   })
 
   it("says so when there is no run yet, and when the engine cannot be reached", async () => {

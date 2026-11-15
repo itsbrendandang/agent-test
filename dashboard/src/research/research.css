@@ -86,10 +86,10 @@
 
 .search-thread { padding-left: 0 !important; padding-right: 0 !important; }
 .source-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); overflow: hidden; }
-.source-rows li + li { border-top: 1px solid var(--edge); }
-.source-rows button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.source-rows button:hover { background: #f6f0e1; }
-.source-rows button:focus-visible { outline: 2px solid #3f7cc4; outline-offset: -2px; }
+.source-rows > li + li { border-top: 1px solid var(--edge); }
+.source-rows > li > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.source-rows > li > button:hover { background: #f6f0e1; }
+.source-rows > li > button:focus-visible { outline: 2px solid #3f7cc4; outline-offset: -2px; }
 .source-what { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; font-size: 15px; }
 .source-what b { font-weight: 600; overflow-wrap: anywhere; }
 .source-open { color: var(--text-muted); text-decoration: underline; flex-shrink: 0; }
@@ -306,3 +306,61 @@
   .search-composer .effort-segments label { padding: 6px 10px; }
   .search-composer .btn-primary { padding: 8px 14px; }
 }
+
+/* source rows while the runs' own titles are being read: a quiet line the height of a row, so nothing changes under the reader */
+.source-wait { display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 62px; }
+.source-line { display: block; width: min(60%, 320px); height: 14px; border-radius: 4px; background: var(--hover); }
+@media (prefers-reduced-motion: no-preference) { .source-line { animation: source-wait 1.4s ease-in-out infinite; } }
+@keyframes source-wait { 50% { opacity: .45; } }
+/* runs of the same brief: the newest is the row, the others fold under it */
+.source-grouped { margin: 0 0 6px; }
+.source-history { padding: 0 14px 10px 48px; }
+.source-history > summary { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; }
+.source-history > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (pointer: coarse) { .source-history > summary { min-height: 36px; } }
+@media (max-width: 520px) { .source-history { padding-left: 14px; } }
+
+/* ---- hypotheses: the question, branches, one card per hypothesis ---- */
+.hyp { display: flex; flex-direction: column; margin: 6px 0 14px; }
+.hyp-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.hyp-question { margin: 0 auto; max-width: 62ch; padding: 10px 14px; border: 1px solid var(--edge, #dedbd2); border-radius: 12px; background: var(--surface, #fff); display: flex; flex-direction: column; gap: 2px; font-weight: 500; text-align: center; overflow-wrap: anywhere; }
+.hyp-branches { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; height: 22px; position: relative; }
+.hyp-branches::before { content: ""; position: absolute; left: 50%; top: 0; height: 11px; border-left: 1.5px solid var(--edge-strong, #c9c5b8); }
+.hyp-branches > span { position: relative; }
+.hyp-branches > span::before { content: ""; position: absolute; left: 50%; top: 11px; bottom: 0; border-left: 1.5px solid var(--edge-strong, #c9c5b8); }
+.hyp-branches > span::after { content: ""; position: absolute; top: 11px; left: 0; right: -12px; border-top: 1.5px solid var(--edge-strong, #c9c5b8); }
+.hyp-branches > span:first-child::after { left: 50%; }
+.hyp-branches > span:last-child::after { right: 50%; }
+.hyp-branches > span:only-child::after { display: none; }
+.hyp-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.hyp-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--edge, #dedbd2); border-top: 3px solid var(--edge-strong, #c9c5b8); border-radius: 12px; background: var(--surface, #fff); overflow-wrap: anywhere; }
+.hyp-card[data-mark="supported"] { border-top-color: #2a9d63; }
+.hyp-card[data-mark="contradicted"] { border-top-color: #c9302c; }
+.hyp-card[data-mark="insufficient"] { border-top-color: #d98a1f; }
+.hyp-card p { margin: 0; }
+.hyp-text { font-weight: 500; line-height: 1.4; }
+.hyp-result { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.hyp-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--edge, #dedbd2); }
+.hyp-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hyp-sidename { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted, #6b675f); }
+.hyp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.hyp-chips .answer-cite { min-width: 24px; height: 24px; border-radius: 12px; font-size: 12px; margin: 0; }
+.answer-cite[data-static] { cursor: default; }
+.answer-markword[data-demo] { background: none; border: 1px dashed var(--edge-strong, #c9c5b8); color: var(--text-muted, #6b675f); font-weight: 500; }
+.hyp-cut { margin-top: 10px; font-size: 13px; }
+.hyp-cut ul { margin: 6px 0 0; padding-left: 1.3em; }
+.hyp-note { margin: 10px 0 0; }
+/* narrow: the cards stack under the question, joined by one line down the left */
+@media (max-width: 720px) {
+  .hyp-branches { display: none; }
+  .hyp-question { margin: 0; text-align: left; }
+  .hyp-cards { grid-auto-flow: row; grid-auto-columns: auto; margin-top: 10px; margin-left: 10px; padding-left: 12px; border-left: 1.5px solid var(--edge-strong, #c9c5b8); gap: 10px; }
+}
+/* the inspector's table */
+.hyp-tablewrap { overflow-x: auto; }
+.hyp-tablewrap:focus-visible { outline: 2px solid var(--focus, #2f6feb); outline-offset: 2px; }
+.hyp-table { border-collapse: collapse; font-size: 12.5px; min-width: 620px; }
+.hyp-table th, .hyp-table td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-top: 1px solid var(--edge, #dedbd2); font-weight: 400; }
+.hyp-table thead th { border-top: 0; font-size: 11px; font-weight: 600; color: var(--text-muted, #6b675f); white-space: nowrap; }
+.hyp-table tbody th { font-weight: 500; min-width: 180px; }
+.hyp-tablenote { display: block; margin-top: 4px; }

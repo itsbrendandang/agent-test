@@ -5,7 +5,7 @@ import { Loader } from "./ai-elements/loader"
 import { Buddy } from "./Buddy"
 import type { Mood } from "./species"
 
-/** Momo, Ember and Fuji in a row. Decoration only: hidden from screen readers, and gone when characters are off. */
+/** Momo, Ember, Fuji and Sage in a row. Decoration only: hidden from screen readers, and gone when characters are off. */
 export function Mascots({ mood = "happy", size = 56, className = "" }: { mood?: Mood; size?: number; className?: string }) {
   const shown = useCharacters()
   if (!shown) return null

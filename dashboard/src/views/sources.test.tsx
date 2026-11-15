@@ -173,11 +173,12 @@ describe("while a real run works, and when it cannot start", () => {
   })
 })
 
-describe("Home: what this can use", () => {
+describe("Connections: the search credit sits in the Exa row", () => {
   const panel = (search: object) => render(<CatalogPanel catalog={{ ...CATALOG_ON, search: { ...CATALOG_ON.search, ...search } } as never} onRetry={() => {}} />)
   it("credits Exa when a run started now would search with it", () => {
     panel({ provider: "exa" })
     expect(screen.getByTestId("search-credit")).toHaveTextContent("Search powered by Exa")
+    expect(screen.getByTestId("search-credit").closest("li")).toHaveTextContent(/^Web search \(Exa\)/) // in the Exa row, not under Europe PMC
     expect(screen.getByRole("link", { name: "Exa" })).toHaveAttribute("href", "https://exa.ai")
   })
   it("does not in Demo", () => {
@@ -248,6 +249,110 @@ describe("the rows of a saved-research search", () => {
     expect(team).toHaveTextContent("Team of nine on the demo task")
     expect(team).toHaveTextContent("One agent or a team · today at 4:51 pm"); expect(team.querySelector("[data-provenance]")).toHaveTextContent("Practice")
     for (const row of [real, demo, team]) expect(row).not.toHaveTextContent(/that h$|that h ·|04bb17d2/)
+  })
+})
+
+describe("repeated runs of the same brief on Research", () => {
+  const sse = (event: object) => `data: ${JSON.stringify({ key: "k", at: 0, ...event })}\n\n`
+  const HOUR = 3_600_000
+  const at = new Date(); at.setHours(12, 0, 0, 0)
+  const RUNS = [
+    { kind: "board", id: "p-new", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" },
+    { kind: "board", id: "live-1", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" },
+    { kind: "board", id: "p-old", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" },
+    { kind: "board", id: "p-mid", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" },
+    { kind: "board", id: "other", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" }, // the same words in its title, another brief
+    { kind: "board", id: "unlisted", title: "Drug board · kras-g12c-hit-to-lead", why: "contains: herg" }, // the engine's list does not have it
+    { kind: "swarm", id: "s-1", title: "Task demo · swarm · mock", why: "contains: demo" },
+    { kind: "swarm", id: "s-2", title: "Task demo · swarm · mock", why: "contains: demo" },
+  ]
+  const LISTED = [
+    { id: "p-new", brief: "kras.md", startedAt: at.getTime() }, { id: "p-mid", brief: "kras.md", startedAt: at.getTime() - HOUR }, { id: "p-old", brief: "kras.md", startedAt: at.getTime() - 2 * HOUR },
+    { id: "live-1", brief: "kras.md", startedAt: at.getTime() - 3 * HOUR }, { id: "other", brief: "kras-copy.md", startedAt: at.getTime() - 4 * HOUR },
+  ].map((r) => ({ ...r, rounds: 1, status: "done", claims: 0 }))
+  const ask = async (mode: "keyword" | "ai" | "scripted", opts: { paidCalls?: boolean; events?: (id: string) => Promise<Response> } = {}) => {
+    routes({
+      "GET /api/chat/catalog": { status: 200, body: { ...CATALOG_ON, paidCalls: opts.paidCalls ?? true } }, "GET /api/status": { status: 200, body: { paidCalls: opts.paidCalls ?? true } },
+      "POST /api/research": { status: 404, body: { error: "not found" } },
+      "POST /api/chat": { status: 200, body: { reply: "A reply.", mode, runs: RUNS } },
+      "GET /api/runs": { status: 200, body: LISTED },
+      "GET /api/glhf/runs": { status: 200, body: ["s-1", "s-2"].map((id, i) => ({ id, model: "mock", solver: "glhf", task: "demo", phase: "done", startedAt: at.getTime() - i * HOUR })) },
+    })
+    const plain = globalThis.fetch
+    const started = (id: string) => Promise.resolve(new Response(sse({ type: "run.started", runId: id, brief: "x", title: "Should we take the KRAS hit forward?", mock: id !== "live-1" }), { status: 200 }))
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      const m = /\/api\/runs\/([\w-]+)\/events$/.exec(String(url))
+      return m ? (opts.events ?? started)(m[1]) : plain(url, init)
+    }))
+    render(<HomeView onOpen={() => {}} />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole("textbox", { name: "Ask a research question" }), "herg{Enter}")
+    return user
+  }
+  const LABEL = { keyword: "Matching saved runs", ai: "Saved research this answer used", scripted: "Related saved research" }
+
+  it("runs that share a brief and a provenance are one row with the others under it; every record is still there, each with its own time and badge", async () => {
+    const user = await ask("keyword")
+    const list = await screen.findByRole("list", { name: LABEL.keyword })
+    await waitFor(() => expect(list).not.toHaveAttribute("aria-busy"))
+    await user.click(screen.getByRole("button", { name: "View all 5" })) // 8 runs in 5 rows
+    expect(screen.getByText("8 runs in 5 rows. Runs of the same brief are together.")).toBeInTheDocument()
+    const rows = [...list.children] as HTMLElement[]
+    expect(rows).toHaveLength(5)
+    // The three practice runs of kras.md: the newest is the row, the two others are under it, newest first.
+    expect(rows[0]).toHaveTextContent("3 runs, latest")
+    const earlier = within(within(rows[0]).getByRole("list", { name: /^Earlier runs of: / }))
+    expect(earlier.getAllByRole("listitem").map((li) => li.getAttribute("data-record"))).toEqual(["board:p-mid", "board:p-old"])
+    for (const li of earlier.getAllByRole("listitem")) { expect(li.querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "practice"); expect(li.querySelector("time")).not.toBeNull() }
+    // The live run of the same brief is never folded under practice runs. Another brief with the same title stands alone, and so does a run the engine's list does not have.
+    expect(rows[1].querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "live")
+    for (const row of [rows[1], rows[2], rows[3]]) expect(within(row).queryByRole("group")).toBeNull()
+    expect(rows[1]).not.toHaveTextContent(/runs, latest/); expect(rows[2]).not.toHaveTextContent(/runs, latest/); expect(rows[3]).not.toHaveTextContent(/runs, latest/)
+    // Task runs group on their own task, solver and model.
+    expect(rows[4]).toHaveTextContent("2 runs, latest")
+    // Nothing is dropped: every run of the reply can be opened, exactly once.
+    const opens = within(list).getAllByRole("button").length
+    expect(opens).toBe(RUNS.length)
+    expect([...list.querySelectorAll("[data-record]")].map((li) => li.getAttribute("data-record")).sort()).toEqual(["board:p-mid", "board:p-old", "swarm:s-2"])
+  })
+
+  it.each([[true, "Real"], [false, "Demo"]] as const)("with the next run set to %s (%s), a practice row says Practice and a live row says Live research", async (paidCalls, _word) => {
+    await ask("keyword", { paidCalls })
+    const list = await screen.findByRole("list", { name: LABEL.keyword })
+    await waitFor(() => expect(list).not.toHaveAttribute("aria-busy"))
+    const rows = [...list.children] as HTMLElement[]
+    expect(rows[0].querySelector("[data-provenance]")).toHaveTextContent("Practice")
+    expect(rows[1].querySelector("[data-provenance]")).toHaveTextContent("Live research")
+  })
+
+  it("holds a row's title until the run has said its own: the file name's words are never shown first", async () => {
+    let answer: (() => void) | undefined
+    const gate = new Promise<void>((done) => { answer = done })
+    const events = (id: string) => gate.then(() => new Response(sse({ type: "run.started", runId: id, brief: "x", title: "Should we take the KRAS hit forward?", mock: id !== "live-1" }), { status: 200 }))
+    await ask("keyword", { events })
+    const list = await screen.findByRole("list", { name: LABEL.keyword })
+    expect(list).toHaveAttribute("aria-busy", "true")
+    expect(list).toHaveTextContent("Loading saved research…")
+    expect(within(list).queryAllByRole("button")).toHaveLength(0)
+    expect(list).not.toHaveTextContent(/kras g12c hit to lead/i)
+    await act(async () => { answer!(); await gate })
+    await waitFor(() => expect(list).not.toHaveAttribute("aria-busy"))
+    expect(within(list).getAllByRole("button")[0]).toHaveTextContent("Should we take the KRAS hit forward?")
+  })
+
+  it("only an AI answer says the runs were used; a demo reply lists them as related and claims nothing", async () => {
+    await ask("scripted")
+    const related = await screen.findByRole("region", { name: "Related saved research" })
+    expect(related).toHaveTextContent("Saved research that shares words with your question. Nothing read it to write this reply.")
+    expect(related).not.toHaveTextContent(/this answer used|Sources/)
+    expect(within(related).getByRole("list", { name: LABEL.scripted })).toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Sources" })).toBeNull()
+  })
+  it("an AI answer keeps 'Saved research this answer used'", async () => {
+    await ask("ai")
+    const sources = await screen.findByRole("region", { name: "Sources" })
+    expect(sources).toHaveTextContent("Saved research this answer used.")
+    expect(within(sources).getByRole("list", { name: LABEL.ai })).toBeInTheDocument()
   })
 })
 

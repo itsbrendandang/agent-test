@@ -14,44 +14,59 @@ With Docker only: `docker compose up`, then open http://localhost:5317.
 
 ## The shell
 
-Every view has the same three parts (`src/App.tsx`):
+Every view has the same three parts (`src/App.tsx`).
 
-- A status line across the top (`src/components/StatusLine.tsx`): the product name, whether the engine answers,
-  and whether paid calls are on or off. Plain text, with a link to Settings.
-- A rail on the left with seven views, each an icon and a word. Under 1000 px wide it becomes a row across the top.
-- The view itself, inside one `<main>`. Content is at most 1100 px wide and starts at the same left edge in every
-  view. Home and Graph use the full width (`data-wide` on the view's root element).
+- **The navigation** (`src/components/AppSidebar.tsx`, on the shadcn sidebar in `src/components/ui/sidebar.tsx`).
+  - Three places carry the everyday work: Research, Saved research, Compare.
+  - The advanced places sit under "More", quieter: Team review, Agents, Graph, Lab.
+  - Settings is at the foot, once. The characters sit above it on a wide window.
+  - On a wide window the sidebar folds to icons. The choice is remembered (`shell.sidebar`).
+  - Under 768 px it is a drawer. The menu button in the header opens it. Choosing a place closes it.
+- **One header row**, 48 px high, above the view. It holds the menu button, the name of the place, and two
+  slots a view may fill: a title and actions (`src/components/HeaderSlot.tsx`). Research puts the question and
+  "New search" there. Nothing else is in the header. There is no status strip and no Demo or Real control in it.
+- **The view**, inside one `<main>`. The view scrolls inside it. The header never lies over content.
+  Content is at most 1100 px wide. Graph uses the full width (`data-wide` on the view's root element).
 
-| View (rail label) | Page title | File | What it is for |
+Under 480 px the header drops the view's title, so the place name and the actions stay inside the window.
+
+| Place (what a person reads) | Key in the address | File | What it is for |
 |---|---|---|---|
-| Home | Home | `src/views/HomeView.tsx`, `src/home/` | Ask a research question; get an answer, cited runs, or a plan to confirm |
-| Runs | Runs | `src/views/ExperimentsView.tsx` | Every past run of both kinds, with keyword search |
-| Compare | Swarm vs single agent | `src/views/SwarmView.tsx`, `src/swarm/` | The like-for-like scoreboard, one run in detail, New run and Cancel |
-| Board | Board review | `src/views/BoardView.tsx`, `src/board/` | A board review: decision, checked claims, discussion |
-| Agents | Agents and skills | `src/views/AgentsView.tsx` | The nine swarm roles, the board members and specialists, skills |
-| Graph | Graph | `src/views/WorldsView.tsx`, `src/graph/` | A 3D graph of what happened in one run |
-| Settings | Settings | `src/views/SettingsView.tsx` | What the engine has (tools, keys set or not), paid calls, the session token |
+| Research | `Home` | `src/views/HomeView.tsx`, `src/home/`, `src/research/` | Ask a research question. Read the answer with its sources, or a plan to confirm |
+| Saved research | `Runs` | `src/views/ExperimentsView.tsx` | Every saved answer, team review and task run, with keyword search |
+| Compare | `Compare` | `src/views/SwarmView.tsx`, `src/swarm/` | One agent alone against a team of nine on the same task. New run and Cancel |
+| Team review | `Board` | `src/views/BoardView.tsx`, `src/board/` | One team review: the decision, the discussion, the checks, the sources |
+| Agents | `Agents` | `src/views/AgentsView.tsx` | Who does the work: roles, team members, specialists and methods |
+| Graph | `Graph` | `src/views/WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and how it was checked |
+| Lab | `Lab` | `src/views/LabView.tsx`, `src/lab/` | Watch the team at work in a run. Characters move only on engine events |
+| Settings | `Settings` | `src/views/SettingsView.tsx` | Demo or Real, the session token, appearance, help, what the engine can use |
 
-The view names in the address are the rail labels (`#Compare`). Older links still open the right view:
-`#Swarm` opens Compare, `#Experiments` opens Runs, `#Worlds` opens Graph (`src/nav.ts`).
+The keys are addresses and never change (`src/nav.ts`). The words a person reads are in `LABEL` there. Rename a
+place by changing `LABEL` only. The address is the key (`#Compare`), and it can name a run (`#Board/<id>`).
+Older links still open the right view: `#Swarm` opens Compare, `#Experiments` opens Saved research, `#Worlds`
+opens Graph, and the words on screen work too (`#Research`, `#Saved`, `#Review`).
 
 A view that fails shows a message in its own area and leaves the shell working (`src/components/ViewBoundary.tsx`).
-The Graph view loads only when it is opened.
+The Graph view loads only when it is opened. When the engine cannot be reached, a notice shows in the page with
+"Try again" (`EngineNotice` in `src/components/Shared.tsx`).
 
 ## Map
 
 | You want to change | File or folder |
 |---|---|
 | Colours, fonts, the type scale, pills, buttons, the shell layout | `src/index.css` |
-| The shell: status line, rail, which view shows | `src/App.tsx`, `src/components/StatusLine.tsx`, `src/lib/shell.ts` |
+| The shell: navigation, header row, which view shows | `src/App.tsx`, `src/components/AppSidebar.tsx`, `src/components/HeaderSlot.tsx`, `src/lib/shell.ts` |
 | The list of views, their names and order, and the product name | `src/nav.ts` |
 | One screen | `src/views/<Name>View.tsx` (see the table above) |
-| Home: chat, plan card and confirm step, effort levels, "What was checked", "What this can use" | `src/views/HomeView.tsx`, `src/home/` (rules in `src/home/chat.ts`, engine calls in `src/home/api.ts`) |
+| Research: the conversation, plan card and confirm step, effort levels, the rows of saved runs under a reply | `src/views/HomeView.tsx`, `src/home/` (rules in `src/home/chat.ts`, engine calls in `src/home/api.ts`) |
+| Research: a direct answer (activity, citations, marks, inspector) | `src/research/` (`model.ts` folds the engine's events into the page state) |
+| The one row for a saved run, answer or source, and grouping runs of the same brief | `src/components/RecordRow.tsx`, `src/lib/records.ts` |
+| How a result was made (Practice, Live research, Local model) | `src/lib/provenance.ts`, `src/components/Provenance.tsx` |
 | New run dialog and cancel | `src/swarm/NewRun.tsx`, `src/swarm/CancelRun.tsx`; rules in `src/swarm/runForm.ts` |
 | The 3D run graph | `src/graph/` (its own styles in `src/graph/graph.css`) |
 | Styles used by one area only | `src/swarm/swarm.css`, `src/board/board.css`, `src/graph/graph.css` |
 | Shared pieces: page header, status pill, practice-or-real label (`ModeLabel`), verdict chip (`Verdict`), run id, the engine error/offline card | `src/components/Shared.tsx` |
-| The app's words (practice run, verdict words, the first sentence of a reply, which URLs may be links) | `src/lib/words.ts` |
+| The app's words (the four marks, run limit, estimated and spent, the first sentence of a reply, which URLs may be links) | `src/lib/words.ts` |
 | Who said what: one message per team member, with its checks | `src/components/Thread.tsx` (on `src/components/ai-elements/`) |
 | Reading from the engine; telling "not running" from "answered with an error" | `src/lib/engine.ts` |
 | The loading screen | `src/components/Splash.tsx` |
@@ -63,7 +78,8 @@ The Graph view loads only when it is opened.
 | Paid-calls wording | `src/lib/paid.ts` |
 | Opening a run in another view | `src/lib/open.ts` |
 | Calls to the engine | `src/swarm/api.ts`, `src/board/api.ts`, `src/home/api.ts` |
-| Characters (Momo, Ember, Fuji) | `src/crew/store.ts` (who they are, the "Show characters" setting), `src/components/Buddy.tsx` (the drawings), `src/components/SideCrew.tsx` (the rail). On by default; Settings turns them off |
+| Characters (Momo, Ember, Fuji, Sage) | `src/crew/store.ts` (who they are, the "Show characters" setting), `src/components/Buddy.tsx` (the drawings), `src/components/SideCrew.tsx` (the foot of the navigation). On by default; Settings turns them off |
+| The faces of the agents that did the work (not the characters above) | `src/lab/identity.ts`, `src/lab/AgentAvatar.tsx` |
 | AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
 | Tests and their stand-in engine | `src/**/*.test.ts(x)`, `src/test/` |
 | The desktop window (size, title, icons) | `src-tauri/tauri.conf.json`, `src-tauri/icons/` |
@@ -77,10 +93,10 @@ The Graph view loads only when it is opened.
   `pill v-unchecked` (board) and `pill sv-supported`, `pill sv-refuted`, `pill sv-insufficient`,
   `pill sv-untested` (swarm).
 - **One type scale**: 12, 13, 15 (conversation text), 16, 20 and 28 px. Nothing under 12.
-- **One place for each input**: questions are asked on Home; keyword search is on Runs; Agents has a filter box.
+- **One place for each input**: questions are asked on Research; keyword search is on Saved research; Agents has a filter box.
 - **One loading look**: `<Loading>text</Loading>` from `src/components/Crew.tsx`. The text is the status; the
   characters beside it are decoration.
-- **One conversation look**: the Home chat, the Board discussion and "What each role did" on Compare all use the
+- **One conversation look**: the Research chat, the Team review discussion and "What each role did" on Compare all use the
   AI Elements `Conversation` and `Message` through `src/components/Thread.tsx`.
 - **One design system**: AI Elements reads the app's own colours (the token block at the end of `src/index.css`),
   and its visible buttons carry the app's `.btn` classes. Do not add a second theme or button style.
@@ -88,7 +104,7 @@ The Graph view loads only when it is opened.
 ## Removed
 
 The template the dashboard started from is gone: the Overview, Simulations and Analytics views, the placeholder
-"Worlds" view (now Graph), the parade, the avatar in the rail, the `.toon-btn` buttons, `src/sim/`, `src/agent/`,
+"Worlds" view (now Graph), the parade, the avatar in the rail, the status line across the top (`StatusLine.tsx`), the seven-item rail, the `.toon-btn` buttons, `src/sim/`, `src/agent/`,
 `src/runs/`, `src/system/UsageBars.tsx`, the chart component, and the "Your crew" editor in Agents (it gave the
 characters roles and skills, which made decoration look like agents). Settings shows the desktop key form only
 inside the desktop app.
@@ -101,10 +117,9 @@ maths and diagram plugins (about 740 kB) stay out of the first load. `sources.ts
 
 ## The characters
 
-Momo, Ember and Fuji are the app's face, not its workers.
+Momo, Ember, Fuji and Sage are the app's face, not its workers.
 
-- Where: the loading screen, the empty Home, every waiting state (`Loading`), next to "See what they found", and
-  the rail on wide screens.
+- Where: the loading screen, every waiting state (`Loading`), and the foot of the navigation on a wide window.
 - Always `aria-hidden`, always with the real status in text beside them, never the only sign of anything.
 - Never shown as the agents that did the work. The team members that ran are named in the conversation and the
   steppers. Next to a practice run the label still says "Practice run".
@@ -120,7 +135,8 @@ small second line, never deleted. The strings and helpers live in `src/lib/words
 | Say | Not | Where the expert term stays |
 |---|---|---|
 | Practice run: fixed text, not real research (`PRACTICE`, `ModeLabel`) | scripted, mock | `data-mode="scripted"` |
-| ✓ Holds up · ✕ Proven wrong · ? Not enough evidence (`Verdict`) | verified/supported · contradicted/refuted · unsupported/unchecked/insufficient/untested | tooltip on every chip; second text with `technical` |
+| ✓ Supported · ✕ Contradicted · ? Insufficient evidence · ○ Not checked (`MARK_WORD`, `MarkChip`) | the engine's own words: verified, refuted, unsupported, untested | tooltip on every chip |
+| Run limit · Estimated · Spent (`runLimit`, `estimated`, `spent`) | one word for all three | they are three different numbers and never share a label |
 | statement | claim | ids such as C2; "experts say claim" in How to read this |
 | a test that could prove it wrong | falsification test | |
 | the team's shared notes / what the run recorded | ledger | |
@@ -161,8 +177,8 @@ A practice run's score or recommendation is never the headline without the words
 
 A first-time visitor gets from opening the app to a finished result, and understands it, without help.
 
-- **First visit**: Home says what this is in one sentence, offers three example questions that send in one click,
-  and says once when the app is in Demo mode.
+- **First visit**: Research says what this is in one sentence, offers three example questions that send in one
+  click, and says once when the app is in Demo mode.
 - **Fewest clicks**: example (1), "Start practice run" (2), "See what they found" (3). A practice plan starts in
   one click only while the engine is in Demo mode and the plan is not paid (`quick` in `src/home/PlanCard.tsx`).
   Everything else keeps the confirm step, the cost and the tick box. Never weaken that.
@@ -172,16 +188,22 @@ A first-time visitor gets from opening the app to a finished result, and underst
   button, and the engine's own text under "Details" (`EngineOffline` in `Shared.tsx`).
 - **Where you were**: the last view (`app.view`) and the last run of each kind (`last.board`, `last.swarm`) are
   remembered. An address can name a run: `#Board/<id>`, `#Compare/<id>` (`src/nav.ts`, `src/lib/open.ts`).
-- **Advanced controls** (effort, model, limits, team choice) sit under "More options". The Demo/Real state and
-  the practice/real label are never hidden.
-- **Help in place**: "How this works" in the status line opens the same four-step picture on every view
-  (`src/components/HowItWorks.tsx`).
+- **Advanced controls** (model, limits, team choice) sit under "Research options". How a result was made (its
+  provenance badge) is never hidden.
+- **Help**: "How this works" in Settings opens the four-step picture (`src/components/HowItWorks.tsx`).
 
 ## Demo and Real
 
-There is no bar across the top. One small chip at the foot of the rail says "Demo" or "Real" on every view
-(`ModeIndicator`); pressing it opens the switch, a radio group "Demo | Real" with plain words beside it (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in
-`src/lib/paidSwitch.ts`; the same control is in Settings).
+Two different things, never mixed:
+
+- **How the next run will be made** is the engine's mode: Demo or Real. A person switches it in Settings only
+  (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in `src/lib/paidSwitch.ts`).
+  The header has no switch: the owner removed it. `NextRun` in the same file is the old header control, kept unused.
+- **How a result on screen was made** is its provenance: Practice, Live research or Local model. It comes from the
+  record itself (`provenanceOf` in `src/lib/provenance.ts`) and is drawn by one badge
+  (`src/components/Provenance.tsx`). It never follows the mode. A practice result seen in Real mode still says Practice.
+
+The switch:
 
 - Demo: "Practice runs. Fixed example answers. Free." Real: "Real AI models and web search. Costs money."
 - Choosing Real never flips anything. It opens a dialog: what changes, the limits (per run, per day, searches),
@@ -190,8 +212,9 @@ There is no bar across the top. One small chip at the foot of the rail says "Dem
 - Choosing Demo is one click, no dialog.
 - Missing keys: the dialog says which, and offers no button and no key field. Locked: the control is disabled
   and says "Locked by the person running the engine".
-- The state comes from the engine on load and on a 10-second poll (`useShell`), and again right after a switch.
-  Nothing about it is stored in the browser. It goes back to Demo when the engine restarts.
+- The state comes from the engine on load and on a 10-second poll (`useShell` in `src/lib/shell.ts`), and again
+  right after a switch. Nothing about it is stored in the browser. It goes back to the engine's own setting when
+  the engine restarts.
 - A run keeps the label it started with. The per-run cost and confirm stay as they are while Real is on.
 - Tests stub the engine. Never send `{on: true}` to a real engine from a test or a script.
 
@@ -212,13 +235,17 @@ There is no bar across the top. One small chip at the foot of the rail says "Dem
 ## Rules that the design must keep
 
 - Every result says whether it came from a real model or was a practice run (fixed text, no model). That comes from the run itself
-  (`src/lib/scripted.ts`), never from the engine's state now. Paid-calls state is in the status line on every view.
-- Verdicts must be readable without colour alone: ✓ verified or supported, ✕ contradicted or refuted, ? unsupported,
-  unchecked, insufficient or untested.
+  (`src/lib/provenance.ts`, `src/lib/scripted.ts`), never from the engine's state now.
+- Marks must be readable without colour alone: ✓ Supported, ✕ Contradicted, ? Insufficient evidence, ○ Not checked.
+- Saved runs under a reply are grouped only on the record's own key (a review's brief file, a task run's task, solver
+  and model) and the same provenance. A similar title is never enough. Only an AI answer says it "used" them
+  (`sourcesWords` in `src/home/chat.ts`).
+- Nothing about activity, progress, durations or how much was checked is made up. The page shows what the engine reported.
 - A paid action needs a confirm step with the cost; nothing starts from a single click.
-- Model and search text is untrusted. Replies in a conversation are plain text: no Markdown, no HTML, no image,
-  and a link only for an `http(s)` source (`safeUrl`). Run documents (memo, findings, methods) go through
-  `streamdown`. Do not use `MessageResponse` for model text without restricting it first.
+- Model and search text is untrusted. A team member's reply in a discussion is plain text. An answer on Research
+  and the reasoning under a team's decision are Markdown through `src/components/SafeMarkdown.tsx` only: headings,
+  lists, tables, code, and links for `http(s)` addresses (`safeUrl`); no raw HTML, no image, no script address.
+  Run documents (memo, findings, methods) go through `streamdown`. Do not use `MessageResponse` for model text.
 - The page never calls a model. The `ai` package is installed for AI Elements' types only; replies come from the
   engine's `/api/chat`.
 - When the engine answers with an error, show its own text (`EngineOffline said=…`). "Engine not running" is only
@@ -231,5 +258,6 @@ There is no bar across the top. One small chip at the foot of the rail says "Dem
 cd dashboard && npx tsc -b && npx vite build && npx oxlint && npm test
 ```
 
-Look at the result at 1440x900, 1280x800 (the desktop window), 1100x800 and 390x844. The dev server must run on
-port 5317: the engine accepts no other browser origin.
+Look at the result at 375, 528, 768 and 1280 px wide. Nothing may be wider than the window. The owner's engine
+accepts the dev server on port 5317 only. For your own checks start a practice engine on another port and name your
+dev server's address in `DASHBOARD_ORIGINS` (see `AGENTS.md`, "A running engine may be someone's live engine").

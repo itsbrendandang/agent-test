@@ -8,6 +8,7 @@
 import { lazy, Suspense, useState } from "react"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
+import { HypothesesTable } from "./Hypotheses"
 import { artifactUrl } from "./api"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markOf } from "./marks"
 import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState, type ResearchEvent } from "./model"
@@ -18,7 +19,7 @@ import { PROVIDERS } from "./providers"
 // The Lab draws the whole scene: loaded only when its tab is opened.
 const LabTab = lazy(() => import("./LabTab"))
 
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", results: "Results", activity: "Activity", lab: "Lab" }
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity", lab: "Lab" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
@@ -39,6 +40,7 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
       </div>
       <div className="inspector-panel" id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${current}`} tabIndex={0}>
         {current === "evidence" && <Evidence state={state} />}
+        {current === "hypotheses" && <HypothesesTable state={state} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
         {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Lab.</p>}><LabTab id={id} events={events} /></Suspense>}

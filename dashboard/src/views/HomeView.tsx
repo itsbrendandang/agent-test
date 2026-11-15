@@ -11,10 +11,11 @@ import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { HeaderSlot } from "@/components/HeaderSlot"
 import { Provenance } from "@/components/Provenance"
+import { RecordList, type RecordItem } from "@/components/RecordRow"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type EffortId, type ProviderId } from "@/home/api"
-import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
+import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, sourcesWords, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
 import { PlanCard } from "@/home/PlanCard"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
@@ -27,7 +28,8 @@ import { loadInspector, saveInspector, tabsOf, useNarrow, type InspectorTab } fr
 import { foldAnswer } from "@/research/model"
 import { Working } from "@/research/Working"
 import { provenanceOf } from "@/lib/provenance"
-import { boardTitles, useBoardScripted } from "@/lib/scripted"
+import { groupRecords, stamp } from "@/lib/records"
+import { boardsRead, boardTitles, useBoardScripted } from "@/lib/scripted"
 import { linkTo, setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
 import { openHelp } from "@/lib/shell"
 
@@ -306,10 +308,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                       {/* The engine's note says who wrote an AI answer. For the other two kinds the line above already says what they are. */}
                       {t.reply.note && t.reply.mode === "ai" && <p className="muted small answer-note">{t.reply.note}</p>}
                       {t.reply.runs && t.reply.runs.length > 0 && (
-                        <section className="answer-sources" aria-label="Sources">
-                          <h2>Sources</h2>
-                          <p className="muted small">Saved research this answer used. Open one to read it and see how each statement in it was checked.</p>
-                          <SourceRows runs={t.reply.runs} onOpen={openRun} />
+                        // Only an AI answer used these runs. Any other reply lists runs that share words with the question, and says only that.
+                        <section className="answer-sources" aria-label={sourcesWords(t.reply.mode).heading}>
+                          <h2>{sourcesWords(t.reply.mode).heading}</h2>
+                          <p className="muted small">{sourcesWords(t.reply.mode).about}</p>
+                          <SourceRows runs={t.reply.runs} onOpen={openRun} label={sourcesWords(t.reply.mode).label} />
                         </section>
                       )}
                       {t.reply.plan && (
@@ -378,39 +381,74 @@ const atLatestQuestion = (bottom: number, { scrollElement, contentElement }: { s
   return Math.max(0, Math.min(bottom, top - 12))
 }
 
-interface Listed { startedAt?: number; scripted?: boolean; solver?: string; task?: string }
+interface Listed { startedAt?: number; brief?: string; model?: string; solver?: string; task?: string }
+type Cited = NonNullable<ChatReply["runs"]>[number]
+/** How long the rows wait for the runs' own titles before they show with what is known. */
+const TITLES_WAIT_MS = 4000
 /**
- * The saved research an answer used, as numbered rows a person can tell apart: the question it was about (the
- * run's own title when it has one), when it ran, and whether it was real or a practice run, each from the run's
- * own record. The first five show; the rest are one press away.
+ * Saved runs as numbered rows a person can tell apart: the question each was about (the run's own title when it
+ * has one), when it ran, and how it was made, each from the run's own record. Runs of the same brief made the same
+ * way are one row, the newest, with the others folded under it (the same grouping as Saved research). The key is
+ * the record's own: a review's brief file, a task run's task, solver and model. A similar title is never enough,
+ * and a run that says less than that stands alone. The rows wait until the runs have said their titles, so the
+ * text does not change under the reader. The first three show; the rest are one press away.
  */
-function SourceRows({ runs, onOpen, label = "Saved research this answer used" }: { runs: NonNullable<ChatReply["runs"]>; onOpen: (kind: "swarm" | "board", id: string) => void; label?: string }) {
+function SourceRows({ runs, onOpen, label }: { runs: Cited[]; onOpen: (kind: "swarm" | "board", id: string) => void; label: string }) {
   const [all, setAll] = useState(false)
-  const [listed, setListed] = useState<Record<string, Listed>>({})
+  const [listed, setListed] = useState<Record<string, Listed>>()
+  const [waited, setWaited] = useState(false)
   useEffect(() => {
     let stale = false
     const read = (path: string) => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : []), () => [])
+    const text = (v: unknown) => (typeof v === "string" && v ? v : undefined)
     void Promise.all([read("/api/runs"), read("/api/glhf/runs")]).then(([board, swarm]: unknown[]) => {
       if (stale) return
       const out: Record<string, Listed> = {}
-      for (const r of Array.isArray(board) ? (board as { id?: unknown; startedAt?: unknown }[]) : []) if (typeof r?.id === "string") out[`board:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined }
+      for (const r of Array.isArray(board) ? (board as { id?: unknown; startedAt?: unknown; brief?: unknown }[]) : []) if (typeof r?.id === "string") out[`board:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined, brief: text(r.brief) }
       for (const r of Array.isArray(swarm) ? (swarm as { id?: unknown; startedAt?: unknown; model?: unknown; solver?: unknown; task?: unknown }[]) : [])
-        if (typeof r?.id === "string") out[`swarm:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined, scripted: typeof r.model === "string" ? r.model === "mock" : undefined }
+        if (typeof r?.id === "string") out[`swarm:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined, model: text(r.model), solver: text(r.solver), task: text(r.task) }
       setListed(out)
     })
-    return () => { stale = true }
+    const timer = window.setTimeout(() => { if (!stale) setWaited(true) }, TITLES_WAIT_MS)
+    return () => { stale = true; window.clearTimeout(timer) }
   }, [])
-  const shown = all ? runs : runs.slice(0, 3)
-  const boardIds = shown.filter((r) => r.kind === "board").map((r) => r.id)
+  const boardIds = useMemo(() => runs.filter((r) => r.kind === "board").map((r) => r.id), [runs])
   const flags = useBoardScripted(boardIds)
-  const titles = boardTitles(boardIds)
+  const rowOf = (r: Cited) => listed?.[`${r.kind}:${r.id}`]
+  // How a run was made, from its own record: a review's first event, a task run's model. It stays Practice whatever the Next run switch says.
+  const madeBy = (r: Cited) => (r.kind === "board" ? provenanceOf(flags[r.id] === undefined ? undefined : { scripted: flags[r.id] }) : provenanceOf({ model: rowOf(r)?.model }))
+
+  // Titles and groups are worked out once, when the engine's lists and every review's first event have answered
+  // (or after a short wait, with what is known by then). After that they do not change.
+  const [rows, setRows] = useState<{ latest: Cited; title: string; history: Cited[] }[]>()
+  const ready = waited || (listed !== undefined && boardsRead(boardIds))
+  if (ready && !rows) {
+    const titles = boardTitles(boardIds)
+    const keyOf = (r: Cited): string | undefined => {
+      const row = rowOf(r), made = madeBy(r)
+      if (!row || !made) return undefined
+      if (r.kind === "board") return row.brief ? `board|${made}|${row.brief}` : undefined
+      return row.task && row.solver && row.model ? `swarm|${made}|${row.task}|${row.solver}|${row.model}` : undefined
+    }
+    const place = new Map(runs.map((r, i) => [r, i]))
+    setRows(groupRecords(runs, keyOf, (r) => rowOf(r)?.startedAt ?? 0)
+      .sort((a, b) => Math.min(...[a.latest, ...a.history].map((r) => place.get(r)!)) - Math.min(...[b.latest, ...b.history].map((r) => place.get(r)!))) // the engine's order of the rows is kept
+      .map((g) => ({ latest: g.latest, history: g.history, title: (g.latest.kind === "board" && titles[g.latest.id]) || runTitle(g.latest.title) })))
+  }
+  const kindWord = (r: Cited) => (r.kind === "swarm" ? "One agent or a team" : "Review")
+  const shown = rows ? (all ? rows : rows.slice(0, 3)) : []
   return (
     <>
-      <ol className="source-rows" aria-label={label}>
-        {shown.map((r, i) => {
-          const row = listed[`${r.kind}:${r.id}`]
-          const scripted = r.kind === "board" ? flags[r.id] : row?.scripted
-          const title = (r.kind === "board" && titles[r.id]) || runTitle(r.title)
+      {rows && rows.length < runs.length && <p className="muted small source-grouped">{runs.length} runs in {rows.length} row{rows.length === 1 ? "" : "s"}. Runs of the same brief are together.</p>}
+      <ol className="source-rows" aria-label={label} aria-busy={!rows || undefined}>
+        {!rows && runs.slice(0, 3).map((r, i) => (
+          <li key={`${r.kind}:${r.id}`} className="source-wait">
+            <span className="source-n" aria-hidden="true">{i + 1}</span>
+            <span className="source-what"><span className="source-line" aria-hidden="true" /><span className="sr-only">{i === 0 ? "Loading saved research…" : ""}</span></span>
+          </li>
+        ))}
+        {shown.map(({ latest: r, title, history }, i) => {
+          const row = rowOf(r)
           return (
             <li key={`${r.kind}:${r.id}`}>
               <button type="button" onClick={() => onOpen(r.kind, r.id)} title={`${title}\nRun id: ${r.id}`}>
@@ -418,19 +456,27 @@ function SourceRows({ runs, onOpen, label = "Saved research this answer used" }:
                 <span className="source-what">
                   <b>{title}</b>
                   <span className="muted small source-meta">
-                    <span>{[r.kind === "swarm" ? "One agent or a team" : "Review", row?.startedAt !== undefined && plainWhen(row.startedAt)].filter(Boolean).join(" · ")}</span>
-                    {/* How this run was made, from its own record: it stays Practice whatever the Next run switch says. */}
-                    <Provenance kind={provenanceOf(scripted === undefined ? undefined : { scripted })} compact />
+                    <span>{[kindWord(r), row?.startedAt !== undefined && plainWhen(row.startedAt)].filter(Boolean).join(" · ")}</span>
+                    <Provenance kind={madeBy(r)} compact />
                   </span>
                   {r.why && <span className="muted small source-why">{r.why}</span>}
                 </span>
                 <span className="source-open small" aria-hidden="true">Open</span>
               </button>
+              {history.length > 0 && (
+                // The older runs of the same brief: each with its own time and its own badge, and each can be opened.
+                <details className="record-history source-history">
+                  <summary><span className="mono">{history.length + 1}</span> runs, latest <span className="mono">{stamp(row?.startedAt)}</span></summary>
+                  <RecordList nested noun="earlier run" label={`Earlier runs of: ${title}`} items={history.map((h): RecordItem => ({
+                    key: `${h.kind}:${h.id}`, title, type: h.kind === "swarm" ? "Task run" : "Team review", when: rowOf(h)?.startedAt, provenance: madeBy(h), onOpen: () => onOpen(h.kind, h.id),
+                  }))} />
+                </details>
+              )}
             </li>
           )
         })}
       </ol>
-      {runs.length > 3 && <button type="button" className="link-btn source-all" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `View all ${runs.length}`}</button>}
+      {rows && rows.length > 3 && <button type="button" className="link-btn source-all" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `View all ${rows.length}`}</button>}
     </>
   )
 }

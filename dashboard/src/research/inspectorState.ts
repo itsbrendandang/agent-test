@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react"
 import type { AnswerState, ResearchEvent } from "./model"
 
-export type InspectorTab = "evidence" | "results" | "activity" | "lab"
+export type InspectorTab = "evidence" | "hypotheses" | "results" | "activity" | "lab"
 
 /** The tabs that have something to show for this answer. */
 export function tabsOf(s: AnswerState | undefined, events: ResearchEvent[]): InspectorTab[] {
   if (!s) return []
   return [
     ...(s.sources.length || s.statements.length || s.notes.length || s.selection ? ["evidence" as const] : []),
+    ...(s.hypotheses.length ? ["hypotheses" as const] : []),
     ...(s.artifacts.length ? ["results" as const] : []),
     ...(s.steps.length || s.status !== "starting" ? ["activity" as const] : []),
     ...(events.length && s.steps.length ? ["lab" as const] : []),

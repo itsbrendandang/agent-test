@@ -6,7 +6,8 @@ import { T0, fixtureModel } from "./fixtures/streams"
 import { Lab } from "./Lab"
 import { LabPanel } from "./LabPanel"
 import { LabScene } from "./LabScene"
-import { CHARACTERS, emptyLab, type LabModel, type Trip } from "./model"
+import { CHARACTERS, WIDE, characterOf, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
+import { stationPoint } from "./motion"
 
 // A stand-in for the browser's frames: nothing runs until a test asks for it.
 let pending = new Map<number, FrameRequestCallback>(), nextId = 1, now = 0
@@ -20,8 +21,14 @@ beforeEach(() => {
 })
 afterEach(() => { Object.defineProperty(document, "hidden", { configurable: true, value: false }) })
 
+/** The name plate under a desk: the control that selects a teammate, and what a screen reader hears. */
 const agent = (name: string) => screen.getByRole("button", { name: new RegExp(`^Inspect ${name}:`) })
+/** The teammate's figure, which is what moves, and the chip above its head. */
+const walker = (id: CharacterId) => document.querySelector<HTMLElement>(`[data-walker="${id}"]`)!
+const chip = (id: CharacterId) => document.querySelector<HTMLElement>(`[data-chip="${id}"]`)!
 const place = (el: HTMLElement) => `${el.style.left} ${el.style.top}`
+/** Where a teammate's desk is, written the way the page writes a place (jsdom rounds what it stores). */
+const homeOf = (id: CharacterId) => { const p = stationPoint(characterOf(id)), el = document.createElement("i"); el.style.left = `${(p.x / WIDE.width) * 100}%`; el.style.top = `${(p.y / WIDE.height) * 100}%`; return place(el) }
 const out: Trip = { id: "t1", kind: "fetch", room: "review", label: "Checking", short: "…", at: T0 }
 const back: Trip = { ...out, back: T0 + 1000, outcome: "carried", label: "✓ Supported: “a statement”", short: "✓ Supported" }
 const quiet = (trips: Trip[] = [], more: Partial<LabModel["characters"]["guardian"]> = {}): LabModel => {
@@ -34,55 +41,80 @@ describe("LabScene", () => {
   it("shows the six rooms and the twelve teammates at their desks when nothing is running, and asks for no frame", () => {
     render(<LabScene model={emptyLab()} />)
     for (const room of ["Discovery", "Planning", "Experiment bench", "Evidence review", "Quality control", "Report studio"]) expect(screen.getByText(room)).toBeInTheDocument()
-    for (const c of CHARACTERS) expect(agent(c.name)).toHaveAttribute("data-state", "idle")
+    for (const c of CHARACTERS) {
+      expect(agent(c.name)).toHaveAttribute("data-state", "idle")
+      expect(place(walker(c.id))).toBe(homeOf(c.id))
+      expect(chip(c.id)).not.toBeVisible() // idle says nothing
+    }
     expect(screen.getByText("Team idle")).toBeInTheDocument()
-    expect(place(agent("Scout"))).toBe("14.5% 22.2973%") // Anh's first desk in Discovery
+    expect(place(walker("scout"))).toBe("14.5% 23.5135%") // Anh's first desk in Discovery
     expect(requestAnimationFrame).not.toHaveBeenCalled()
   })
 
   it("moves nobody without an event: the same model again asks for no frame", () => {
     const model = quiet()
     const { rerender } = render(<LabScene model={model} clock={T0} />)
-    const before = CHARACTERS.map((c) => place(agent(c.name)))
+    const before = CHARACTERS.map((c) => place(walker(c.id)))
     rerender(<LabScene model={{ ...model }} clock={T0 + 60_000} />)
     rerender(<LabScene model={{ ...model, characters: { ...model.characters } }} clock={T0 + 120_000} />)
     expect(requestAnimationFrame).not.toHaveBeenCalled()
-    expect(CHARACTERS.map((c) => place(agent(c.name)))).toEqual(before)
+    expect(CHARACTERS.map((c) => place(walker(c.id)))).toEqual(before)
   })
 
-  it("shows every state on the teammate in words or a mark, not by colour alone", () => {
+  it("shows every state on the teammate in a mark and a word, not by colour alone", () => {
     render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
     expect(agent("Auditor")).toHaveAttribute("data-state", "working")
     expect(agent("Auditor")).toHaveAccessibleName(/Auditor: Working\. Screening 6 results\./)
-    expect(within(agent("Auditor")).getByText(/…/)).toBeInTheDocument()
-    expect(agent("Scout")).toHaveAttribute("data-state", "fetching")
+    expect(chip("auditor")).toHaveTextContent("… working")
+    expect(chip("scout")).toHaveTextContent("⇄ fetching")
+    expect(chip("navigator")).toHaveTextContent("→ handed off")
     expect(agent("Navigator")).toHaveAccessibleName(/Handed off/)
-    expect(within(agent("Librarian")).getByText(/✓/)).toBeInTheDocument()
+    expect(chip("librarian")).toHaveTextContent("✓ done")
     // failed: the word, a mark that stays, and the reason for a screen reader
-    const reporter = agent("Reporter")
-    expect(reporter).toHaveAttribute("data-state", "failed")
-    expect(within(reporter).getByText("failed")).toBeInTheDocument()
-    expect(within(reporter).getByText("!")).toBeInTheDocument()
-    expect(reporter).toHaveAccessibleName(/Failed\. Writing the answer: did not work/)
-    expect(within(agent("Reviser")).getByText("cancelled")).toBeInTheDocument()
-    // not part of this run: said in words, and never shown as working
+    expect(agent("Reporter")).toHaveAttribute("data-state", "failed")
+    expect(chip("reporter")).toHaveTextContent("✕ failed")
+    expect(within(walker("reporter")).getByText("!")).toBeInTheDocument()
+    expect(agent("Reporter")).toHaveAccessibleName(/Failed\. Writing the answer: did not work/)
+    expect(chip("reviser")).toHaveTextContent("■ cancelled")
+    // not part of this run: quiet on the map (no chip, no extra words), said in words to a screen reader and in the tooltip
     const proposer = agent("Proposer")
     expect(proposer).toHaveAttribute("data-in-run", "false")
-    expect(within(proposer).getByText("not in this run")).toBeInTheDocument()
     expect(proposer).toHaveAccessibleName("Inspect Proposer: Not in this run.")
+    expect(proposer).toHaveTextContent(/^Proposer$/)
+    expect(chip("proposer")).not.toBeVisible()
+    expect(walker("proposer")).toHaveAttribute("title", "Proposer: not in this run")
     // a visiting specialist under its real name
     expect(screen.getByRole("img", { name: /Visitor Toxicologist: Working/ })).toBeInTheDocument()
     expect(screen.getByText("Team at work")).toBeInTheDocument()
   })
 
+  it("lets the keyboard reach and select every teammate", () => {
+    const picked: string[] = []
+    render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} onSelect={(id) => picked.push(id)} />)
+    const plates = CHARACTERS.map((c) => document.querySelector<HTMLButtonElement>(`button[data-agent="${c.id}"]`)!)
+    for (const plate of plates) { expect(plate.tabIndex).toBe(0); plate.focus(); expect(document.activeElement).toBe(plate); fireEvent.click(plate) }
+    expect(picked).toEqual(CHARACTERS.map((c) => c.id)) // also the ones that are not in this run
+  })
+
+  it("keeps each name plate under its own desk, so no caption can lie on another", () => {
+    render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
+    const spots = CHARACTERS.map((c) => { const el = document.querySelector<HTMLElement>(`button[data-agent="${c.id}"]`)!; return [parseFloat(el.style.left), parseFloat(el.style.top)] })
+    for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
+      const dx = Math.abs(spots[i][0] - spots[j][0]) * 10, dy = Math.abs(spots[i][1] - spots[j][1]) * 7.4 // map units
+      expect(dx >= 185 || dy >= 200, `${CHARACTERS[i].name} and ${CHARACTERS[j].name}`).toBe(true)
+    }
+  })
+
   it("walks a teammate to the room for a fetch, waits there, then carries the parcel home", async () => {
     const { rerender } = render(<LabScene model={quiet([out])} clock={T0} />)
-    const guardian = agent("Guardian"), home = place(guardian)
+    const guardian = walker("guardian"), home = place(guardian)
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
     await frames(20)
     expect(place(guardian)).not.toBe(home)
     expect(guardian).toHaveAttribute("data-moving", "true")
     expect(guardian).toHaveAttribute("data-carrying", "false")
+    expect(chip("guardian")).toHaveTextContent("Guardian ⇄") // away from its desk, the chip says who it is
+    expect(place(document.querySelector<HTMLElement>('button[data-agent="guardian"]')!)).not.toBe(place(guardian)) // the name plate stays at the desk
     await frames(1500)
     // at the pick-up point in Evidence review, waiting: no more frames are asked for
     expect(guardian).toHaveAttribute("data-moving", "false")
@@ -93,12 +125,26 @@ describe("LabScene", () => {
     rerender(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(100)
     expect(guardian).toHaveAttribute("data-carrying", "true")
-    expect(within(guardian).getByText("✓ Supported")).toBeInTheDocument()
+    expect(chip("guardian")).toHaveTextContent("Guardian: ✓ Supported")
     await frames(1500)
     expect(place(guardian)).toBe(home)
     expect(place(guardian)).not.toBe(waitingAt)
     expect(guardian).toHaveAttribute("data-carrying", "false")
+    expect(chip("guardian")).toHaveTextContent("⇄ fetching") // back at its desk: the state alone
     expect(pending.size).toBe(0) // everyone is home: the loop ended itself
+  })
+
+  it("moves a walker's chip to a free side when another teammate is in the way", async () => {
+    // the Reviser stands at the desk beside the Guardian's; the Guardian's chip above its head is taken as it walks past
+    const model = quiet([out])
+    model.characters.reviser = { ...model.characters.reviser, state: "working", doing: "Revising." }
+    render(<LabScene model={model} clock={T0} />)
+    const tops = new Set<number>()
+    for (let i = 0; i < 40; i++) { await frames(1); const c = chip("guardian"), w = walker("guardian"); tops.add(Math.round((parseFloat(c.style.top) - parseFloat(w.style.top)) * 10)) }
+    expect(tops.size).toBeGreaterThanOrEqual(1)
+    // whatever side it takes, it never sits on the Reviser's chip
+    const a = chip("guardian"), b = chip("reviser")
+    expect(Math.abs(parseFloat(a.style.left) - parseFloat(b.style.left)) > 2 || Math.abs(parseFloat(a.style.top) - parseFloat(b.style.top)) > 2).toBe(true)
   })
 
   it("does not walk a trip that is history when the scene first sees it", () => {
@@ -109,23 +155,22 @@ describe("LabScene", () => {
   it("does not walk again when a replay jumps (settleKey changes)", async () => {
     const { rerender } = render(<LabScene model={quiet([out])} clock={T0} settleKey={0} />)
     await frames(30)
-    const guardian = agent("Guardian")
     rerender(<LabScene model={quiet([back, { ...back, id: "t2" }])} clock={T0 + 1000} settleKey={1} />)
-    expect(place(guardian)).toBe("33.5% 87.1622%") // back at its desk at once
+    expect(place(walker("guardian"))).toBe(homeOf("guardian")) // back at its desk at once
     expect(pending.size).toBe(0)
   })
 
   it("with reduced motion nobody walks, and the state and the parcel still show", async () => {
     motion(true)
     const { rerender } = render(<LabScene model={quiet([out])} clock={T0} />)
-    const guardian = agent("Guardian"), home = place(guardian)
+    const guardian = walker("guardian"), home = place(guardian)
     rerender(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(50)
     expect(requestAnimationFrame).not.toHaveBeenCalled()
     expect(place(guardian)).toBe(home)
-    expect(guardian).toHaveAttribute("data-state", "fetching")
+    expect(agent("Guardian")).toHaveAttribute("data-state", "fetching")
     expect(guardian).toHaveAttribute("data-carrying", "true")
-    expect(within(guardian).getByText("✓ Supported")).toBeInTheDocument()
+    expect(chip("guardian")).toHaveTextContent("✓ Supported")
     const pause = screen.getByRole("button", { name: "Reduced motion enabled" })
     expect(pause).toBeDisabled()
     expect(pause).toHaveAttribute("aria-pressed", "true")
@@ -134,7 +179,7 @@ describe("LabScene", () => {
   it("Pause motion stops the walk where it is and Resume motion goes on; the choice is remembered", async () => {
     const { unmount } = render(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(20)
-    const guardian = agent("Guardian")
+    const guardian = walker("guardian")
     fireEvent.click(screen.getByRole("button", { name: "Pause motion" }))
     const held = place(guardian)
     await frames(50)
@@ -153,7 +198,7 @@ describe("LabScene", () => {
   it("asks for no frames while the tab is hidden and goes on when it is shown again", async () => {
     render(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(10)
-    const guardian = agent("Guardian")
+    const guardian = walker("guardian")
     Object.defineProperty(document, "hidden", { configurable: true, value: true })
     act(() => { document.dispatchEvent(new Event("visibilitychange")) })
     expect(pending.size).toBe(0)
@@ -180,13 +225,13 @@ describe("LabScene", () => {
   it("sends everyone home when the run is cancelled", async () => {
     const { rerender } = render(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(60)
-    const guardian = agent("Guardian")
-    expect(place(guardian)).not.toBe("33.5% 87.1622%")
+    const guardian = walker("guardian")
+    expect(place(guardian)).not.toBe(homeOf("guardian"))
     rerender(<LabScene model={{ ...quiet([back], { state: "cancelled", doing: "Cancelled: back at its desk." }), status: "cancelled" }} clock={T0 + 2000} />)
     await frames(1500)
-    expect(place(guardian)).toBe("33.5% 87.1622%")
+    expect(place(guardian)).toBe(homeOf("guardian"))
     expect(guardian).toHaveAttribute("data-carrying", "false")
-    expect(within(guardian).getByText("cancelled")).toBeInTheDocument()
+    expect(chip("guardian")).toHaveTextContent("■ cancelled")
     expect(screen.getByText("Run cancelled")).toBeInTheDocument()
   })
 
@@ -196,6 +241,23 @@ describe("LabScene", () => {
     render(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     expect(agent("Guardian")).toHaveAttribute("data-state", "fetching")
     expect(screen.getByRole("button", { name: "Motion not available" })).toBeDisabled()
+  })
+
+  it("draws the same rooms in one column when asked for the narrow map, with every teammate still on it", () => {
+    render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} layout="tall" />)
+    expect(document.querySelector(".lab-scene")).toHaveAttribute("data-layout", "tall")
+    for (const c of CHARACTERS) {
+      const w = walker(c.id)
+      expect(parseFloat(w.style.left)).toBeLessThan(75) // all in the one column, left of the corridor
+      expect(parseFloat(w.style.top)).toBeGreaterThan(0); expect(parseFloat(w.style.top)).toBeLessThan(100)
+    }
+    expect(screen.getAllByRole("button", { name: /^Inspect / })).toHaveLength(12)
+  })
+
+  it("shows the replay controls it is given in the bar under the map, beside Pause motion", () => {
+    render(<LabScene model={emptyLab()} footer={<span>player goes here</span>} />)
+    const bar = screen.getByText("player goes here").parentElement!
+    expect(within(bar).getByRole("button", { name: "Pause motion" })).toBeInTheDocument()
   })
 })
 
@@ -236,7 +298,7 @@ describe("LabPanel and Lab", () => {
     model.log.push({ id: "x", at: T0, text: "<script>alert(1)</script>" })
     const { container } = render(<Lab model={model} clock={T0 + 3_600_000} />)
     fireEvent.click(agent("Scout"))
-    expect(container.querySelector("img, script, b:not(.lab-visitors b)")).toBeNull()
+    expect(container.querySelector("img, script, .lab-facts b, .lab-log b")).toBeNull()
     expect(screen.getByText("<script>alert(1)</script>")).toBeInTheDocument()
   })
 

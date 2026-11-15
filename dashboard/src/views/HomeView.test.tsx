@@ -18,7 +18,7 @@ const view_practice = (card: ReturnType<typeof within>) => card.getAllByText("Pr
 function setup(catalog: Catalog | null, status?: Parameters<typeof boardScriptedWhy>[0], why?: string) {
   const onRetry = vi.fn()
   const view = render(<CatalogPanel catalog={catalog} why={why} boardWhy={catalog ? boardScriptedWhy(status, catalog.providers) : undefined} onRetry={onRetry} />)
-  return { view, onRetry, panel: within(screen.getByRole("complementary", { name: "What this can use" })) }
+  return { view, onRetry, panel: within(screen.getByRole("complementary", { name: "Connections" })) }
 }
 
 /** Event streams the page opened (board run progress). jsdom has no EventSource. */
@@ -584,24 +584,23 @@ describe("effort", () => {
   })
 })
 
-describe("what this can use", () => {
-  it("lists providers and Exa with key present or missing, and never a key", () => {
+describe("Connections (the setup panel, in Settings under Technical)", () => {
+  it("lists providers and Exa as Connected or Not connected, and never a key", () => {
     const { panel, view } = setup(CATALOG_ON)
     const row = (name: string) => panel.getByText(name).closest("li")!
-    expect(row("Claude (Anthropic)")).toHaveTextContent("key present")
-    expect(row("OpenAI")).toHaveTextContent("key missing")
-    expect(row("Web search (Exa)")).toHaveTextContent("key missing")
-    expect(panel.getByText("Real: costs money")).toBeInTheDocument()
+    expect(within(row("Claude (Anthropic)")).getByText("Connected")).toHaveAttribute("data-kind", "success")
+    expect(row("OpenAI")).toHaveTextContent("Not connected")
+    expect(row("Web search (Exa)")).toHaveTextContent("Not connected")
+    expect(view.container).not.toHaveTextContent(/costs money|can spend money|key present|key missing/) // the cost is said once, in Run mode
     expect(view.container.querySelectorAll("input[type=password], input[type=text], input[type=search]")).toHaveLength(0)
   })
-  it("says paid calls are off and how a person turns them on", () => {
+  it("in Demo a key that is there still reads Connected, in a neutral pill whose tooltip says it is not used", () => {
     const { panel } = setup(CATALOG_OFF)
-    expect(panel.getByText("Demo: practice runs only")).toBeInTheDocument()
-    expect(panel.getByRole("region", { name: "Paid calls" })).toHaveTextContent("Real")
-    // a key that is present is not shown as usable while paid calls are off
     const claude = panel.getByText("Claude (Anthropic)").closest("li")!
-    expect(within(claude).getByText("key present · off")).toHaveAttribute("data-kind", "neutral")
-    expect(panel.getByText("OpenAI").closest("li")).toHaveTextContent("key missing")
+    expect(within(claude).getByText("Connected")).toHaveAttribute("data-kind", "neutral")
+    expect(within(claude).getByText("Connected")).toHaveAttribute("title", "Connected, and not used while the run mode is Demo.")
+    expect(panel.getByText("OpenAI").closest("li")).toHaveTextContent("Not connected")
+    expect(panel.queryByText(/Demo: practice runs only|Real: costs money/)).toBeNull()
   })
   it("says plainly when board runs can only be scripted, and why", () => {
     const { panel } = setup(CATALOG_ON, { mock: true, paidCalls: true, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: false }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } })
@@ -609,11 +608,13 @@ describe("what this can use", () => {
   })
   it("says nothing of the kind when the board can use real models", () => {
     const { panel } = setup(CATALOG_ON, { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } })
-    expect(panel.getByText("Real: costs money")).toBeInTheDocument()
     expect(panel.queryByRole("note")).toBeNull()
   })
-  it("groups agents as Board and Specialists, with triggers", () => {
+  it("puts Board, Specialists and Skills together under one Agents and skills group, with triggers", () => {
     const { panel } = setup(CATALOG_ON)
+    const group = panel.getByRole("region", { name: "Agents and skills" })
+    expect(within(group).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Agents and skills"]) // no separate Skills heading
+    expect([...group.querySelectorAll("details > summary")].map((x) => x.textContent!.replace(/\s*\(.*$/, ""))).toEqual(["Board", "Specialists", "Skills"])
     const board = panel.getByText("Board").closest("details")!
     expect(board).toHaveTextContent("(2)")
     expect(board).toHaveTextContent("Lead Scientist")
@@ -655,7 +656,7 @@ describe("the conversation has no setup panel", () => {
   it("shows no setup cards, key status or recent-results strip on Research: those are in Settings and Saved research", async () => {
     home(CATALOG_ON)
     await screen.findByRole("radio", { name: "Standard" })
-    expect(screen.queryByRole("complementary", { name: "What this can use" })).toBeNull()
+    expect(screen.queryByRole("complementary", { name: "Connections" })).toBeNull()
     expect(screen.queryByRole("region", { name: "What was checked" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Recent results and setup" })).toBeNull()
   })

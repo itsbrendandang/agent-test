@@ -309,6 +309,30 @@ describe("a research answer (answerLab)", () => {
     expect(m.log[0].text).toBe("The answer started (practice: fixed example text, nothing is searched).")
   })
 
+  it("gives the hypotheses step to the Proposer and has the Guardian carry each hypothesis's mark there", () => {
+    const h = (seq: number, type: string, fields: Record<string, unknown>): LabEvent => ({ seq, at: T0 + seq * 1000, run: "a-h", type, ...fields })
+    const events = [
+      REAL_ANSWER[0], REAL_ANSWER[1], REAL_ANSWER[2],
+      h(4, "step.started", { step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test" }),
+      h(5, "hypotheses", { items: [{ id: "h1", text: "Placeholder hypothesis one", supportIf: "x", contradictIf: "y", origin: "planner" }, { id: "h2", text: "Placeholder hypothesis two", supportIf: "x", contradictIf: "y", origin: "planner" }], needed: true }),
+      h(6, "step.finished", { step: "hypotheses", status: "completed", ms: 900, summary: "2 hypotheses." }),
+      h(7, "step.started", { step: "search:exa:1", kind: "search", label: "Searching the web", provider: "exa", query: "q", hypothesis: "h1" }),
+      h(8, "step.started", { step: "search:exa:2", kind: "search", label: "Searching the web", provider: "exa", query: "q2", hypothesis: "h2" }),
+      h(9, "hypothesis.checked", { id: "h1", verdict: "verified", for: [1, 2], against: [], forStatements: 2, againstStatements: 0 }),
+      h(10, "hypothesis.checked", { id: "h2", verdict: "contradicted", for: [], against: [3], forStatements: 0, againstStatements: 1 }),
+    ]
+    const m = answerLab(events)
+    expect(m.characters.proposer).toMatchObject({ inRun: true, state: "handing-off", doing: "Gave the hypotheses to test to the Scout." })
+    expect(m.characters.proposer.standsFor).toMatch(/hypotheses step of a Standard answer/)
+    expect(trips(m, "navigator").map((t) => t.to)).toEqual(["proposer"]) // the plan goes to the hypotheses first
+    expect(trips(m, "scout").filter((t) => t.kind === "fetch")).toHaveLength(2) // the two hypotheses' web searches overlap
+    expect(trips(m, "guardian").map((t) => [t.kind, t.to, t.short])).toEqual([["handoff", "proposer", "h1 ✓"], ["handoff", "proposer", "h2 ✕"]])
+    expect(trips(m, "guardian")[0].label).toBe("the mark of hypothesis h1: ✓ Supported (2 sources for, 0 against)")
+    expect(m.log.some((l) => l.text === "2 hypotheses set up to test against published sources.")).toBe(true)
+    // an answer without the step keeps the Proposer out of the run
+    expect(answerLab(REAL_ANSWER).characters.proposer.inRun).toBe(false)
+  })
+
   it("waits while a follow-up is queued", () => {
     const m = answerLab([{ seq: 1, at: T0, type: "research.queued", after: "a-1" }])
     expect(m).toMatchObject({ status: "waiting", note: "Waiting for the answer before it to finish." })

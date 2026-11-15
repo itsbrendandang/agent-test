@@ -9,6 +9,7 @@ import { provenanceOf } from "@/lib/provenance"
 import { plainDuration } from "@/lib/format"
 import { runLimit, safeUrl, spent } from "@/lib/words"
 import { Activity } from "./Activity"
+import { Hypotheses } from "./Hypotheses"
 import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
 import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
@@ -124,6 +125,8 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
         <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
 
+      <Hypotheses state={s} onSource={goTo} />
+      {s.hypotheses.length === 0 && s.hypothesesNote && !working && <p className="muted small">No hypotheses were set up: {s.hypothesesNote}</p>}
       {s.markdown && <SafeMarkdown className="answer-text" inline={inline}>{marked.text}</SafeMarkdown>}
       {!s.complete && s.markdown && <p className="muted small">Still being written. It has not been checked yet.</p>}
 

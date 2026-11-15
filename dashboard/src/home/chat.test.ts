@@ -4,7 +4,7 @@ import { routes } from "@/test/engine"
 import { ChatRefused, getCatalog, sendChat, startPlan } from "./api"
 import {
   boardScriptedWhy, keyOfModel, chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
-  MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, type Turn,
+  MODE_LABEL, refuseText, replanRequest, sourcesWords, saveEffort, saveTurns, startBlock, startRequest, type Turn,
 } from "./chat"
 
 const turns: Turn[] = [
@@ -15,6 +15,17 @@ const turns: Turn[] = [
 describe("mode labels", () => {
   it("say plainly whether a model wrote the reply", () => {
     expect(MODE_LABEL).toEqual({ ai: "AI answer", keyword: "Saved-research search", scripted: "Demo response" })
+  })
+})
+
+describe("the words over the saved runs under a reply", () => {
+  it("say 'this answer used' only for an AI answer; every other mode gets neutral words", () => {
+    expect(sourcesWords("ai")).toMatchObject({ heading: "Sources", label: "Saved research this answer used" })
+    for (const mode of ["scripted", "keyword", "something-new"]) {
+      const words = sourcesWords(mode)
+      expect(words.heading).toBe("Related saved research")
+      expect(`${words.heading} ${words.about} ${words.label}`).not.toMatch(/this answer used|sources|support/i)
+    }
   })
 })
 
@@ -114,7 +125,7 @@ describe("starting a plan", () => {
   it("a paid plan cannot start while paid calls are off, ticked or not, and says how a person turns them on", () => {
     for (const agreed of [false, true]) {
       expect(startBlock(PLAN, false, agreed)).toMatch(/you are in Demo mode/)
-      expect(startBlock(PLAN, false, agreed)).toMatch(/choose Real at the top of the page/)
+      expect(startBlock(PLAN, false, agreed)).toMatch(/choose Real in Settings/)
       expect(startBlock(PLAN, false, agreed)).toMatch(/asks you to confirm that it costs money/)
     }
   })
