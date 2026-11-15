@@ -24,6 +24,7 @@ import { ResearchAnswer, type Picked } from "@/research/Answer"
 import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
 import { Inspector } from "@/research/Inspector"
+import { ResearchLive } from "@/research/ResearchLive"
 import { InspectorPane, InspectorToggle } from "@/research/InspectorPane"
 import { loadInspector, saveInspector, tabsOf, useNarrow, type InspectorTab } from "@/research/inspectorState"
 import { foldAnswer } from "@/research/model"
@@ -199,6 +200,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
   const answers = turns.flatMap((t) => (t.role === "assistant" && "research" in t ? [t.research.id] : []))
   const inspected = inspect.id && answers.includes(inspect.id) ? inspect.id : answers[answers.length - 1]
+  // The live Agent Lab follows the answer being made, else the latest one.
+  const labAnswer = activeId ?? answers[answers.length - 1]
   const seenEvents = useSeenEvents(inspected)
   const seenState = useMemo(() => (seenEvents.length ? foldAnswer(seenEvents) : undefined), [seenEvents])
   const composer = seenState?.example ? (
@@ -279,85 +282,88 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           )}
 
           {!empty && (
-            <Conversation className="search-log" aria-live="polite" aria-label="Messages" targetScrollTop={atLatestQuestion}>
-              <ConversationContent className="search-thread">
-                {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
-                  <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
-                    <MessageContent>
-                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops fresh={started.includes(t.research.id)}
-                        onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
-                        picked={chosenItem?.id === t.research.id ? chosenItem : undefined} onPick={pick(t.research.id)}
-                        onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
-                        onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
-                        onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
-                        onReview={sending === undefined ? () => void send(t.research.question, "review") : undefined}
-                        onDone={(done) => setTurns((old) => old.map((o) => (o.id === t.id && o.content !== done.markdown ? { ...o, content: done.markdown } : o)))} />
-                    </MessageContent>
-                  </Message>
-                ) : t.reply.mode === "keyword" ? (
-                  // A keyword search of saved runs is a list of matches. It is not an answer and is never shown as one.
-                  <Message key={t.id} from="assistant" role="article" aria-label="Matching saved research" className="answer saved-matches">
-                    <MessageContent>
-                      <h2 className="matches-title">Matching saved research</h2>
-                      {t.reply.runs && t.reply.runs.length > 0 ? (
-                        <>
-                          <p className="matches-sum">
-                            Found {t.reply.runs.length} matching run{t.reply.runs.length === 1 ? "" : "s"}.{" "}
-                            <span className="muted" title="These runs contain words from your question. Nothing read or answered the question, and the list is not ranked by relevance.">Keyword matches from saved runs.</span>
-                          </p>
-                          <SourceRows runs={t.reply.runs} onOpen={openRun} label="Matching saved runs" />
-                        </>
-                      ) : <p className="matches-sum">No matching research found. Try a shorter question or different keywords.</p>}
-                      <div className="answer-actions">
-                        {canCopy && t.reply.runs && t.reply.runs.length > 0 && (
-                          <button type="button" className="link-btn" onClick={() => copy(t.id, t.reply.runs!.map((r) => `${runTitle(r.title)}\n${linkTo(r.kind, r.id)}`).join("\n\n"))}>{copied === t.id ? "Copied" : "Copy links"}</button>
+            <ResearchLive answer={labAnswer} fresh={!!labAnswer && started.includes(labAnswer)}>
+              <Conversation className="search-log" aria-live="polite" aria-label="Messages" targetScrollTop={atLatestQuestion}>
+                <ConversationContent className="search-thread">
+                  {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
+                    <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
+                      <MessageContent>
+                        <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops fresh={started.includes(t.research.id)}
+                          onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
+                          picked={chosenItem?.id === t.research.id ? chosenItem : undefined} onPick={pick(t.research.id)}
+                          onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
+                          onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
+                          onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
+                          onReview={sending === undefined ? () => void send(t.research.question, "review") : undefined}
+                          onDone={(done) => setTurns((old) => old.map((o) => (o.id === t.id && o.content !== done.markdown ? { ...o, content: done.markdown } : o)))} />
+                      </MessageContent>
+                    </Message>
+                  ) : t.reply.mode === "keyword" ? (
+                    // A keyword search of saved runs is a list of matches. It is not an answer and is never shown as one.
+                    <Message key={t.id} from="assistant" role="article" aria-label="Matching saved research" className="answer saved-matches">
+                      <MessageContent>
+                        <h2 className="matches-title">Matching saved research</h2>
+                        {t.reply.runs && t.reply.runs.length > 0 ? (
+                          <>
+                            <p className="matches-sum">
+                              Found {t.reply.runs.length} matching run{t.reply.runs.length === 1 ? "" : "s"}.{" "}
+                              <span className="muted" title="These runs contain words from your question. Nothing read or answered the question, and the list is not ranked by relevance.">Keyword matches from saved runs.</span>
+                            </p>
+                            <SourceRows runs={t.reply.runs} onOpen={openRun} label="Matching saved runs" />
+                          </>
+                        ) : <p className="matches-sum">No matching research found. Try a shorter question or different keywords.</p>}
+                        <div className="answer-actions">
+                          {canCopy && t.reply.runs && t.reply.runs.length > 0 && (
+                            <button type="button" className="link-btn" onClick={() => copy(t.id, t.reply.runs!.map((r) => `${runTitle(r.title)}\n${linkTo(r.kind, r.id)}`).join("\n\n"))}>{copied === t.id ? "Copied" : "Copy links"}</button>
+                          )}
+                          {t.id === lastAnswer && <button type="button" className="link-btn" disabled={sending !== undefined} onClick={() => retry(t.id)}>Search again</button>}
+                        </div>
+                      </MessageContent>
+                    </Message>
+                  ) : (
+                    <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
+                      <MessageContent>
+                        <p className="answer-kind">
+                          <span className="pill" data-kind={MODE_KIND[t.reply.mode]} data-mode={t.reply.mode === "scripted" ? "scripted" : undefined}>{MODE_LABEL[t.reply.mode]}</span>
+                          <span className="muted small">{MODE_MEANS[t.reply.mode]}</span>
+                        </p>
+                        <SafeMarkdown className="answer-text">{t.reply.reply}</SafeMarkdown>
+                        {/* The engine's note says who wrote an AI answer. For the other two kinds the line above already says what they are. */}
+                        {t.reply.note && t.reply.mode === "ai" && <p className="muted small answer-note">{t.reply.note}</p>}
+                        {t.reply.runs && t.reply.runs.length > 0 && (
+                          // Only an AI answer used these runs. Any other reply lists runs that share words with the question, and says only that.
+                          <section className="answer-sources" aria-label={sourcesWords(t.reply.mode).heading}>
+                            <h2>{sourcesWords(t.reply.mode).heading}</h2>
+                            <p className="muted small">{sourcesWords(t.reply.mode).about}</p>
+                            <SourceRows runs={t.reply.runs} onOpen={openRun} label={sourcesWords(t.reply.mode).label} />
+                          </section>
                         )}
-                        {t.id === lastAnswer && <button type="button" className="link-btn" disabled={sending !== undefined} onClick={() => retry(t.id)}>Search again</button>}
-                      </div>
-                    </MessageContent>
-                  </Message>
-                ) : (
-                  <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
-                    <MessageContent>
-                      <p className="answer-kind">
-                        <span className="pill" data-kind={MODE_KIND[t.reply.mode]} data-mode={t.reply.mode === "scripted" ? "scripted" : undefined}>{MODE_LABEL[t.reply.mode]}</span>
-                        <span className="muted small">{MODE_MEANS[t.reply.mode]}</span>
-                      </p>
-                      <SafeMarkdown className="answer-text">{t.reply.reply}</SafeMarkdown>
-                      {/* The engine's note says who wrote an AI answer. For the other two kinds the line above already says what they are. */}
-                      {t.reply.note && t.reply.mode === "ai" && <p className="muted small answer-note">{t.reply.note}</p>}
-                      {t.reply.runs && t.reply.runs.length > 0 && (
-                        // Only an AI answer used these runs. Any other reply lists runs that share words with the question, and says only that.
-                        <section className="answer-sources" aria-label={sourcesWords(t.reply.mode).heading}>
-                          <h2>{sourcesWords(t.reply.mode).heading}</h2>
-                          <p className="muted small">{sourcesWords(t.reply.mode).about}</p>
-                          <SourceRows runs={t.reply.runs} onOpen={openRun} label={sourcesWords(t.reply.mode).label} />
-                        </section>
-                      )}
-                      {t.reply.plan && (
-                        <PlanCard key={t.reply.plan.id} plan={t.reply.plan} state={t.plan ?? { state: "open" }} paidCalls={catalog?.paidCalls}
-                          searchProvider={catalog?.search.provider} literature={catalog?.search.literature?.available} efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
-                          onState={(s) => setPlan(t.id, s)} onOpenRun={(id) => openRun("board", id)} />
-                      )}
-                      <div className="answer-actions">
-                        {canCopy && <button type="button" className="link-btn" onClick={() => copy(t.id, t.reply.reply)}>{copied === t.id ? "Copied" : "Copy answer"}</button>}
-                        {t.id === lastAnswer && <button type="button" className="link-btn" disabled={sending !== undefined} onClick={() => retry(t.id)}>Ask again</button>}
-                      </div>
-                    </MessageContent>
-                  </Message>
-                ))}
-                {sending !== undefined && (
-                  <>
-                    <UserMessage>{sending}</UserMessage>
-                    {effort !== "deep" && canAnswer !== "missing" ? <AgentsWorking>Sending your question…</AgentsWorking> : <Working>{ catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the reply…"}</Working>}
-                  </>
-                )}
-              </ConversationContent>
-              <ConversationScrollButton className="btn home-latest" aria-label="Scroll to the latest message" title="Scroll to the latest message" />
-            </Conversation>
+                        {t.reply.plan && (
+                          <PlanCard key={t.reply.plan.id} plan={t.reply.plan} state={t.plan ?? { state: "open" }} paidCalls={catalog?.paidCalls}
+                            searchProvider={catalog?.search.provider} literature={catalog?.search.literature?.available} efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
+                            onState={(s) => setPlan(t.id, s)} onOpenRun={(id) => openRun("board", id)} />
+                        )}
+                        <div className="answer-actions">
+                          {canCopy && <button type="button" className="link-btn" onClick={() => copy(t.id, t.reply.reply)}>{copied === t.id ? "Copied" : "Copy answer"}</button>}
+                          {t.id === lastAnswer && <button type="button" className="link-btn" disabled={sending !== undefined} onClick={() => retry(t.id)}>Ask again</button>}
+                        </div>
+                      </MessageContent>
+                    </Message>
+                  ))}
+                  {sending !== undefined && (
+                    <>
+                      <UserMessage>{sending}</UserMessage>
+                      {effort !== "deep" && canAnswer !== "missing" ? <AgentsWorking>Sending your question…</AgentsWorking> : <Working>{ catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the reply…"}</Working>}
+                    </>
+                  )}
+                </ConversationContent>
+                <ConversationScrollButton className="btn home-latest" aria-label="Scroll to the latest message" title="Scroll to the latest message" />
+              </Conversation>
+              {composer}
+            </ResearchLive>
           )}
 
-          {composer}
+          {empty && composer}
 
           {empty && (
             <div className="search-start">
