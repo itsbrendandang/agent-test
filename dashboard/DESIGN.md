@@ -166,7 +166,8 @@ run)"), `plainWhen` ("today at 4:51 pm"). Scores keep three decimals.
 
 ## The conversation
 
-The discussion is the centre of Board and Compare: `TeamMessage` in `src/components/Thread.tsx`.
+The discussion is the centre of Compare: `TeamMessage` in `src/components/Thread.tsx`. Board's discussion is the
+Agent Log's group chat (`src/lab/EventLog.tsx`); see "One log" above.
 
 - Who speaks and their job in one plain line (`BOARD_JOB` in `words.ts`, written from `board/agents/*.md`; the
   swarm's from `src/swarm/roles.ts`). Do not invent what a role does.

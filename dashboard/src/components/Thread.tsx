@@ -1,4 +1,4 @@
-// One look for "who said what": the Home chat, the board's discussion and the swarm's activity all use the AI
+// One look for "who said what": the Home chat and the swarm's activity both use the AI
 // Elements Conversation and Message components through these pieces. Everything a model wrote is untrusted and is
 // put on the page as text (React text nodes): no Markdown, no HTML, no links or images made from model output.
 import type { SearchProvider } from "@/board/api"
