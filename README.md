@@ -135,6 +135,19 @@ row at the foot. Benchmarks and Compare are not in the sidebar; they open only b
 `#Compare`). The pictures below are **Demo mode**: practice runs with fixed example text, not research. The app
 labels them "Practice".
 
+| Screen | What it is for |
+|---|---|
+| Overview | Ask in the "Let's research together!" question box. Its card shows under the box: the agents and their current step, with Stop, while the team researches, and "The answer is ready." when it ends. The answer itself is not written on the Overview: "See the answer and follow up in Research" opens its chat in Research, with the full answer and the box for a follow-up. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and practice apart. |
+| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. While the answer is made, the Agent Lab sits beside it (above it on a narrow screen); when the answer is done the Lab folds into one line. |
+| Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
+| Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
+| Team review | One review in detail: the recommendation, how each statement was checked, and the sources. Its discussion is the Agent Log's group chat for that review, with a link "Open in Agent Log". |
+| Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
+| Graph | One run as a picture of who said what. |
+| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs (research answers, team reviews and task runs), next to Follow newest. A team review shows a "Round n" line where each round begins, the lead and the members as messages, and each statement check as a quiet note with its mark (✓ supported, ✕ contradicted, ? insufficient evidence, ○ not checked). No room picture here; the Lab stays on Overview. |
+| Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
+| Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
+
 ### 1. Overview: ask, and watch the team work
 
 The app opens here. Choose Quick, Standard or Deep for a question, then press Send. Under the box, **Try asking**

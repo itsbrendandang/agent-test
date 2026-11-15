@@ -54,11 +54,13 @@ interface Props {
   picked?: Picked
   /** A source or a statement was chosen here: the inspector shows it too. */
   onPick?: (pick: Omit<Picked, "n">) => void
+  /** The Overview's card: the agents and the step line while it runs, one line when it ends, never the answer itself. */
+  brief?: boolean
 }
 /** One choice of a source (its number) or of a checked statement (its index), shared by the answer and the inspector. */
 export interface Picked { source?: number; statement?: number; n: number }
 
-export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops, fresh, picked: chosen, onPick }: Props) {
+export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops, fresh, picked: chosen, onPick, brief }: Props) {
   const { events, lost } = useResearchEvents(id)
   const s = useMemo(() => foldAnswer(events), [events])
   const key = useId().replace(/[^a-z0-9]/gi, "")
@@ -144,21 +146,24 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {onRemove && <button type="button" className="link-btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(() => onRemove()) }}>Remove</button>}
         </div>
       )}
-      {waiting && <AgentsWorking>{working ? progressLine(s) : "The answer is ready."}</AgentsWorking>}
+      {brief
+        ? (s.status !== "queued" && <AgentsWorking>{working ? progressLine(s) : s.status === "done" ? "The answer is ready." : s.status === "failed" ? "The answer could not be finished." : "The answer was stopped."}</AgentsWorking>)
+        : waiting && <AgentsWorking>{working ? progressLine(s) : "The answer is ready."}</AgentsWorking>}
       {working && s.status !== "queued" && !lost && (
         <div className="answer-working">
           {/* Until the answer has something to show: the agents, with the engine's current step in words. Then the quiet line. */}
-          {!waiting && <Working>{progressLine(s)}</Working>}
+          {!waiting && !brief && <Working>{progressLine(s)}</Working>}
           {!demo && s.caps && <span className="muted small">{runLimit(s.caps.maxUsd)} · {plainDuration(s.caps.maxSeconds * 1000)}</span>}
           {!composerStops && <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>}
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
-      {working && !waiting && !lost && <LiveSteps state={s} ended />}
+      {working && !waiting && !lost && !brief && <LiveSteps state={s} ended />}
       <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
       {lost && working && (
-        <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
+        <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown && !brief ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
+      {!brief && <>
 
       {s.markdown && <SafeMarkdown className="answer-text" inline={inline} live={working && !s.complete}>{marked.text}</SafeMarkdown>}
       {s.markdown && <AnswerImages sources={s.sources} onSource={setLit} />}
@@ -314,6 +319,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {s.status !== "starting" && <a className="link-btn" href={logLink({ kind: "answer", id })} title="Every step of this answer, agent by agent">Open in the Agent Log</a>}
         </div>
       )}
+      </>}
     </>
   )
 }
