@@ -1,7 +1,7 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
 // Five places carry the everyday work (the Agent Lab sits right under Research); the advanced ones sit under "More",
 // quieter. At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
-import { FlaskConical, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, Microscope, Settings, Share2, Users, X } from "lucide-react"
+import { FlaskConical, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { ProfileMenu } from "@/components/ProfileMenu"
 import { SideCrew } from "@/components/SideCrew"
@@ -13,7 +13,7 @@ import type { PaidState } from "@/lib/paid"
 import { ABOUT, LABEL, MORE, PRIMARY, PRODUCT, type View } from "@/nav"
 
 const ICON: Record<View, typeof Settings> = {
-  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Benchmarks: Trophy, Board: FlaskConical, Agents: Users, Graph: Share2, Lab: Microscope, Settings,
+  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Benchmarks: Trophy, Board: FlaskConical, Agents: Users, Graph: Share2, Lab: ScrollText, Settings,
 }
 
 export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View) => void; /** The mode of the next run, for the profile row. */ paid: PaidState }) {
