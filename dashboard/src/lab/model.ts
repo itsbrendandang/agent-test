@@ -1,35 +1,32 @@
 // Agent Lab design by Anh Lam (https://github.com/Anhlam09/agent-lab-report, and the look of Agent Lab 2.0,
-// https://github.com/Anhlam09/agent-lab-2.0): six rooms, the Buddy characters, the lab equipment.
+// https://github.com/Anhlam09/agent-lab-2.0): nine rooms, the Buddy characters, the lab equipment.
 // This file is the pure part of the dashboard's Lab: the rooms, who the teammates are, and the ACTIVITY MODEL the
 // scene draws. The model is made from engine events only (adapter.ts). Nothing here invents work: a teammate that
 // no event mentions stays idle at its desk.
 import type { ProvenanceKind } from "@/lib/provenance"
 
-export type RoomId = "discovery" | "planning" | "bench" | "review" | "quality" | "report"
+export type RoomId = "discovery" | "planning" | "bench" | "review" | "quality" | "report" | "library" | "data" | "specialists"
 export interface Room { id: RoomId; name: string }
-/** Anh's six rooms (stations), in map order. */
+/** Anh's nine rooms (stations), in map order. */
 export const ROOMS: readonly Room[] = [
-  { id: "discovery", name: "Discovery" }, { id: "planning", name: "Planning" }, { id: "bench", name: "Experiment bench" },
-  { id: "review", name: "Evidence review" }, { id: "quality", name: "Quality control" }, { id: "report", name: "Report studio" },
+  { id: "discovery", name: "Discovery" }, { id: "library", name: "Literature library" }, { id: "planning", name: "Planning" },
+  { id: "bench", name: "Experiment bench" }, { id: "data", name: "Data room" }, { id: "review", name: "Evidence review" },
+  { id: "quality", name: "Quality control" }, { id: "specialists", name: "Specialists lounge" }, { id: "report", name: "Report studio" },
 ]
 export const roomOf = (id: RoomId): Room => ROOMS.find((r) => r.id === id)!
 /** A room of Agent Lab 2.0: a 450 x 214 card. `back` is the height of its back wall; the floor is below it. */
 export const ROOM = { width: 450, height: 214, back: 58 } as const
 
-/**
- * Where the rooms are. "wide" is Anh's 2.0 map: 1000 x 706, three rooms on each side of a narrow corridor. "tall" is
- * the same rooms in one column beside the corridor, for a narrow screen, so the lab never needs a sideways scroll.
- * Everything on the map is placed in these units. A room's door is at the bottom of its corridor side.
- */
-export interface LabLayout { id: "wide" | "tall"; width: number; height: number; corridorX: number; at: Record<RoomId, { x: number; y: number; door: "left" | "right" }> }
+/** Two vertical aisles join below the wide map; narrow screens keep one aisle beside nine rooms. */
+export interface LabLayout { id: "wide" | "tall"; width: number; height: number; corridorX: number; corridors: readonly number[]; crossY: number; at: Record<RoomId, { x: number; y: number; door: "left" | "right" }> }
 const column = (ids: RoomId[], x: number, door: "left" | "right") => Object.fromEntries(ids.map((id, i) => [id, { x, y: 16 + i * 230, door }]))
 export const WIDE: LabLayout = {
-  id: "wide", width: 1000, height: 706, corridorX: 500,
-  at: { ...column(["discovery", "bench", "quality"], 20, "right"), ...column(["planning", "review", "report"], 530, "left") } as LabLayout["at"],
+  id: "wide", width: 1510, height: 754, corridorX: 500, corridors: [500, 1010], crossY: 720,
+  at: { ...column(["discovery", "bench", "quality"], 20, "right"), ...column(["library", "data", "specialists"], 530, "left"), ...column(["planning", "review", "report"], 1040, "left") } as LabLayout["at"],
 }
 export const TALL: LabLayout = {
-  id: "tall", width: 546, height: 1396, corridorX: 500,
-  at: column(["discovery", "planning", "bench", "review", "quality", "report"], 20, "right") as LabLayout["at"],
+  id: "tall", width: 546, height: 2086, corridorX: 500, corridors: [500], crossY: 2052,
+  at: column(ROOMS.map((r) => r.id), 20, "right") as LabLayout["at"],
 }
 /** Anh's map, for code that asks for "the" map. */
 export const MAP = WIDE
@@ -46,29 +43,34 @@ export const FURNITURE: readonly (readonly [RoomId, FurnType, number, number, nu
   ["bench", "cabinet", 50, 104, 60], ["bench", "labtable", 180, 160, 120], ["bench", "desk", 335, 150, 90], ["bench", "plant", 30, 186, 26], ["bench", "plant", 415, 100, 26],
   ["review", "desk2", 215, 150, 120], ["review", "microscope", 360, 140, 60], ["review", "rack", 425, 110, 36], ["review", "plant", 428, 196, 26],
   ["quality", "clipdesk", 145, 166, 100], ["quality", "shielddesk", 290, 172, 90], ["quality", "plant", 30, 120, 26], ["quality", "plant", 405, 100, 26],
+  ["library", "shelf", 265, 98, 110], ["library", "shelf", 75, 104, 100], ["library", "desk", 210, 160, 110], ["library", "plant", 415, 110, 26],
+  ["data", "desk2", 215, 150, 120], ["data", "cabinet", 70, 104, 60], ["data", "rack", 400, 130, 36], ["data", "plant", 420, 196, 26],
+  ["specialists", "desk", 145, 160, 100], ["specialists", "desk", 290, 160, 100], ["specialists", "plant", 30, 110, 26], ["specialists", "plant", 400, 110, 26], ["specialists", "easel", 410, 178, 36],
   ["report", "shelf", 215, 98, 110], ["report", "desk2", 165, 164, 120], ["report", "printer", 395, 104, 50], ["report", "easel", 410, 178, 36], ["report", "plant", 300, 100, 26],
 ]
 /** Things on the back wall: [room, type, x]. The room's name sits over the left of each wall. */
 export const WALL_ITEMS: readonly (readonly [RoomId, WallType, number])[] = [
+  ["library", "notes", 210], ["library", "glassshelf", 360], ["data", "chartscreen", 245], ["data", "wallscreen", 375], ["specialists", "whiteboard", 240], ["specialists", "notes", 380],
   ["discovery", "dna", 185], ["discovery", "glassshelf", 360], ["planning", "whiteboard", 240], ["planning", "periodic", 400], ["bench", "hazard", 395],
   ["review", "glassshelf", 260], ["review", "cells", 360], ["quality", "chartscreen", 245], ["quality", "hazard", 405], ["report", "periodic", 300], ["report", "wallscreen", 375],
 ]
 /** Equipment on the lab counter along the back wall: [room, type, x]. */
 export const COUNTER_ITEMS: readonly (readonly [RoomId, CounterType, number])[] = [
+  ["library", "bottles", 125], ["data", "tubes", 125], ["data", "incubator", 335], ["specialists", "beakers", 150],
   ["discovery", "bottles", 125], ["discovery", "tubes", 175], ["discovery", "sink", 365], ["planning", "beakers", 150], ["planning", "tubes", 330], ["planning", "bottles", 250],
   ["bench", "centrifuge", 140], ["bench", "hood", 260], ["bench", "bottles", 362], ["review", "centrifuge", 205], ["review", "incubator", 335], ["review", "tubes", 100],
   ["quality", "sink", 110], ["quality", "beakers", 175], ["quality", "bottles", 330], ["report", "bottles", 105], ["report", "tubes", 320],
 ]
 /** In each room, where a teammate stands to pick something up or to put it down: in front of the room's main table. */
-export const PICK: Record<RoomId, readonly [number, number]> = { discovery: [262, 184], planning: [240, 188], bench: [205, 188], review: [215, 180], quality: [220, 190], report: [272, 188] }
+export const PICK: Record<RoomId, readonly [number, number]> = { library: [245, 188], data: [215, 184], specialists: [220, 188], discovery: [262, 184], planning: [240, 188], bench: [205, 188], review: [215, 180], quality: [220, 190], report: [272, 188] }
 
 /**
- * Two pick-up points in Discovery for real searches, at furniture 2.0 already has there: the computer on the cabinet
- * for the web, the bookshelf for papers and public databases. `dx`, `dy`: where a teammate stands, from the room's corner.
+ * Search pick-up points: Discovery's computer for the web, the library's bookshelf for papers and public databases.
+ * `dx`, `dy`: where a teammate stands, from the room's corner.
  */
 export const SEARCH_SPOTS = {
-  web: { dx: 103, dy: 112, about: "Web search" },
-  papers: { dx: 338, dy: 106, about: "Literature and public databases" },
+  web: { room: "discovery", dx: 103, dy: 112, about: "Web search" },
+  papers: { room: "library", dx: 338, dy: 106, about: "Literature and public databases" },
 } as const
 /** Which pick-up point a search uses. A practice run's example sources, and anything that is not a search, use the room's table. */
 export const searchSpot = (provider: string | undefined): keyof typeof SEARCH_SPOTS | undefined =>
@@ -88,7 +90,7 @@ export interface Character { id: CharacterId; name: string; shape: Shape; color:
  */
 export const CHARACTERS: readonly Character[] = ([
   ["scout", "Scout", "bunny", "#f6b6cd", "discovery", [372, 162]],
-  ["librarian", "Librarian", "sprout", "#a9c56b", "discovery", [150, 172]],
+  ["librarian", "Librarian", "sprout", "#a9c56b", "library", [150, 172]],
   ["proposer", "Proposer", "sprout", "#5cc48d", "planning", [120, 150]],
   ["navigator", "Navigator", "mountain", "#8f7fe0", "planning", [334, 172]],
   ["experimenter", "Experimenter", "flame", "#ff7a59", "bench", [92, 165]],
@@ -170,7 +172,7 @@ export interface Activity {
 }
 
 /** A method specialist that joined a team review: shown as a visitor in the room that fits, under its real name. */
-export interface Visitor { id: string; name: string; title: string; why?: string; room: RoomId; state: LabState; doing: string; since?: number }
+export interface Visitor { id: string; name: string; title: string; why?: string; methods?: string[]; room: RoomId; state: LabState; doing: string; since?: number }
 
 /** What kind of step a line of the activity log is about: it picks the mark on the log's rail. */
 export type LogKind = "search" | "screen" | "write" | "check" | "handoff" | "failed" | "warn" | "done" | "note"
@@ -343,4 +345,3 @@ export function activeRooms(model: LabModel): RoomId[] {
   }
   return ROOMS.map((r) => r.id).filter((id) => on.has(id))
 }
-

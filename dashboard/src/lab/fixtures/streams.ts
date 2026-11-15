@@ -192,7 +192,7 @@ export function fixtureModel(change: Partial<Record<CharacterId, Partial<Activit
   return {
     kind: "answer", runId: "fixture", title: "Placeholder question (hand-written fixture)", provenance: "practice", status: "running", startedAt: at, at,
     characters,
-    visitors: [{ id: "toxicologist", name: "Toxicologist", title: "Toxicologist", why: "Fixture.", room: "bench", state: "working", doing: "Round 1: writing its reply.", since: at }],
+    visitors: [{ id: "toxicologist", name: "Toxicologist", title: "Toxicologist", why: "Fixture.", room: "quality", state: "working", doing: "Round 1: writing its reply.", since: at }],
     log: [
       { id: "l0", at, text: "Fixture: the run started." },
       { id: "l1", at, text: "Navigator gave the search plan to the Scout.", who: "Navigator" },

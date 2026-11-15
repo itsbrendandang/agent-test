@@ -293,6 +293,33 @@ export function loadSpecialists(dir = SPECIALISTS_DIR): Specialist[] {
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+export type SpecialistRoom = "library" | "data" | "quality" | "bench" | "review" | "planning" | "report" | "specialists"
+
+const ROOM_SIGNALS: Record<Exclude<SpecialistRoom, "specialists">, RegExp> = {
+  library: /literature|citation|meta.analysis|trial landscape|prior.work|documentation|known or claimed by others/gi,
+  data: /rna.seq|rnaseq|single.cell|genom|proteom|biomarker|bioinform|statistic|genetic|variant|omics|transcriptom|gene expression|clustering|crispr|perturb.seq|repertoire|nextflow/gi,
+  quality: /toxic|safety|admet|adme\b|absorption|distribution|metabolism|excretion|pharmacokinetic|clearance|risk register|adverse|quality control/gi,
+  bench: /medicinal|med.chem|chemistry|compound|molecul|smiles|structural.alert|scaffold|rdkit|potency|dose.response|selectivity|structure.activity|target biology|mechanis|pharmacology|protein structure|antibody|binder|druggability/gi,
+  review: /skepti|contrarian|critic|audit|falsif|alternative explanation|alternative reading|another defensible|strongest alternative|disprove|confounder/gi,
+  planning: /budget share|triage sheet|assign|portfolio|strategy|prioritis|prioritiz|competing hypotheses|own the answer/gi,
+  report: /report writing|write.{0,20}report|manuscript|figure generation|publication/gi,
+}
+
+/** Classification uses only cleaned, loadable capabilities, never a specialist's name or title. */
+export function specialistPlacement(s: Specialist): { room: SpecialistRoom; signals: string[] } {
+  const methods = s.methods.map((m) => [m.name, m.scope, m.needs, m.produces].join(" ")).join(" ")
+  const routes = s.routes.filter((r) => r.methods.length > 0 && r.methods.some((n) => s.methods.some((m) => m.number === n))).map((r) => r.text).join(" ")
+  const profile = s.role.length ? [s.trigger, s.deliverable, s.role[0]].join(" ") : ""
+  const score = (text: string, re: RegExp) => [...new Set((text.match(re) ?? []).map((x) => x.toLowerCase()))]
+  const ranked = Object.entries(ROOM_SIGNALS).map(([room, re]) => {
+    const strong = score(methods, re), weak = score(`${routes} ${profile}`, re)
+    return { room: room as SpecialistRoom, score: strong.length * 3 + weak.length * 2, signals: [...new Set([...strong, ...weak])] }
+  }).sort((a, b) => b.score - a.score)
+  return ranked[0].score ? { room: ranked[0].room, signals: ranked[0].signals } : { room: "specialists", signals: [] }
+}
+
+export const specialistRoom = (s: Specialist): SpecialistRoom => specialistPlacement(s).room
+
 // ── Matching a question ──────────────────────────────────────────────────────────────────────────────────────────
 const STOP = new Set(("about above after again against also among because been before being below between both could does doing down during each from further have having here into itself just more most only other over same should some such than that their them then there these they this those through under until very were what when where which while with would your will candidate candidates question board decision evidence " +
   "the and for are was not but its our can has had how any all one two new use used using need needs want know tell give make best good first next data analysis analyses analyse analyze result results study studies method methods based given versus whether problem show shows look like " +
@@ -491,11 +518,11 @@ export function runSpecialists(config: BoardConfig, runId: string, places: numbe
 /** A specialist as a board member. No tools, the fixed tier, no modes. */
 export function asAgent(s: Specialist, methods: Method[], why: string): AgentDef {
   return { name: s.name, title: s.title, role: "member", model: SPECIALIST_TIER, tools: [], deliverable: s.deliverable, prompt: specialistPrompt(s, methods, why),
-    specialist: { why, methods: methods.map((m) => ({ name: m.name, title: m.title })) } }
+    specialist: { room: specialistRoom(s), why, methods: methods.map((m) => ({ name: m.name, title: m.title })) } }
 }
 
 /** The run's members for the `run.roster` event and GET /api/roster?run=: the lead first, then the members in speaking order. */
 export function rosterEntries(lead: AgentDef, roster: AgentDef[]): RosterEntry[] {
   return [lead, ...roster].map((a) => ({ name: a.name, title: a.title, role: a.role, source: a.specialist ? "specialist" as const : "board" as const,
-    ...(a.specialist ? { why: a.specialist.why, methods: a.specialist.methods } : {}) }))
+    ...(a.specialist ? { room: a.specialist.room, why: a.specialist.why, methods: a.specialist.methods } : {}) }))
 }

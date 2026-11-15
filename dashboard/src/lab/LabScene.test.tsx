@@ -38,16 +38,16 @@ const quiet = (trips: Trip[] = [], more: Partial<LabModel["characters"]["guardia
 }
 
 describe("LabScene", () => {
-  it("shows the six rooms and the twelve teammates at their desks when nothing is running, and asks for no frame", () => {
+  it("shows the nine rooms and the twelve teammates at their desks when nothing is running, and asks for no frame", () => {
     render(<LabScene model={emptyLab()} />)
-    for (const room of ["Discovery", "Planning", "Experiment bench", "Evidence review", "Quality control", "Report studio"]) expect(screen.getByText(room)).toBeInTheDocument()
+    for (const room of ["Discovery", "Literature library", "Data room", "Specialists lounge", "Planning", "Experiment bench", "Evidence review", "Quality control", "Report studio"]) expect(screen.getByText(room)).toBeInTheDocument()
     for (const c of CHARACTERS) {
       expect(agent(c.name)).toHaveAttribute("data-state", "idle")
       expect(place(walker(c.id))).toBe(homeOf(c.id))
       expect(chip(c.id)).not.toBeVisible() // idle says nothing
     }
     expect(screen.getByText("Team idle")).toBeInTheDocument()
-    expect(place(walker("scout"))).toBe("39.2% 25.2125%") // in Discovery, by the bookshelf
+    expect(place(walker("scout"))).toBe(homeOf("scout")) // in Discovery, by the bookshelf
     expect(requestAnimationFrame).not.toHaveBeenCalled()
   })
 
@@ -100,7 +100,7 @@ describe("LabScene", () => {
     render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
     const spots = CHARACTERS.map((c) => { const el = document.querySelector<HTMLElement>(`button[data-agent="${c.id}"]`)!; return [parseFloat(el.style.left), parseFloat(el.style.top)] })
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
-      const dx = Math.abs(spots[i][0] - spots[j][0]) * 10, dy = Math.abs(spots[i][1] - spots[j][1]) * 7.06 // map units
+      const dx = Math.abs(spots[i][0] - spots[j][0]) * WIDE.width / 100, dy = Math.abs(spots[i][1] - spots[j][1]) * WIDE.height / 100 // map units
       expect(dx >= 170 || dy >= 150, `${CHARACTERS[i].name} and ${CHARACTERS[j].name}`).toBe(true)
     }
   })
@@ -111,9 +111,9 @@ describe("LabScene", () => {
     const plate = (id: CharacterId) => document.querySelector<HTMLElement>(`button[data-agent="${id}"]`)!
     const half = (text: string) => ((text.length * 7 + 16 + 14) / 2 / WIDE.width) * 100 // the scene's own estimate of a label's width, in % of the map
     const left = parseFloat(plate("experimenter").style.left), right = parseFloat(plate("guardian").style.left)
-    expect(left - half("A very long caption for the Experimenter")).toBeGreaterThanOrEqual(2) // the Experiment bench starts at 2% of the map
-    expect(right + half("A very long caption for the Guardian here")).toBeLessThanOrEqual(47) // Quality control ends at 47%
-    expect(parseFloat(plate("scout").style.left)).toBeCloseTo(39.2, 1) // a short one stays under its teammate
+    expect(left - half("A very long caption for the Experimenter")).toBeGreaterThanOrEqual(WIDE.at.bench.x / WIDE.width * 100)
+    expect(right + half("A very long caption for the Guardian here")).toBeLessThanOrEqual((WIDE.at.quality.x + 450) / WIDE.width * 100)
+    expect(parseFloat(plate("scout").style.left)).toBeCloseTo(stationPoint(characterOf("scout")).x / WIDE.width * 100, 1) // a short one stays under its teammate
   })
 
   it("never puts a walker's bubble on a name plate when two teammates of a room carry something at once", async () => {
@@ -128,7 +128,9 @@ describe("LabScene", () => {
       for (const id of ["scout", "librarian"] as const) {
         const bubble = chip(id)
         if (bubble.hidden) continue
-        expect(bubble.textContent).not.toMatch(/^Investigator \d: /) // in its own room the bubble does not repeat the name
+        const c = characterOf(id), r = WIDE.at[c.room], el = walker(id)
+        const x = parseFloat(el.style.left) * WIDE.width / 100, y = parseFloat(el.style.top) * WIDE.height / 100
+        if (x >= r.x && x <= r.x + 450 && y >= r.y && y <= r.y + 214) expect(bubble.textContent).not.toMatch(/^Investigator \d: /)
         expect(plates.some((p) => hit(rect(bubble, bubble.textContent ?? ""), p)), `${id} at frame ${i * 4}: ${bubble.textContent}`).toBe(false)
       }
     }
@@ -314,7 +316,10 @@ describe("LabScene", () => {
     expect(kinds("review")).toEqual(["desk2", "microscope", "plant", "rack"])
     expect(kinds("quality")).toEqual(["clipdesk", "plant", "plant", "shielddesk"])
     expect(kinds("report")).toEqual(["desk2", "easel", "plant", "printer", "shelf"])
-    expect(document.querySelectorAll(".lab-room")).toHaveLength(6)
+    expect(document.querySelectorAll(".lab-room")).toHaveLength(9)
+    expect(kinds("library")).toEqual(["desk", "plant", "shelf", "shelf"])
+    expect(kinds("data")).toEqual(["cabinet", "desk2", "plant", "rack"])
+    expect(kinds("specialists")).toEqual(["desk", "desk", "easel", "plant", "plant"])
     expect(document.querySelector(".lab-map canvas")).toBeNull() // drawn as SVG: no canvas is needed
   })
 
@@ -361,6 +366,12 @@ describe("LabScene", () => {
 })
 
 describe("LabPanel and Lab", () => {
+  it("shows a visitor's method skills rather than inventing a role from its title", () => {
+    const model = emptyLab()
+    model.visitors = [{ id: "new", name: "New specialist", title: "New specialist", room: "data", methods: ["RNA-seq analysis", "Differential expression"], state: "idle", doing: "Waiting." }]
+    render(<LabPanel model={model} selected="guardian" />)
+    expect(screen.getByText("Method skills: RNA-seq analysis; Differential expression")).toBeInTheDocument()
+  })
   it("says who the selected teammate is, what it does and what it last fetched; the rest is under About, closed", () => {
     render(<LabPanel model={fixtureModel()} selected="guardian" />)
     const panel = screen.getByRole("complementary", { name: /Selected teammate/ })

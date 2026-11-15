@@ -114,7 +114,7 @@ describe("the engine's example answer streams", () => {
     expect(m.log.filter((l) => /gave its section on h[123] to the Reporter\.$/.test(l.text))).toHaveLength(3)
     expect(m.log.some((l) => /^Investigator \d gave .* to the Investigator/.test(l.text))).toBe(false) // no work passes between investigators
     const results = m.characters.guardian.trips.filter((t) => t.id.startsWith("hypothesis:"))
-    expect(results.map((t) => [t.kind, t.to, t.room])).toEqual([["handoff", "scout", "discovery"], ["handoff", "librarian", "discovery"], ["handoff", "auditor", "review"]])
+    expect(results.map((t) => [t.kind, t.to, t.room])).toEqual([["handoff", "scout", "discovery"], ["handoff", "librarian", "library"], ["handoff", "auditor", "review"]])
     for (const t of results) expect(t.label).toMatch(/^the result for hypothesis h[123]: (✓ Supported|✕ Contradicted|\? Insufficient evidence|○ Not checked)(: the sources disagree)? \(\d+ sources? for, \d+ against\)$/)
     expect(m.log.some((l) => l.text === "3 hypotheses set up. Tested against published sources, not by experiment.")).toBe(true)
     // twice in the run all three are busy at once: with their first searches, and with their sections

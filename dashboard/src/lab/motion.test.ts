@@ -1,8 +1,8 @@
 // The walking simulation, without a browser: routes, the wait at a pick-up point, the parcel, the queue, and the
 // rule that nothing moves unless the model holds a trip.
 import { describe, expect, it } from "vitest"
-import { TALL, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
-import { MAX_WAITING, active, advance, claimPlace, createSim, dropPoint, pickupPoint, searchPoint, settle, stationPoint, syncTrips, type Sim } from "./motion"
+import { ROOM, ROOMS, WIDE, doorOf, TALL, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
+import { MAX_WAITING, pathBetween, active, advance, claimPlace, createSim, dropPoint, pickupPoint, searchPoint, settle, stationPoint, syncTrips, visitorPoint, type Sim } from "./motion"
 
 const withTrips = (trips: Partial<Record<CharacterId, Trip[]>>, runId = "r1", more: Partial<LabModel> = {}): LabModel => {
   const m = { ...emptyLab(), runId, status: "running" as const, ...more }
@@ -10,6 +10,54 @@ const withTrips = (trips: Partial<Record<CharacterId, Trip[]>>, runId = "r1", mo
   return m
 }
 const fetch = (id: string, room: Trip["room"], back?: number, outcome: Trip["outcome"] = "carried"): Trip => ({ id, kind: "fetch", room, label: `label ${id}`, short: `s-${id}`, at: 0, ...(back !== undefined && { back, outcome }) })
+
+describe("nine-room floor plan", () => {
+  it("keeps every ordered room pair on doorways and connected corridor space, including offset lanes", () => {
+    for (const layout of [WIDE, TALL]) for (const a of ROOMS) for (const b of ROOMS) for (const offset of [-8, 0, 8]) {
+      const start = pickupPoint(a.id, 0, layout), end = pickupPoint(b.id, 1, layout)
+      const route = [start, ...pathBetween(layout, start, end, layout.corridorX + offset)]
+      expect(route.at(-1)).toEqual(end)
+      for (let i = 1; i < route.length; i++) {
+        const from = route[i - 1], to = route[i]
+        for (let n = 0; n <= 100; n++) {
+          const p = { x: from.x + (to.x - from.x) * n / 100, y: from.y + (to.y - from.y) * n / 100 }
+          const inside = ROOMS.find((r) => { const at = layout.at[r.id]; return p.x > at.x && p.x < at.x + ROOM.width && p.y > at.y && p.y < at.y + ROOM.height })
+          if (inside) expect([a.id, b.id]).toContain(inside.id)
+          else {
+            const inAisle = layout.corridors.some((x) => Math.abs(p.x - x) <= 30)
+            const inCross = Math.abs(p.y - layout.crossY) <= 26 && p.x >= layout.corridors[0] - 26 && p.x <= layout.corridors.at(-1)! + 26
+            const onDoor = [a.id, b.id].some((id) => {
+              const door = doorOf(layout, id)
+              return Math.abs(p.y - door.y) < 0.001 && Math.abs(p.x - door.x) <= 65
+            })
+            expect(inAisle || inCross || onDoor, JSON.stringify({ a, b, p })).toBe(true)
+          }
+        }
+        for (const room of ROOMS) {
+          const at = layout.at[room.id]
+          for (const x of [at.x, at.x + ROOM.width]) {
+            if ((from.x < x && to.x > x) || (from.x > x && to.x < x)) {
+              const y = from.y + (to.y - from.y) * (x - from.x) / (to.x - from.x)
+              if (y > at.y && y < at.y + ROOM.height) expect(y).toBe(doorOf(layout, room.id).y)
+            }
+          }
+        }
+      }
+    }
+  })
+  it("fits all nine rooms in one narrow column", () => {
+    expect(ROOMS).toHaveLength(9)
+    expect(new Set(ROOMS.map((r) => TALL.at[r.id].x)).size).toBe(1)
+    for (const r of ROOMS) {
+      expect(TALL.at[r.id].x + ROOM.width).toBeLessThan(TALL.width)
+      expect(TALL.at[r.id].y + ROOM.height).toBeLessThan(TALL.height)
+    }
+  })
+  it("leaves space between the first safety visitor and the two resident name plates", () => {
+    const sim = createSim(), visitor = visitorPoint("quality", 0)
+    for (const id of ["guardian", "reviser"] as const) expect(Math.abs(visitor.x - sim.walkers[id].home.x)).toBeGreaterThan(140)
+  })
+})
 /** Run the simulation until it is not active, or for `seconds`. Returns the places the teammate passed. */
 function run(sim: Sim, who: CharacterId, seconds = 120) {
   const path: { x: number; y: number; carrying: boolean }[] = []
@@ -27,10 +75,10 @@ describe("the lab's walking", () => {
   it("puts the twelve teammates at their places: two a room, beside the equipment they work at", () => {
     const sim = createSim()
     expect(sim.walkers.scout.home).toEqual({ x: 392, y: 178 })
-    expect(sim.walkers.librarian.home).toEqual({ x: 170, y: 188 })
-    expect(sim.walkers.finisher.home).toEqual({ x: 890, y: 654 })
+    expect(sim.walkers.librarian.home).toEqual({ x: 680, y: 188 })
+    expect(sim.walkers.finisher.home).toEqual({ x: 1400, y: 654 })
     expect(new Set(Object.values(sim.walkers).map((w) => `${w.home.x},${w.home.y}`)).size).toBe(12)
-    expect(stationPoint({ room: "planning", home: [120, 150] })).toEqual({ x: 650, y: 166 })
+    expect(stationPoint({ room: "planning", home: [120, 150] })).toEqual({ x: WIDE.at.planning.x + 120, y: 166 })
   })
 
   it("moves nobody when the model holds no trip", () => {
@@ -195,15 +243,15 @@ describe("the lab's walking", () => {
     const path = run(sim, "guardian")
     // it leaves Quality control and enters Evidence review at their doorways (34 above each room's bottom edge)
     const crossings = path.filter((p, i) => i > 0 && (p.x > 470) !== (path[i - 1].x > 470)).map((p) => Math.round(p.y))
-    expect(new Set(crossings)).toEqual(new Set([656])) // out of and back into its own room at its door
-    const entering = path.filter((p, i) => i > 0 && (p.x >= 530) !== (path[i - 1].x >= 530)).map((p) => Math.round(p.y))
-    expect(new Set(entering)).toEqual(new Set([426])) // Evidence review's door
+    expect(new Set(crossings)).toEqual(new Set([doorOf(WIDE, "quality").y])) // out of and back into its own room at its door
+    const entering = path.filter((p, i) => i > 0 && (p.x >= WIDE.at.review.x) !== (path[i - 1].x >= WIDE.at.review.x)).map((p) => Math.round(p.y))
+    expect(new Set(entering)).toEqual(new Set([doorOf(WIDE, "review").y])) // Evidence review's door
     // inside a room it walks around the table: the Librarian's way to the bookshelf goes along the front lane
     const lib = createSim()
-    syncTrips(lib, withTrips({ librarian: [{ ...fetch("p", "discovery", 0), provider: "europepmc" }] }), all)
+    syncTrips(lib, withTrips({ librarian: [{ ...fetch("p", "library", 0), provider: "europepmc" }] }), all)
     const way = run(lib, "librarian")
-    expect(way.some((p) => Math.round(p.y) === 196 && p.x > 200)).toBe(true) // the lane at the door's height, past the lab table
-    expect(way.some((p) => p.x > 143 && p.x < 277 && p.y > 136 && p.y < 160)).toBe(false) // never across the lab table
+    expect(way.some((p) => Math.round(p.y) === doorOf(WIDE, "library").y && p.x > WIDE.at.library.x)).toBe(true) // the lane at the door's height, past the lab table
+    expect(way.some((p) => p.x > WIDE.at.library.x + 143 && p.x < WIDE.at.library.x + 277 && p.y > 136 && p.y < 160)).toBe(false) // never across the lab table
   })
 
   it("picks a real search up at 2.0's own furniture in Discovery: the computer for the web, the bookshelf for papers", () => {

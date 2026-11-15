@@ -1,5 +1,5 @@
 // Agent Lab design by Anh Lam. The map of Agent Lab 2.0 (https://github.com/Anhlam09/agent-lab-2.0), redrawn here
-// as SVG from Anh's canvas drawings in src/lab/office.ts: the corridor and six room cards, each with a back wall
+// as SVG from Anh's canvas drawings in src/lab/office.ts: the corridor and nine room cards, each with a back wall
 // (pipes, a valve, wall items), a lab counter with equipment on it, and furniture on a tiled floor, in 2.0's flat,
 // outline-free style and palette. It holds no characters.
 //
@@ -264,8 +264,8 @@ export const LabMap = memo(function LabMap({ layout = WIDE, active = "" }: { lay
       <defs><clipPath id="lab-room-clip"><rect width={ROOM.width} height={ROOM.height} rx="18" /></clipPath></defs>
       <rect width={layout.width} height={layout.height} fill="var(--lab-ground)" />
       {/* the corridor: a pale strip with a dashed guide line */}
-      <rect x={layout.corridorX - 26} y="6" width="52" height={layout.height - 12} rx="18" fill={P.corridor} />
-      <path d={`M${layout.corridorX} 22V${layout.height - 22}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" />
+      {layout.corridors.map((x) => <g key={x}><rect x={x - 26} y="6" width="52" height={layout.height - 12} rx="18" fill={P.corridor} /><path d={`M${x} 22V${layout.height - 22}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" /></g>)}
+      {layout.corridors.length > 1 && <g><rect x={layout.corridors[0] - 26} y={layout.crossY - 26} width={layout.corridors.at(-1)! - layout.corridors[0] + 52} height="52" rx="18" fill={P.corridor} /><path d={`M${layout.corridors[0]} ${layout.crossY}H${layout.corridors.at(-1)}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" /></g>}
       {ROOMS.map((r) => { const at = layout.at[r.id]; return <g key={r.id} className="lab-room" data-room={r.id} data-active={on.has(r.id) || undefined} transform={`translate(${at.x} ${at.y})`}>{room(r.id, at.door, on.has(r.id), "lab-room-clip")}</g> })}
     </svg>
   )

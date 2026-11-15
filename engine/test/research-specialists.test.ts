@@ -26,6 +26,8 @@ test("Demo: the matched specialist joins, drafts a section from the example sour
     assert.deepEqual(record.specialists?.map((s) => [s.name, s.agent]), [["toxicologist", "specialist:toxicologist"]], "the quick level adds one")
     const chosen = events.filter((x) => x.type === "specialists")
     assert.equal(chosen.length, 1)
+    assert.equal(record.specialists?.[0].room, "quality")
+    assert.equal(chosen[0].type === "specialists" && chosen[0].items[0].room, "quality")
     assert.ok(events.indexOf(chosen[0]) < events.findIndex((x) => x.type === "step.started" && x.kind === "search"), "who joined is said before the search")
     const step = record.steps.find((s) => s.step === "specialist:toxicologist")
     assert.deepEqual([step?.status, step?.agent, step?.kind], ["completed", "specialist:toxicologist", "write"])

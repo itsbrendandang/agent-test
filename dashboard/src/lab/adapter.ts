@@ -14,7 +14,7 @@ import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
 import {
-  CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
+  CHARACTER_IDS, LOG_KEPT, ROOMS, TRIPS_KEPT, characterOf, clip, plural,
   type Activity, type CharacterId, type LabModel, type LabState, type LogKind, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
 } from "./model"
 
@@ -138,16 +138,24 @@ const BOARD_LABELS: Partial<Record<CharacterId, string>> = {
 /** The experimenter's mode names, as board/agents/experimenter.md has them. */
 const MODE: Record<string, CharacterId> = { pilot: "pilot", full: "experimenter", revise: "reviser" }
 
-/** The room a visiting specialist stands in, from the words of its name and title. The bench when nothing fits. */
+/** Older events have no capability-based room; retain a name-based fallback for them. */
 export function visitorRoom(nameAndTitle: string): RoomId {
   const t = nameAndTitle.toLowerCase()
-  if (/literature|evidence synth|prior|librarian|search/.test(t)) return "discovery"
+  if (/literature|evidence synth|prior.work|librarian/.test(t)) return "library"
+  if (/toxic|safety|admet|quality|regulat|compliance/.test(t)) return "quality"
+  if (/omics|rna.?seq|single.cell|genom|proteom|biomarker|statistic|data|bioinform/.test(t)) return "data"
+  if (/medicinal|chemist|target.biolog|pharmacolog/.test(t)) return "bench"
   if (/skeptic|contrarian|critic|review|audit/.test(t)) return "review"
   if (/chief|strateg|portfolio|plan|lead/.test(t)) return "planning"
-  if (/quality|regulat|safety officer|compliance/.test(t)) return "quality"
-  if (/writer|report|communicat/.test(t)) return "report"
-  return "bench"
+  if (/writer|report/.test(t)) return "report"
+  return "specialists"
 }
+const eventRoom = (value: unknown, fallback: string): RoomId => ROOMS.find((r) => r.id === value)?.id ?? visitorRoom(fallback)
+const methodTitles = (value: unknown): string[] => Array.isArray(value) ? value.flatMap((m) => {
+  const title = str((m as { title?: unknown } | null)?.title)
+  return title ? [clip(title, 160)] : []
+}) : []
+const searchRoom = (who: CharacterId): RoomId => who === "librarian" ? "library" : "discovery"
 
 const NO_TASK = /^\s*no task\.?\s*$/i
 
@@ -205,7 +213,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         for (const raw of e.members as Record<string, unknown>[]) {
           const member = str(raw?.name); if (!member) continue
           roster.add(member)
-          if (raw.source === "specialist" || !BOARD_MEMBER[member]) visitor(member, str(raw.title), str(raw.why))
+          if (raw.source === "specialist" || !BOARD_MEMBER[member]) Object.assign(visitor(member, str(raw.title), str(raw.why)), { room: eventRoom(raw.room, `${member} ${str(raw.title) ?? ""}`), methods: methodTitles(raw.methods) })
           else if (str(raw.title)) {
             // the caption is the engine's own title for the member (identity.ts), unless that is the character's name
             const id = BOARD_MEMBER[member], short = agentIdentity(member, { title: str(raw.title) }).short
@@ -246,7 +254,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         const kept = num(e.kept) ?? 0, dropped = num(e.dropped) ?? 0
         const place = placeOf(provider), query = str(e.query)
         const label = kept > 0 ? `${fromPlace(kept, provider)}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`
-        b.trip(who, { id: `fetch:${str(e.key) ?? `${at}:${query ?? ""}`}`, kind: "fetch", room: "discovery", label, short: kept > 0 ? tagOf(kept, provider) : "nothing", at: at ?? 0, back: at ?? 0, outcome: kept > 0 ? "carried" : "empty", ...(provider && { provider }) })
+        b.trip(who, { id: `fetch:${str(e.key) ?? `${at}:${query ?? ""}`}`, kind: "fetch", room: searchRoom(who), label, short: kept > 0 ? tagOf(kept, provider) : "nothing", at: at ?? 0, back: at ?? 0, outcome: kept > 0 ? "carried" : "empty", ...(provider && { provider }) })
         b.searched(provider)
         const asked = query ? ` for “${clip(query, 90)}”` : ""
         const brought = provider === "fixture" ? (kept > 0 ? `Brought back ${label}.` : `Looked at ${place}: ${label}.`) : kept > 0 ? `Searched ${place}${asked} and brought back ${label}.` : `Searched ${place}${asked}: ${label}.`
@@ -429,7 +437,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         for (const item of Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []) {
           const agent = str(item?.agent), title = str(item?.title) ?? str(item?.name)
           if (!agent || !title || visitors.has(agent)) continue
-          const v: Visitor = { id: agent, name: title, title, why: clip(str(item.why) ?? "", 200) || undefined, room: visitorRoom(`${str(item.name) ?? ""} ${title}`), state: "idle", doing: "Joined this answer. Waiting for the sources.", since: at }
+          const v: Visitor = { id: agent, name: title, title, why: clip(str(item.why) ?? "", 200) || undefined, room: eventRoom(item.room, `${str(item.name) ?? ""} ${title}`), methods: methodTitles(item.methods), state: "idle", doing: "Joined this answer. Waiting for the sources.", since: at }
           visitors.set(agent, v); m.visitors.push(v)
           b.log(at, `${title} joined this answer as a method specialist.${v.why ? ` ${v.why}` : ""}`, title)
         }
@@ -468,7 +476,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const query = str(e.query)
         const doing = `${label}${kind === "search" && query ? `: “${clip(query, 70)}”` : ""}.`
         if (isFetch(kind)) {
-          b.trip(who, { id: `step:${id}`, kind: "fetch", room: "discovery", label, short: "…", at: at ?? 0, ...(kind !== "evaluate" && provider && { provider }) })
+          b.trip(who, { id: `step:${id}`, kind: "fetch", room: searchRoom(who), label, short: "…", at: at ?? 0, ...(kind !== "evaluate" && provider && { provider }) })
           if (kind === "search") b.searched(provider)
           b.set(who, "fetching", doing, at)
         } else b.set(who, "working", doing, at)
@@ -504,7 +512,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider); short = tagOf(found ?? 0, s.provider); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
         else if (s.kind === "evaluate") { line = `${s.label}: kept ${kept ?? 0}${found !== undefined ? ` of ${found}` : ""}.`; label = `${plural(kept ?? 0, "source")} kept${found !== undefined ? ` of ${found}` : ""}`; short = `${kept ?? 0} kept`; outcome = (kept ?? 1) > 0 ? "carried" : "empty" }
         else line = `${s.label}: done.${summary ? ` ${clip(summary, 160)}` : ""}`
-        if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: "discovery", label, short, at: s.at, back: at ?? s.at, outcome, ...(s.kind !== "evaluate" && s.provider && { provider: s.provider }) })
+        if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: searchRoom(s.who), label, short, at: s.at, back: at ?? s.at, outcome, ...(s.kind !== "evaluate" && s.provider && { provider: s.provider }) })
         if (status === "failed") b.who(s.who).problem = { text: line, at: at ?? 0 }
         const left = running(s.who)
         if (left.length) { const next = left.at(-1)!; b.set(s.who, isFetch(next.kind) ? "fetching" : "working", `${next.label}.`, b.who(s.who).since) }
@@ -567,7 +575,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const open = [...steps.values()].filter((s) => s.running)
         for (const s of open) {
           s.running = false
-          if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: "discovery", label: "nothing: the answer failed", short: "failed", at: s.at, back: at ?? s.at, outcome: "failed" })
+          if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: searchRoom(s.who), label: "nothing: the answer failed", short: "failed", at: s.at, back: at ?? s.at, outcome: "failed" })
           b.set(s.who, "failed", `${s.label}: did not finish. ${why}`, at); b.who(s.who).problem = { text: why, at: at ?? 0 }
         }
         // The engine closes every running step before this event; only when nobody shows the failure does the last teammate carry it.

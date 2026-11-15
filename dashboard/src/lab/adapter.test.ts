@@ -108,7 +108,7 @@ describe("a team review (boardLab)", () => {
 
   it("shows a specialist that joined as a visitor under its real name, and a member that is not on the team as not in this run", () => {
     const m = boardLab(REVIEW_WITH_VISITOR)
-    expect(m.visitors).toEqual([expect.objectContaining({ id: "toxicologist", name: "Toxicologist", room: "bench", why: "The question is about a safety margin.", state: "done" })])
+    expect(m.visitors).toEqual([expect.objectContaining({ id: "toxicologist", name: "Toxicologist", room: "quality", why: "The question is about a safety margin.", state: "done" })])
     expect(m.characters.proposer).toMatchObject({ inRun: false, state: "idle" })
     expect(m.characters.proposer.standsFor).toMatch(/not on this review's team/)
     expect(m.characters.proposer.trips).toHaveLength(0)
@@ -117,9 +117,12 @@ describe("a team review (boardLab)", () => {
     // mid-run: the visitor works with the team and replies
     const mid = boardLab(REVIEW_WITH_VISITOR.slice(0, 12))
     expect(mid.visitors[0]).toMatchObject({ state: "handing-off", doing: "Round 1: gave its reply to the lead scientist." })
-    expect(visitorRoom("literature-evidence-synthesist Literature Evidence Synthesist")).toBe("discovery")
+    expect(visitorRoom("literature-evidence-synthesist Literature Evidence Synthesist")).toBe("library")
     expect(visitorRoom("attending-skeptic Attending Skeptic")).toBe("review")
     expect(visitorRoom("medicinal-chemist Medicinal Chemist")).toBe("bench")
+    expect(visitorRoom("bulk-rnaseq-analyst")).toBe("data")
+    expect(visitorRoom("toxicologist")).toBe("quality")
+    expect(visitorRoom("a new specialist")).toBe("specialists")
   })
 
   it("keeps a failure on the lead and stops the others, and a resume clears the run's status", () => {
@@ -468,6 +471,14 @@ describe("a swarm run (swarmLab)", () => {
 })
 
 describe("method specialists of a research answer", () => {
+  it.each([
+    ["librarian", "library"], ["evidence synthesis", "library"], ["single-cell", "data"], ["statistics", "data"],
+    ["ADMET", "quality"], ["safety", "quality"], ["medicinal chemistry", "bench"], ["target biology", "bench"],
+    ["pharmacology", "bench"], ["audit", "review"], ["chief strategy", "planning"], ["portfolio lead", "planning"],
+    ["writer", "report"], ["something new", "specialists"],
+  ])("keeps legacy placement for %s", (label, room) => {
+    expect(visitorRoom(label)).toBe(room)
+  })
   const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
   const events: LabEvent[] = [
     { seq: 1, at: 1, type: "research.started", id: "a-1", question: "Is hERG a risk?", mode: "real" },
@@ -492,5 +503,10 @@ describe("method specialists of a research answer", () => {
   })
   it("an answer with no specialists event has no visitors", () => {
     expect(answerLab(events.filter((e) => e.type !== "specialists" && e.agent === undefined)).visitors).toEqual([])
+  })
+  it("uses the engine's capability room before the legacy name guess and keeps method titles", () => {
+    const event = { seq: 1, at: 1, type: "specialists", items: [{ name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", room: "data", methods: [{ name: "rna-seq", title: "RNA-seq analysis" }] }] }
+    expect(answerLab([event]).visitors[0]).toMatchObject({ room: "data", methods: ["RNA-seq analysis"] })
+    expect(answerLab([{ ...event, items: [{ ...event.items[0], room: "unknown" }] }]).visitors[0].room).toBe("quality")
   })
 })

@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { parse } from "yaml"
 import { type BoardConfig, path, type Tier } from "../config.ts"
+import type { SpecialistRoom } from "../specialists.ts"
 import type { Brief } from "../brief.ts"
 import { SEARCH_GUIDANCE } from "../search/exa.ts"
 import { LITERATURE_GUIDANCE } from "../search/literature.ts"
@@ -19,7 +20,7 @@ export interface AgentDef {
   /** Roles this one agent can play, as mode id -> role title (e.g. pilot -> "Pilot"). The lead names one per round. */
   modes?: Record<string, string>
   /** Set only for a method specialist added to one run (specialists.ts): why it was chosen and the methods whose notes it reads. Never read from a board agent file. */
-  specialist?: { why: string; methods: { name: string; title: string }[] }
+  specialist?: { room?: SpecialistRoom; why: string; methods: { name: string; title: string }[] }
   prompt: string
 }
 

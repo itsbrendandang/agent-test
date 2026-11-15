@@ -1,3 +1,4 @@
+import type { SpecialistRoom } from "./specialists.ts"
 // Everything the dashboard shows is an event in board/runs/<run>/events.jsonl. The server replays the
 // file and tails it over SSE, so a dashboard that connects late, or after a restart, sees the whole run.
 // Events carry a stable `key`: a tool that reruns after a crash re-emits the same keys, and readers
@@ -40,7 +41,7 @@ export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", 
 export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider; query?: string }
 
 /** One member of a run. `source`: "board" (a file in board/agents) or "specialist" (a method specialist a plan added for this run: `why` it was chosen and the `methods` whose notes it reads). */
-export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }
+export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; room?: SpecialistRoom; why?: string; methods?: { name: string; title: string }[] }
 
 export type Stamped = BoardEvent & { key: string; at: number }
 

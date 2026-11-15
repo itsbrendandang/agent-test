@@ -19,12 +19,12 @@ export const dropPoint = (to: CharacterId, index: number, layout: LabLayout = WI
   const dx = Math.max(40, Math.min(ROOM.width - 40, c.home[0] + (r.door === "right" ? 44 : -44)))
   return inRoom(layout, c.room, dx, Math.min(ROOM.height - 22, c.home[1] + (index % 2 ? 8 : 2)))
 }
-/** Where the n-th visitor of a room stands: on the front lane, to either side of the room's table. */
-export const visitorPoint = (room: RoomId, n: number, layout: LabLayout = WIDE): Point => inRoom(layout, room, PICK[room][0] + (n % 2 === 0 ? 62 : -62), ROOM.height - 24)
+/** Visitors stand on the front lane: the middle first, then either side of the room's table. */
+export const visitorPoint = (room: RoomId, n: number, layout: LabLayout = WIDE): Point => inRoom(layout, room, PICK[room][0] + (n % 3 === 0 ? 0 : n % 3 === 1 ? 62 : -62), ROOM.height - 24)
 /** Where the Engine stands to pick a claim up in a room, or to put it down there. */
 export const trayPoint = (room: RoomId, index: number, layout: LabLayout = WIDE): Point => pickupPoint(room, index, layout)
-/** Where a real search is picked up in Discovery: at the computer for the web, at the bookshelf for papers and databases. */
-export const searchPoint = (spot: keyof typeof SEARCH_SPOTS, index: number, layout: LabLayout = WIDE): Point => inRoom(layout, "discovery", SEARCH_SPOTS[spot].dx, SEARCH_SPOTS[spot].dy + (index % 2 ? 4 : 0))
+/** Searches use Discovery's computer or the library's bookshelf. */
+export const searchPoint = (spot: keyof typeof SEARCH_SPOTS, index: number, layout: LabLayout = WIDE): Point => inRoom(layout, SEARCH_SPOTS[spot].room, SEARCH_SPOTS[spot].dx, SEARCH_SPOTS[spot].dy + (index % 2 ? 4 : 0))
 
 const roomAt = (p: Point, layout: LabLayout): RoomId | undefined => ROOMS.find((room) => { const r = layout.at[room.id]; return p.x >= r.x && p.x <= r.x + ROOM.width && p.y >= r.y && p.y <= r.y + ROOM.height })?.id
 /** The floor a piece of furniture takes up, with room to walk past (2.0's rule: only furniture that stands out on the floor). */
@@ -47,9 +47,16 @@ function routeIn(layout: LabLayout, room: RoomId, from: Point, to: Point): Point
 export function pathBetween(layout: LabLayout, from: Point, to: Point, lane = layout.corridorX): Point[] {
   const a = roomAt(from, layout), b = roomAt(to, layout)
   if (a && a === b) return routeIn(layout, a, from, to)
-  const out = a ? [...routeIn(layout, a, from, doorOf(layout, a)), { x: lane, y: doorOf(layout, a).y }] : [{ x: lane, y: from.y }]
-  const into = b ? [{ x: lane, y: doorOf(layout, b).y }, doorOf(layout, b), ...routeIn(layout, b, doorOf(layout, b), to)] : [{ x: lane, y: to.y }, to]
-  return [...out, ...into]
+  const offset = lane - layout.corridorX
+  const aisle = (room: RoomId | undefined, p: Point) => {
+    const door = room ? doorOf(layout, room) : p
+    return layout.corridors.reduce((best, x) => Math.abs(x - door.x) < Math.abs(best - door.x) ? x : best) + offset
+  }
+  const ax = aisle(a, from), bx = aisle(b, to)
+  const out = a ? [...routeIn(layout, a, from, doorOf(layout, a)), { x: ax, y: doorOf(layout, a).y }] : [{ x: ax, y: from.y }]
+  const across = ax === bx ? [] : [{ x: ax, y: layout.crossY }, { x: bx, y: layout.crossY }]
+  const into = b ? [{ x: bx, y: doorOf(layout, b).y }, doorOf(layout, b), ...routeIn(layout, b, doorOf(layout, b), to)] : [{ x: bx, y: to.y }, to]
+  return [...out, ...across, ...into]
 }
 
 export interface Walker {
@@ -122,8 +129,8 @@ function start(w: Walker, trip: Trip, layout: LabLayout) {
     w.carrying = false; w.tag = ""
     w.route = [...then(via(here, from), "pickup"), ...then(via(from, to), "drop"), ...via(to, w.home)]
   } else if (trip.kind === "fetch") {
-    // a real search is picked up at its own point in Discovery; everything else at the room's table
-    const search = trip.room === "discovery" ? searchSpot(trip.provider) : undefined
+    // Searches have their own furniture; everything else uses the room's table.
+    const search = trip.room === "discovery" || trip.room === "library" ? searchSpot(trip.provider) : undefined
     const spot = search ? searchPoint(search, w.index, layout) : pickupPoint(trip.room, w.index, layout)
     w.carrying = false; w.tag = ""
     w.route = [...then(via(here, spot), "pickup"), ...via(spot, w.home)]
