@@ -88,6 +88,7 @@ anything is spent.
 
 | Screen | What it is for |
 |---|---|
+| Overview | The first screen: how much has been run, how much of it is research, and a chart per day. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
 | Saved research | Everything that was run before. You can search it and open any result. |
 | Compare | A team of nine agents against one agent alone, on the same task. |
@@ -95,10 +96,16 @@ anything is spent.
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
 | Lab | The agents as characters in a lab. They walk only when the engine reports real work. |
+| Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, spending limits, how it works. |
 
 The pictures below are from **Demo mode**. Every one shows a practice run: fixed example text,
 not research. The app labels such runs "Practice" itself.
+
+**Overview.** Practice runs are counted apart from research, so the big number is only what real
+models produced.
+
+![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
 
 **Research.** You ask; the answer is split into hypotheses, each with the sources for and against
 it.
@@ -113,6 +120,11 @@ it.
 The lab's look is by Anh Lam.
 
 ![The Lab screen: six rooms with the agents as characters, and a side panel for the selected one](docs/images/lab.png)
+
+**Benchmarks.** These numbers are real runs, read from the run records. Where something was not
+measured the screen says "Not known".
+
+![The Benchmarks screen: the record to beat, and one agent against the team of nine with accuracy, tokens, time and cost](docs/images/benchmarks.png)
 
 ## Where things stand
 
@@ -160,6 +172,9 @@ A first report, in words. Charts and a fuller scope come later.
 |---|---|---|
 | BixBench3 | No real task yet. | No score. We cannot compare with 0.523. |
 | BixBench v1.5 | A pilot: 3 datasets, 8 questions, `anthropic/claude-sonnet-5-5`. | One agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). |
+| BixBench v1.5 | 20 datasets, 82 questions, an open model (Qwen3.6 35B) served on Modal, same token limit for both. | One agent: 15 of 82. Swarm: 19 of 82. No difference detected (exact p = 0.29). 42 of the 82 answers were not graded, because no judge model was used; they count as wrong, so both scores are lower bounds. |
+
+The Benchmarks screen in the app shows these rows with their intervals, tokens and time.
 
 Eight questions are far too few to tell the two apart. The pilot also used an older swarm; it
 has changed since, and the changes were tested with a scripted model only, not a real one. We
