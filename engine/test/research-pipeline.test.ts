@@ -8,7 +8,7 @@ import { test } from "node:test"
 
 process.env.NO_PAID_CALLS = "1"
 const { containsKey, DEFAULTS, engine, EUROPEPMC, EXA_RESULTS, jsonResponse, KEYS, paidAllowed, sourcesIn } = await import("./fixtures/research/harness.ts")
-const { BudgetReached, checkDailyBudget, spentToday } = await import("../src/board.ts")
+const { BudgetReached, checkDailyBudget, spentToday } = await import("../src/board/board.ts")
 const { researchSpentToday } = await import("../src/research/spend.ts")
 import type { Stamped } from "../src/research/types.ts"
 

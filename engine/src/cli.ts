@@ -4,11 +4,11 @@
 import { existsSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import "./env.ts"
-import { BudgetReached, loadState, RunBusy, runBoard, startRun } from "./board.ts"
+import { BudgetReached, loadState, RunBusy, runBoard, startRun } from "./board/board.ts"
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path, ROOT } from "./config.ts"
 import type { Stamped } from "./events.ts"
-import { PaidCallsOff } from "./paid.ts"
+import { PaidCallsOff } from "./paid/paid.ts"
 import { MissingTierKey } from "./providers.ts"
 
 const rest = process.argv.slice(2)

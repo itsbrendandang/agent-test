@@ -1,10 +1,10 @@
 // Exa web search for board members. Follows Exa's build-with-exa skill (.agents/skills/build-with-exa):
 // the request is the query, the objective the model wrote, type "auto" and highlights, and nothing else.
 // Results pass through the cheap first-pass triage (triage.ts) before any member reads them, so off-topic hits never cost the members' tokens.
-import { MOCK } from "./config.ts"
-import type { EvidenceItem } from "./events.ts"
-import { MOCK_EVIDENCE } from "./mock.ts"
-import { refusePaid } from "./paid.ts"
+import { MOCK } from "../config.ts"
+import type { EvidenceItem } from "../events.ts"
+import { MOCK_EVIDENCE } from "../mock.ts"
+import { refusePaid } from "../paid/paid.ts"
 
 /** Verbatim from Exa: the description of the `objective` tool parameter. Do not reword. */
 export const OBJECTIVE_DESCRIPTION =

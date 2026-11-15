@@ -1,7 +1,7 @@
 """The kill switch for everything that costs money: NO_PAID_CALLS.
 
 Same rule and wording as glhf/bixbench/src/bixbench3/paid.py and the engine's
-engine/src/paid.ts (copied, not imported: this folder has its own virtualenv).
+engine/src/paid/paid.ts (copied, not imported: this folder has its own virtualenv).
 The switch is ON unless NO_PAID_CALLS is exactly "0". While it is on:
 
 - LLMClient refuses to be built, so run.py, regrade.py and any script that

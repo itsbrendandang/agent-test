@@ -3,11 +3,11 @@
 // and the brief, so every member starts on the same page.
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { parse } from "yaml"
-import { type BoardConfig, path, type Tier } from "./config.ts"
-import type { Brief } from "./brief.ts"
-import { SEARCH_GUIDANCE } from "./exa.ts"
-import { LITERATURE_GUIDANCE } from "./literature.ts"
-import { DATABASE_GUIDANCE } from "./sources/index.ts"
+import { type BoardConfig, path, type Tier } from "../config.ts"
+import type { Brief } from "../brief.ts"
+import { SEARCH_GUIDANCE } from "../search/exa.ts"
+import { LITERATURE_GUIDANCE } from "../search/literature.ts"
+import { DATABASE_GUIDANCE } from "../sources/index.ts"
 
 export interface AgentDef {
   name: string

@@ -20,7 +20,7 @@ No key is needed for `npm run demo` or for a scripted drug board run. A **live**
 
 ## Paid calls: `NO_PAID_CALLS` and the runtime switch
 
-The engine starts with the state `NO_PAID_CALLS` gives. The dashboard's paid switch (`POST /api/paid`, `engine/src/paidswitch.ts`) can change it **for the running process only**: it is kept in memory, never written to `.env`, and a restart or crash goes back to the `.env` value. To turn it on the request needs the session token, `{"on": true, "confirm": "I will be charged"}` exactly, a JSON body, the usual Origin and Host checks, and every key the board's roster needs (else 409 naming them). Turning it off needs the token. Each attempt that passes the token check is appended to `board/runs/.paid-switch-audit.jsonl` (time, direction, origin; never the token). `PAID_SWITCH_LOCKED=1` refuses all changes. A board run keeps the mode it started in. Turning paid calls off stops new paid calls at the next call of a running board run, and asks the tracker to stop local GLHF runs that can spend; it cannot stop a cloud run's VM. `GET /api/paid` shows the state.
+The engine starts with the state `NO_PAID_CALLS` gives. The dashboard's paid switch (`POST /api/paid`, `engine/src/paid/paidswitch.ts`) can change it **for the running process only**: it is kept in memory, never written to `.env`, and a restart or crash goes back to the `.env` value. To turn it on the request needs the session token, `{"on": true, "confirm": "I will be charged"}` exactly, a JSON body, the usual Origin and Host checks, and every key the board's roster needs (else 409 naming them). Turning it off needs the token. Each attempt that passes the token check is appended to `board/runs/.paid-switch-audit.jsonl` (time, direction, origin; never the token). `PAID_SWITCH_LOCKED=1` refuses all changes. A board run keeps the mode it started in. Turning paid calls off stops new paid calls at the next call of a running board run, and asks the tracker to stop local GLHF runs that can spend; it cannot stop a cloud run's VM. `GET /api/paid` shows the state.
 
 
 A key alone does not allow spending. The engine refuses every paid step unless this variable
@@ -28,7 +28,7 @@ is exactly `0`.
 
 | Variable | Default | Meaning | Code |
 |---|---|---|---|
-| `NO_PAID_CALLS` | not set, which means **no paid calls** | `0` allows paid calls: real models, cloud runs, Exa, the drug board's models and checkers, the model behind Ask. Any other value, or no value, refuses them. Only the person who pays sets it. The engine reads it at start. | `engine/src/paid.ts` (the only place that reads it) |
+| `NO_PAID_CALLS` | not set, which means **no paid calls** | `0` allows paid calls: real models, cloud runs, Exa, the drug board's models and checkers, the model behind Ask. Any other value, or no value, refuses them. Only the person who pays sets it. The engine reads it at start. | `engine/src/paid/paid.ts` (the only place that reads it) |
 
 `.env.example` has the line as a comment (`# NO_PAID_CALLS=0`), so a copy of that file keeps
 paid calls off.
@@ -72,11 +72,11 @@ Set these in `.env` or in your shell. All are optional.
 |---|---|---|---|
 | `DRUG_BOARD_PORT` | `8787` | Engine port. The CLI also uses it to find the engine. | `engine/src/server.ts`, `engine/src/glhf/cli.ts` |
 | `HOST` | `127.0.0.1` | Address the engine listens on. Docker Compose sets `0.0.0.0` inside the container. | `bindHost` in `engine/src/app.ts` |
-| `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
+| `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on port 5317. | `engine/src/http.ts` |
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
-| `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
+| `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/search/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
-| `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid.ts` |
+| `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
 
 ### Run tracker
@@ -147,7 +147,7 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `checkers.escalate.literature`, `checkers.escalate.computed` | `openai`, `claude-code` | Second checker for each kind of claim. |
 | `checkers.openai_model` | `gpt-5-mini` | Model for the OpenAI checker. |
 | `checkers.claude_code_cmd` | `claude -p --output-format json --restricted --strict-mcp-config` | Command for the Claude Code checker. `--restricted` removes the tools that run commands or code and the web fetch tool, keeps file tools inside the working folder, and ignores user and project settings. `--strict-mcp-config` loads no MCP servers. So by default the checker **cannot run code**: it checks a computed claim by reasoning, and answers "unsupported" when that is not enough. |
-| `checkers.claude_code_tools` | `Read Write` | Tools the checker may use without asking. It runs in an empty temporary folder. Its environment holds only a fixed list of variables (`CHILD_ENV` in `engine/src/checkers.ts`), so other providers' keys are not passed. |
+| `checkers.claude_code_tools` | `Read Write` | Tools the checker may use without asking. It runs in an empty temporary folder. Its environment holds only a fixed list of variables (`CHILD_ENV` in `engine/src/board/checkers.ts`), so other providers' keys are not passed. |
 | `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
 | (warning for the two keys above) | | The checker is not in a container. It runs as your user. If you remove `--restricted` or add `Bash(python3:*)` to the tools, code that it writes can read any file you can read (also `.env`) and use the network. Do that only inside a container. The `--restricted` mode was not tested with a live call. |
 | `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |

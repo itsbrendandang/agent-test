@@ -24,7 +24,7 @@ from pathlib import Path
 
 from persist import Persister
 
-# The same list as PAID_KEYS in engine/src/paid.ts: the keys that can spend, or that open a paid or gated service.
+# The same list as PAID_KEYS in engine/src/paid/paid.ts: the keys that can spend, or that open a paid or gated service.
 PROVIDER_KEYS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "HF_TOKEN", "TINKER_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY")
 # What a real-mode deployment hands to the engine, from the Modal Secret `asb-keys`.
 REAL_KEYS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "HF_TOKEN", "PAST_API_KEY")

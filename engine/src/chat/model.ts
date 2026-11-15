@@ -2,7 +2,7 @@
 // chat completions when chosen. The model reads the catalog, the run records and the conversation, all
 // as data between markers with every "<" escaped (as ask.ts does), and replies with one JSON object. It cannot
 // start a run: nothing in its reply is acted on except through the checks in plan.ts.
-import { refusePaid } from "../paid.ts"
+import { refusePaid } from "../paid/paid.ts"
 import type { ProviderId } from "./catalog.ts"
 
 export type Fetch = typeof fetch

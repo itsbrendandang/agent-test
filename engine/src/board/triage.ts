@@ -21,11 +21,11 @@
 // narrows this, nothing removes it. Treat "verified" here as "a different model found a real supporting passage",
 // not as a proof.
 import type { Model, Models, ThinkingLevel } from "@earendil-works/pi-ai"
-import { type BoardConfig, MOCK } from "./config.ts"
-import type { EvidenceItem, Verdict } from "./events.ts"
-import { refusePaid } from "./paid.ts"
-import { firstPassModel, type ModelId, parseModelId } from "./providers.ts"
-import { CHECK_SYSTEM, checkPrompt, TRIAGE_SYSTEM, triagePrompt } from "./questions.ts"
+import { type BoardConfig, MOCK } from "../config.ts"
+import type { EvidenceItem, Verdict } from "../events.ts"
+import { refusePaid } from "../paid/paid.ts"
+import { firstPassModel, type ModelId, parseModelId } from "../providers.ts"
+import { CHECK_SYSTEM, checkPrompt, TRIAGE_SYSTEM, triagePrompt } from "../questions.ts"
 
 export const MIN_QUOTE = 20 // characters; a shorter "quote" is a phrase, not a passage
 export const MAX_QUOTE = 600

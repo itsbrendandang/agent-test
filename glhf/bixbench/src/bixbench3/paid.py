@@ -1,6 +1,6 @@
 """The kill switch for everything that costs money: NO_PAID_CALLS.
 
-The same switch as the engine's (engine/src/paid.ts), for someone who runs this package directly
+The same switch as the engine's (engine/src/paid/paid.ts), for someone who runs this package directly
 instead of through the engine. It is ON unless NO_PAID_CALLS is exactly "0". While it is on:
 
 - a run with a paid model is refused; the scripted model and a local model may run (glhf_local.py).

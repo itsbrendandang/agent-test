@@ -88,13 +88,13 @@ Paths: `swarm/` is `glhf/bixbench/src/bixbench3/inspect_harness/swarm/`. `v1/` i
 
 | # | Claim | Evidence | Status |
 |---|---|---|---|
-| 49 | Exa is called by `search_docs` and by the drug board's search. | `swarm/tools.py:501-507` (`api.exa.ai/search`, `includeDomains`); `engine/src/exa.ts:52` | verified-by-me (read) |
+| 49 | Exa is called by `search_docs` and by the drug board's search. | `swarm/tools.py:501-507` (`api.exa.ai/search`, `includeDomains`); `engine/src/search/exa.ts:52` | verified-by-me (read) |
 | 50 | Exa was tested with live searches. | `docs/status.md` ("Sponsor tools"). It also says there is no record of a live search with the 9-site list. | taken from docs |
 | 51 | Exa was not used in the pilot. | pilot `run.json` files: `settings.documentation_search: false` | verified-by-me |
 | 52 | past.dev sends and recalls approved lessons. | `swarm/past_memory.py:24,49,94`; `test_glhf_memory_and_search.py:527,595` (stand-in) | verified-by-me (read, tests pass) |
 | 53 | past.dev was tested against the live API. | `docs/status.md`, `README.md` | taken from docs |
 | 54 | Pi is the coding agent harness the project was built with. | `docs/pi-setup.md`; `.pi/settings.json`, `.pi/agents/` (4 profiles) exist | taken from docs; the files exist |
-| 55 | Pi Durable runs the tracker and the drug board. | `engine/package.json:14`; `engine/src/board.ts:28-29,473`; `engine/src/glhf/task.ts:14` | verified-by-me |
+| 55 | Pi Durable runs the tracker and the drug board. | `engine/package.json:14`; `engine/src/board/board.ts:28-29,473`; `engine/src/glhf/task.ts:14` | verified-by-me |
 | 56 | Modal is not used. | No `import modal` or `"modal"` dependency in any `.py`, `.ts`, `.json` or `.toml` file outside `node_modules` and `.venv` (grep) | verified-by-me |
 | 57 | The swarm's agent loop runs on Inspect AI, not on Pi. | `swarm/solver.py:22-26` (imports from `inspect_ai`) | verified-by-me |
 

@@ -16,11 +16,8 @@ export class HttpError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status }
 }
 
-// 5317 is the dashboard (Vite dev server, Docker, Tauri dev). Vite's own default ports (5173, 4173) are not listed:
-// any other project's dev server would be the dashboard. The three tauri entries are the built desktop app
-// (tauri://localhost on macOS and Linux, http(s)://tauri.localhost on Windows). Others go in DASHBOARD_ORIGINS.
+// 5317 is the dashboard (Vite dev server and Docker). Other origins go in DASHBOARD_ORIGINS.
 const DEFAULT_ORIGINS = [5317].flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`])
-  .concat(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"])
 
 const list = (value: string | undefined) => (value ?? "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 

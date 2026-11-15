@@ -13,7 +13,7 @@ should be used, and asked whether to build a database.
 - **The engine** (chat, direct answers, team reviews) does not use past.dev at all.
 - **What agents find** is kept per run, in a folder of files (`board/runs/<id>/`,
   `board/runs/.research/<id>/`, `glhf/runs/<id>/`). There is no database. Search over saved
-  research reads those folders each time (`engine/src/search.ts`).
+  research reads those folders each time (`engine/src/search/search.ts`).
 
 ## Part 1: past.dev in the engine
 

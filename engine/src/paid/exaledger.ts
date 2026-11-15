@@ -9,7 +9,7 @@
 // Exa reported, or minus the reservation when the search failed.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { type BoardConfig, path } from "./config.ts"
+import { type BoardConfig, path } from "../config.ts"
 
 /** ASSUMPTION: $0.007 per search, measured once from two live searches ($0.014); a small sample, not a contract price. */
 export const EXA_ASSUMED_USD = 0.007

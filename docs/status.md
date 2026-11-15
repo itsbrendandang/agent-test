@@ -89,7 +89,7 @@ Known limits:
 
 | Tool | Status |
 |---|---|
-| Exa search | Tested live. Used by the swarm's `search_docs` tool (`swarm/tools.py`). Also wired into the board review (`engine/src/exa.ts`): the scout has the tool, with a limit of 20 searches a run and $40 in total. No real board review has used it. The scout also has a free literature search (`engine/src/literature.ts`, Europe PMC), tested with a fake network and one live query by hand. Details for the swarm's tool are in the next table. |
+| Exa search | Tested live. Used by the swarm's `search_docs` tool (`swarm/tools.py`). Also wired into the board review (`engine/src/search/exa.ts`): the scout has the tool, with a limit of 20 searches a run and $40 in total. No real board review has used it. The scout also has a free literature search (`engine/src/search/literature.ts`, Europe PMC), tested with a fake network and one live query by hand. Details for the swarm's tool are in the next table. |
 
 Live test of the swarm's documentation search (the guard in `swarm/tools.py`, with the 9-site
 list):
@@ -124,7 +124,7 @@ sample.
 | `--solvers` in the CLI | Automated test (same file). |
 | `GET /api/glhf/status`: limits, models, keys as true or false | Automated tests (same file). |
 | Refusals name the field (`{error, field}`) | Automated tests (same file). |
-| Paid-calls switch (`NO_PAID_CALLS`, `engine/src/paid.ts`): on unless the value is `0`; refuses real-model and cloud runs, Exa, the board's models and three checkers; Ask falls back to word search; keys blank in child processes; a paid local run in progress is stopped; `paidCalls` and `models` in the status; the doctor line | Automated tests (`engine/test/paid.test.ts`, 12 tests). The tests check that no request left the process. **Not tested:** a real cloud run that is already on its machine (none exists); the switch inside Docker Compose. |
+| Paid-calls switch (`NO_PAID_CALLS`, `engine/src/paid/paid.ts`): on unless the value is `0`; refuses real-model and cloud runs, Exa, the board's models and three checkers; Ask falls back to word search; keys blank in child processes; a paid local run in progress is stopped; `paidCalls` and `models` in the status; the doctor line | Automated tests (`engine/test/paid.test.ts`, 12 tests). The tests check that no request left the process. **Not tested:** a real cloud run that is already on its machine (none exists); the switch inside Docker Compose. |
 | Paid-calls switch for Python commands run directly: `bixbench3 run` and `setup-runtime`, `python -m bixbench3.glhf_local` with a real model or `--exa`, `search_docs`, past.dev recall and ingest, lesson approval, `bixbench-v1 run` with a real model, the v1 LLM judge | Automated tests with fakes: 11 in `glhf/bixbench/tests/unit/test_paid.py`, 5 in `glhf/bixbench_v1/tests/test_paid.py`. All pass. **Not tested:** a real refused command on a machine with real keys. |
 | Paid-calls switch: what it does not cover | `inspect eval` on `inspect_harness/tasks.py`; scripts that call `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly; credentials other than the seven named keys (Google, AWS, Azure, a saved Hugging Face login); a cloud run that is already on its virtual machine. No code guards these. |
 | HTTP checks (Host, Origin, token, JSON bodies) | Automated tests that call the real request handler (`engine/test/app.test.ts`, `engine/test/board-http.test.ts`). The handler is in `engine/src/app.ts`; `server.ts` only listens. |

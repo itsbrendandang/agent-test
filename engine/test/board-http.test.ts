@@ -7,12 +7,12 @@ import { join } from "node:path"
 import { Readable } from "node:stream"
 import { test } from "node:test"
 import type { IncomingMessage } from "node:http"
-import { acquireRunLock, lockHolder, newRunDir, overLimit, rememberRun, RunBusy, spentToday } from "../src/board.ts"
+import { acquireRunLock, lockHolder, newRunDir, overLimit, rememberRun, RunBusy, spentToday } from "../src/board/board.ts"
 import { BriefRejected, loadBrief } from "../src/brief.ts"
-import { checkerEnv, parseVerdict } from "../src/checkers.ts"
+import { checkerEnv, parseVerdict } from "../src/board/checkers.ts"
 import { type BoardConfig, loadConfig } from "../src/config.ts"
 import { stamp } from "../src/glhf/proc.ts"
-import { allowedHost, allowedOrigin, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
+import { allowedHost, allowedOrigin, dashboardOrigins, hasToken, HttpError, isSafeId, linesFrom, originState, readJson, safeId } from "../src/http.ts"
 
 // These tests are about what happens when paid calls are allowed. They make none: models, fetch and commands are
 // fakes. What the NO_PAID_CALLS switch refuses is tested in paid.test.ts.
@@ -27,13 +27,12 @@ const tempConfig = (): BoardConfig => {
 }
 
 test("origin: dashboard allowed, other pages forbidden, none for CLI", () => {
+  assert.deepEqual([...dashboardOrigins({})].sort(), ["http://127.0.0.1:5317", "http://localhost:5317"])
   assert.equal(originState(req({ origin: "http://127.0.0.1:5317" }), {}), "allowed")
   assert.equal(originState(req({ origin: "http://localhost:5317" }), {}), "allowed")
   // Vite's default ports are any other project's dev server: not the dashboard unless configured.
   for (const port of [5173, 4173]) for (const host of ["localhost", "127.0.0.1"]) assert.equal(originState(req({ origin: `http://${host}:${port}` }), {}), "forbidden", `${host}:${port}`)
   assert.equal(originState(req({ origin: "http://localhost:5173" }), { DASHBOARD_ORIGINS: "http://localhost:5173" }), "allowed", "DASHBOARD_ORIGINS adds one")
-  // The built desktop app: tauri://localhost on macOS and Linux, http(s)://tauri.localhost on Windows.
-  for (const origin of ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]) assert.equal(originState(req({ origin }), {}), "allowed", origin)
   assert.equal(originState(req({ origin: "https://evil.example" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "http://localhost:9999" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "null" }), {}), "forbidden")
@@ -194,7 +193,7 @@ test("run lock: a lock that names a reused pid, our own pid or pid 1 is stale (t
 test("run lock: released when the process is stopped with SIGTERM or SIGINT", async () => {
   const config = tempConfig()
   const dir = join(config.paths.runs, newRunDir(config, "r")), file = join(dir, "run.lock")
-  const board = new URL("../src/board.ts", import.meta.url).href
+  const board = new URL("../src/board/board.ts", import.meta.url).href
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     const child = spawn(process.execPath, ["--input-type=module", "-e", `import { acquireRunLock } from ${JSON.stringify(board)}; acquireRunLock(${JSON.stringify(dir)}); console.log("locked"); setInterval(() => {}, 1000)`], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, DRUG_BOARD_MOCK: "1" } })
     await new Promise<void>((ok, fail) => { child.stdout.once("data", () => ok()); child.once("exit", () => fail(new Error("child ended before taking the lock"))) })

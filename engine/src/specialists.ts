@@ -20,7 +20,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { parse } from "yaml"
-import type { AgentDef } from "./agents.ts"
+import type { AgentDef } from "./board/agents.ts"
 import { type BoardConfig, path, ROOT, type Tier } from "./config.ts"
 import type { RosterEntry } from "./events.ts"
 

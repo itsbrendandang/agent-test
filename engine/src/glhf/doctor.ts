@@ -2,7 +2,7 @@
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
-import { paidCallsOff, paidState, paidSwitchLocked } from "../paid.ts"
+import { paidCallsOff, paidState, paidSwitchLocked } from "../paid/paid.ts"
 import { LIMITS, modelsFor } from "./types.ts"
 
 export interface Check { name: string; ok: boolean; need: "local" | "cloud" | "optional"; found: string; fix: string }

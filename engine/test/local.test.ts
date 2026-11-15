@@ -42,7 +42,7 @@ process.env.DRUG_BOARD_LOCAL_MODEL = "ollama/qwen2.5:14b"
 for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"]) process.env[key] = "fake-key-for-tests"
 
 const local = await import("../src/local.ts")
-const paid = await import("../src/paid.ts")
+const paid = await import("../src/paid/paid.ts")
 const config = await import("../src/config.ts")
 const { buildModels, modelFor, localModelFor, LOCAL_PROVIDER } = await import("../src/models.ts")
 const { costEstimate, modelCatalogue, modelsFor } = await import("../src/glhf/types.ts")

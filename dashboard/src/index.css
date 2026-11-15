@@ -261,19 +261,8 @@ details.set-section > summary { cursor: pointer; width: fit-content; border-radi
 details.set-section > summary h2 { display: inline; }
 details.set-section[open] > summary { margin-bottom: var(--space-3); }
 details.set-section > * + * { margin-top: var(--space-3); }
-.keys { display: flex; flex-direction: column; gap: 10px; }
-.keys ul, ul.engine-facts { list-style: none; margin: 0; padding: 0; }
-.keys li, ul.engine-facts li { display: grid; grid-template-columns: 180px 1fr; gap: 4px 20px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
-.keys-name { display: flex; flex-direction: column; font-size: 13px; }
-.keys-name span { font-size: 12px; color: var(--text-muted); }
-.keys-name span[data-on] { color: var(--success); }
-.keys-actions { display: flex; align-items: center; gap: 12px; }
-.keys-actions input { flex: 1; min-width: 0; padding: 8px 12px; border: 1px solid var(--edge); border-radius: 10px; background: var(--muted); font: 13px var(--font-mono); }
-.keys-actions input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.keys-actions button:disabled { opacity: .4; cursor: default; }
-.keys-result { grid-column: 2; font-size: 12px; min-height: 0; color: var(--danger); }
-.keys-result:empty { display: none; }
-.keys-result[data-ok="true"] { color: var(--success); }
+ul.engine-facts { list-style: none; margin: 0; padding: 0; }
+ul.engine-facts li { display: grid; grid-template-columns: 180px 1fr; gap: 4px 20px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 
 /* swarm team cards (Agents view) */
 .team-card { display: flex; flex-direction: column; gap: 10px; }
@@ -580,8 +569,7 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
   .home-empty { margin: 0 auto; }
 }
 @media (max-width: 640px) {
-  .keys li, .engine-facts li { grid-template-columns: minmax(0, 1fr); }
-  .keys-actions { flex-wrap: wrap; }
+  .engine-facts li { grid-template-columns: minmax(0, 1fr); }
   .home-composer-foot .effort { flex-basis: 100%; }
   .page-head > div:first-child { flex-basis: 100%; }
 }

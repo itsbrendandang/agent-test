@@ -5,12 +5,12 @@
 // part of any response.
 import { existsSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
-import { loadAgent, loadRoster } from "../agents.ts"
+import { loadAgent, loadRoster } from "../board/agents.ts"
 import { clean, frontmatter, LIBRARY_ID, LIBRARY_TITLE, loadSpecialists as loadAllSpecialists, namesOrigin, section, type Specialist as LoadedSpecialist, SPECIALISTS_DIR } from "../specialists.ts"
 import { type BoardConfig, mockMode, ROOT } from "../config.ts"
-import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "../exaledger.ts"
+import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "../paid/exaledger.ts"
 import { MODEL_CHOICES } from "../glhf/types.ts"
-import { paidCallsOff, paidState } from "../paid.ts"
+import { paidCallsOff, paidState } from "../paid/paid.ts"
 import { type DatabaseSource, SOURCES } from "../sources/index.ts"
 
 export type ProviderId = "anthropic" | "openai"

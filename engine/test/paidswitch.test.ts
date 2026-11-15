@@ -12,6 +12,7 @@ import { after, afterEach, test } from "node:test"
 import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai"
 
 process.env.NO_PAID_CALLS = "1"
+delete process.env.DRUG_BOARD_MOCK // CI sets it; this file tests the switch between scripted and real, with fakes
 for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "OPENROUTER_API_KEY"]) process.env[key] = "fake-key-for-tests"
 const outbound: string[] = []
 const realFetch = globalThis.fetch
@@ -22,17 +23,17 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 
-const paid = await import("../src/paid.ts")
+const paid = await import("../src/paid/paid.ts")
 const { createApp } = await import("../src/app.ts")
 const cfg = await import("../src/config.ts")
 const { loadConfig } = cfg
-const { handlePaid, CONFIRM, AUDIT_FILE, resetRateLimit, RATE_PER_MINUTE } = await import("../src/paidswitch.ts")
-const { checkClaims, searchOnce, startRun, runBoard, loadState } = await import("../src/board.ts")
+const { handlePaid, CONFIRM, AUDIT_FILE, resetRateLimit, RATE_PER_MINUTE } = await import("../src/paid/paidswitch.ts")
+const { checkClaims, searchOnce, startRun, runBoard, loadState } = await import("../src/board/board.ts")
 const { gateProvider } = await import("../src/models.ts")
-const { FirstPass } = await import("../src/triage.ts")
+const { FirstPass } = await import("../src/board/triage.ts")
 const { modelsFor } = await import("../src/glhf/types.ts")
 const { buildCatalog } = await import("../src/chat/catalog.ts")
-const { exaLedgerFile } = await import("../src/exaledger.ts")
+const { exaLedgerFile } = await import("../src/paid/exaledger.ts")
 const { EventLog } = await import("../src/events.ts")
 import type { BoardConfig } from "../src/config.ts"
 
@@ -209,7 +210,7 @@ test("the environment's own value is the start: NO_PAID_CALLS=0 reads as on, the
 })
 
 test("a restart goes back to the environment: the switch lives in memory only", () => {
-  const code = (body: string) => spawnSync(process.execPath, ["--input-type=module", "-e", `const p = await import(${JSON.stringify(join(import.meta.dirname, "../src/paid.ts"))}); ${body}`], { env: { PATH: process.env.PATH, NO_PAID_CALLS: "1", PAID_SWITCH_LOCKED: "0" }, encoding: "utf8" })
+  const code = (body: string) => spawnSync(process.execPath, ["--input-type=module", "-e", `const p = await import(${JSON.stringify(join(import.meta.dirname, "../src/paid/paid.ts"))}); ${body}`], { env: { PATH: process.env.PATH, NO_PAID_CALLS: "1", PAID_SWITCH_LOCKED: "0" }, encoding: "utf8" })
   const first = code("p.setPaidOverride(true); console.log(JSON.stringify(p.paidState()))")
   assert.equal(first.stdout.trim(), '{"paid":true,"source":"switch"}', first.stderr)
   const second = code("console.log(JSON.stringify(p.paidState()))")

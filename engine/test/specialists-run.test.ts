@@ -14,8 +14,8 @@ for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"]) proces
 const scratch = mkdtempSync(join(tmpdir(), "specialists-run-"))
 process.env.GLHF_RUNS_DIR = join(scratch, "glhf-runs")
 
-const { instructionsFor, loadAgent, loadRoster } = await import("../src/agents.ts")
-const { applyOverrides, loadState, runBoard, startRun } = await import("../src/board.ts")
+const { instructionsFor, loadAgent, loadRoster } = await import("../src/board/agents.ts")
+const { applyOverrides, loadState, runBoard, startRun } = await import("../src/board/board.ts")
 const { loadBrief } = await import("../src/brief.ts")
 const { loadConfig, MOCK, path } = await import("../src/config.ts")
 const { guard } = await import("../src/http.ts")

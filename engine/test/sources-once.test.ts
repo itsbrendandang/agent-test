@@ -17,14 +17,14 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 
-const { foundBy, loadState, poolEvidence, replyPhases, runBoard, searches, startRun, summarize } = await import("../src/board.ts")
-const { instructionsFor, loadAgent, loadRoster } = await import("../src/agents.ts")
+const { foundBy, loadState, poolEvidence, replyPhases, runBoard, searches, startRun, summarize } = await import("../src/board/board.ts")
+const { instructionsFor, loadAgent, loadRoster } = await import("../src/board/agents.ts")
 const { loadBrief } = await import("../src/brief.ts")
 const { buildCatalog } = await import("../src/chat/catalog.ts")
 const { loadConfig } = await import("../src/config.ts")
 const { EventLog, SEARCH_PROVIDERS } = await import("../src/events.ts")
 const { MOCK_EVIDENCE } = await import("../src/mock.ts")
-const { runPreflight } = await import("../src/preflight.ts")
+const { runPreflight } = await import("../src/paid/preflight.ts")
 const { databaseOnce, DATABASE_GUIDANCE, DEFAULT_MAX_DATABASE_SEARCHES, fixtureRecords, QUERY_DESCRIPTION, ServiceError, SOURCES } = await import("../src/sources/index.ts")
 import type { BoardConfig } from "../src/config.ts"
 import type { EvidenceItem, SearchProvider } from "../src/events.ts"
@@ -264,7 +264,7 @@ test("a practice run: the scout searches the web first, then the literature, the
 })
 
 test("the three search tools are wired the same way: each puts its results into the pool with its own label and the member's query", () => {
-  const board = readFileSync(join(import.meta.dirname, "../src/board.ts"), "utf8")
+  const board = readFileSync(join(import.meta.dirname, "../src/board/board.ts"), "utf8")
   const calls = [...board.matchAll(/return intoPool\(out\.result as SearchResult, foundBy\("(\w+)", mock(, args\.source)?\), memberOf\(api\), api\.callId, args\.query, args\.key_question(, true)?\)/g)].map((m) => [m[1], Boolean(m[2]), Boolean(m[3])])
   assert.deepEqual(calls, [["exa_search", false, false], ["literature_search", false, false], ["database_search", true, true]])
   assert.equal(board.match(/intoPool\(/g)?.length, 3, "no search result reaches a member by another way")

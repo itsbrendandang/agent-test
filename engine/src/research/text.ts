@@ -1,6 +1,6 @@
 // Pure text work on an answer: nothing here calls a model or the network. This is where code, not a model, decides
 // which markers stand, what the cited sentences are, and what a key or an over-long text is cut to.
-import { PAID_KEYS } from "../paid.ts"
+import { PAID_KEYS } from "../paid/paid.ts"
 
 /** Hard size caps on text from a person or a model. */
 export const MAX_ANSWER_CHARS = 12_000

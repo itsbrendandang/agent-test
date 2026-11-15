@@ -4,8 +4,8 @@
 // board's own evidence block (board.ts evidenceBlock).
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { loadAgent } from "../agents.ts"
-import { evidenceBlock } from "../board.ts"
+import { loadAgent } from "../board/agents.ts"
+import { evidenceBlock } from "../board/board.ts"
 import type { BoardConfig } from "../config.ts"
 import type { EvidenceItem } from "../events.ts"
 import { escapeData, MAX_SOURCE_CHARS } from "./text.ts"

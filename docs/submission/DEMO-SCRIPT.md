@@ -12,7 +12,7 @@ Two terminals, T1 and T2, both in the repository root. Large font.
 
 ```bash
 # T1 and T2
-export NO_PAID_CALLS=1          # the engine then refuses every paid call (engine/src/paid.ts)
+export NO_PAID_CALLS=1          # the engine then refuses every paid call (engine/src/paid/paid.ts)
 ```
 
 ```bash
