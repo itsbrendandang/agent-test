@@ -1,14 +1,17 @@
 # AI Scientist Bot
 
-**Ask a science question. A team of AI agents researches it. You see what they found, what they
-checked, and what is still uncertain.**
+AI Scientist Bot (GLHF) is a research aid for scientists and developers who want to test how
+teams of AI agents work. It runs drug candidate team reviews and compares a swarm with a single
+agent on biology data-analysis tasks. You can inspect the sources, checks and uncertain claims.
+Start with free practice runs; real AI models cost money and stay off until you turn them on.
 
 Built for the **SF AI Research Hackathon** (Track 3, AI Scientist Swarms) by team GLHF:
 Brendan Dang, Anh Lam and Josh Bustamante.
 
-**Contents:** [Try it](#try-it) · [Demo and Real](#demo-and-real) · [What is in the app](#what-is-in-the-app) ·
-[Where things stand](#where-things-stand) · [Benchmarks](#benchmarks) · [How it fits together](#how-it-fits-together) ·
-[Words](#words) · [Read more](#read-more)
+**Contents:** [Quick start](#quick-start) · [What's inside](#whats-inside) ·
+[Running a review](#running-a-review) · [Real mode and paid calls](#real-mode-and-paid-calls) ·
+[App screens](#what-is-in-the-app) · [Status](#where-things-stand) · [Benchmarks](#benchmarks) ·
+[Tests and checks](#tests-and-checks) · [Docs index](#docs-index) · [Words](#words-used-in-these-documents)
 
 ## Why we built it
 
@@ -25,22 +28,60 @@ answer. It shows the work:
 
 The app is allowed to say "I do not know" or "nothing was found". That is better than a guess.
 
-## Try it
+## Quick start
 
-You need a terminal and [Node.js](https://nodejs.org) 24 or newer.
+You need a terminal, [Node.js](https://nodejs.org) 24 or newer, and [uv](https://docs.astral.sh/uv/).
+The scripted swarm demo also needs Docker running. No API keys are needed.
 
 ```bash
 git clone https://github.com/itsbrendandang/agent-test.git && cd agent-test
 npm run setup    # once, after cloning
+npm run doctor   # reports missing tools and how to fix them
 npm start        # starts everything and opens http://127.0.0.1:5317 in your browser
 ```
 
-Press Ctrl+C to stop. After every `git pull`, stop and run `npm start` again.
+The engine listens on port **8787**. The dashboard listens on port **5317**.
+To start them separately, run `npm run engine` and `npm run dashboard` in two terminals.
+Press Ctrl+C in each terminal to stop what you started. After pulling changes, restart the app;
+run `npm run setup` again if dependencies changed.
 
 A new copy starts in **Demo mode**. Demo mode is free and needs no account. Its answers are fixed
 examples that show how the app works. They are not research.
 
-## Demo and Real
+With the engine running, try the scripted swarm in another terminal:
+
+```bash
+npm run demo    # free demo case in Docker; not a benchmark result
+```
+
+## What's inside
+
+| Folder | What it holds |
+|---|---|
+| [engine/](engine/) | The engine, run tracker and paid-call checks. |
+| [dashboard/](dashboard/) | The browser app. |
+| [board/](board/) | Team review settings and agent instructions. |
+| [glhf/bixbench/](glhf/bixbench/) | The nine-role swarm for BixBench3. |
+| [glhf/bixbench_v1/](glhf/bixbench_v1/) | The adapter and three-role swarm for BixBench v1.5. |
+| [docs/](docs/) | Setup, design, results and reference guides. |
+
+See [the codebase map](docs/codebase.md) for more detail. The desktop shell is still in
+this branch, but is paused; use the browser app. See [the developer guide](docs/developers.md).
+
+## Running a review
+
+Start in Demo mode. In **Research**, ask a question such as “Should we take this drug candidate
+forward?” Review the plan and its limits before you start a team review. Open the result in
+**Saved research** to read the recommendation, sources and statement checks. Practice runs use
+fixed example text, not live research.
+
+For review settings and the command-line workflow, see [the team review guide](docs/drug-board.md).
+For swarm runs and saved results, see [the running guide](docs/running.md).
+
+## Real mode and paid calls
+
+**Only the person who pays may enable paid calls. Coding agents must not enable them, run
+preflight, or make paid calls.** Never share keys or commit your local key file.
 
 | | Demo | Real |
 |---|---|---|
@@ -78,7 +119,7 @@ Only the person who pays for the keys does this.
 3. **Switch to Real.** Choose one:
    - **For this session:** start the app (`npm start`), open **Settings**, and switch Run mode
      from Demo to Real. The app shows the limits and asks you to confirm. A restart goes back
-     to Demo.
+     to the value in your local key file (Demo by default).
    - **Every time:** set `NO_PAID_CALLS=0` in `.env`, then start the app again.
 
 Good to know:
@@ -319,7 +360,7 @@ saved as it happens. A review that is interrupted, for example by a crash or a r
 where it stopped and does not repeat (or pay again for) finished work. We tested this by stopping
 a practice review in the middle.
 
-## Words
+## Words used in these documents
 
 | Word | Plain meaning |
 |---|---|
@@ -332,18 +373,26 @@ a practice review in the middle.
 | Benchmark | A public set of tasks with known answers, used to measure a method. Ours is BixBench (biology data analysis). |
 | Engine | The program on your machine that runs everything and guards the spending. |
 
-## Check that your copy is healthy
+## Tests and checks
 
 ```bash
 npm run check    # about 3 minutes; never spends money
+npm run check -- --fast    # merge-conflict markers and type checks only
+npm run check -- --all     # also runs the Python suites
 ```
 
 It prints one line per part, `ok` or `FAIL`. All five parts should print `ok`: no
 merge-conflict markers, both type checks clean, engine tests and dashboard tests pass.
-If a line says `FAIL` on your copy, run `npm run setup` again first. More about the tests is in
+Prefer this report to `npm test`: that command runs the harness tests, type checks and engine
+tests, but not the dashboard tests. It has no per-file time limit. The health report runs each
+engine test file with a time limit. An older note says `app.test.ts` hangs; it now exits when
+run on its own, so that note is not a reliable description of the current code.
+The default check does not run the Python suites; use `--all` for those.
+If a line says `FAIL`, read its detail; run `npm run setup` again if dependencies are missing.
+More about the tests is in
 [docs/developers.md](docs/developers.md#tests).
 
-## Read more
+## Docs index
 
 | If you want to | Read |
 |---|---|
