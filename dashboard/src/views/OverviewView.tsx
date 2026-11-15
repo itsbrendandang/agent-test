@@ -6,7 +6,7 @@ import { EngineOffline } from "@/components/Shared"
 import { answerLab, emptyLab, Lab, type LabEvent } from "@/lab"
 import { answerRuns, boardRuns, mergeRuns, swarmRuns, type RunRef } from "@/lab/runs"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
-import { setAsk } from "@/lib/open"
+import { setAsk, setOpenAnswer } from "@/lib/open"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
 import { Credits } from "@/overview/Credits"
@@ -88,7 +88,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
         <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
           <h2 id="ov-answer-title">{asked.question}</h2>
           <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
-          <button type="button" className="ov-link" onClick={() => onOpen("Home")}>Ask a follow-up in Research</button>
+          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>Ask a follow-up in Research</button>
         </section>
       )}
 
