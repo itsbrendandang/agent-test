@@ -67,6 +67,13 @@ test("an ambiguous word in the news alone makes no suggestion; in the search its
   assert.equal(trendQuestions([{ term: "stroke symptoms", news: [] }])[0]?.question, "What does the latest science say about stroke symptoms?")
 })
 
+test("an agency or brand name in the news alone makes no suggestion; in the search itself it does", () => {
+  assert.deepEqual(trendQuestions([{ term: "pfizer stock", news: ["FDA approves new weight loss pill"] }]), [])
+  assert.deepEqual(trendQuestions([{ term: "senate hearing", news: ["CDC director testifies", "NIH budget cut", "Tylenol maker shares fall"] }]), [])
+  assert.equal(trendQuestions([{ term: "fda", news: [] }])[0]?.topic, "Trending: fda")
+  assert.equal(trendQuestions([{ term: "tylenol autism", news: [] }])[0]?.question, "What does the latest science say about tylenol autism?")
+})
+
 test("a feed bigger than the limit is cut, not read whole", async () => {
   const big = feed(item("measles", [])) + " ".repeat(3_000_000)
   let pulled = 0

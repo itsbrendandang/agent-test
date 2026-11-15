@@ -55,8 +55,9 @@ const BIO_WORDS = [
   "enzyme", "mutation", "biology", "neuroscience", "brain", "species", "fossil", "dinosaur", "disease", "syndrome", "symptoms", "medicine",
 ]
 // Words that are biology in a search but often something else in a news headline ("a two-stroke lead", "fossil fuels",
-// "protein bars"). They count in the search's own words only, never from its news alone.
-const AMBIGUOUS = new Set(["stroke", "fossil", "protein", "brain", "outbreak", "heart attack", "species", "dinosaur"])
+// "protein bars"), and agency and brand names that headlines on stocks or politics often name ("FDA approves ...",
+// "CDC director ..."). They count in the search's own words only, never from its news alone.
+const AMBIGUOUS = new Set(["stroke", "fossil", "protein", "brain", "outbreak", "heart attack", "species", "dinosaur", "fda", "cdc", "nih", "tylenol"])
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const wordsRe = (words: string[], flags: string) =>
   new RegExp(`(?:^|[^\\p{L}\\p{N}])(${[...words].sort((a, b) => b.length - a.length).map(escape).join("|")})(?=$|[^\\p{L}\\p{N}])`, flags)
