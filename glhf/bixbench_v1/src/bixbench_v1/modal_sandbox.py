@@ -99,7 +99,7 @@ def _config(config: SandboxEnvironmentConfigType | None) -> BixModalConfig:
 
 
 @sandboxenv(name=PROVIDER)
-class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):
+class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):  # type: ignore[misc]
     """One run's sandbox. `self.sandbox` is the current Modal sandbox; `fresh_sandbox`
     replaces it."""
 
@@ -241,7 +241,7 @@ class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):
         are carried on the host and added to the outputs at the end; the old sandbox, with
         everything in it, is terminated before the new one is used."""
         context = RUNS.get(self.bix.run_tag)
-        old, old_started = self.sandbox, self._started
+        old, old_started = self.sandbox, self._started  # type: ignore[has-type]
         if context is not None:
             for path in keep:
                 try:
@@ -277,7 +277,7 @@ class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):
         if user is not None and user != "root" and not (env and "HOME" in env):
             cmd = ["/bin/sh", "-c", _AS_USER, "sh", user, *cmd]
         cmd = boundary.clean_env_command(cmd, env)
-        return await super().exec(
+        result: ExecResult[str] = await super().exec(
             cmd,
             input=input,
             cwd=cwd,
@@ -287,6 +287,7 @@ class BixModalSandbox(ModalSandboxEnvironment, FreshSandbox):
             timeout_retry=timeout_retry,
             concurrency=concurrency,
         )
+        return result
 
     # Cleanup ----------------------------------------------------------------------------------
     def close(self, reason: str) -> None:
