@@ -133,3 +133,10 @@
 .ov-credits .ov-row-label { margin-top: 0; }
 .ov-page .ov-credits .ov-tile b { font-size: 20px; }
 .ov-credits .ov-track { margin-top: 6px; height: 6px; }
+
+/* The lab under the question box, the answer asked from this page, and the one line of counts. */
+.ov-lab { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
+.ov-answer { min-width: 0; }
+.ov-counts { font-size: 13px; color: var(--text-muted); }
+.ov-counts b { color: var(--text); font-weight: 650; }

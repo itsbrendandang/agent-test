@@ -1,8 +1,8 @@
 // The welcome at the top of the home page: a few of the agents, eager to start, around a question box. The
 // characters here are a greeting and move by themselves (they stand still when the system asks for less motion);
 // they are not a picture of work being done. Real work is shown in Agent Lab, where nothing moves without an event.
-// Pressing the send button hands the question to Research, which starts the search at once at the Standard level,
-// through its own Send path (the same token prompt and limits in Real). The line under the box says what that may
+// Pressing the send button starts the answer on this page (the same engine call, token prompt and limits as Research),
+// or, when the page gives no `onAsk`, hands the question to Research. The line under the box says what that may
 // cost before the press. A starter question only fills the box.
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { agentIdentity } from "@/lab/identity"
@@ -28,7 +28,7 @@ const TEAM: { name: string; does: string }[] = [
 ]
 const MAX = 2000
 
-export function Hero({ onOpen }: { onOpen: (view: View) => void }) {
+export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Start the answer on this page. Absent: the question is handed to Research. */ onAsk?: (question: string, effort: "quick" | "standard") => void | Promise<void> }) {
   const [text, setText] = useState("")
   const [focused, setFocused] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
@@ -45,7 +45,9 @@ export function Hero({ onOpen }: { onOpen: (view: View) => void }) {
   const ask = (asked: string) => {
     const question = asked.trim()
     if (!question) { box.current?.focus(); return }
-    setAsk(question.slice(0, MAX), { send: true, effort: catalog ? effortInEffect(catalog, effort) : effort })
+    const level = catalog ? effortInEffect(catalog, effort) : effort
+    if (onAsk) { setText(""); void onAsk(question.slice(0, MAX), level === "quick" ? "quick" : "standard"); return }
+    setAsk(question.slice(0, MAX), { send: true, effort: level })
     onOpen("Home")
   }
   return (
