@@ -53,7 +53,6 @@ test("a plain factual question takes the short path: one web search, at most thr
     const write = e.calls.find((c) => c.role === "write")!
     assert.equal(write.options.maxTokens, SHORT.outputTokens)
     assert.ok(SHORT.outputTokens < LIMITS.levels.standard.maxOutputTokens)
-    assert.notEqual(write.options.reasoning, "low")
     assert.match(write.system, new RegExp(`${SHORT.words}\\b`), "the writer is asked for a short answer")
     assert.equal(of(events, "step.started").find((s) => s.step === "write")!.input?.shortPath, true)
     // Sourced: at most three numbered sources, at least one cited, every cited sentence checked once.
@@ -102,16 +101,40 @@ test("a harder question keeps the full pipeline: the planner does not say simple
   } finally { await medical.close() }
 })
 
-test("shortPath: code adds its own limits to the planner's word", () => {
+test("shortPath: the planner's word decides, except for health questions and a plan that was not read", () => {
   const level = LIMITS.levels.standard
   const simple = readPlan(PLAN, Q, level)
   assert.equal(simple.simple, true)
-  assert.equal(shortPath(simple, Q, false), true)
-  assert.equal(shortPath(simple, "What is a cell?", false), true)
-  assert.equal(shortPath({ ...simple, simple: false }, Q, false), false, "the planner did not say simple")
-  assert.equal(shortPath(simple, Q, true), false, "about health")
-  assert.equal(shortPath(fallbackPlan(Q), Q, false), false, "the planner's reply was not read")
-  assert.equal(shortPath(simple, "What is the powerhouse of the cell? And why does it have its own DNA?", false), false, "two questions")
-  assert.equal(shortPath(simple, `What is ${"a very long and detailed ".repeat(10)}cell?`, false), false, "a long question")
+  assert.equal(shortPath(simple, false), true)
+  assert.equal(shortPath({ ...simple, simple: false }, false), false, "the planner did not say simple")
+  assert.equal(shortPath(simple, true), false, "about health")
+  assert.equal(shortPath({ ...fallbackPlan(Q), simple: true }, false), false, "the planner's reply was not read")
   assert.equal(readPlan(PLAN.replace('"simple":true', '"simple":"yes"'), Q, level).simple, false, "only a JSON true counts")
+})
+
+test("the short draft asks for less thinking than a full draft, on a model that can reason", async () => {
+  // Oracle: the faux models report `reasoning: true` with no thinking-level map, so a full draft is sent "low" and the
+  // short path the least the model allows (no level at all). A short path that still sent "low" fails here.
+  const short = await engine({ script: { plan: () => PLAN, screen: keepAll }, reasoning: true })
+  short.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
+  try {
+    await paidAllowed(() => short.answer({ question: Q, effort: "quick" }))
+    assert.equal(short.calls.find((c) => c.role === "write")!.options.reasoning, undefined)
+  } finally { await short.close() }
+  const full = await engine({ reasoning: true })
+  try {
+    await paidAllowed(() => full.answer({ question: "Does semaglutide lower the risk of heart attack and stroke in people with obesity who do not have diabetes?", effort: "quick" }))
+    assert.equal(full.calls.find((c) => c.role === "write")!.options.reasoning, "low")
+  } finally { await full.close() }
+})
+
+test("the budget check prices a short draft at its smaller output cap", async () => {
+  const { realBrain } = await import("../src/research/pipeline.ts")
+  const { fakeModels } = await import("./fixtures/research/harness.ts")
+  const { loadConfig } = await import("../src/config.ts")
+  const level = LIMITS.levels.standard
+  const brain = realBrain(fakeModels({}, []), loadConfig(), level, () => {})
+  const full = brain.worstCase("write", 10_000), short = brain.worstCase("write", 10_000, true)
+  assert.ok(short < full, `a short draft (${SHORT.outputTokens} tokens) is priced below a full one (${level.maxOutputTokens} tokens)`)
+  assert.equal(brain.worstCase("revise", 10_000, true), brain.worstCase("revise", 10_000))
 })

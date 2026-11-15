@@ -85,7 +85,8 @@ export interface Brain {
   /** Worst-case dollars of one call of each step, given the size of its input in characters. */
   /** The model a method specialist runs on: the level's tier (cheap at quick, strong at standard). */
   specialistModel: string
-  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
+  /** `short`: a short-path draft (`SHORT`), priced at its smaller output cap. Only the "write" step uses it. */
+  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number, short?: boolean): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** `short`: the short path for a plain factual question (`SHORT`): fewer output tokens and the least thinking the model has. */
   write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void, short?: boolean): Promise<Reply>
@@ -247,10 +248,11 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     checkerIndependent: checker.independent,
     criticIndependent: critic.independent,
     specialistModel: specialist.qualified,
-    worstCase(step, inputChars) {
+    worstCase(step, inputChars, short) {
       switch (step) {
         case "plan": return price(planner, inputChars, PLAN_TOKENS)
-        case "write": case "revise": return price(writer, inputChars, level.maxOutputTokens)
+        case "write": return price(writer, inputChars, short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens)
+        case "revise": return price(writer, inputChars, level.maxOutputTokens)
         case "section": return price(writer, inputChars, sectionTokens(level))
         case "specialist": return price(specialist, inputChars, sectionTokens(level))
         case "critic": return price(critic.model, inputChars, CRITIC_TOKENS)
@@ -288,17 +290,16 @@ export function fallbackPlan(question: string): Plan {
  * thinking, one round of statement checks. No hypotheses, no method specialists, no further searches, no critic, no
  * revision. Harder questions are not touched.
  */
-export const SHORT = { words: 120, outputTokens: 1_000, sourcesKept: 3, questionChars: 200 } as const
+export const SHORT = { words: 120, outputTokens: 1_000, sourcesKept: 3 } as const
 export const SHORT_OPENING = "This is a plain factual question, so I'll keep it short: one search, a short answer from what it finds, and a check of each statement against its source."
 
 /**
- * Whether an answer takes the short path. The planner's word that the question is simple is needed, and code adds its
- * own limits: the plan was read (not the fallback), the question is short and asks one thing, and it is not about
- * health (a medical answer always gets the full review). Not in a demo answer.
+ * Whether an answer takes the short path. The planner's word that the question is simple decides, with two exclusions
+ * that code adds: the plan was read (not the fallback), and the question is not about health (a medical answer always
+ * gets the full review). Not in a demo answer.
  */
-export function shortPath(plan: Plan, question: string, medical: boolean): boolean {
-  const text = question.trim()
-  return plan.simple && !plan.fallback && !medical && text.length <= SHORT.questionChars && (text.match(/\?/g) ?? []).length <= 1
+export function shortPath(plan: Plan, medical: boolean): boolean {
+  return plan.simple && !plan.fallback && !medical
 }
 
 export const MAX_OPENING_CHARS = 240
@@ -927,7 +928,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       }
       if (demo) plan = { ...plan, opening: "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked." }
       medical = medical || plan.medical
-      short = !demo && shortPath(plan, record.question, medical)
+      short = !demo && shortPath(plan, medical)
       if (short) plan = { ...plan, opening: SHORT_OPENING }
       if (plan.fallback && !demo) {
         notes.push("The query planner's reply could not be used, so the question's own words were searched.")
@@ -1244,7 +1245,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const words = short ? Math.min(level.words, SHORT.words) : level.words, maxOutputTokens = short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens
       const system = testing.length ? leadSystem(words) : writerSystem(words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
       begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens, words, ...(short ? { shortPath: true } : {}) } })
-      const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
+      const whyNot = allow(brain.worstCase("write", system.length + user.length, short), "write", { system, user })
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.

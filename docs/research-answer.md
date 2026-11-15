@@ -66,8 +66,7 @@ nothing more). Code then takes the **short path** only when all of these hold (`
 `engine/src/research/pipeline.ts`):
 
 - the planner's reply was read (not the fallback plan) and says `simple`;
-- the question is not about health (a medical answer always gets the full review);
-- the question is at most 200 characters and asks one thing (at most one `?`).
+- the question is not about health (a medical answer always gets the full review).
 
 On the short path, at both levels:
 
