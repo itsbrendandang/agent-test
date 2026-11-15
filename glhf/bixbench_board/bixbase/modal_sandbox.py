@@ -401,6 +401,7 @@ def _start_script(layout: Layout) -> str:
             f"chown -R root:root {layout.data}",
             f"id -u {layout.user} >/dev/null 2>&1 || useradd -M -d {layout.work} -s /bin/sh {layout.user}",
             f"chown {layout.user} {layout.work}",
+            "chmod 1777 /tmp",  # the image leaves /tmp root-only; R needs a temp dir
             "chmod 700 /__modal 2>/dev/null || true",  # the Volume's own path: root only
         ]
     return "\n".join(lines) + "\n"
