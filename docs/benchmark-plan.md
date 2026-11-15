@@ -22,14 +22,15 @@ Not checked: any real model in the changed swarm. The only real-model numbers ar
 
 Run from `glhf/bixbench_v1/`. `NO_PAID_CALLS=0` is the payer's decision.
 
-Step 1, a slice first (10 capsules, both solvers, same budget):
+Step 1, a slice first (10 capsules with 43 questions, both solvers, same budget). The cap below
+covers the most these 20 runs can spend (12.6 M tokens of budget, 15.75 M at the hard stop):
 
 ```bash
 NO_PAID_CALLS=0 uv run bixbench-v1 run \
   --capsules bix-1,bix-2,bix-3,bix-4,bix-5,bix-6,bix-7,bix-8,bix-9,bix-10 \
   --solvers single,glhf --swarm-budget equal \
   --model anthropic/claude-sonnet-5-5 \
-  --total-token-cap 12000000 --out runs/slice-1
+  --total-token-cap 16000000 --out runs/slice-1
 ```
 
 Step 2, everything (resumable; finished runs are skipped):
