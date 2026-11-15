@@ -449,6 +449,7 @@ model account; it is separate from the app's free Demo mode. See [docs/pi-setup.
 | If you want to | Read |
 |---|---|
 | Set up your machine and contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Fix a common setup or run problem | [docs/faq.md](docs/faq.md) |
 | Understand the folders and where new code goes | [docs/codebase.md](docs/codebase.md) |
 | See every command, the two parts of the project, the tests and the limits | [docs/developers.md](docs/developers.md) |
 | Know exactly what was tested | [docs/status.md](docs/status.md) |
