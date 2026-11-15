@@ -1,9 +1,9 @@
 // The Agent Log, drawn as a group chat: each agent's turn is a message bubble beside its picture and name, a run of
-// messages from the same agent is grouped, long reasoning sits behind "Show thinking", and tool calls, searches and
-// system steps are small notes between the messages. Every row is still one list item, in the order eventRows gave.
+// messages from the same agent is grouped, long reasoning sits behind "Show thinking" (other long text behind "Show
+// more"), and tool calls, searches and system steps are small notes between the messages. Every row is still one list item, in the order eventRows gave.
 import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AgentAvatar } from "./AgentAvatar"
-import { chatItems, splitThought, type ChatItem } from "./chat"
+import { chatItems, splitMessage, type ChatItem } from "./chat"
 import { readableName } from "./identity"
 import { filterRows, logDownload, type EventRow, type LogFilter } from "./logRows"
 import type { Provenance, RunKind } from "./model"
@@ -45,7 +45,7 @@ function Note({ row }: { row: EventRow }) {
 
 function Message({ item }: { item: ChatItem }) {
   const { row, first, last } = item
-  const { say, thinking } = splitThought(row.text)
+  const { say, more } = splitMessage(row.text)
   return (
     <li className="event-log-row chat-msg" data-kind={row.kind} data-first={first || undefined} data-last={last || undefined}>
       <div className="chat-face">{first && <AgentAvatar name={row.agentId.replace(/^specialist:/, "")} title={row.agent} size={32} />}</div>
@@ -53,7 +53,7 @@ function Message({ item }: { item: ChatItem }) {
         {first ? <div className="chat-who"><strong>{row.agent}</strong><span>{readableName(row.kind)}</span></div> : <span className="sr-only">{row.agent}: </span>}
         <div className="chat-bubble">
           <p>{say || "(no text recorded)"}</p>
-          {thinking && <details className="chat-thinking"><summary>Show thinking</summary><p>{thinking}</p></details>}
+          {more && <details className="chat-thinking"><summary>{row.thought ? "Show thinking" : "Show more"}</summary><p>{more}</p></details>}
           <Sources row={row} />
         </div>
         {(validTime(row.at) || row.usd !== undefined) && <div className="chat-meta"><When at={row.at} /><Cost row={row} /></div>}
@@ -63,7 +63,7 @@ function Message({ item }: { item: ChatItem }) {
 }
 
 export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { id: string; kind: RunKind; provenance?: Provenance }; connection: Connection }) {
-  const [filter, setFilter] = useState<LogFilter>({ agent: "", kind: "", query: "" })
+  const [filter, setFilterState] = useState<LogFilter>({ agent: "", kind: "", query: "" })
   const [downloadError, setDownloadError] = useState("")
   const agents = useMemo(() => [...new Map(rows.map((r) => [r.agentId, r.agent])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows])
   const kinds = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
@@ -84,12 +84,13 @@ export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { i
   // `readUpTo`: how many messages were shown when the reader scrolled up (undefined while following the newest).
   const thread = useRef<HTMLDivElement>(null)
   const [readUpTo, setReadUpTo] = useState<number>()
+  const setFilter = (next: LogFilter) => { setFilterState(next); setReadUpTo(undefined) }
   const live = connection !== "ended" && connection !== "offline"
   const unread = live && readUpTo !== undefined && shown.length > readUpTo
   useLayoutEffect(() => {
     const el = thread.current
     if (live && readUpTo === undefined && el) el.scrollTop = el.scrollHeight
-  }, [live, readUpTo, shown.length])
+  }, [live, readUpTo, shown])
   const toBottom = () => { const el = thread.current; if (el) el.scrollTop = el.scrollHeight; setReadUpTo(undefined) }
   const onScroll = () => {
     const el = thread.current

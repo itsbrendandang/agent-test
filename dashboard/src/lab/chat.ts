@@ -1,12 +1,12 @@
 // The Agent Log as a group chat: which rows start or end an agent's run of messages, and how a long message is cut
-// into a short line and its "thinking". No React here; EventLog.tsx draws it.
+// into a short line and the rest. No React here; EventLog.tsx draws it.
 import type { EventRow } from "./logRows"
 
-/** Longest short line a bubble shows before the rest goes behind "Show thinking". */
+/** Longest short line a bubble shows before the rest goes behind "Show thinking" or "Show more". */
 export const SAY_MAX = 140
 
-/** The short line a bubble shows, and the rest of the text (the agent's reasoning) when there is more. */
-export function splitThought(text: string, max = SAY_MAX): { say: string; thinking?: string } {
+/** The short line a bubble shows, and the rest of the text when there is more. */
+export function splitMessage(text: string, max = SAY_MAX): { say: string; more?: string } {
   const t = text.trim()
   if (t.length <= max && !t.includes("\n")) return { say: t }
   const line = t.split("\n")[0].trimEnd()
@@ -20,7 +20,7 @@ export function splitThought(text: string, max = SAY_MAX): { say: string; thinki
   }
   const rest = t.slice(say.length).trim()
   if (!rest) return { say }
-  return { say: cut ? `${say}…` : say, thinking: cut ? `…${rest}` : rest }
+  return { say: cut ? `${say}…` : say, more: cut ? `…${rest}` : rest }
 }
 
 export interface ChatItem {

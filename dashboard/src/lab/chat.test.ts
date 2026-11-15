@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { chatItems, splitThought, SAY_MAX } from "./chat"
+import { chatItems, splitMessage, SAY_MAX } from "./chat"
 import { eventRows, type EventRow } from "./logRows"
 import { CLAIMS_EVENTS } from "./fixtures/claims"
 
@@ -7,18 +7,18 @@ const row = (id: string, agentId: string, note = false): EventRow => ({ id, agen
 
 describe("group chat thread", () => {
   it("keeps a short message whole and puts longer reasoning behind the short line", () => {
-    expect(splitThought("  Short reply.  ")).toEqual({ say: "Short reply." })
-    expect(splitThought("Plan: pilot first.\nThe subset is cheap and shows the shape.")).toEqual({ say: "Plan: pilot first.", thinking: "The subset is cheap and shows the shape." })
+    expect(splitMessage("  Short reply.  ")).toEqual({ say: "Short reply." })
+    expect(splitMessage("Plan: pilot first.\nThe subset is cheap and shows the shape.")).toEqual({ say: "Plan: pilot first.", more: "The subset is cheap and shows the shape." })
     const long = `Registered test Shape check for statement C1. ${"Compare every column against the brief ".repeat(6)}end.`
-    const { say, thinking } = splitThought(long)
+    const { say, more } = splitMessage(long)
     expect(say).toBe("Registered test Shape check for statement C1.")
-    expect(`${say} ${thinking}`).toBe(long)
+    expect(`${say} ${more}`).toBe(long)
     const words = "word ".repeat(60).trim()
-    const cut = splitThought(words)
+    const cut = splitMessage(words)
     expect(cut.say.endsWith("…")).toBe(true)
     expect(cut.say.length).toBeLessThanOrEqual(SAY_MAX + 1)
-    expect(cut.thinking?.startsWith("…")).toBe(true)
-    expect(splitThought("")).toEqual({ say: "" })
+    expect(cut.more?.startsWith("…")).toBe(true)
+    expect(splitMessage("")).toEqual({ say: "" })
   })
 
   it("groups consecutive messages from the same agent and lets notes end a run", () => {
@@ -41,5 +41,16 @@ describe("group chat thread", () => {
       { key: "r", type: "member.replied", member: "scout", round: 1, text: "Two trials agree." },
     ], "board")
     expect(board.map((r) => !!r.note)).toEqual([true, false])
+  })
+
+  it("labels only reasoning as thinking and keeps an answer draft's markdown out of the short line", () => {
+    const rows = eventRows([
+      { key: "r", type: "member.replied", member: "scout", round: 1, text: "Two trials agree." },
+      { key: "w", type: "answer.written", markdown: "## Answer\nSemaglutide lowers the risk." },
+      { key: "t", type: "test.registered", agent: "planner", name: "Shape", claim: "C1", method: "Compare columns." },
+      { key: "s", type: "selection", criteria: "Kept relevant results.", selected: [{ n: 1, why: "On topic." }] },
+    ], "answer")
+    expect(rows.map((r) => !!r.thought)).toEqual([true, false, false, false])
+    expect(splitMessage(rows[1].text)).toEqual({ say: "Wrote the draft.", more: "## Answer\nSemaglutide lowers the risk." })
   })
 })

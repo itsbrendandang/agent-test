@@ -50,10 +50,10 @@ it("handles loading, empty, unsupported streams, errors and appended events", ()
 
 const chat: EventRow[] = [
   { id: "c1", at: 1000, agent: "Planner", agentId: "planner", kind: "claim", text: "I think the outputs need every sample.", sources: [] },
-  { id: "c2", at: 2000, agent: "Planner", agentId: "planner", kind: "test", text: "Registering a shape check first.\nA pilot on a subsample is cheap and shows whether the columns line up before the full run.", sources: [] },
+  { id: "c2", at: 2000, agent: "Planner", agentId: "planner", kind: "test", text: "Registering a shape check first.\nA pilot on a subsample is cheap and shows whether the columns line up before the full run.", sources: [], thought: true },
   { id: "c3", at: 3000, agent: "Engine", agentId: "engine", kind: "claim", text: "Moved claim C1 from triaged to piloting.", sources: [], note: true },
   { id: "c4", at: 4000, agent: "Scout", agentId: "scout", kind: "search", text: "Searched practice example sources: kept 1, dropped 0.", sources: [{ title: "Trial", url: "https://example.org/t" }], note: true },
-  { id: "c5", at: 5000, agent: "Critic", agentId: "critic", kind: "review", text: "A control is missing.", sources: [] },
+  { id: "c5", at: 5000, agent: "Critic", agentId: "critic", kind: "review", text: "Resolved the notes.\nNote 1: resolved. Note 2: not resolved.", sources: [] },
 ]
 
 it("shows agent turns as grouped chat bubbles with faces, thinking behind a toggle and quiet notes", () => {
@@ -74,6 +74,9 @@ it("shows agent turns as grouped chat bubbles with faces, thinking behind a togg
   fireEvent.click(within(items[1]).getByText("Show thinking"))
   expect(thinking.open).toBe(true)
   expect(within(items[0]).queryByText("Show thinking")).toBeNull()
+  // Other long text, such as a list of resolved notes, is not called thinking.
+  expect(within(items[4]).getByText("Show more")).toBeInTheDocument()
+  expect(within(items[4]).queryByText("Show thinking")).toBeNull()
   // Notes have no picture, keep their agent and their links.
   expect(items[3].querySelector("svg")).toBeNull()
   expect(within(items[3]).getByText("Scout")).toBeInTheDocument()
@@ -101,4 +104,20 @@ it("follows the newest message while live, and offers a jump back after the read
   scroller.scrollTop = 0
   rerender(<EventLog rows={chat} run={run} connection="ended" />)
   expect(scroller.scrollTop).toBe(0)
+})
+
+it("follows the newest message again after the reader changes the filters", () => {
+  const { container } = render(<EventLog rows={chat} run={run} connection="live" />)
+  fireEvent.change(screen.getByRole("combobox", { name: "Agent" }), { target: { value: "planner" } })
+  const scroller = container.querySelector(".chat-scroll") as HTMLDivElement
+  let height = 400
+  Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height })
+  Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 300 })
+  scroller.scrollTop = 0
+  fireEvent.scroll(scroller)
+  height = 1500
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+  expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown")
+  expect(screen.queryByRole("button", { name: "New messages ↓" })).toBeNull()
+  expect(scroller.scrollTop).toBe(1500)
 })
