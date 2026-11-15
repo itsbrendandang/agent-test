@@ -63,7 +63,7 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
           )
         })}
       </div>
-      <h2 id="ov-hero-title">Your research team is ready</h2>
+      <h2 id="ov-hero-title">Let's research together!</h2>
       {/* The same composer as Research (one component), so the two boxes cannot differ. */}
       <AskBox id="ov-ask-box" textareaRef={box} rows={2} value={text} onChange={setText} onSubmit={(asked) => ask(asked)} onFocusChange={setFocused}
         efforts={catalog?.efforts ?? []} effort={catalog ? effortInEffect(catalog, effort) : effort} onEffort={setEffort} name="overview-effort" />

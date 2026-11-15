@@ -87,7 +87,7 @@ td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
 
 
 @theme inline {
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-display);
   --font-sans: 'Geist Variable', sans-serif;
   --font-mono: 'Geist Mono Variable', var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
