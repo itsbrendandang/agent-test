@@ -1,6 +1,6 @@
 ---
 name: biomni-lab
-description: Index of the 100 Biomni Lab skills (biomni.phylo.bio/skills) and which of them apply to this repo's work. Use when choosing a bioinformatics or drug-discovery method, when a BixBench task needs a standard analysis workflow (RNA-seq differential expression, enrichment, clustering, single-cell), or when someone asks what Biomni skills are available. This index holds names, categories and links only; the skill packages (scripts, references, assets) are not installed here.
+description: Index of the 100 Biomni Lab skills (biomni.phylo.bio/skills), with each skill's full Overview instructions, and which of them apply to this repo's work. Use when choosing a bioinformatics or drug-discovery method, when a BixBench task needs a standard analysis workflow (RNA-seq differential expression, enrichment, clustering, single-cell), or when someone asks what Biomni skills are available. The written instructions for every previewed skill are included; the skill packages (scripts, references, assets) are not installed here.
 ---
 
 # Biomni Lab skills
@@ -10,11 +10,19 @@ description: Index of the 100 Biomni Lab skills (biomni.phylo.bio/skills) and wh
 The Biomni Skill Hub holds 100 skills for computational biology and drug
 discovery. Each one is a package: instructions plus `scripts/`, `references/`
 and `assets/`. This directory holds only the catalog: names, categories and
-links (`references/catalog.md`).
+links (`references/catalog.md`) and the full Overview instructions as the hub
+displays them (`references/overviews-part1.md`, skills 1-50, and
+`references/overviews-part2.md`, skills 51-100).
+
+The overview files hold each skill's written workflow, decision rules,
+scientific caveats, data-source licences and failure modes. They are the real
+instructions, and they are enough to reason with. 44 of the 100 skills show no
+preview on the hub, so their entry is a name and a link only.
 
 The packages are not installed. A Biomni skill's instructions say things like
 "run `scripts/biomni_tools.py`"; those files do not exist here. Treat the
-catalog as a map of available methods, not as runnable skills. To install one,
+catalog and the overviews as a map of available methods and how their authors
+say to use them, not as runnable skills. To install one,
 open its hub page, use the Files tab, and put the package in `.agents/skills/`.
 
 ## Which ones matter for this repo
