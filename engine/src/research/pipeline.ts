@@ -20,9 +20,9 @@
 // searched. Models write text and give opinions; nothing they write can change a tool, a limit or an instruction.
 //
 // MONEY. Every paid step first passes `guard`: paid calls must still be on, the time limit not passed, and what was
-// spent plus the step's worst case must fit under the answer's cap. A step that does not pass is not started, and the
-// answer ends with what it has and says so. The record's `usd` is saved after every paid step; the board's daily cap
-// reads it (spend.ts).
+// spent plus in-flight reservations and the step's worst case must fit under the answer's cap. A step that does not
+// pass is not started, and the answer ends with what it has and says so. The record's `usd` is saved after every paid
+// step; the board's daily cap reads it (spend.ts).
 //
 // DURABLE. An answer runs as a Pi Durable task (routes.ts). Every paid or outside step (the plan, each search, each
 // screening, the draft, each statement check, the critic, the revision) goes through `remember` under a stable key:
@@ -738,6 +738,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   }
 
   let own = 0, exaUsd = demo ? 0 : exaSpentBy(config, record.id)
+  const reservations = new Map<string, number>()
   const spent = () => own + exaUsd
   let frozen = false // set when the engine is stopping: nothing more is written
   const save = () => { if (frozen) return; record.usd = Math.round(spent() * 1e6) / 1e6; record.workedMs = Math.round(worked()); saveRecord(config, record) }
@@ -750,7 +751,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     if (worked() >= limitMs || timer.signal.aborted) return "time"
     if (demo) return undefined
     if (deps.paidOff()) return "paid_off"
-    return spent() + worst > record.caps.maxUsd + 1e-9 ? "cap" : undefined
+    const reserved = [...reservations.values()].reduce((sum, usd) => sum + usd, 0)
+    return spent() + reserved + worst > record.caps.maxUsd + 1e-9 ? "cap" : undefined
   }
   /** Note a reason to end early that was met inside a step running beside others; the answer ends once they are done. */
   let ending: StopReason | undefined
@@ -773,28 +775,36 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
    */
   const allow = (worst: number, step: string, input: unknown): StopReason | undefined => {
     if (interrupted()) throw new Interrupted()
-    return storedBefore.has(keyOf(step, input)) ? undefined : guard(worst)
+    const key = keyOf(step, input)
+    if (storedBefore.has(key) || asked.has(key) || reservations.has(key)) return undefined
+    const why = guard(worst)
+    if (!why && !demo) reservations.set(key, worst)
+    return why
   }
   const once = async <T>(step: string, input: unknown, work: () => Promise<{ value: T; usd: number }>): Promise<T> => {
     const key = keyOf(step, input)
     // Two steps with the very same input (two searches that returned the same results) share one call and are charged once.
     const first = !asked.has(key)
-    if (first) asked.set(key, deps.remember<T>(key, async () => {
-      try { const done = await work(); return { ok: true, value: done.value, usd: done.usd } } catch (error) {
-        const usd = Number((error as { usd?: unknown }).usd) || 0
-        if (error instanceof Interrupted || interrupted()) throw new Interrupted()
-        const stop = asStop(error)
-        if (stop) { own += usd; throw stop }
-        if (error instanceof FatalModelError) { own += usd; throw error }
-        if (error instanceof Error && isFatalModelError(error.message)) { own += usd; throw new FatalModelError(`This answer was stopped on its first failed call: a model's key or name was refused by its vendor. Nothing more was spent on it. Check the keys in .env and the model ids in board/config.yaml. Vendor message: ${error.message}`) }
-        return { ok: false, error: message(error), usd }
-      }
-    }))
-    const outcome = (await asked.get(key)) as Outcome<T>
-    if (first) own += outcome.usd
-    save()
-    if (!outcome.ok) throw new StepFailed(outcome.error)
-    return outcome.value
+    try {
+      if (first) asked.set(key, deps.remember<T>(key, async () => {
+        try { const done = await work(); return { ok: true, value: done.value, usd: done.usd } } catch (error) {
+          const usd = Number((error as { usd?: unknown }).usd) || 0
+          if (error instanceof Interrupted || interrupted()) throw new Interrupted()
+          const stop = asStop(error)
+          if (stop) { own += usd; throw stop }
+          if (error instanceof FatalModelError) { own += usd; throw error }
+          if (error instanceof Error && isFatalModelError(error.message)) { own += usd; throw new FatalModelError(`This answer was stopped on its first failed call: a model's key or name was refused by its vendor. Nothing more was spent on it. Check the keys in .env and the model ids in board/config.yaml. Vendor message: ${error.message}`) }
+          return { ok: false, error: message(error), usd }
+        }
+      }))
+      const outcome = (await asked.get(key)) as Outcome<T>
+      if (first) own += outcome.usd
+      save()
+      if (!outcome.ok) throw new StepFailed(outcome.error)
+      return outcome.value
+    } finally {
+      if (first) reservations.delete(key)
+    }
   }
   const model = (step: string, input: unknown, ask: () => Promise<Reply>) => once(step, input, async () => { const reply = await ask(); return { value: { text: reply.text, truncated: reply.truncated }, usd: reply.usd } })
   /** A first-pass call: a FirstPass of its own, so that its cost is known exactly, also when it throws. */
@@ -1200,7 +1210,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           if (!brain.checkerIndependent) return fail("no checker from another vendor than the writer is configured")
           const claims = group.map((it) => it.sentence.text), source = textOf(n)
           let why: StopReason | undefined
-          try { why = allow(brain.worstCase("check", 1_400 + source.length + claims.reduce((sum, c) => sum + c.length + 30, 0)), `check:${stage}:${n}`, { claims, source }) ?? (storedBefore.has(keyOf(`check:${stage}:${n}`, { claims, source })) ? undefined : ending) } catch (error) { broke ??= error; return }
+          try { why = (storedBefore.has(keyOf(`check:${stage}:${n}`, { claims, source })) ? undefined : ending) ?? allow(brain.worstCase("check", 1_400 + source.length + claims.reduce((sum, c) => sum + c.length + 30, 0)), `check:${stage}:${n}`, { claims, source }) } catch (error) { broke ??= error; return }
           if (why) { soft(why); return fail(STOP_WORDS[why]) }
           try {
             const out = await firstPassOnce(`check:${stage}:${n}`, { claims, source }, (firstPass) => firstPass.check(deps.writerModel, claims, source))
@@ -1227,7 +1237,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         const unreviewed = "The draft was not reviewed as a whole. The statement checks still apply."
         if (!brain.criticIndependent) { notes.push("The critic did not run: no model from another vendor than the writer is configured."); end("review", "failed", { error: "No model from another vendor than the writer is configured for the critic.", consequence: unreviewed }); return [] }
         const cSystem = criticSystem(config), cUser = criticUser({ question: record.question, searches: record.searches, sources, draft, cited, hypotheses: testing })
-        const why = allow(brain.worstCase("critic", cSystem.length + cUser.length), "critic", { cSystem, cUser }) ?? (storedBefore.has(keyOf("critic", { cSystem, cUser })) ? undefined : ending)
+        const why = (storedBefore.has(keyOf("critic", { cSystem, cUser })) ? undefined : ending) ?? allow(brain.worstCase("critic", cSystem.length + cUser.length), "critic", { cSystem, cUser })
         if (why) { soft(why); notes.push(`The critic did not run: ${STOP_WORDS[why]}.`); endFor("review", why, unreviewed); return [] }
         try {
           const read = readNotes((await model("critic", { cSystem, cUser }, () => brain.critique(cSystem, cUser, signal))).text, cited.length)
@@ -1327,7 +1337,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
             const jSystem = rejudgeSystem(config), jUser = rejudgeUser({ question: record.question, notes: reviewNotes, revised: final })
             begin({ step: "review:2", kind: "review", agent: "critic", label: `Reading the revision against ${plural(reviewNotes.length, "note")} of the reviewer`, input: { model: brain.names.critic, notes: reviewNotes.length } })
             const unjudged = "Whether the revision resolved the reviewer's notes was not judged by the reviewer; the record says what code and the writer's own report show."
-            const why = allow(brain.worstCase("rejudge", jSystem.length + jUser.length), "rejudge", { jSystem, jUser }) ?? (storedBefore.has(keyOf("rejudge", { jSystem, jUser })) ? undefined : ending)
+            const why = (storedBefore.has(keyOf("rejudge", { jSystem, jUser })) ? undefined : ending) ?? allow(brain.worstCase("rejudge", jSystem.length + jUser.length), "rejudge", { jSystem, jUser })
             if (why) { soft(why); return endFor("review:2", why, unjudged) }
             try {
               const judged = readRejudged((await model("rejudge", { jSystem, jUser }, () => brain.rejudge(jSystem, jUser, signal))).text, reviewNotes.length)
