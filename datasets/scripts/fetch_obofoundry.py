@@ -39,7 +39,7 @@ def to_record(item: Dict[str, Any], retrieved_at: str) -> Optional[Dict[str, Any
     if not prefix or not title:
         return None
     licence = item.get("license") or {}
-    description = common.clean_text(item.get("description") or title, 300)
+    description = common.safe_description(common.clean_text(item.get("description") or title, 300), title)
     products = [p.get("id", "") for p in item.get("products") or []]
     formats = sorted({p.rsplit(".", 1)[-1].upper() for p in products if "." in p})
     texts = [title, description, str(item.get("domain") or "")]

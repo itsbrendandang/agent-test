@@ -4,8 +4,9 @@
 Endpoint: GET https://raw.githubusercontent.com/biopragmatics/bioregistry/main/exports/registry/registry.json
 (the registry's own export; its metadata is CC0-1.0).
 Kept: resources that are not deprecated, are not a part of another resource, are not an OBO
-Foundry ontology (fetch_obofoundry.py lists those), have a homepage and a description, and whose
-licence the registry gives as an SPDX identifier.
+Foundry ontology (fetch_obofoundry.py lists those), have a description and a homepage that
+answers (each homepage is fetched once), and whose licence the registry gives as an SPDX
+identifier.
 Output: /tmp/dataset-scout/records/bioregistry.jsonl
 """
 
@@ -33,7 +34,7 @@ def to_record(prefix: str, item: Dict[str, Any], retrieved_at: str) -> Optional[
         return None
     name = (item.get("name") or "").strip()
     homepage = (item.get("homepage") or "").strip()
-    description = common.clean_text(item.get("description"), 300)
+    description = common.safe_description(common.clean_text(item.get("description"), 300), "")
     if not name or not homepage.startswith(("http://", "https://")) or len(description) < 40:
         return None
     licence = licences.normalise(item.get("license"))
@@ -72,6 +73,32 @@ def to_record(prefix: str, item: Dict[str, Any], retrieved_at: str) -> Optional[
     )
 
 
+def homepage_state(url: str) -> str:
+    """'ok', 'not checked' (robots.txt) or 'failed'. Registry homepages go stale."""
+    try:
+        common.fetch(url, ok_statuses=(200,))
+    except common.RobotsDisallowed:
+        return "not checked"
+    except Exception:
+        return "failed"
+    return "ok"
+
+
+def check_homepages(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop a record whose homepage does not answer; note the ones robots.txt keeps us from."""
+    kept: List[Dict[str, Any]] = []
+    for record in records:
+        state = homepage_state(record["url"])
+        if state == "failed":
+            common.log(f"{SOURCE}: dropped {record['id']}: its homepage {record['url']} does not answer")
+            continue
+        if state == "not checked":
+            note = "Homepage not checked: its robots.txt disallows scripts."
+            record["notes"] = (record.get("notes", "") + " " + note).strip()
+        kept.append(record)
+    return kept
+
+
 def select(registry: Dict[str, Dict[str, Any]], retrieved_at: str) -> List[Dict[str, Any]]:
     """One record per resource. The registry often has several identifier namespaces for one
     database ("civic.gid", "civic.eid", ...): the one with the shortest prefix stands for all."""
@@ -92,8 +119,9 @@ def select(registry: Dict[str, Dict[str, Any]], retrieved_at: str) -> List[Dict[
 
 def main() -> int:
     registry, got = common.get_json(INDEX)
-    records = select(registry, got.fetched_at)
-    common.log(f"{SOURCE}: {len(registry)} registry entries, {len(records)} kept")
+    candidates = select(registry, got.fetched_at)
+    records = check_homepages(candidates)
+    common.log(f"{SOURCE}: {len(registry)} registry entries, {len(candidates)} candidates, {len(records)} with a homepage that answers")
     common.write_records(SOURCE, records, drops=schema.BOUNDARY_DROPS)
     return 0
 

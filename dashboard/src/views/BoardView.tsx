@@ -1,18 +1,18 @@
 // Board room. By default a plain summary: is the board working, and what did it decide and why can you trust it.
 // "Show details" opens the full room: roster, every reply with per-claim verdicts, the ledger, evidence and memo.
-import { takeOpen } from "@/lib/open"
+import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
 import { EngineOffline, ModeLabel, PageHead, StatusPill, Verdict as VerdictChip } from "@/components/Shared"
-import { CheckedStatement, TeamMessage } from "@/components/Thread"
-import { verdictCount } from "@/lib/words"
+import { TeamMessage, type Checked } from "@/components/Thread"
+import { BOARD_JOB, verdictCount } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
-import { fmtDuration } from "@/lib/format"
+import { plainCost, plainDuration, plainTitle, plainWhen } from "@/lib/format"
 import "@/board/board.css"
 
 type Of<T extends BoardEvent["type"]> = Extract<BoardEvent, { type: T }>
@@ -51,7 +51,9 @@ export function BoardView() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [brief, setBrief] = useState("")
   const [opened] = useState(() => takeOpen("board")) // a review another view asked to open ("See what they found")
-  const [runId, setRunId] = useState<string | undefined>(opened)
+  const [runId, setRunId] = useState<string | undefined>(() => opened ?? lastRun("board")) // else the review shown last time
+  const [copied, setCopied] = useState(false)
+  useEffect(() => showing("board", runId), [runId])
   const [error, setError] = useState("")
   const [memoOf, setMemoOf] = useState<{ runId: string; text: string }>()
   // Someone who asked to see a review wants the discussion: it is open on arrival. Otherwise the last choice is kept.
@@ -96,6 +98,9 @@ export function BoardView() {
   const evidence = events.filter((e): e is Of<"evidence.triaged"> => e.type === "evidence.triaged")
   const uniqueEvidence = [...new Map(evidence.flatMap((e) => e.items).map((i) => [i.url, i])).values()]
   const dropped = evidence.reduce((n, e) => n + e.dropped, 0)
+  // Who found the sources, as the run recorded it. Old runs do not say; then nothing is claimed.
+  const providers = new Set(evidence.flatMap((e) => [e.provider, ...e.items.map((i) => i.provider)]).filter(Boolean))
+  const searchedWith = providers.has("exa") ? "exa" : providers.has("fixture") ? "fixture" : undefined
   const current = rounds.at(-1)?.[1]
   const members = roster.filter((m) => m.role === "member")
   const live = !finished && events.length > 0
@@ -128,8 +133,8 @@ export function BoardView() {
   const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
   const headline = !status ? "Loading the review…"
-    : !runId ? "No reviews yet. Pick a brief and press Start a review. While paid calls are off this is a practice run: fixed text, free, not real research."
-    : runs.length > 0 && !known && events.length === 0 ? `Run ${runId} was not found. Pick another run from the list.`
+    : !runId ? "No reviews yet. Pick a brief and press Start a review. In Demo mode this is a practice run: fixed text, free, not real research."
+    : runs.length > 0 && !known && events.length === 0 ? "That review could not be found. It may have been deleted. Pick another one from the list above."
     : failed ? "The run stopped with an error."
     : done ? `The team has decided. ${said}`
     : memoWritten ? "Writing the decision…"
@@ -137,111 +142,123 @@ export function BoardView() {
     : "Starting the review…"
   const progress = done ? 1 : Math.min(0.95, ((rounds.length - 1) + (current ? current.replies.length / Math.max(1, members.length) : 0)) / maxRounds)
 
+  const runRow = runs.find((r) => r.id === runId)
+  const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
+  const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
+  const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
+  const wrong = count("contradicted")
+  const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: BOARD_JOB[member] ?? t.job?.toLowerCase() } }
+  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
+
   return (
     <div className="page board">
-      <PageHead title="Board review" about={ABOUT}>
-      </PageHead>
-      <div className="board-banner card-surface">
-        <h2 id="board-run-label">Review</h2>
-        <select aria-labelledby="board-run-label" value={runId ?? ""} title={runId} onChange={(e) => setRunId(e.target.value || undefined)}>
-          {runs.length === 0 && <option value="">No runs yet</option>}
-          {runId && !known && runs.length > 0 && <option value={runId}>{runId}</option>}
-          {runs.map((r) => <option key={r.id} value={r.id}>{r.id} · {runState(r.status)}</option>)}
-        </select>
-        {runId && (known || events.length > 0) && <StatusPill state={failed ? "failed" : runState(runs.find((r) => r.id === runId)?.status ?? (done ? "done" : "running"))} />}
-        {runs.find((r) => r.id === runId)?.status === "paused" && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
-        <span className="board-new">
-        <select aria-label="Brief for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
-          {briefs.map((b) => <option key={b} value={b}>{b.replace(/\.md$/, "").replace(/-/g, " ")}</option>)}
-        </select>
-        <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Review in progress" : "Start a review"}</button>
-        </span>
-        <label className="toggle">
-          <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
-          <span>Show the full discussion</span>
+      <PageHead title="Board review" about={ABOUT} />
+      <div className="board-bar">
+        <label className="board-pick">
+          <span className="small muted">Showing</span>
+          <select aria-label="Review to show" value={runId ?? ""} title={runId} onChange={(e) => setRunId(e.target.value || undefined)}>
+            {runs.length === 0 && <option value="">No reviews yet</option>}
+            {runId && !known && runs.length > 0 && <option value={runId}>{plainTitle(runId)}</option>}
+            {runs.map((r) => <option key={r.id} value={r.id}>{plainTitle(r.brief)} · {plainWhen(r.startedAt)} · {runState(r.status)}</option>)}
+          </select>
         </label>
+        {(runRow?.status === "paused" || runRow?.status === "failed") && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
+        <span className="board-new">
+          <select aria-label="Question for a new review" value={brief} onChange={(e) => setBrief(e.target.value)}>
+            {briefs.map((b) => <option key={b} value={b}>{plainTitle(b)}</option>)}
+          </select>
+          <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Review in progress" : "Start a review"}</button>
+        </span>
       </div>
+      {status?.mock && <p className="muted small" data-testid="next-mode">A new review would be a practice run. {nextWhy}</p>}
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
-      <section className="card-surface summary" aria-label="Status">
-        {runId && members.length > 0 && (
-          <ol className="board-steps" aria-label="Board members in this round">
-            {members.map((m) => {
-              // From the run's own events: a member who never replied did not take part, also when the roster lists them.
-              const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
-              const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
-              return <li key={m.name} data-step={step} title={nameAndJob(m.title).job}><span>{nameAndJob(m.title).name}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></li>
-            })}
-          </ol>
+      <section className="story" aria-label="What happened">
+        {runId && (known || events.length > 0) && (
+          <>
+            <p className="story-eyebrow">The question</p>
+            <h2 className="story-title">{question}</h2>
+            <p className="story-facts">
+              <StatusPill state={state} />
+              {startedAs !== undefined && (
+                <span data-testid="run-mode" className="story-mode">
+                  <ModeLabel scripted={startedAs} />
+                  {startedAs === false && <span className="muted small"> This review ran with real models.</span>}
+                </span>
+              )}
+              <span className="muted small">
+                {runRow && <>Started {plainWhen(runRow.startedAt)}</>}
+                {done && <> · took {plainDuration(done.minutes * 60_000)} · {plainCost(done.usd, startedAs === true)}</>}
+              </span>
+            </p>
+          </>
         )}
-        <p className="headline" role="status">{headline}</p>
-        {runId && startedAs !== undefined && <p className="board-scripted" data-testid="run-mode"><ModeLabel scripted={startedAs} /> <span className="muted small">{startedAs ? "This review used fixed text instead of models. It cost nothing and is not research." : "This review ran with real models."}</span></p>}
-        {status?.mock && <p className="muted small board-scripted" data-testid="next-mode">{nextWhy}</p>}
+        <p className="story-headline" role="status">{headline}</p>
+        {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was proven wrong." : `${wrong} statements were proven wrong.`} Look for the marked messages below.</p>}
+        {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
-        {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
+        {memoText && (
+          <div className="story-decision" role="group" aria-label="Decision">
+            <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
+            <p className="decision-text">{plain(bullets(memo["decision"])[0]) || "See the written decision below."}</p>
+            {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
+            <p className="trust">
+              <VerdictChip verdict="verified" count={count("verified")} />
+              <VerdictChip verdict="contradicted" count={count("contradicted")} />
+              <VerdictChip verdict="unsupported" count={count("unsupported") + count("unchecked")} />
+              <span className="muted small">of {claims.length} statements checked</span>
+            </p>
+            <p className="muted small">Holds up: a source supports the statement. Proven wrong: a source goes against it. Not enough evidence: no source was found, or nothing checked it. A separate checker decides each one; the team does not grade itself.</p>
+          </div>
+        )}
       </section>
 
-      {memoText && (
-        <section className="card-surface decision" aria-label="Decision">
-          <p className="board-resulthead"><span className="eyebrow">What the team recommends</span><ModeLabel scripted={startedAs} /></p>
-          <h2 className="decision-text">{plain(bullets(memo["decision"])[0]) || "See memo"}</h2>
-          {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
-          <p className="trust">
-            <VerdictChip verdict="verified" count={count("verified")} />
-            <VerdictChip verdict="contradicted" count={count("contradicted")} />
-            <VerdictChip verdict="unsupported" count={count("unsupported") + count("unchecked")} />
-            <span className="muted small">of {claims.length} statements checked against {uniqueEvidence.length} sources</span>
-          </p>
-          <p className="muted small">Holds up: a source supports the statement. Proven wrong: a source goes against it. Not enough evidence: no source was found, or nothing checked it. A separate checker decides each one; the team does not grade itself.</p>
-          <div className="decision-lists">
-            {memo["unresolved tensions"] && <div><h3>Open questions</h3><ul>{bullets(memo["unresolved tensions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
-            {memo["next actions"] && <div><h3>Next steps</h3><ul>{bullets(memo["next actions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
-          </div>
-          {done && <p className="muted small">{rounds.length} rounds · took {fmtDuration(done.minutes * 60_000)} · cost ${done.usd.toFixed(2)}</p>}
-        </section>
+      {runId && members.length > 0 && (
+        <ol className="board-steps" aria-label="Who took part">
+          {members.map((m) => {
+            // From the run's own events: a member who never replied did not take part, also when the roster lists them.
+            const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
+            const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
+            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><span>{nameAndJob(m.title).name}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></li>
+          })}
+        </ol>
       )}
 
-      {!details && runId && (
-        <button type="button" className="link-btn" onClick={() => setDetails(true)}>See who said what, the sources and every check →</button>
+      <section className="talk" aria-label="Discussion">
+        <h2 className="talk-title">The discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
+        <p className="muted small">Who said what, in order. Each message shows one sentence; the chips under it show what a separate check found about each statement in it.</p>
+        {rounds.length === 0 && <p className="empty-note">{runId && (known || events.length > 0) ? "Nobody has spoken yet." : <>Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Home</a>.</>}</p>}
+        <Conversation className="thread-inline" aria-label="Discussion, round by round">
+          <ConversationContent className="thread-list">
+            {rounds.map(([n, r]) => (
+              <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
+                <h3 className="round-head">Round {n}{r.head?.final ? ": final positions" : ""}</h3>
+                {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job={BOARD_JOB["lead-scientist"]} text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
+                {r.replies.map((reply) => <TeamMessage key={reply.key} {...who(reply.member)} text={reply.text} short={reply.summary?.trim() || undefined} checks={checksOf(r.claims.filter((c) => c.member === reply.member))} />)}
+              </div>
+            ))}
+            {live && <Loading>{headline}</Loading>}
+          </ConversationContent>
+        </Conversation>
+        {events.filter((e): e is Of<"constraint"> => e.type === "constraint").map((c) => (
+          <p key={c.key} className="pill" data-kind="warning">The lead was told to wrap up: {c.detail}</p>
+        ))}
+      </section>
+
+      {runId && (known || events.length > 0) && (
+        <nav className="next-steps" aria-label="What you can do next">
+          <p className="story-eyebrow">{finished ? "What next?" : "While you wait"}</p>
+          <a className="btn btn-primary" href="#Home">Ask a follow-up</a>
+          <button type="button" className="btn" aria-pressed={details} onClick={() => setDetails(!details)}>{details ? "Hide the checks, sources and written decision" : "See how each statement was checked"}</button>
+          <a className="btn" href="#Graph" onClick={() => setOpen("board", runId)}>Watch it as a graph</a>
+          <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(linkTo("board", runId)).then(() => setCopied(true), () => setCopied(false)) }}>{copied ? "Link copied" : "Copy a link to this review"}</button>
+        </nav>
       )}
 
       {details && (
         <div className="board-grid">
-          <section className="card-surface" aria-label="Discussion">
-            <h2>Discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
-            <p className="muted small">Who said what, round by round. Under each reply: what a separate check found about each statement in it.</p>
-            {rounds.length === 0 && <p className="muted small">{runId ? "No replies yet." : "Nothing to show until a review is started."}</p>}
-            <Conversation className="thread-inline" aria-label="Discussion, round by round">
-              <ConversationContent className="thread-list">
-                {rounds.map(([n, r]) => (
-                  <div key={n} className="thread-round" role="group" aria-label={`Round ${n}`}>
-                    <h3 className="round-head">Round {n}{r.head?.final ? " · final positions" : ""}</h3>
-                    {r.head?.message && <TeamMessage name={lead?.title ?? "Lead"} job="Leads the review and writes the decision" text={r.head.message.replace(/^\s*Round \d+\.\s*/, "")} />}
-                    {r.replies.map((reply) => {
-                      const who = nameAndJob(title(reply.member))
-                      const said = r.claims.filter((c) => c.member === reply.member)
-                      return (
-                        <TeamMessage key={reply.key} name={who.name} job={who.job} text={reply.text}>
-                          {said.length > 0 && (
-                            <ul className="thread-checks" aria-label={`What the checks found about ${who.name}'s statements`}>
-                              {said.map((c) => <CheckedStatement key={c.key} verdict={c.verdict} claim={c.claim} note={c.note} source={c.source} by={checkerName(c)} />)}
-                            </ul>
-                          )}
-                        </TeamMessage>
-                      )
-                    })}
-                  </div>
-                ))}
-                {live && <Loading>{headline}</Loading>}
-              </ConversationContent>
-            </Conversation>
-            {events.filter((e): e is Of<"constraint"> => e.type === "constraint").map((c) => (
-              <p key={c.key} className="pill" data-kind="warning">Wrap up: {c.detail}</p>
-            ))}
-          </section>
-
           <section className="card-surface" aria-label="Checks, sources and the written decision">
-            <h2>What the checks found</h2>
+            <h2>Every check, counted</h2>
             <div className="ledger-stats">
               {VERDICTS.map((v) => <div key={v} title={`The check's own word: ${v}`}><strong>{count(v)}</strong><span>{VERDICT_DETAIL[v]}</span><span className="muted small">{v}</span></div>)}
             </div>
@@ -250,7 +267,9 @@ export function BoardView() {
               {" "}{claims.filter((c) => !firstPass(c)).length} went to a second, more careful check.
             </p>
             <h2>Sources</h2>
-            <p className="muted small">{uniqueEvidence.length} sources kept · {dropped} dropped as off-topic</p>
+            <p className="muted small">{uniqueEvidence.length === 0 ? "This review looked up no outside sources." : `${uniqueEvidence.length} sources kept`}{dropped > 0 && ` · ${dropped} left out as off-topic`}</p>
+            {searchedWith === "exa" && <p className="muted small" data-testid="search-credit">Search powered by Exa</p>}
+            {searchedWith === "fixture" && <p className="muted small" data-testid="search-credit">These are example sources that come with a practice run. No live search was made.</p>}
             <ul className="evidence">
               {uniqueEvidence.map((i) => <li key={i.url}><a href={i.url} target="_blank" rel="noreferrer">{i.title}</a> <span className="muted">{i.studyType}</span></li>)}
             </ul>
@@ -263,12 +282,12 @@ export function BoardView() {
               <div key={m.name} className="member" title={m.deliverable}>
                 <div>
                   <strong>{m.title}</strong>
-                  <span>{m.role === "lead" ? "Leads the review and writes the decision" : m.deliverable}</span>
+                  <span>{BOARD_JOB[m.name] ?? m.deliverable}</span>
                   <code title={scripted ? `A real run would use ${m.modelId}` : m.modelId}>{scripted ? "practice: no model" : m.modelId}</code>
                 </div>
               </div>
             ))}
-            {status && <p className="muted small">Limits: {status.meeting.max_rounds} rounds · {status.meeting.max_minutes} min · ${status.meeting.max_usd}</p>}
+            {status && <p className="muted small">Limits for one review: at most {status.meeting.max_rounds} rounds, {status.meeting.max_minutes} minutes and ${status.meeting.max_usd}.</p>}
           </details>
 
         </div>

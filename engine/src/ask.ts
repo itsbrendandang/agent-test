@@ -144,9 +144,9 @@ export function keywordAnswer(question: string, boardRuns: BoardRun[], kind: Kin
   }
   const top = [...score.values()].sort((a, b) => b.words.length - a.words.length || b.hit.startedAt - a.hit.startedAt).slice(0, 8)
   const runs = top.map(({ hit, words: w }) => ({ kind: hit.kind, id: hit.id, title: hit.title, why: `contains: ${w.join(", ")}` }))
-  const answer = !words.length ? "The question has no words to search for."
-    : runs.length ? `These runs contain the words ${words.map((w) => `“${w}”`).join(", ")}. This is a word match, not an answer to the question.`
-    : `No run contains any of the words ${words.map((w) => `“${w}”`).join(", ")}.`
+  const answer = !words.length ? "There is nothing to search for yet. Type a few keywords."
+    : runs.length ? `Saved research that mentions ${words.map((w) => `“${w}”`).join(", ")}. This is a keyword match, not an answer to your question.`
+    : "No matching research found. Try a shorter question or different keywords."
   return { answer, runs, mode: "keyword", note: why }
 }
 

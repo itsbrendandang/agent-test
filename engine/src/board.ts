@@ -36,6 +36,7 @@ import { assertBoardKeys, describeModelFailure, escalationModel, FatalModelError
 import { paidCallsOff, refusePaid } from "./paid.ts"
 import { type Checker, EventLog, type EvidenceItem, type SearchProvider, type Verdict } from "./events.ts"
 import { exaSearch, OBJECTIVE_DESCRIPTION, type SearchResult } from "./exa.ts"
+import { DEFAULT_MAX_LITERATURE_SEARCHES, literatureLive, literatureOnce } from "./literature.ts"
 import { exaAssumed, maxSearches, reserveSearch, settleSearch } from "./exaledger.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "./models.ts"
@@ -59,6 +60,8 @@ export interface RunState {
   jevUsd?: number // the same figure in runs recorded before Jev was removed; read as a fallback, never written
   /** Exa searches this run made, by tool call id: what came back and what it cost. A replayed call reads this and does not search (or pay) again. Scripted runs store nothing here. */
   searched?: Record<string, { items: EvidenceItem[]; notices: string[]; usd: number; basis: "reported" | "assumed" }>
+  /** Results of the free literature searches (literature.ts), by tool call id: a crash replay reads them here instead of searching again. */
+  literature?: Record<string, { items: EvidenceItem[]; notices: string[] }>
   lastRoundUsd?: number // what the last round cost; the next round is refused when it would not fit under max_usd
   droppedKeys?: string[] // search results the triage dropped (url + key question), so no member's repeat search pays to screen them again
   usd?: number // running total for the run: models + first-pass checker + escalation checkers
@@ -201,7 +204,7 @@ export function summarize(dir: string, state: Pick<RunState, "rounds" | "ledger"
       if (!line.includes('"round.started"') && !line.includes('"claim.checked"') && !line.includes('"evidence.triaged"')) continue
       try {
         const e = JSON.parse(line) as { type?: string; key?: string; round?: number; provider?: string }
-        if (e.type === "evidence.triaged") { searches++; if (provider === undefined && (e.provider === "exa" || e.provider === "fixture")) provider = e.provider }
+        if (e.type === "evidence.triaged") { searches++; if (provider === undefined && (e.provider === "exa" || e.provider === "europepmc" || e.provider === "fixture")) provider = e.provider }
         if (e.type === "round.started" && typeof e.round === "number") rounds = Math.max(rounds, e.round)
         if (e.type === "claim.checked") claims.add(e.key ?? line)
       } catch { /* partial line */ }
@@ -551,6 +554,28 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
   save()
 
   // ── Tools ──────────────────────────────────────────────────────────────────────────────────────
+  // What a search found goes into the evidence pool through here, whichever search it was: results the pool already
+  // has (or already dropped for this key question) are not screened and paid for again, the rest are screened by the
+  // first pass, and the member is given only what was kept.
+  const intoPool = async (result: SearchResult, provider: SearchProvider, member: string, callId: string, query: string, keyQuestion: string) => {
+    const found = { ...result, items: result.items.map((i) => ({ ...i, provider })) }
+    const dropKey = (url: string) => createHash("sha1").update(`${url}\n${keyQuestion}`).digest("hex").slice(0, 16)
+    const known = found.items.filter((i) => state.evidence[i.url] || state.droppedKeys?.includes(dropKey(i.url)))
+    const fresh = found.items.filter((i) => !known.includes(i))
+    const triaged = await firstPass.triage(fresh, keyQuestion)
+    for (const t of triaged) if (!t.keep) state.droppedKeys = [...(state.droppedKeys ?? []), dropKey(t.item.url)]
+    const kept = [...known.filter((i) => state.evidence[i.url]).map((i) => state.evidence[i.url]), ...triaged.filter((t) => t.keep).map((t) => t.item)]
+    for (const item of kept) state.evidence[item.url] = item
+    state.firstPassUsd = firstPassBefore + firstPass.usd
+    save()
+    log.emit(`evidence:${callId}`, { type: "evidence.triaged", member, query, kept: kept.length, dropped: found.items.length - kept.length, items: kept, provider })
+    const results = kept.length
+      ? kept.map((i) => `- ${i.title} [${i.studyType ?? "?"}] ${i.url}\n  ${i.text}`).join("\n")
+      : "Nothing relevant found. Say so in your reply."
+    const text = [results, ...found.notices.map((n) => `Note from the search engine: ${n}`)].join("\n\n")
+    return { output: [{ type: "text" as const, text }] }
+  }
+
   const exaTool = defineTool({
     name: "exa_search",
     description: "Search the live web and the scientific literature and return the most relevant URLs with excerpts. Results are screened for relevance before you see them.",
@@ -568,24 +593,30 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
         save()
         return { output: [{ type: "text", text: out.refused }] }
       }
-      const provider: SearchProvider = mock ? "fixture" : "exa" // shown in the app as the source of the evidence: Exa for a live search, fixture for a practice run's example sources
-      const found = { ...(out.result as SearchResult), items: (out.result as SearchResult).items.map((i) => ({ ...i, provider })) }
-      // A result already in the pool, or already dropped for this key question, is not screened (and paid for) again.
-      const dropKey = (url: string) => createHash("sha1").update(`${url}\n${args.key_question}`).digest("hex").slice(0, 16)
-      const known = found.items.filter((i) => state.evidence[i.url] || state.droppedKeys?.includes(dropKey(i.url)))
-      const fresh = found.items.filter((i) => !known.includes(i))
-      const triaged = await firstPass.triage(fresh, args.key_question)
-      for (const t of triaged) if (!t.keep) state.droppedKeys = [...(state.droppedKeys ?? []), dropKey(t.item.url)]
-      const kept = [...known.filter((i) => state.evidence[i.url]).map((i) => state.evidence[i.url]), ...triaged.filter((t) => t.keep).map((t) => t.item)]
-      for (const item of kept) state.evidence[item.url] = item
-      state.firstPassUsd = firstPassBefore + firstPass.usd
+      return intoPool(out.result as SearchResult, providerOf(mock), memberOf(api), api.callId, args.query, args.key_question)
+    },
+  })
+
+  const literatureTool = defineTool({
+    name: "literature_search",
+    description: "Search PubMed and preprints (through Europe PMC) and return matching papers with their abstracts. Free. Results are screened for relevance before you see them.",
+    parameters: obj({
+      query: str({ description: "A short PubMed-style keyword query: 3 to 6 terms, no sentences" }),
+      key_question: str({ description: "The one question from the brief this search serves" }),
+    }),
+    replay: "safe",
+    execute: async (args, api) => {
+      const out = await literatureOnce({
+        state, mock, maxSearches: config.meeting.max_literature_searches ?? DEFAULT_MAX_LITERATURE_SEARCHES,
+        search: (q) => (mock ? exaSearch(q, args.key_question, true) : literatureLive(q)), // a practice run gets the fixture sources and reaches no network
+        capReached: async () => (await spend()) >= config.meeting.max_usd, paidOff: () => paidCallsOff(),
+      }, api.callId, args.query)
       save()
-      log.emit(`evidence:${api.callId}`, { type: "evidence.triaged", member, query: args.query, kept: kept.length, dropped: found.items.length - kept.length, items: kept, provider })
-      const results = kept.length
-        ? kept.map((i) => `- ${i.title} [${i.studyType ?? "?"}] ${i.url}\n  ${i.text}`).join("\n")
-        : "Nothing relevant found. Say so in your reply."
-      const text = [results, ...found.notices.map((n) => `Note from the search engine: ${n}`)].join("\n\n")
-      return { output: [{ type: "text", text }] }
+      if (out.refused) {
+        if (!out.failed) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })
+        return { output: [{ type: "text", text: out.refused }] }
+      }
+      return intoPool(out.result as SearchResult, mock ? "fixture" : "europepmc", memberOf(api), api.callId, args.query, args.key_question)
     },
   })
 
@@ -685,7 +716,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
 
   // ── Harness ────────────────────────────────────────────────────────────────────────────────────
   const registry = createRegistry()
-  registry.install(defineExtension({ name: "board", tools: [exaTool, converseTool, memoTool] }))
+  registry.install(defineExtension({ name: "board", tools: [exaTool, literatureTool, converseTool, memoTool] }))
   const harness = await Harness.open(await openNodeSqliteStorage(`${runDir(config, runId)}/session.sqlite`), {
     models, registry,
     identity: { attribution: { name: "drug-board", url: "https://github.com/" } },
@@ -710,7 +741,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     if (state.members[agent.name]) continue
     const c = await harness.createConversation({
       ownership: { kind: "ownerless" },
-      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: agent.tools.includes("exa_search") ? [exaTool] : [], maxTurns: config.meeting.member_turns ?? 6 },
+      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: [exaTool, literatureTool].filter((t) => agent.tools.includes(t.name)), maxTurns: config.meeting.member_turns ?? 6 },
     }, ctx)
     state.members[agent.name] = c.id
     save()
@@ -754,6 +785,9 @@ export function overLimit(config: BoardConfig, rounds: number, startedAt: number
   if (reserve > 0 && usd + reserve >= config.meeting.max_usd) return { reason: "budget" as const, detail: `$${usd.toFixed(2)} spent, and another round is expected to cost about $${reserve.toFixed(2)}, which would pass the $${config.meeting.max_usd} cap` }
   return undefined
 }
+
+/** Where a run's sources come from, for the label "Search powered by Exa": a live search is exa, a practice run's example sources are fixture. */
+export const providerOf = (mock: boolean): SearchProvider => (mock ? "fixture" : "exa")
 
 /** The members that can search first, then the rest; one phase when there is no such member or nobody else. */
 export function replyPhases(roster: AgentDef[]): AgentDef[][] {

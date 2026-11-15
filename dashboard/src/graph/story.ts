@@ -40,3 +40,17 @@ function problemsLine(s: Stats): string {
   const open = s.problems - s.problemsFixed
   return ` The reviewers found ${plural(s.problems, "problem")}: ${s.problemsFixed} fixed${open > 0 ? `, ${open} still open` : ""}.`
 }
+
+/** Replay speed: about 30 seconds for a whole run, never faster than 3 steps a second or slower than 1. */
+export const stepMs = (max: number) => Math.max(280, Math.min(900, Math.round(30_000 / Math.min(100, Math.max(1, max)))))
+/** A long run replays several steps at a time, so that a replay never takes much longer than half a minute. */
+export const stepsPerTick = (max: number) => Math.max(1, Math.ceil(max / 100))
+export const replaySeconds = (max: number) => Math.max(5, Math.round((Math.ceil(max / stepsPerTick(max)) * stepMs(max)) / 1000))
+
+/** What the replay is showing, in one sentence of the run's own recorded events. */
+export function narration(model: Pick<GraphModel, "steps" | "maxOrder">, step: number | null): string {
+  if (step === null) return ""
+  if (step === 0) return "Before anything happened."
+  return model.steps[step - 1]?.label ?? ""
+}
+

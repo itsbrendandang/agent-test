@@ -106,7 +106,7 @@ def parse_page(html: str, page: str, retrieved_at: str) -> List[Dict[str, Any]]:
                 url=f"{url}#{anchor}",
                 domains=domains,
                 modality=tagging.modality_for([title, description, task_line, "smiles" if "SMILES" in section else ""]),
-                description=common.clean_text(description + (" Task: " + task_line if task_line else ""), 380),
+                description=common.safe_description(common.clean_text(description + (" Task: " + task_line if task_line else ""), 380), title),
                 size=common.clean_text(stats, 120) or None,
                 format="tabular, loaded with the PyTDC package (files on Harvard Dataverse)",
                 licence_raw=licence_text,

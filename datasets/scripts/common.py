@@ -37,10 +37,10 @@ CACHE = ROOT / "cache"
 RECORDS = ROOT / "records"
 REQUEST_LOG = ROOT / "requests.log"
 
-UA_TOKEN = "drug-board-dataset-scout"
+UA_NAME = "drug-board-dataset-scout"
 UA = os.environ.get(
     "DATASET_SCOUT_UA",
-    UA_TOKEN + "/0.1 (metadata-only dataset catalogue; polite; +https://github.com/itsbrendandang)",
+    UA_NAME + "/0.1 (metadata-only dataset catalogue; polite; +https://github.com/itsbrendandang)",
 )
 
 # Seconds between two requests to the same host. 0.6 s is about 1.7 requests per second.
@@ -74,7 +74,7 @@ ROBOTS_EXEMPT_API_HOSTS: Dict[str, str] = {}
 # AI agents or AI crawlers, that group is obeyed as well as the group for "*". A person who runs
 # a fetcher by hand may say so with DATASET_SCOUT_OPERATOR=human; then only the "*" group (or a
 # group for our own name) applies. An AI agent must never set that variable.
-AI_AGENT_TOKENS = ("claude-user", "claude-web", "claudebot", "anthropic-ai", "gptbot", "chatgpt-user", "oai-searchbot")
+AI_AGENT_NAMES = ("claude-user", "claude-web", "claudebot", "anthropic-ai", "gptbot", "chatgpt-user", "oai-searchbot")
 
 
 def operator_is_ai() -> bool:
@@ -245,11 +245,11 @@ def robots_allows(url: str) -> bool:
     robots = robots_for(parts.scheme, parts.netloc)
     if robots is None:
         return True
-    if not robots.allowed(UA_TOKEN, url):
+    if not robots.allowed(UA_NAME, url):
         return False
     if not operator_is_ai():
         return True
-    return all(robots.allowed(token, url) for token in AI_AGENT_TOKENS)
+    return all(robots.allowed(token, url) for token in AI_AGENT_NAMES)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -261,7 +261,7 @@ def _interval(scheme: str, host: str, check_robots: bool) -> float:
     base = HOST_INTERVAL.get(host, DEFAULT_INTERVAL)
     if check_robots:
         robots = _ROBOTS.get(scheme + "://" + host)
-        delay = robots.crawl_delay(UA_TOKEN) if robots else None
+        delay = robots.crawl_delay(UA_NAME) if robots else None
         if delay:
             base = max(base, min(delay, MAX_CRAWL_DELAY))
     return base
@@ -385,6 +385,19 @@ def _curl(
         return status, reply_headers, body
 
 
+ROBOTS_REFUSED = -1  # cache status of a URL that robots.txt did not let us read
+
+
+def _store_refusal(meta_path: Path, body_path: Path, url: str, method: str, refused_url: str) -> None:
+    """Remember a robots.txt refusal, so that a later run from the cache gives the same result
+    and never uses an older copy of the page."""
+    body_path.write_bytes(b"")
+    meta_path.write_text(
+        json.dumps({"url": url, "method": method, "status": ROBOTS_REFUSED, "headers": {},
+                    "fetched_at": now_iso(), "refused_url": refused_url})
+    )
+
+
 def fetch(
     url: str,
     method: str = "GET",
@@ -409,6 +422,8 @@ def fetch(
     if not refresh and os.environ.get("DATASET_SCOUT_REFRESH") != "1":
         if meta_path.exists() and body_path.exists():
             meta = json.loads(meta_path.read_text())
+            if meta["status"] == ROBOTS_REFUSED:
+                raise RobotsDisallowed(meta.get("refused_url") or url)
             if meta["status"] in ok:
                 return Fetched(
                     url, meta["status"], meta["headers"], body_path.read_bytes(), meta["fetched_at"], True
@@ -417,6 +432,7 @@ def fetch(
     if os.environ.get("DATASET_SCOUT_OFFLINE") == "1":
         raise HttpError(0, url, "(offline mode and not in the cache)")
     if check_robots and parts.netloc not in ROBOTS_EXEMPT_API_HOSTS and not robots_allows(url):
+        _store_refusal(meta_path, body_path, url, method, url)
         raise RobotsDisallowed(url)
 
     send = {"User-Agent": UA, "Accept-Encoding": "gzip, deflate"}
@@ -462,7 +478,7 @@ def fetch(
                     time.sleep(pause)
                     pause *= 2
                     continue
-                raise HttpError(0, url, f"({type(failure).__name__}: {failure})")
+                raise HttpError(0, url, f"({type(failure).__name__}: {failure})") from failure
         _touch(here.netloc)
         _log_request(current_method, current, status, len(raw))
         if status in (301, 302, 303, 307, 308) and reply_headers.get("location"):
@@ -472,6 +488,7 @@ def fetch(
             if hops > MAX_REDIRECTS or there.scheme not in ("http", "https"):
                 raise HttpError(status, url, f"(redirect not followed: {target[:120]})")
             if check_robots and there.netloc not in ROBOTS_EXEMPT_API_HOSTS and not robots_allows(target):
+                _store_refusal(meta_path, body_path, url, method, target)
                 raise RobotsDisallowed(target)
             if status == 303 or (status in (301, 302) and current_method == "POST"):
                 current_method, current_data = "GET", None
@@ -520,6 +537,15 @@ def fetch(
         return Fetched(url, status, keep, raw, fetched_at, False)
 
 
+def cached_at(url: str, method: str = "GET") -> Optional[str]:
+    """When the cache entry of a URL was written (a reply or a robots.txt refusal), or None."""
+    meta_path, _ = _cache_paths(method, url, None)
+    try:
+        return json.loads(meta_path.read_text()).get("fetched_at")
+    except (OSError, ValueError):
+        return None
+
+
 def get_json(url: str, **kwargs: Any) -> Tuple[Any, Fetched]:
     headers = dict(kwargs.pop("headers", None) or {})
     headers.setdefault("Accept", "application/json")
@@ -563,6 +589,27 @@ def clean_text(value: Any, limit: int = 300) -> str:
     if " " in cut[limit // 2 :]:
         cut = cut[: cut.rindex(" ")]
     return cut.rstrip(" ,;:.-") + "…"
+
+
+# Text from a dataset card or a registry is written by third parties. Some of it speaks to the
+# reader ("install this plugin in your coding agent", "pip install ..."). Such text must not
+# reach an agent as if it were a description, so it is replaced by a neutral line.
+_INSTRUCTION = re.compile(
+    r"\b(your (coding )?agents?|coding agents?|as an ai\b|ignore (all |any )?(previous|prior|above)|system prompt"
+    r"|you (must|should|are an?)\b|pip3? install|npx |npm install|curl |wget |run the following"
+    r"|\binstall (it|the|this|our|hugging ?face)\b|conda (install|environment)|quickstart"
+    r"|execute the|sudo |api[_ -]?key|click here|sign up|subscribe)",
+    re.I,
+)
+
+
+def is_instruction_like(text: Optional[str]) -> bool:
+    return bool(text and _INSTRUCTION.search(text))
+
+
+def safe_description(text: str, fallback: str) -> str:
+    """The description, or the fallback when the text reads like instructions to the reader."""
+    return fallback if is_instruction_like(text) or not text else text
 
 
 def human_size(num_bytes: Any) -> Optional[str]:

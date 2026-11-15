@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PRACTICE } from "@/lib/words"
 import { routes } from "@/test/engine"
+import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
 
 // jsdom has no WebGL: the renderer is replaced by a recorder, and WebGL support is switched per test.
@@ -362,6 +363,17 @@ describe("Graph view", () => {
     expect(FakeEventSource.all.at(-1)!.closed).toBe(false)
   })
 
+  it("caps a large run, says so in plain words, and still counts the whole run in the headline", async () => {
+    routes(lists)
+    render(<WorldsView />)
+    const many = Array.from({ length: 700 }, (_, i) => ({ type: "claim.checked", round: 1, member: `m${i % 5}`, claim: `Claim number ${i}`, kind: "brief", verdict: i % 50 === 0 ? "contradicted" : "verified", checker: "first-pass", key: `c${i}`, at: 2_000 + i }) as BoardEvent)
+    await streamBoard([BOARD_EVENTS[0], ...many])
+    expect(await screen.findByTestId("headline")).toHaveTextContent("5 team members made 700 statements: 686 held up, 14 were proven wrong.")
+    expect(screen.getByText(/This run is large: the 600 most important of \d+ nodes are drawn \(limit 600\), those proven wrong first\./)).toBeInTheDocument()
+    await waitFor(() => expect(fake.data.at(-1)?.nodes.length).toBeLessThanOrEqual(600))
+    expect(fake.data.at(-1)!.nodes.map((n) => n.id).filter((id) => id.startsWith("claim:")).length).toBeGreaterThan(14) // the 14 proven wrong are among them
+  })
+
   it("closes the event stream when the run ends", async () => {
     routes(lists)
     render(<WorldsView />)
@@ -397,7 +409,7 @@ describe("Graph view", () => {
   it("says the engine is offline when no list loads, and offers a retry", async () => {
     routes({})
     render(<WorldsView />)
-    expect(await screen.findByText("Engine not running")).toBeInTheDocument()
+    expect(await screen.findByText("The app's engine isn't running")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument()
   })
 

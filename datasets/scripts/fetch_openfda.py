@@ -19,7 +19,8 @@ import schema
 SOURCE = "openfda"
 INDEX = "https://api.fda.gov/download.json"
 LICENCE_PAGES = ("https://open.fda.gov/license/", "https://open.fda.gov/terms/")
-LICENCE_PATTERN = re.compile(r"Creative Commons CC0 1\.0 Universal|CC0 1\.0 Universal dedication", re.I)
+LICENCE_REGEX = r"Creative Commons CC0 1\.0 Universal|CC0 1\.0 Universal dedication"
+LICENCE_PATTERN = re.compile(LICENCE_REGEX, re.I)
 
 # What each endpoint holds, in our words. An endpoint that is not listed gets a generic line.
 ABOUT: Dict[str, Dict[str, Any]] = {
@@ -50,7 +51,7 @@ def licence_from_pages() -> Optional[str]:
     """'CC0-1.0' when openFDA's own licence or terms page still states it; else None."""
     for url in LICENCE_PAGES:
         try:
-            page = common.fetch(url).text()
+            page = common.clean_text(common.fetch(url).text(), 10 ** 7)
         except Exception as err:
             common.log(f"{SOURCE}: could not read {url}: {err}")
             continue
@@ -92,7 +93,7 @@ def to_records(index: Dict[str, Any], licence_url: Optional[str], retrieved_at: 
                     size=size,
                     format="JSON (zipped), REST API",
                     licence_raw="CC0-1.0" if licence_url else None,
-                    licence_source=f"openFDA page {licence_url} states CC0 1.0 Universal" if licence_url else None,
+                    licence_source=f"{licence_url} matches /{LICENCE_REGEX}/" if licence_url else None,
                     last_updated=info.get("export_date") or exported,
                     retrieved_at=retrieved_at,
                     how_retrieved="GET " + INDEX,

@@ -96,12 +96,12 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
 
         {step !== "confirm" ? (
           <>
-            <p className="muted small">Runs on this machine, on the small demo case. It needs Docker. Cloud runs and BixBench3 tasks start from the command line.</p>
+            <p className="muted small">Runs on this computer, on the small demo task. It needs Docker to be running. Benchmark tasks and cloud runs start from the command line.</p>
 
             <fieldset className="newrun-field">
               <legend>Who does the work</legend>
               <div className="newrun-choices">
-                {([["glhf", "Swarm (9 roles)"], ["single", "Single agent"], ["both", "Both, to compare"]] as const).map(([value, label]) => (
+                {([["glhf", "A team of nine"], ["single", "Single agent"], ["both", "Both, to compare"]] as const).map(([value, label]) => (
                   <label key={value}><input type="radio" name="who" id={who === value ? `${uid}-who` : undefined} value={value} checked={who === value} onChange={() => set("who", value)} /> {label}</label>
                 ))}
               </div>
@@ -119,7 +119,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               <select id={choice === OTHER ? `${uid}-model-pick` : `${uid}-model`} value={choice} onChange={(e) => set("choice", e.target.value)}
                 aria-invalid={choice !== OTHER && !!errors.model} aria-describedby={described("model")}>
                 {models.map((m) => <option key={m} value={m}>{m === "mock" ? "practice (fixed steps, free, no real analysis)" : `${m} (paid)`}</option>)}
-                <option value={OTHER} disabled={off}>Another model…{off ? " (paid calls are off)" : ""}</option>
+                <option value={OTHER} disabled={off}>Another model…{off ? " (not in Demo mode)" : ""}</option>
               </select>
               {choice === OTHER && (
                 <input id={`${uid}-model`} type="text" aria-label="Model id" placeholder="provider/model-name" autoComplete="off" spellCheck={false} maxLength={200}
@@ -128,11 +128,11 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               {err("model")}
               {off && (
                 <p className="muted small" id={`${uid}-paid-off`}>
-                  Paid calls are off, so only the scripted model can run and no other model id can be typed. To change this, a person sets NO_PAID_CALLS=0 in the .env file and restarts the engine. The dashboard cannot turn it on.
+                  You are in Demo mode, so only a practice run can start. To use a real model, choose Real at the top of the page first.
                 </p>
               )}
               {!off && models.length === 1 && <p className="muted small">The engine has no model API key, so only the practice option is listed. Add a key to .env and restart the engine to run a real model.</p>}
-              {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the token budget. You will be asked to confirm.</p>}
+              {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the text limit. You will be asked to confirm.</p>}
               {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail. Add the key to .env and restart the engine.</p>}
             </div>
 
@@ -159,7 +159,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
             </div>
 
             <fieldset className="newrun-field" disabled={!swarm}>
-              <legend>Swarm only</legend>
+              <legend>For the team only</legend>
               <div className="newrun-row">
                 <div className="newrun-field">
                   <label htmlFor={`${uid}-rounds`}>Review rounds</label>
@@ -171,13 +171,13 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
                   <input id={`${uid}-exa`} type="checkbox" checked={useExa} disabled={off || !hasExaKey} onChange={(e) => set("exa", e.target.checked)}
                     aria-describedby={[described("exa"), (off || !hasExaKey) && `${uid}-exa-off`].filter(Boolean).join(" ") || undefined} /> Exa documentation search
                 </label>
-                <label className="newrun-check"><input id={`${uid}-memory`} type="checkbox" checked={memory} onChange={(e) => set("memory", e.target.checked)} aria-describedby={described("memory")} /> Memory between runs</label>
+                <label className="newrun-check"><input id={`${uid}-memory`} type="checkbox" checked={memory} onChange={(e) => set("memory", e.target.checked)} aria-describedby={described("memory")} /> Use lessons from earlier runs</label>
               </div>
               {err("exa")}{err("memory")}
-              {off ? <p className="muted small" id={`${uid}-exa-off`}>Exa search is a paid service, so it cannot be used while paid calls are off.</p>
-                : !hasExaKey && <p className="muted small" id={`${uid}-exa-off`}>Exa search is off because the engine has no EXA_API_KEY. Add the key to .env and restart the engine to use it.</p>}
+              {off ? <p className="muted small" id={`${uid}-exa-off`}>Web search (Exa) is a paid service, so it cannot be used in Demo mode.</p>
+                : !hasExaKey && <p className="muted small" id={`${uid}-exa-off`}>Web search is off because the engine has no key for Exa (EXA_API_KEY). Add the key to .env and restart the engine to use it.</p>}
               <p className="muted small">
-                {swarm ? "Review rounds, Exa search and memory apply to the swarm only." : "A single agent has no review rounds, Exa search or memory."}
+                {swarm ? "Review rounds, web search and lessons apply to the team only." : "One agent alone has no review rounds, web search or lessons."}
                 {who === "both" && " The single-agent run starts without them. The scoreboard still pairs the two runs and lists these extras next to the swarm."}
               </p>
             </fieldset>
@@ -189,8 +189,8 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               <dt>Model</dt><dd><code>{model}</code></dd>
               <dt>Runs</dt><dd>{who === "both" ? "2: a swarm run first, then a single-agent run when the swarm run has ended" : who === "glhf" ? "1 swarm run (9 roles)" : "1 single-agent run"}</dd>
               <dt>Time limit</dt><dd>{fmtDuration(limitMs)} ({minutes} minutes){count === 2 && " for each run"}</dd>
-              <dt>Token budget</dt><dd>{fmtTokens(budget)} tokens{count === 2 && budget !== undefined && ` for each run, ${fmtTokens(budget * 2)} in total`}</dd>
-              {swarm && <><dt>Swarm extras</dt><dd>{[`${rounds} review rounds`, useExa && "Exa search", memory && "memory"].filter(Boolean).join(", ")}</dd></>}
+              <dt>Text limit (tokens)</dt><dd>{fmtTokens(budget)} tokens{count === 2 && budget !== undefined && ` for each run, ${fmtTokens(budget * 2)} in total`}</dd>
+              {swarm && <><dt>Team extras</dt><dd>{[`${rounds} review rounds`, useExa && "Exa search", memory && "memory"].filter(Boolean).join(", ")}</dd></>}
               {seed.trim() && <><dt>Seed</dt><dd>{seed}</dd></>}
             </dl>
             {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail.</p>}

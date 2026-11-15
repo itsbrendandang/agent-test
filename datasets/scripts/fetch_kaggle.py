@@ -10,6 +10,7 @@ Output: /tmp/dataset-scout/records/kaggle.jsonl
 
 from __future__ import annotations
 
+import re
 import sys
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
@@ -48,6 +49,11 @@ def to_record(item: Dict[str, Any], retrieved_at: str, how: str) -> Optional[Dic
     title = (item.get("title") or "").strip()
     if "/" not in ref or not title or item.get("isPrivate"):
         return None
+    # A dataset whose address shares no word with its title was renamed for other content.
+    slug = re.sub(r"[^a-z0-9]+", " ", ref.split("/", 1)[1].lower())
+    title_words = [w for w in re.split(r"[^a-z0-9]+", title.lower()) if len(w) >= 4]
+    if title_words and not any(w in slug.replace(" ", "") for w in title_words):
+        return None
     licence_name = (item.get("licenseName") or "").strip()
     if not licence_name or licence_name.lower() == "unknown":
         return None
@@ -55,7 +61,7 @@ def to_record(item: Dict[str, Any], retrieved_at: str, how: str) -> Optional[Dic
         return None
     tags = [t.get("name", "") for t in item.get("tags") or []]
     subtitle = (item.get("subtitle") or "").strip()
-    description = common.clean_text(subtitle or item.get("description") or title, 300)
+    description = common.safe_description(common.clean_text(subtitle or item.get("description") or title, 300), title)
     texts = [title, subtitle, ", ".join(tags)]
     domains = tagging.domains_for(texts)
     spoken = set(tagging.domains_for([title, subtitle], fallback=()))

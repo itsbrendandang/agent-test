@@ -11,25 +11,40 @@ an e-value whatever the dependence between the tests (a product is one only if t
 independent, which the code cannot check), so by Markov's inequality a true null reaches a mean
 of m/alpha with probability <= alpha/m.
 
-What the code enforces, because the p-values are reported by a model and cannot be re-derived here:
-  - pre-registration: a test is registered (name and what would contradict the claim) before any
-    result of that claim exists; a favourable result is accepted only under a registered name,
-    and registration closes at the claim's first result. So the tests that count are fixed before
-    their outcomes are known, and the best few of many cannot be picked afterwards;
+What the code enforces:
+  - a test is a script. It is registered (name, method, the test's own null, the script's path
+    and the SHA-256 of its content) before any result of that claim exists, and registration
+    closes at the claim's first result or first run. So the tests that count are fixed before
+    their outcomes are recorded, and the best few of many cannot be picked afterwards;
+  - relevance, between registration and run: a separate model call that is shown the claim, its
+    null and the registered test (never a result, never the experimenter's reasoning) rates
+    whether the test's null follows from the claim's null (Popper's Assumption 1 and relevance
+    checker). Below RELEVANCE_THRESHOLD, or without a judgement, the test cannot support or
+    refute: it counts as e = 0. It may still be run and its result is recorded;
+  - the harness runs the test, not the model: the file at the registered path must still have
+    the registered hash, the registered content is what is executed, and the p-value is parsed
+    from the last line of its output (RESULT_LINE). A p-value typed in by a model is never
+    accepted as support. A script that changed, is missing, exits non-zero, times out or prints
+    no parsable last line has no result: it counts as e = 0, like any registered test without
+    a result. Command, exit code, runtime and the end of the output are kept;
   - every registered test counts. One without a result counts as e = 0 and keeps the claim from
-    being "supported"; a test marked `contradicts` contributes KAPPA (the calibrated e-value of
+    being "supported"; a result that contradicts contributes KAPPA (the calibrated e-value of
     p = 1), never more;
-  - at most MAX_TESTS registered tests per claim and one result per test name. A CONTRADICTING
-    result is never refused, registered or not, over the cap or not: it can only lower the mean
-    and it can refute;
+  - at most MAX_TESTS registered tests per claim and one run per registered test. A
+    CONTRADICTING result typed in by a role is never refused, registered or not, over the cap or
+    not: it can only lower the mean and it can refute;
   - Bonferroni across the m registered claims: support needs a mean >= m/alpha, refutation needs
     a contradicting test with p < alpha/m;
-  - p is floored at P_FLOOR = 1e-6, so one self-reported p = 0 is worth at most e = 500.
+  - p is floored at P_FLOOR = 1e-6, so one p = 0 is worth at most e = 500.
 The guarantee: a true-null claim is "supported" with probability <= alpha/m, under any dependence
-between its registered tests, IF each reported p-value is a valid p-value from code that was run
-and no test was run privately before it was registered. What is not controlled: a dishonest or
-miscomputed p-value, tests tried in private and then registered, and the refutation rule (a true
-claim can be refuted by one bad contradicting test).
+between its registered tests, IF each counted script computes a valid p-value under a null that
+the claim's null implies, and the script was not chosen or tuned on the data it tests.
+What the code now proves by itself: the number came from running the registered file, unchanged
+since registration, and nobody typed it. What it still cannot prove: that the script is a
+meaningful test (it may print a constant, or compute an invalid p-value); that the relevance
+judgement is right (it is a model's reading, a filter and not a proof); that the model did not
+run the script, or look at the data, before registering it (the sandbox is the model's own
+workshop); and the refutation rule (a true claim can be refuted by one bad contradicting test).
 
 Verdicts (m = number of registered claims):
   supported     every registered test has a result and their mean e-value is >= m/alpha
@@ -40,6 +55,7 @@ Verdicts (m = number of registered claims):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -49,11 +65,18 @@ from typing import Literal
 ALPHA = 0.1  # family-wise, across all registered claims (Bonferroni)
 KAPPA = 0.5
 P_FLOOR = 1e-6  # finer p-values are not credible from permutations or bootstraps; caps e at 500
+RELEVANCE_THRESHOLD = 0.8  # a test below this cannot support; see relevance.py for the rubric
+# The last non-empty line a registered test script must print. Parsed by code, nothing else is.
+RESULT_LINE = "GLHF_RESULT p_value=<number in [0, 1]> contradicts=<true|false>"
+_RESULT = re.compile(r"GLHF_RESULT p_value=(\S+) contradicts=(true|false)")
+MAX_SCRIPT_BYTES = 64 * 1024  # a registered script is kept whole in the ledger
+OUTPUT_TAIL_CHARS = 2000
 UNREVIEWED = "review.none"  # event: review was planned and no critic completed a pass
 MAX_TESTS = 3  # registered tests per claim; see the module docstring
 
 Verdict = Literal["supported", "refuted", "insufficient", "untested"]
 Severity = Literal["blocking", "major", "minor"]
+RunStatus = Literal["ok", "changed", "missing", "failed", "timeout", "unparsable"]
 
 
 def p_to_e(p: float, kappa: float = KAPPA) -> float:
@@ -75,12 +98,62 @@ class Test:
     note: str
     by: str
     registered: bool = True  # False: a contradicting result recorded without registration
+    source: Literal["harness", "model"] = "model"  # who produced the number
+    counts: bool = True  # False: judged not relevant (or not judged): worth e = 0, cannot refute
 
     @property
     def e_value(self) -> float:
+        if not self.counts:
+            return 0.0
         # A result that goes against the claim has a one-sided p >= 0.5 in the claim's direction,
         # whose calibrated e-value is at least KAPPA; using KAPPA is the conservative choice.
         return KAPPA if self.contradicts else p_to_e(self.p_value)
+
+
+def parse_result_line(output: str) -> tuple[float, bool] | None:
+    """(p-value, contradicts) from the last non-empty line of a test's output, or None when
+    that line is not exactly RESULT_LINE with a number in [0, 1]."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    found = _RESULT.fullmatch(lines[-1]) if lines else None
+    if not found:
+        return None
+    try:
+        p_value = float(found.group(1))
+    except ValueError:
+        return None
+    if math.isnan(p_value) or not 0.0 <= p_value <= 1.0:
+        return None
+    return p_value, found.group(2) == "true"
+
+
+@dataclass
+class Relevance:
+    """One judgement of whether a registered test bears on its claim, made before the run."""
+
+    score: float | None  # 0.1 to 1.0 on the rubric; None: the judge gave no usable answer
+    relevant: bool  # score >= threshold
+    reason: str
+    threshold: float = RELEVANCE_THRESHOLD
+    judge: str = "relevance"
+    judge_model: str = ""
+    proposer_model: str = ""
+    same_vendor_as_proposer: bool | None = None  # True: judge and proposer share blind spots
+
+
+@dataclass
+class Run:
+    """What the harness saw when it executed a registered script. `status` "ok" is the only one
+    with a result; every other status leaves the test without one (e = 0)."""
+
+    status: RunStatus
+    command: list[str] = field(default_factory=list)
+    exit_code: int | None = None
+    seconds: float = 0.0
+    output_tail: str = ""
+    sha256_at_run: str | None = None  # of the file found at the registered path
+    p_value: float | None = None
+    contradicts: bool | None = None
+    detail: str = ""
 
 
 @dataclass
@@ -88,6 +161,22 @@ class Registration:
     name: str
     method: str  # what will be run, and which outcome would contradict the claim
     by: str
+    test_null: str = ""  # the null the script's p-value is computed under
+    script_path: str | None = None  # in the sandbox
+    script_sha256: str | None = None  # of the content at registration
+    script_bytes: int = 0
+    script: str = ""  # the registered content: this is what the harness executes
+    relevance: Relevance | None = None
+    run: Run | None = None
+
+
+def _state(entry: Registration) -> str:
+    """Why a registered test has no result, in words; "" when it has one."""
+    if entry.run is not None:
+        return "" if entry.run.status == "ok" else f"run {entry.run.status}"
+    if entry.script_sha256 is None:
+        return "no script"
+    return "not judged for relevance" if entry.relevance is None else "not run"
 
 
 @dataclass
@@ -104,9 +193,17 @@ class Claim:
 
     @property
     def pending(self) -> list[str]:
-        """Registered tests that have no result yet."""
-        done = {normalised_name(t.name) for t in self.tests}
-        return [r.name for r in self.registered if normalised_name(r.name) not in done]
+        """Registered tests without a result: not run yet, or run without a parsable result."""
+        return [r.name for r in self.registered if r.run is None or r.run.status != "ok"]
+
+    @property
+    def closed(self) -> bool:
+        """No more tests may be registered: the claim has a result, or a test of it was run."""
+        return bool(self.tests) or any(r.run is not None for r in self.registered)
+
+    def registration(self, name: str) -> Registration | None:
+        key = normalised_name(name)
+        return next((r for r in self.registered if normalised_name(r.name) == key), None)
 
     @property
     def e_value(self) -> float:
@@ -122,7 +219,7 @@ class Claim:
     def verdict(self) -> Verdict:
         refute_below = ALPHA / max(1, self.family)
         if self.replication_failed or any(
-            t.contradicts and t.p_value < refute_below for t in self.tests
+            t.contradicts and t.counts and t.p_value < refute_below for t in self.tests
         ):
             return "refuted"
         if not self.tests:
@@ -165,15 +262,27 @@ class Ledger:
         self.log("claim.added", claim=claim.id, by=by, text=claim.text)
         return claim
 
-    def register_test(self, claim_id: str, name: str, method: str, by: str) -> Claim:
-        """Pre-register a falsification test: its name and method, before any result exists."""
+    def register_test(
+        self,
+        claim_id: str,
+        name: str,
+        method: str,
+        by: str,
+        *,
+        script_path: str | None = None,
+        script: str | None = None,
+        test_null: str = "",
+    ) -> Claim:
+        """Pre-register a falsification test before any result exists: its name, its method, and
+        the script that is the test (path and content; the hash is taken here). A registration
+        without a script is recorded but can never be run, so it can never support."""
         claim = self.claims[claim_id]
         key = normalised_name(name)
         if not key:
             raise ValueError("test_name is empty")
         if not method.strip():
             raise ValueError("method is empty: say what you will run and what would contradict")
-        if claim.tests:
+        if claim.closed:
             raise ValueError(
                 f"registration for {claim_id} is closed: it already has a result. Tests must be "
                 "registered before any of them is run."
@@ -184,13 +293,128 @@ class Ledger:
             raise ValueError(
                 f"{claim_id} already has {MAX_TESTS} registered tests, the most a claim may have"
             )
-        claim.registered.append(Registration(name.strip(), method.strip(), by))
-        self.log("test.registered", claim=claim_id, name=name, method=method.strip(), by=by)
+        entry = Registration(name.strip(), method.strip(), by, test_null.strip())
+        if script is not None:
+            size = len(script.encode("utf-8"))
+            if not script.strip():
+                raise ValueError("the test script is empty")
+            if size > MAX_SCRIPT_BYTES:
+                raise ValueError(
+                    f"the test script is {size} bytes; the most a registered test may be is "
+                    f"{MAX_SCRIPT_BYTES} (put the data handling in the script, not data)"
+                )
+            entry.script_path, entry.script, entry.script_bytes = script_path, script, size
+            entry.script_sha256 = hashlib.sha256(script.encode("utf-8")).hexdigest()
+        claim.registered.append(entry)
+        self.log(
+            "test.registered",
+            claim=claim_id,
+            name=name,
+            method=method.strip(),
+            test_null=entry.test_null,
+            script_path=entry.script_path,
+            script_sha256=entry.script_sha256,
+            script_bytes=entry.script_bytes,
+            by=by,
+        )
+        return claim
+
+    def judge_relevance(self, claim_id: str, name: str, relevance: Relevance) -> Claim:
+        """Record the relevance judgement of a registered test. Once, and before its run."""
+        claim = self.claims[claim_id]
+        entry = claim.registration(name)
+        if entry is None:
+            raise ValueError(f"{claim_id} has no registered test named {name!r}")
+        if entry.run is not None:
+            raise ValueError(f"{claim_id} / {name!r} was already run: relevance is judged first")
+        if entry.relevance is not None:
+            raise ValueError(f"{claim_id} / {name!r} already has a relevance judgement")
+        relevance.relevant = relevance.score is not None and relevance.score >= relevance.threshold
+        entry.relevance = relevance
+        self.log("test.relevance", claim=claim_id, name=entry.name, **asdict(relevance))
+        return claim
+
+    def record_run(self, claim_id: str, name: str, run: Run) -> Claim:
+        """Record what the harness saw when it ran a registered script. The only way a
+        favourable result enters the ledger. Needs a relevance judgement first; one run per
+        registered test; the hash at run time must be the registered one for a result."""
+        claim = self.claims[claim_id]
+        entry = claim.registration(name)
+        if entry is None or entry.script_sha256 is None:
+            raise ValueError(f"{claim_id} has no registered test script named {name!r}")
+        if entry.relevance is None:
+            raise ValueError(
+                f"{claim_id} / {name!r} has no relevance judgement: it is judged before it is run"
+            )
+        if entry.run is not None:
+            raise ValueError(f"{claim_id} / {name!r} was already run; the first run stands")
+        if run.status == "ok" and run.sha256_at_run != entry.script_sha256:
+            run.status, run.detail = "changed", "the script is not the registered one"
+        if run.status == "ok" and (
+            run.p_value is None
+            or run.contradicts is None
+            or isinstance(run.p_value, bool)
+            or math.isnan(run.p_value)
+            or not 0.0 <= run.p_value <= 1.0
+        ):
+            run.status, run.detail = "unparsable", "no p-value in [0, 1] on the last line"
+        if run.status != "ok":
+            run.p_value = run.contradicts = None
+        run.output_tail = run.output_tail[-OUTPUT_TAIL_CHARS:]
+        entry.run = run
+        counts = entry.relevance.relevant
+        if run.status == "ok":
+            assert run.p_value is not None and run.contradicts is not None
+            claim.tests.append(
+                Test(
+                    entry.name,
+                    float(run.p_value),
+                    run.contradicts,
+                    f"run by the harness: {entry.script_path} (sha256 {entry.script_sha256[:12]})"
+                    + ("" if counts else "; judged not relevant, counts as e = 0"),
+                    "harness",
+                    registered=True,
+                    source="harness",
+                    counts=counts,
+                )
+            )
+        self.log(
+            "test.executed",
+            claim=claim_id,
+            name=entry.name,
+            status=run.status,
+            command=run.command,
+            exit_code=run.exit_code,
+            seconds=round(run.seconds, 3),
+            output_tail=run.output_tail,
+            script_sha256=entry.script_sha256,
+            sha256_at_run=run.sha256_at_run,
+            detail=run.detail,
+            p=run.p_value,
+            contradicts=run.contradicts,
+            counts=counts,
+        )
+        if run.status == "ok":
+            self.log(
+                "test.recorded",
+                claim=claim_id,
+                name=entry.name,
+                p=run.p_value,
+                contradicts=run.contradicts,
+                registered=True,
+                source="harness",
+                counts=counts,
+                e=round(claim.e_value, 4),
+                verdict_at_the_time=claim.verdict,
+                by="harness",
+            )
         return claim
 
     def record_test(
         self, claim_id: str, name: str, p_value: float, contradicts: bool, note: str, by: str
     ) -> Claim:
+        """Record a result a role typed in. Only a CONTRADICTING one: it can lower the mean and
+        it can refute, never support. A favourable result comes from the harness (record_run)."""
         claim = self.claims[claim_id]
         if isinstance(p_value, bool) or not isinstance(p_value, (int, float)):
             raise ValueError("p_value must be a number in [0, 1], not a boolean or text")
@@ -199,41 +423,30 @@ class Ledger:
         key = normalised_name(name)
         if not key:
             raise ValueError("test_name is empty")
-        contradicts = bool(contradicts)
-        is_registered = any(normalised_name(r.name) == key for r in claim.registered)
+        if not bool(contradicts):
+            raise ValueError(
+                "a result typed in by a role cannot support a claim. Register the test as a "
+                "script with register_falsification_test; the harness runs the registered file "
+                "and reads the p-value from its last line. Only a result that contradicts the "
+                "claim can be reported by hand."
+            )
         again = re.compile(re.escape(key) + r"( repeat \d+)?")
         repeats = sum(1 for t in claim.tests if again.fullmatch(normalised_name(t.name)))
         label = name.strip()
-        if contradicts:
-            # Never refused: a result against the claim can only lower the mean, and may refute.
-            if repeats:
-                label, is_registered = f"{label} (repeat {repeats + 1})", False
-        else:
-            if not is_registered:
-                state = (
-                    "registration is closed because the claim already has a result"
-                    if claim.tests
-                    else "register it first with register_falsification_test"
-                )
-                raise ValueError(
-                    f"{claim_id} has no registered test named {name!r}; {state}. Only tests "
-                    f"registered before their result count (registered: "
-                    f"{', '.join(r.name for r in claim.registered) or 'none'})."
-                )
-            if repeats:
-                raise ValueError(
-                    f"{claim_id} already has a result for test {name!r}; the first result stands."
-                )
+        if repeats:
+            label = f"{label} (repeat {repeats + 1})"
         claim.tests.append(
-            Test(label, float(p_value), contradicts, note.strip(), by, registered=is_registered)
+            Test(label, float(p_value), True, note.strip(), by, registered=False, source="model")
         )
         self.log(
             "test.recorded",
             claim=claim_id,
             name=label,
             p=p_value,
-            contradicts=contradicts,
-            registered=is_registered,
+            contradicts=True,
+            registered=False,
+            source="model",
+            counts=True,
             e=round(claim.e_value, 4),
             # Only what was true when this result came in. A claim registered later raises the
             # threshold of every claim, so the verdict that counts is the one in "claims".
@@ -297,6 +510,10 @@ class Ledger:
                 "p_floor": P_FLOOR,
                 "max_tests_per_claim": MAX_TESTS,
                 "combination": "mean of e-values over registered tests (no result = 0)",
+                "relevance_threshold": RELEVANCE_THRESHOLD,
+                "result_line": RESULT_LINE,
+                "test_results": "run by the harness from the registered script; a typed-in "
+                "result is accepted only when it contradicts",
                 "claims_in_family": len(self.claims),
                 "support_threshold": max(1, len(self.claims)) / ALPHA,
                 "claims": [
@@ -323,22 +540,25 @@ class Ledger:
         lines = [
             f"Claims (verdict by code; alpha={ALPHA} shared by {m} claims. Supported: every "
             f"registered test has a result and their mean e-value is >= {m / ALPHA:g}. Refuted: a "
-            f"contradicting test with p < {ALPHA / m:.3g}, or a failed replication. Register at "
-            f"most {MAX_TESTS} tests per claim BEFORE running any; a registered test without a "
-            "result counts as zero; a contradicting result is always accepted):"
+            f"contradicting test with p < {ALPHA / m:.3g}, or a failed replication. A test is a "
+            f"script: register at most {MAX_TESTS} per claim BEFORE any is run. Each is judged "
+            "for relevance, then run by the harness, which reads the p-value from the script's "
+            "last line. A test without a result, or judged not relevant, counts as zero; a "
+            "typed-in result is accepted only when it contradicts):"
         ]
         for c in self.claims.values():
             tests = "; ".join(
                 f"{t.name}: p={t.p_value:.3g}{' CONTRADICTS' if t.contradicts else ''}"
+                + ("" if t.counts else " (not relevant: counts 0)")
                 for t in c.tests
             )
-            waiting = ", ".join(c.pending)
-            state = "closed" if c.tests else f"open, {MAX_TESTS - len(c.registered)} left"
+            waiting = ", ".join(f"{r.name} ({_state(r)})" for r in c.registered if _state(r))
+            state = "closed" if c.closed else f"open, {MAX_TESTS - len(c.registered)} left"
             lines.append(
                 f"- {c.id} [{c.verdict}, mean e={c.e_value:.3g}] {c.text} (artifacts: {', '.join(c.artifact_ids)})"
                 + f"\n    null: {c.null_hypothesis}"
                 + f"\n    test registration: {state}"
-                + (f"\n    registered, no result yet: {waiting}" if waiting else "")
+                + (f"\n    registered, no result: {waiting}" if waiting else "")
                 + (f"\n    tests: {tests}" if tests else "")
             )
         lines.append("Issues:")
@@ -364,11 +584,34 @@ class Ledger:
                 out.append(f"- Null hypothesis: {c.null_hypothesis}")
                 out.append(f"- Mean e-value: {c.e_value:.3g} (threshold {c.threshold:g})")
                 for r in c.registered:
-                    waiting = " NO RESULT RECORDED (counts as e = 0)" if r.name in c.pending else ""
-                    out.append(f"  - registered: {r.name}. {r.method} [{r.by}]{waiting}")
+                    waiting = f" NO RESULT: {_state(r)} (counts as e = 0)" if _state(r) else ""
+                    script = (
+                        f" Script {r.script_path}, sha256 {r.script_sha256[:12]}."
+                        if r.script_sha256
+                        else " No script: cannot be run."
+                    )
+                    judged = ""
+                    if r.relevance is not None:
+                        score = (
+                            "no score" if r.relevance.score is None else f"{r.relevance.score:g}"
+                        )
+                        judged = (
+                            f" Relevance {score} (needs {r.relevance.threshold:g}): "
+                            f"{'relevant' if r.relevance.relevant else 'NOT RELEVANT, counts as e = 0'}"
+                            + (
+                                "; judge on the proposer's vendor"
+                                if r.relevance.same_vendor_as_proposer
+                                else ""
+                            )
+                            + "."
+                        )
+                    out.append(
+                        f"  - registered: {r.name}. {r.method}{script}{judged} [{r.by}]{waiting}"
+                    )
                 for t in c.tests:
                     tag = " (contradicts)" if t.contradicts else ""
-                    tag += "" if t.registered else " (not pre-registered)"
+                    tag += "" if t.registered else " (typed in by a role, not pre-registered)"
+                    tag += "" if t.counts else " (not relevant)"
                     out.append(
                         f"  - {t.name}: p = {t.p_value:.3g}, e = {t.e_value:.3g}{tag}. {t.note} [{t.by}]"
                     )
@@ -399,17 +642,24 @@ class Ledger:
             f"Error control and its limits. alpha = {ALPHA} is shared by the {m} registered claims "
             f"(Bonferroni). A claim is supported when every test registered for it has a result and "
             f"the mean of their e-values reaches {m / ALPHA:g}; it is refuted when a test contradicts "
-            f"it with p < {ALPHA / m:.3g} or a replication fails. Tests are registered (name and "
-            f"method, at most {MAX_TESTS} per claim) before the claim has any result; a registered "
-            f"test without a result counts as e = 0, a contradicting test counts as e = {KAPPA} and "
-            "is always accepted. "
+            f"it with p < {ALPHA / m:.3g} or a replication fails. A test is a script, registered "
+            f"with its content hash (at most {MAX_TESTS} per claim) before the claim has any "
+            "result. Before it is run, a separate model call that sees no result judges whether "
+            f"the test bears on the claim; under {RELEVANCE_THRESHOLD:g} it counts as e = 0. The "
+            "harness then runs the registered file and reads the p-value from its last line; a "
+            "script that changed, failed, timed out or printed no value has no result and counts "
+            f"as e = 0. A contradicting test counts as e = {KAPPA}; one typed in by a role is "
+            "always accepted, a favourable one never. "
             f"Guarantee: a claim whose null is true is supported with probability at most "
             f"{ALPHA / m:.3g} (alpha / m), under any dependence between its registered tests. "
-            "Assumptions: each reported p-value is a valid p-value computed by the critic's "
-            "scripts, and no test was run in private before it was registered. Not controlled: "
-            "the code cannot verify a p-value or detect private tests (both are reported by a "
-            "model), and a true claim can be refuted by one mistaken contradicting test. The "
-            "scripts are in scripts/.",
+            "Assumptions: each counted script computes a valid p-value under a null that the "
+            "claim's null implies, and it was not chosen or tuned on the data it tests. "
+            "Checked by code: the number was produced by running the registered file, unchanged "
+            "since registration. Not checked: whether the script is a meaningful test (it could "
+            "print a constant), whether the relevance judgement (a model's reading) is right, "
+            "and whether the model ran the script or explored the data before registering it. "
+            "A true claim can be refuted by one mistaken contradicting test. The registered "
+            "scripts are in the ledger with their hashes.",
             "",
             *unreviewed,
             *section("Supported findings", {"supported"}),

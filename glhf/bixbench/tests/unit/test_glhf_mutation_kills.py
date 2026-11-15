@@ -16,13 +16,23 @@ from inspect_ai.tool import ToolError
 
 from bixbench3.inspect_harness.models import ExpectedOutput
 from bixbench3.inspect_harness.swarm import guards, memory, tools
-from bixbench3.inspect_harness.swarm.ledger import ALPHA, Claim, Ledger
+from bixbench3.inspect_harness.swarm.ledger import ALPHA, Claim, Ledger, Relevance, Run
 
 
 def _claim(ledger: Ledger, n: int = 1) -> Claim:
     for _ in range(n):
         claim = ledger.add_claim("effect present", ["degs"], "effect absent", "planner")
     return claim
+
+
+def _harness_test(ledger: Ledger, claim_id: str, name: str, p: float) -> None:
+    """A registered script, judged relevant, run by the harness: how a result gets in."""
+    ledger.register_test(
+        claim_id, name, "method", "critic", script_path="/workspace/t.py", script=f"# {name}\n"
+    )
+    ledger.judge_relevance(claim_id, name, Relevance(1.0, True, "bears on the claim"))
+    digest = ledger.claims[claim_id].registered[-1].script_sha256
+    ledger.record_run(claim_id, name, Run("ok", ["python3", "-"], 0, 0.1, "", digest, p, False))
 
 
 # ----------------------------------------------------------------------------- ledger
@@ -38,8 +48,7 @@ def test_refutation_is_strict_at_alpha_over_m_L08() -> None:
 def test_a_mean_exactly_at_the_threshold_supports_L11() -> None:
     ledger = Ledger()
     claim = _claim(ledger)
-    ledger.register_test(claim.id, "perm", "permute labels; p > 0.1 contradicts", "critic")
-    ledger.record_test(claim.id, "perm", 0.0025, False, "", "critic")  # e = 0.5 / 0.05 = 10
+    _harness_test(ledger, claim.id, "perm", 0.0025)  # e = 0.5 / 0.05 = 10
     assert claim.e_value == claim.threshold == 10.0
     assert claim.verdict == "supported"
 
@@ -58,13 +67,14 @@ def test_a_claim_takes_exactly_three_registered_tests_L13() -> None:
 def test_repeated_contradictions_are_numbered_and_marked_unregistered_L26_L36() -> None:
     ledger = Ledger()
     claim = _claim(ledger)
-    ledger.register_test(claim.id, "perm", "method", "critic")
-    for _ in range(3):
+    _harness_test(ledger, claim.id, "perm", 0.9)
+    for _ in range(2):
         ledger.record_test(claim.id, "perm", 0.9, True, "", "critic")
     assert [t.name for t in claim.tests] == ["perm", "perm (repeat 2)", "perm (repeat 3)"]
-    # Only the first result belongs to the registration; the repeats were not pre-registered.
+    # Only the harness's run belongs to the registration; what a role typed in does not.
     assert [t.registered for t in claim.tests] == [True, False, False]
-    assert ledger.findings_markdown().count("(not pre-registered)") == 2
+    assert [t.source for t in claim.tests] == ["harness", "model", "model"]
+    assert ledger.findings_markdown().count("not pre-registered)") == 2
 
 
 def test_open_issues_are_blocking_and_major_and_only_open_L28_L29() -> None:
@@ -91,8 +101,7 @@ def test_only_fixed_issues_are_marked_rechecked_L31() -> None:
 def test_an_insufficient_claim_is_not_listed_as_a_finding_L32() -> None:
     ledger = Ledger()
     claim = _claim(ledger)
-    ledger.register_test(claim.id, "perm", "method", "critic")
-    ledger.record_test(claim.id, "perm", 0.04, False, "", "critic")  # e = 2.5 < 10
+    _harness_test(ledger, claim.id, "perm", 0.04)  # e = 2.5 < 10
     assert claim.verdict == "insufficient"
     text = ledger.findings_markdown()
     assert "## Supported findings (0)" in text

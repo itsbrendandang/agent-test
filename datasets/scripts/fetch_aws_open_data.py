@@ -59,7 +59,7 @@ def to_record(row: Dict[str, Any], retrieved_at: str) -> Optional[Dict[str, Any]
     slug = (row.get("Slug") or "").strip()
     if not name or not slug:
         return None
-    description = common.clean_text(plain(row.get("Description")), 300)
+    description = common.safe_description(common.clean_text(plain(row.get("Description")), 300), name)
     texts = [name, ", ".join(tags), description]
     if tagging.core_hits([name, description]) == 0:
         return None

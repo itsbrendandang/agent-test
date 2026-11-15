@@ -41,6 +41,7 @@ from inspect_ai.tool import ToolChoice, ToolInfo
 from bixbench3 import paid
 from bixbench3.grading.grader import grade
 from bixbench3.inspect_harness.models import RuntimeCase
+from bixbench3.inspect_harness.swarm import relevance as swarm_relevance
 from bixbench3.inspect_harness.swarm import roles as swarm_roles
 from bixbench3.inspect_harness.swarm import tools as swarm_tools
 from bixbench3.inspect_harness.swarm.baseline import TOKEN_SEMANTICS
@@ -66,6 +67,7 @@ ROLE_PROMPTS = {
     "finisher": swarm_roles.FINISHER,
     "reporter": swarm_roles.REPORTER,
     "handoff": swarm_roles.HANDOFF,
+    "relevance": swarm_relevance.INSTRUCTIONS,
 }
 
 
@@ -81,11 +83,25 @@ def _done(answer: str) -> ModelOutput:
     return _call("submit", answer=answer)
 
 
+TESTS = "/workspace/work/glhf/tests"
+
+
+def _test_script(name: str, body: str) -> ModelOutput:
+    """The critic writes a falsification test as a script file (it is registered next)."""
+    path = f"{TESTS}/{name}"
+    return _call(
+        "python",
+        code=f"import os\nos.makedirs({TESTS!r}, exist_ok=True)\n"
+        f"open({path!r}, 'w').write({body!r})\nprint('wrote', {path!r})",
+    )
+
+
 def role_script(
     truths: dict[str, str],
     review_rounds: int = 3,
     exa: bool = False,
     memory: bool = False,
+    relevance_scores: tuple[float, float] = (1.0, 1.0),
 ) -> dict[str, list[ModelOutput]]:
     """The swarm's fixed script for `--model mock`, keyed by role. `truths` maps each required
     sandbox path to correct content.
@@ -95,8 +111,12 @@ def role_script(
     cannot hand its lines to the next role, which is what a script kept by position did.
 
     Story: the first pass leaves the first artifact with a header and no rows; the critic
-    rejects it and refutes the claim that the first pass was complete; the reviser fixes it; the
-    second review finds nothing; the reporter writes METHODS.md.
+    raises that and registers a test script for the claim that the first pass was complete; the
+    relevance judge passes the test and the harness runs it: it contradicts, the claim is
+    refuted; the reviser fixes the artifact; in the second review the critic registers a test
+    for the other claim, the judge passes it, the harness runs it and the claim is supported;
+    the reporter writes METHODS.md. No role types a p-value. `relevance_scores` are the judge's
+    scores in rounds 1 and 2 (a score under 0.8 in round 2 leaves the claim unsupported).
     """
     methods = _write(
         "/outputs/METHODS.md", "# Methods\n\nScripted mock run. No analysis was performed.\n"
@@ -172,37 +192,44 @@ def role_script(
                 problem=f"{Path(first_path).name} has a header and no rows.",
                 evidence=f"wc -l {first_path} -> 1",
             ),
+            _test_script(
+                "row_count.py",
+                "import csv\n"
+                f"rows = list(csv.reader(open({first_path!r})))[1:]\n"
+                "print('data rows:', len(rows))\n"
+                "# No data row contradicts 'the first pass is complete'. Scripted values.\n"
+                "print('GLHF_RESULT p_value=0.01 contradicts=true' if not rows else "
+                "'GLHF_RESULT p_value=0.5 contradicts=false')\n",
+            ),
             _call(
                 "register_falsification_test",
                 claim_id="C2",
                 test_name="row count",
-                method="Count data rows of every output; an output with none contradicts the claim.",
-            ),
-            _call(
-                "record_falsification_test",
-                claim_id="C2",
-                test_name="row count",
-                p_value=0.01,
-                contradicts=True,
-                note=f"{first_path} has 0 data rows",
+                method="Count data rows of the first output; none contradicts the claim.",
+                script_path=f"{TESTS}/row_count.py",
+                test_null="The first output has no data rows after the first pass.",
             ),
             _done("1 issue raised"),
             # round 2
+            _test_script(
+                "label_permutation.py",
+                "# Scripted run: stands in for 10000 label permutations. No analysis is done.\n"
+                "print('GLHF_RESULT p_value=0.0004 contradicts=false')\n",
+            ),
             _call(
                 "register_falsification_test",
                 claim_id="C1",
                 test_name="label permutation",
                 method="Permute sample labels 10000 times; a p-value near 1 contradicts the claim.",
-            ),
-            _call(
-                "record_falsification_test",
-                claim_id="C1",
-                test_name="label permutation",
-                p_value=0.0004,
-                contradicts=False,
-                note="scripts/perm.py, 10000 permutations",
+                script_path=f"{TESTS}/label_permutation.py",
+                test_null="The outputs do not depend on which samples are used.",
             ),
             _done("no issues"),
+        ],
+        # The relevance judge: one answer per review round, a line per registered test.
+        "relevance": [
+            ModelOutput.from_content(MOCK, f"T1 score={score:g} reason=Scripted judgement.")
+            for score in relevance_scores
         ],
         "reviser": [
             correct[0],
@@ -264,6 +291,16 @@ def by_role(
     ) -> ModelOutput:
         del tool_choice, config
         role = role_of(messages)
+        if role == "relevance":
+            if left.get("relevance"):
+                return left["relevance"].pop(0)
+            asked = sum(1 for m in messages if m.role == "user" for _ in m.text.split("=== T")[1:])
+            return ModelOutput.from_content(
+                MOCK,
+                "\n".join(
+                    f"T{n} score=1.0 reason=Scripted judgement." for n in range(1, asked + 1)
+                ),
+            )
         if role == "handoff" or not tools:
             return ModelOutput.from_content(MOCK, "Scripted run: no hand-off note.")
         lines = left.get(role or "", [])

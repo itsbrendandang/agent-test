@@ -89,7 +89,7 @@ test("catalog: the contract's shape, effort levels within the caps, and never a 
   assert.equal(body.paidCalls, false)
   assert.deepEqual(body.providers.map((p: any) => [p.id, p.keyPresent]), [["anthropic", true], ["openai", true]])
   for (const p of body.providers) assert.ok(p.models.length > 0 && p.models.every((m: unknown) => typeof m === "string"))
-  assert.deepEqual(body.search, { provider: "fixture", exa: { keyPresent: true, usedUsd: 0, ceilingUsd: 40 } }, "search: what a run would use now (practice-run example sources while paid calls are off), and Exa: key present, spend so far, lifetime ceiling")
+  assert.deepEqual(body.search, { provider: "fixture", exa: { keyPresent: true, usedUsd: 0, ceilingUsd: 40 }, literature: { provider: "europepmc", free: true, keyNeeded: false, available: body.search.literature.available } }, "search: what a run would use now (practice-run example sources while paid calls are off), and Exa: key present, spend so far, lifetime ceiling")
   assert.ok(!JSON.stringify(body).includes(SECRET) && !JSON.stringify(body).includes("fake-key-for-tests"), "no key in the catalog")
   const board = body.agents.filter((a: any) => a.source === "board"), specialists = body.agents.filter((a: any) => a.source === "specialist")
   assert.equal(board.length, 6); assert.equal(specialists.length, 9)

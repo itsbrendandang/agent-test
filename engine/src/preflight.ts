@@ -75,7 +75,8 @@ export async function runPreflight(deps: PreflightDeps): Promise<PreflightResult
     if (ids.includes(model.id)) log(`✓ tier ${tier}: ${model.qualified} is in ${model.vendor}'s list`)
     else { problems.push(`tier ${tier}: ${model.qualified} is not in ${model.vendor}'s model list`); log(`✗ tier ${tier}: ${model.qualified} is NOT in ${model.vendor}'s model list. Fix models.${tier} (or checkers.first_pass.alt) in board/config.yaml`) }
   }
-  // 3. Exa: the key only
+  // 3. Exa: the key only. (The Europe PMC literature search needs no key and costs nothing, so there is nothing to check.)
+  if (loadRoster(config).some((a) => a.tools.includes("literature_search"))) log("- Europe PMC literature search: free, no key (not called)")
   if (searchers) {
     if (env.EXA_API_KEY?.trim()) log("✓ EXA_API_KEY: set (not tested: a search would cost money)")
     else { problems.push("EXA_API_KEY is not set (a member searches)"); log("✗ EXA_API_KEY: not set, and a member searches") }

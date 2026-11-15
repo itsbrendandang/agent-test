@@ -12,6 +12,7 @@ Output: /tmp/dataset-scout/records/gdc.jsonl
 from __future__ import annotations
 
 import json
+import re
 import sys
 import urllib.parse
 from typing import Any, Dict, List, Optional
@@ -23,8 +24,19 @@ SOURCE = "gdc"
 API = "https://api.gdc.cancer.gov"
 FIELDS = "project_id,name,program.name,primary_site,disease_type,summary.case_count,summary.file_count,released,state"
 POLICY_URL = "https://gdc.cancer.gov/access-data/data-access-policies"
-# The GDC states its terms in a policy page, not in a licence. We store the policy's name.
+# The GDC states its terms in a policy page, not in a licence. We store the policy's name, and
+# only when the page still carries the sentence below.
 LICENCE_NAME = "NIH Genomic Data Sharing Policy; GDC open-access tier (no licence stated)"
+POLICY_PATTERN = r"open and controlled data access adhere to the National Institutes of Health \(NIH\) Genomic Data Sharing Policy"
+
+
+def policy_confirmed() -> bool:
+    try:
+        page = common.clean_text(common.fetch(POLICY_URL).text(), 10 ** 7)
+    except Exception as err:
+        common.log(f"{SOURCE}: policy page not readable: {err}")
+        return False
+    return re.search(POLICY_PATTERN, page, re.I) is not None
 
 STRATEGY_DOMAINS = {
     "RNA-Seq": "transcriptomics", "miRNA-Seq": "transcriptomics", "scRNA-Seq": "single-cell",
@@ -45,7 +57,9 @@ def open_files_url() -> str:
     return API + "/files?" + urllib.parse.urlencode(query)
 
 
-def to_record(project: Dict[str, Any], open_files: Dict[str, int], release: str, retrieved_at: str) -> Optional[Dict[str, Any]]:
+def to_record(
+    project: Dict[str, Any], open_files: Dict[str, int], release: str, retrieved_at: str, policy_ok: bool = True
+) -> Optional[Dict[str, Any]]:
     project_id = project.get("project_id") or ""
     if not project_id or not project.get("released") or project.get("state") != "open":
         return None
@@ -78,9 +92,8 @@ def to_record(project: Dict[str, Any], open_files: Dict[str, int], release: str,
         description=common.clean_text(description, 390),
         size=f"{n_open} open-access files",
         format="TSV, MAF, TXT, SVS, BCR XML (open tier)",
-        licence_raw=LICENCE_NAME,
-        licence_url=POLICY_URL,
-        licence_source="GDC data access policies page: " + POLICY_URL,
+        licence_raw=LICENCE_NAME if policy_ok else None,
+        licence_source=f"{POLICY_URL} matches /{POLICY_PATTERN}/" if policy_ok else None,
         last_updated=None,
         retrieved_at=retrieved_at,
         how_retrieved=f"GET {API}/projects and GET {API}/files (facet on access=open); data release {release}",
@@ -98,8 +111,9 @@ def main() -> int:
     buckets = facets["data"]["aggregations"]["cases.project.project_id"]["buckets"]
     open_files = {b["key"]: int(b["doc_count"]) for b in buckets}
     records: List[Dict[str, Any]] = []
+    policy_ok = policy_confirmed()
     for project in projects["data"]["hits"]:
-        record = to_record(project, open_files, release, got.fetched_at)
+        record = to_record(project, open_files, release, got.fetched_at, policy_ok)
         if record and schema.allowed(record):
             records.append(record)
     common.log(f"{SOURCE}: {len(projects['data']['hits'])} projects, {len(records)} with open-access files")

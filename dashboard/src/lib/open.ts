@@ -9,3 +9,15 @@ export function takeOpen(kind: "swarm" | "board"): string | undefined {
 export const setOpen = (kind: "swarm" | "board", id: string) => sessionStorage.setItem(`open.${kind}`, id)
 /** The view that shows a run of this kind. */
 export const viewOfKind = (kind: "swarm" | "board") => (kind === "swarm" ? "Compare" : "Board") as "Compare" | "Board"
+
+/** The run a view showed last, so reopening the app returns to it. */
+export const lastRun = (kind: "swarm" | "board"): string | undefined => { try { return localStorage.getItem(`last.${kind}`) ?? undefined } catch { return undefined } }
+/** Record the run a view is showing: remembered for next time, and put in the address so the link can be copied. */
+export function showing(kind: "swarm" | "board", id: string | undefined) {
+  if (!id) return
+  try { localStorage.setItem(`last.${kind}`, id) } catch { /* private mode */ }
+  const hash = `#${viewOfKind(kind)}/${encodeURIComponent(id)}`
+  if (window.location.hash.startsWith(`#${viewOfKind(kind)}`) && window.location.hash !== hash) window.history.replaceState(null, "", hash)
+}
+/** The address that opens this run. */
+export const linkTo = (kind: "swarm" | "board", id: string) => `${window.location.origin}${window.location.pathname}#${viewOfKind(kind)}/${encodeURIComponent(id)}`

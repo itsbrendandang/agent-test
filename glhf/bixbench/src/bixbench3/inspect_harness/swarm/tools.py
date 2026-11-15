@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import posixpath
 import re
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
@@ -25,7 +28,14 @@ from ...network_gateway.policy import (
 )
 from ..models import ExpectedOutput, NetworkAccessPolicy
 from .guards import names_doi, names_person, normalise, shared_phrase, study_identifier
-from .ledger import Ledger
+from .ledger import (
+    OUTPUT_TAIL_CHARS,
+    RESULT_LINE,
+    Ledger,
+    Registration,
+    Run,
+    parse_result_line,
+)
 
 WORK = "/workspace/work/glhf"
 
@@ -289,34 +299,161 @@ def propose_claim(ledger: Ledger, role: str) -> Tool:
     return execute
 
 
+# A registered test is a script. The harness runs it; these are the only ways it is started.
+# The registered content is given on standard input, so what runs is what was hashed at
+# registration, whatever happens to the file afterwards.
+INTERPRETERS: dict[str, list[str]] = {
+    ".py": ["python3", "-"],
+    ".sh": ["bash", "-s"],
+    ".r": ["Rscript", "-"],
+}
+TEST_ROOT = "/workspace/"  # a test script must be under it
+TEST_SECONDS = 300  # the most one registered test may run
+MIN_TEST_SECONDS = 10  # with less time than this a test is not started
+
+
+def _script_suffix(path: str) -> str:
+    return posixpath.splitext(path)[1].lower()
+
+
+def script_path_problem(path: str) -> str | None:
+    """Why `path` cannot be a registered test script, or None."""
+    if not path.startswith(TEST_ROOT) or posixpath.normpath(path) != path:
+        return f"script_path must be a plain absolute path under {TEST_ROOT}"
+    if _script_suffix(path) not in INTERPRETERS:
+        return f"script_path must end in one of {', '.join(sorted(INTERPRETERS))} (any case)"
+    return None
+
+
+async def read_script(path: str) -> str | None:
+    """The text of a script in the sandbox, or None when there is no readable text file."""
+    try:
+        return await sandbox().read_file(path)
+    except Exception:
+        return None
+
+
+async def run_registered_test(entry: Registration, seconds: int) -> Run:
+    """Execute a registered test script in the sandbox and report what was seen. Harness code:
+    no model takes part. The file at the registered path must still have the registered hash;
+    what is executed is the registered content itself; the result is the last line of stdout."""
+    assert entry.script_path and entry.script_sha256
+    command = INTERPRETERS[_script_suffix(entry.script_path)]
+    found = await read_script(entry.script_path)
+    if found is None:
+        return Run("missing", command, detail="no readable file at the registered path")
+    now = hashlib.sha256(found.encode("utf-8")).hexdigest()
+    if now != entry.script_sha256:
+        return Run(
+            "changed", command, sha256_at_run=now, detail="the file changed after registration"
+        )
+    began = time.monotonic()
+    try:
+        result = await sandbox().exec(
+            command, input=entry.script, cwd=WORK, timeout=max(1, seconds), timeout_retry=False
+        )
+    except TimeoutError:
+        return Run(
+            "timeout",
+            command,
+            seconds=time.monotonic() - began,
+            sha256_at_run=now,
+            detail=f"no result in {seconds} s",
+        )
+    except Exception as error:  # output too large, sandbox gone: no result
+        return Run(
+            "failed",
+            command,
+            seconds=time.monotonic() - began,
+            sha256_at_run=now,
+            detail=str(error)[:300],
+        )
+    took = time.monotonic() - began
+    tail = result.stdout[-OUTPUT_TAIL_CHARS:]
+    if result.stderr.strip():
+        tail = (tail + "\n[stderr]\n" + result.stderr[-500:])[-OUTPUT_TAIL_CHARS:]
+    if not result.success:
+        return Run("failed", command, result.returncode, took, tail, now, detail="non-zero exit")
+    parsed = parse_result_line(result.stdout)
+    if parsed is None:
+        return Run(
+            "unparsable",
+            command,
+            result.returncode,
+            took,
+            tail,
+            now,
+            detail=f"the last line of stdout is not: {RESULT_LINE}",
+        )
+    return Run("ok", command, result.returncode, took, tail, now, parsed[0], parsed[1])
+
+
 @tool
 def register_falsification_test(ledger: Ledger, role: str) -> Tool:
-    async def execute(claim_id: str, test_name: str, method: str) -> str:
-        """Pre-register a falsification test for a claim, BEFORE you run it or any other test of
-        that claim. Only registered tests can support a claim.
+    async def execute(
+        claim_id: str, test_name: str, method: str, script_path: str, test_null: str
+    ) -> str:
+        """Pre-register a falsification test for a claim: a script file that IS the test.
 
-        Decide the tests first: at most 3 per claim, each one a check whose result would be
-        unlikely if the claim were false (permutation of sample labels, held-out replicate,
-        negative-control gene set, alternative method, direction check against a known marker).
-        Registration closes when the claim gets its first result, and every registered test
-        must then be run and recorded: one left without a result counts as zero and the claim
-        cannot be supported. Do not try a test first and register it afterwards.
+        Write the script first, then register it, BEFORE any test of that claim has a result.
+        The content of the file is hashed now. You do not run it and you do not report its
+        p-value: after your turn a separate judge rates whether the test bears on the claim
+        (it sees the claim and this registration, no results), and then the harness runs the
+        registered file and reads the result from its LAST line of standard output, which must
+        be exactly:
+
+            GLHF_RESULT p_value=<number in [0, 1]> contradicts=<true|false>
+
+        p_value is the p-value under the test's null, computed by the script from the data;
+        contradicts=true when the observed effect goes against the claim. The script must run
+        with no arguments from /workspace/work/glhf (python3, bash or Rscript, by suffix .py,
+        .sh, .R), use absolute paths, be deterministic (fix every seed) and finish within a few
+        minutes. Do not change the file after registering it: a changed, failing, slow or
+        silent script has no result, which counts as zero and keeps the claim from being
+        supported. So does a test the judge finds not relevant.
+
+        At most 3 tests per claim, each one a check whose result would be unlikely if the claim
+        were false (permutation of sample labels, held-out replicate, negative-control gene
+        set, alternative method, direction check against a known marker). Registration closes
+        when the claim gets its first result.
 
         Args:
             claim_id: Claim id, e.g. "C3".
-            test_name: Short name; use the same name when you record the result.
-            method: What you will run (data, statistic, number of permutations) and which
+            test_name: Short name of the test.
+            method: What the script does (data, statistic, number of permutations) and which
                 outcome would contradict the claim.
+            script_path: Absolute path of the script, under /workspace/.
+            test_null: The null hypothesis the script's p-value is computed under, in one
+                sentence. It should be true whenever the claim's null is true.
         """
         if claim_id not in ledger.claims:
             raise ToolError(f"unknown claim {claim_id}; known: {', '.join(ledger.claims)}")
+        problem = script_path_problem(script_path)
+        if problem:
+            raise ToolError(problem)
+        script = await read_script(script_path)
+        if script is None:
+            raise ToolError(f"no readable text file at {script_path}: write the script first")
         try:
-            claim = ledger.register_test(claim_id, test_name, method, role)
+            claim = ledger.register_test(
+                claim_id,
+                test_name,
+                method,
+                role,
+                script_path=script_path,
+                script=script,
+                test_null=test_null,
+            )
         except ValueError as e:
             raise ToolError(str(e)) from e
         await save_ledger(ledger)
-        return f"{claim.id}: registered {len(claim.registered)} test(s): " + ", ".join(
-            r.name for r in claim.registered
+        entry = claim.registered[-1]
+        assert entry.script_sha256
+        return (
+            f"{claim.id}: registered {len(claim.registered)} test(s): "
+            + ", ".join(r.name for r in claim.registered)
+            + f". {entry.name} is {script_path}, sha256 {entry.script_sha256[:12]}. Do not change "
+            "or run-and-report it: it will be judged for relevance and then run by the harness."
         )
 
     return execute
@@ -327,22 +464,18 @@ def record_falsification_test(ledger: Ledger, role: str) -> Tool:
     async def execute(
         claim_id: str, test_name: str, p_value: float, contradicts: bool, note: str
     ) -> str:
-        """Record the result of a falsification test you actually ran in the sandbox.
+        """Report a result that CONTRADICTS a claim, from code you ran in the sandbox.
 
-        The test must have been registered with register_falsification_test before any test of
-        the claim was run; use the registered name. Report the p-value of the observed result
-        under the claim's null hypothesis, from code you ran. Set contradicts=true when the result
-        goes against the claim; a contradicting result is always accepted, registered or not.
-        The verdict is computed by code: alpha=0.1 is shared across all claims, and a claim is
-        supported only when every registered test has a result and the mean of their e-values
-        reaches the threshold read_ledger shows. Record every registered test, favourable or not;
-        one result per test name, and the first result stands.
+        Only for results that go against the claim (contradicts=true): such a result is always
+        accepted, it lowers the claim's evidence and it can refute the claim. A favourable
+        result cannot be reported here and is refused: support comes only from registered test
+        scripts, which the harness runs itself (see register_falsification_test).
 
         Args:
             claim_id: Claim id, e.g. "C3".
-            test_name: The registered name of the test.
+            test_name: A short name for what you ran.
             p_value: p-value under the null, from code you ran. Never estimate it.
-            contradicts: True if the observed effect goes against the claim.
+            contradicts: Must be true.
             note: What you ran (script path) and what you observed.
         """
         if claim_id not in ledger.claims:

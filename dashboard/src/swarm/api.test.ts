@@ -57,7 +57,7 @@ describe("startRun", () => {
     await expect(startRun(body)).rejects.toMatchObject({ status: 409, run: "x", field: undefined })
   })
   it("says so when the engine cannot be reached or answers without JSON", async () => {
-    await expect(startRun(body)).rejects.toMatchObject({ status: 0, message: expect.stringContaining("cannot be reached") })
+    await expect(startRun(body)).rejects.toMatchObject({ status: 0, message: expect.stringContaining("engine isn't running. Start it with: npm start") })
     engine({ status: 502, body: "bad gateway" })
     await expect(startRun(body)).rejects.toMatchObject({ status: 502, message: "The engine answered 502." })
   })

@@ -78,6 +78,7 @@ def to_record(seed: Dict[str, Any], data: Dict[str, Any], retrieved_at: str) -> 
     source = seed.get("source") or source_of(doi, client)
     descriptions = [d.get("description", "") for d in attributes.get("descriptions") or [] if d.get("description")]
     description = common.clean_text(descriptions[0], 300) if descriptions else title
+    description = common.safe_description(description, title)
     subjects = [s.get("subject", "") for s in attributes.get("subjects") or []]
     formats = [str(f) for f in attributes.get("formats") or [] if f]
     texts = [title, ", ".join(subjects), description]

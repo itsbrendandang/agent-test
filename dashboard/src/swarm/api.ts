@@ -103,7 +103,7 @@ const send = async <T,>(path: string, body?: unknown): Promise<T> => {
   let r: Response
   try {
     r = await engineFetch(ENGINE + path, body === undefined ? { method: "POST" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
-  } catch { throw new Refused("The engine cannot be reached. Start it with npm run engine.", 0) }
+  } catch { throw new Refused("The app's engine isn't running. Start it with: npm start. Then try again.", 0) }
   const reply = await r.json().catch(() => ({}))
   if (r.ok) return reply as T
   throw new Refused(typeof reply.error === "string" ? reply.error : `The engine answered ${r.status}.`, r.status,

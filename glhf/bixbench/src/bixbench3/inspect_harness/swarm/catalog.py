@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from . import roles, solver
+from . import relevance, roles, solver, tools
 
 
 def _own(text: str) -> str:
@@ -63,6 +63,16 @@ def catalog() -> dict[str, object]:
             roles.CRITIC,
             f"{_pct(solver.CRITIQUE_SHARE)} {review}, at most "
             f"{_pct(solver.TOKEN_SHARE['critique'])} of the tokens; {_floor('critique')}; {room}",
+        ),
+        (
+            "relevance",
+            "critic",
+            relevance.INSTRUCTIONS,
+            f"{_pct(solver.RELEVANCE_SHARE)} {review} after the critique, at most "
+            f"{_pct(solver.TOKEN_SHARE['relevance'])} of the tokens; one model call without "
+            f"tools; {_floor('relevance')}. The registered tests are then run by the harness "
+            f"(no tokens; up to {_pct(solver.EXECUTE_SHARE)} of the review time left, at most "
+            f"{tools.TEST_SECONDS // 60} minutes a test)",
         ),
         (
             "revise",

@@ -54,7 +54,7 @@ def check_url(url: str) -> Tuple[str, Optional[str]]:
     try:
         got = common.fetch(url, ok_statuses=(200,))
     except common.RobotsDisallowed:
-        return "not checked: robots.txt disallows it", None
+        return "not checked: robots.txt disallows it", common.cached_at(url)
     except common.HttpError as err:
         return f"failed: HTTP {err.status}", None
     except Exception as err:
@@ -91,7 +91,7 @@ def resolve_licence(seed: Dict[str, Any]) -> Dict[str, Any]:
             if all(p and re.search(p, text, re.I) for p in patterns):
                 return {
                     "raw": claim["claim"],
-                    "source": f"{url} matches /{' and '.join(patterns)}/",
+                    "source": f"{url} matches /{'/ and /'.join(patterns)}/",
                     "verified": True,
                     "commercial_use": claim.get("commercial_use", spec.get("commercial_use")),
                     "share_alike": claim.get("share_alike", spec.get("share_alike")),

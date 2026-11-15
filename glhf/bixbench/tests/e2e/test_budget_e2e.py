@@ -117,6 +117,7 @@ def test_a_budget_below_the_mandatory_floors_says_so_up_front_and_still_ends_doc
         "pilot",
         "audit",
         "critique",
+        "relevance",
         "revise",
         "finish",
     ]
@@ -135,7 +136,7 @@ def test_a_budget_below_the_mandatory_floors_says_so_up_front_and_still_ends_doc
     assert allowed == {"experiment": 6840, "report": 1980}
     prompts = _prompts(tmp_path)
     assert "Reduced plan (below_floor)" in prompts["experiment"]
-    assert "scout, propose, pilot, audit, critique, revise" in prompts["experiment"]
+    assert "scout, propose, pilot, audit, critique, relevance, revise" in prompts["experiment"]
     assert (
         "No pilot ran" not in prompts["experiment"]
         and "pilot's subsampled" not in prompts["experiment"]
@@ -200,7 +201,7 @@ def test_a_reduced_plan_skips_pilot_and_audit_and_a_message_limit_gets_a_hand_of
     kinds = [e["kind"] for e in events]
     plan = events[kinds.index("budget.plan")]
     assert plan["mode"] == "lean" and plan["skipped"] == ["pilot", "audit"]
-    assert events[kinds.index("budget.degraded")]["needed"]["full"]["tokens"] == 557_500
+    assert events[kinds.index("budget.degraded")]["needed"]["full"]["tokens"] == 567_500
     started = [e["phase"] for e in events if e["kind"] == "phase.started"]
     assert started == ["scout", "propose", "experiment", "critique 1", "finish", "report"]
     skipped = [(e["phase"], e["reason"]) for e in events if e["kind"] == "phase.skipped"]

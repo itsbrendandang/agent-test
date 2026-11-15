@@ -20,7 +20,7 @@ no keys. Run the commands from the repository root.
 | Step | Command | What you should see |
 |---|---|---|
 | 1 | `docker compose up --build` | After some minutes, the line `glhf tracker ready`. Leave this terminal open. |
-| 2 | Open `http://localhost:5317` in a browser | The dashboard, Swarm view. |
+| 2 | Open `http://localhost:5317` in a browser | The app. |
 | 3 | In a second terminal: `docker compose exec engine npm run demo` | A scripted swarm run. It ends with `score 1.000`. The run also appears in the dashboard. |
 | 4 | `docker compose exec engine npm run doctor` | A list of what the container has and what is missing. |
 
@@ -71,8 +71,12 @@ cp .env.example .env
 Open `.env` and add the keys you have. You need no key for the scripted demo. The key list is in
 [docs/configuration.md](docs/configuration.md).
 
-**A key alone does not allow spending.** Paid calls are off until `.env` has the line
-`NO_PAID_CALLS=0` and the engine is started again.
+Use your own keys. Keys are never in the repository and are not shared between teammates.
+`npm run preflight` checks them with the vendors for free.
+
+**A key alone does not allow spending.** Paid calls are off until the person who pays turns them on:
+with the Demo/Real switch in the app's status line (it lasts until the engine restarts), or with the
+line `NO_PAID_CALLS=0` in `.env` and a restart of the engine.
 
 | Question | Answer |
 |---|---|
@@ -114,11 +118,11 @@ npm test
 | Part | Command | Tests |
 |---|---|---|
 | Everything below except the adapter | `npm test` | |
-| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 370 |
-| Engine | `npm run test:engine` | 115 |
+| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 2,368 |
+| Engine | `npm run test:engine` | 283 pass, 5 fail, one file does not finish |
 | Type checks (engine and dashboard) | `npm run typecheck` | |
-| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 122 |
-| Dashboard (not part of `npm test`) | `npm --prefix dashboard test` | 105 |
+| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 200 |
+| Dashboard (not part of `npm test`) | `npm --prefix dashboard test` | 415 |
 
 The counts are for the committed files at commit `58c0935`. Files that are not committed yet
 add more; see the table in [README.md](README.md#tests).

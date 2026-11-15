@@ -1,17 +1,8 @@
 import { useEffect } from "react"
+import { narration, stepMs, stepsPerTick } from "./story"
 import type { GraphModel } from "./types"
 
 const seconds = (ms: number | undefined) => (ms === undefined ? "" : ` · +${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`)
-/** Replay speed: about 30 seconds for a whole run, never faster than 3 steps a second or slower than 1. */
-export const stepMs = (max: number) => Math.max(280, Math.min(900, Math.round(30_000 / Math.max(1, max))))
-
-/** What the replay is showing, in one sentence of the run's own recorded events. */
-export function narration(model: Pick<GraphModel, "steps" | "maxOrder">, step: number | null): string {
-  if (step === null) return ""
-  if (step === 0) return "Before anything happened."
-  return model.steps[step - 1]?.label ?? ""
-}
-
 /**
  * Grows the graph in the order things happened. Board runs step through their events (each has its own timestamp);
  * swarm runs step through the ledger log, which has an order but no clock. null means "everything", which also follows a live run.
@@ -24,7 +15,7 @@ export function Scrubber({ model, step, onStep, playing, onPlaying }: {
   useEffect(() => {
     if (!playing) return
     const t = window.setInterval(() => {
-      const next = (step ?? 0) + 1
+      const next = (step ?? 0) + stepsPerTick(max)
       if (next >= max) { onStep(null); onPlaying(false) } else onStep(next)
     }, stepMs(max))
     return () => window.clearInterval(t)

@@ -22,8 +22,8 @@ export type BoardEvent =
   | { type: "run.finished"; usd: number; minutes: number }
   | { type: "run.failed"; error: string }
 
-/** `provider`: where the source came from: "exa" (a live Exa search) or "fixture" (a practice run's example source). Absent in runs recorded before this field. */
-export type SearchProvider = "exa" | "fixture"
+/** `provider`: where the source came from: "exa" (a live Exa search), "europepmc" (a free literature search, literature.ts) or "fixture" (a practice run's example source). Absent in runs recorded before this field. */
+export type SearchProvider = "exa" | "europepmc" | "fixture"
 export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider }
 
 export type Stamped = BoardEvent & { key: string; at: number }

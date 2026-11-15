@@ -32,6 +32,7 @@ def test_no_gated_entry_and_no_missing_provenance(catalog):
 def test_benchmark_boundary_holds_for_the_whole_file(catalog):
     text = CATALOG.read_text(encoding="utf-8")
     assert not schema.BENCHMARK.search(text)
+    assert not [r["id"] for r in catalog if schema.BENCHMARK_MAKERS.match(r["id"])]
     for record in catalog:
         fields = [record.get(k) for k in ("id", "name", "url", "landing_api", "description", "citation", "notes")]
         assert schema.study_accessions(*fields) == [], record["id"]

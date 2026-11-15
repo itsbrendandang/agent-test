@@ -813,7 +813,7 @@
   "access": "open",
   "level": "dataset",
   "licence": {
-   "claim": "CC BY 4.0 as stated by the Hub, with added limits: not for clinical treatment or commercial marketing; no commercial redistribution without permission",
+   "claim": "CC BY 4.0 as stated by the Hub, with added limits: no commercial redistribution or marketing use",
    "evidence": [
     "https://repo-hub.broadinstitute.org/repurposing"
    ],
@@ -1178,7 +1178,7 @@
   "access": "open",
   "level": "collection",
   "licence": {
-   "claim": "CC BY 4.0 as stated by ARCHS4, with the added line: free for non-commercial purposes; commercial use needs a licence from Mount Sinai",
+   "claim": "CC BY 4.0 as stated by ARCHS4, limited on the same page to non-commercial use (commercial use needs a licence)",
    "evidence": [
     "https://maayanlab.cloud/archs4/help.html"
    ],

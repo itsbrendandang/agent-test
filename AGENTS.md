@@ -30,6 +30,8 @@ documents are in `docs/`.
     (`bixbench-v1 run`), and sending lessons to past.dev.
   - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid.ts`).
     Do not edit `.env`, do not export the variable, and do not change or go around `paid.ts`.
+  - `npm run preflight` (engine) checks a real run's model ids and keys with the vendors' free model-list requests. It needs real
+    keys, so an agent never runs it: only the person who pays does. It refuses when `PAID_SWITCH_LOCKED=1` and in tests.
   - The engine also has a **runtime paid switch**: `POST /api/paid` turns paid calls on for the life of the engine
     process (it is not saved, and a restart goes back to `.env`). **An agent never calls `POST /api/paid` with
     `on: true`**, with or without the token and the confirmation text. It has the same standing as setting
