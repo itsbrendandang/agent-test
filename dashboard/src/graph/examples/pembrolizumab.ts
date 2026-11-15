@@ -13,7 +13,7 @@ import type { BoardEvent, EvidenceItem, RosterMember, SearchProvider, Verdict } 
 export const EXAMPLE_ID = "example:pembrolizumab"
 export const RETRIEVED_ON = "2026-11-15"
 export const EXAMPLE_TITLE = "Example: a cancer drug from biomanufacturing to FDA approval (pembrolizumab)"
-/** The question the example answers. It is also the first "Try asking" question on Research and the Overview. */
+/** The question the example answers: the lead frames the review with it. */
 export const EXAMPLE_QUESTION = "We are testing a cancer drug (pembrolizumab): what are the steps from biomanufacturing to FDA approval, its interactions, articles with errors about it, and possible clinical trials?"
 
 /** The stages, in order. Each one is a round of the review and a lane of the picture. */
