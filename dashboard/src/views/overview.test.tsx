@@ -71,7 +71,7 @@ describe("Overview", () => {
 
 describe("the Agent Lab under the question box", () => {
   const lab = () => document.querySelector(".ov-lab") as HTMLElement
-  it("is idle until a question is sent; Send starts the answer on this page and the lab follows that answer", async () => {
+  it("is idle until a question is sent; Send shows only a loading bar, the lab follows the answer, and its end opens the Research chat", async () => {
     const onOpen = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
     await screen.findByText("Let's research together!")
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
@@ -80,11 +80,20 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Is hERG a risk for KRAS G12C inhibitors?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is working on your question."))
-    expect(onOpen).not.toHaveBeenCalled() // the page stays: no jump to Research
+    expect(onOpen).not.toHaveBeenCalled() // the page stays while the team works
     expect(sessionStorage.getItem("open.ask")).toBeNull()
-    const answer = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })
-    // The answer is written above the lab, so it is in view without scrolling past the lab.
-    expect(answer.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Only a loading bar above the lab: no answer card, no links, no Stop.
+    const bar = screen.getByRole("button", { name: "Researching: Is hERG a risk for KRAS G12C inhibitors?. Open in Research" })
+    expect(bar.querySelector("[role=progressbar]")).toBeTruthy()
+    expect(bar.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /View activity/ })).toBeNull()
+    // A click on the bar opens the question's Research chat early.
+    await userEvent.click(bar)
+    expect(onOpen).toHaveBeenLastCalledWith("Home")
+    expect(JSON.parse(sessionStorage.getItem("open.answer") ?? "null")).toEqual({ id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?" })
+    sessionStorage.removeItem("open.answer"); onOpen.mockClear()
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
     // The same answer is Research's conversation, with its thread, so Research shows it and continues it.
     expect(JSON.parse(sessionStorage.getItem("home.chat") ?? "null")).toEqual([
@@ -107,15 +116,12 @@ describe("the Agent Lab under the question box", () => {
     await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
     await waitFor(() => expect(reads()).toBeGreaterThan(before))
-    // The finished answer is not printed here: one line, and the links to its chat in Research.
-    expect(screen.getByText("The answer is ready in the Research chat.")).toBeTruthy()
+    // The finished answer is never printed here: its Research chat opens by itself, where follow-ups continue it.
     expect(document.body.textContent).not.toContain("hERG blocking is a known risk")
-    expect(onOpen).not.toHaveBeenCalled() // still no jump to Research by itself
-    await userEvent.click(screen.getByRole("button", { name: "Open in Research chat" }))
-    expect(onOpen).toHaveBeenLastCalledWith("Home")
-    await userEvent.click(screen.getByRole("button", { name: "Is hERG a risk for KRAS G12C inhibitors?" }))
-    expect(onOpen).toHaveBeenCalledTimes(2)
-    expect(sessionStorage.getItem("open.answer")).toBeNull() // the chat it opens is the conversation with its thread (home.chat above)
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home"))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(sessionStorage.getItem("open.answer") ?? "null")).toEqual({ id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?" })
+    sessionStorage.removeItem("open.answer")
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {

@@ -1,7 +1,7 @@
-// The Overview: the question box, the answer asked from here right under it while it is made, then the Agent Lab. The
-// team is idle at its desks until a question is sent from this page; then the lab follows that answer's own events
-// (nothing moves without one). That answer is also Research's conversation, so Research shows it and continues it:
-// once it ends, the Overview shows one line and the link to that chat, not the whole answer. One quiet line
+// The Overview: the question box, then the Agent Lab. A question asked here shows only a loading bar while it is
+// researched (a click opens its Research chat early); when it ends, its Research chat opens by itself. The answer is
+// never written on this page: Research shows it and continues it. The team is idle at its desks until a question is
+// sent from this page; then the lab follows that answer's own events (nothing moves without one). One quiet line
 // keeps the counts: a practice run is counted apart and is never added to research.
 // Spend and limits are in Settings (Usage and limits), not on this page.
 import { useEffect, useMemo, useState } from "react"
@@ -18,7 +18,7 @@ import { startConversation } from "@/home/chat"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
 import { ResearchAnswer } from "@/research/Answer"
-import { ResearchRefused, startResearch, useSeenEvents } from "@/research/api"
+import { ResearchRefused, startResearch, useResearchEvents, useSeenEvents } from "@/research/api"
 import "@/design/overview.css"
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
@@ -60,19 +60,24 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
     return () => window.removeEventListener("hashchange", open)
   }, [])
   const [refused, setRefused] = useState<string>()
-  const events = useSeenEvents(asked?.kind === "board" ? undefined : asked?.id)
+  // A question asked here is followed by its own events (no answer on the page holds them); an example by its answer card.
+  const own = useResearchEvents(asked && !asked.example && asked.kind !== "board" ? asked.id : undefined).events
+  const seenEvents = useSeenEvents(asked?.example && asked.kind !== "board" ? asked.id : undefined)
+  const events = asked?.example ? seenEvents : own
   const board = useLabEvents(asked?.kind === "board" ? "board" : undefined, asked?.kind === "board" ? asked.id : undefined)
   const lab = useMemo(() => (asked ? asked.kind === "board" ? boardLab(board.events, asked.id) : answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events, board.events])
   const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
   // An answer that ended is counted at once: the line of counts is read again.
   useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A question asked here that ended (ready, failed or stopped): its Research chat opens, where the answer and follow-ups are.
+  useEffect(() => { if (ended && asked && !asked.example && asked.kind !== "board") { setOpenAnswer(asked.id, asked.question); onOpen("Home") } }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
     : lab.status === "done" ? "The team finished your question. The answer is in the Research chat."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
     : lab.status === "cancelled" ? "The answer was stopped."
     : "The team is working on your question. Nothing here moves unless the engine reports it."
   // The question's chat in Research. A question asked here is already Research's conversation (startConversation), with its thread.
-  const openChat = () => { if (asked?.example) setOpenAnswer(asked.id, asked.question); onOpen("Home") }
+  const openChat = () => { if (asked) setOpenAnswer(asked.id, asked.question); onOpen("Home") }
   const ask = async (question: string, effort: "quick" | "standard"): Promise<boolean> => {
     setRefused(undefined)
     try {
@@ -96,13 +101,19 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       {refused && <p className="newrun-error" role="alert">{refused}</p>}
 
       {/* The answer comes first, so it is in view without scrolling past the lab. Once it ends, one line and the link to its chat. */}
-      {asked && asked.kind !== "board" && (
+      {asked && asked.kind !== "board" && !asked.example && (
+        <button type="button" className="ov-card ov-loading" onClick={openChat} aria-label={`Researching: ${asked.question}. Open in Research`}>
+          <span className="ov-loading-label">{asked.question}</span>
+          <span className="ov-loading-bar" role="progressbar" aria-label="Researching" />
+        </button>
+      )}
+      {asked && asked.kind !== "board" && asked.example && (
         <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
           <h2 id="ov-answer-title"><button type="button" className="ov-link ov-answer-open" onClick={openChat}>{asked.question}</button></h2>
           {ended
             ? <p className="ov-answer-status" role="status">{lab.status === "done" ? "The answer is ready in the Research chat." : lab.status === "failed" ? "The answer could not be finished." : "The answer was stopped."}</p>
             : <ResearchAnswer key={asked.id} id={asked.id} latest fresh />}
-          <button type="button" className="ov-link" onClick={openChat}>{asked.example ? "Open example in Research" : "Open in Research chat"}</button>
+          <button type="button" className="ov-link" onClick={openChat}>Open example in Research</button>
         </section>
       )}
 
