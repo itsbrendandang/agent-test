@@ -7,8 +7,6 @@ board/runs/*
 !board/runs/.gitkeep
 *.sqlite
 *.sqlite-*
-dashboard/src-tauri/target/
-dashboard/src-tauri/gen/
 .DS_Store
 
 glhf/runs/

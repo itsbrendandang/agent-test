@@ -1,8 +1,7 @@
 // Serves the built dashboard. No dependencies.
 //
-// Every response carries a Content-Security-Policy that follows the desktop app's production policy
-// (dashboard/src-tauri/tauri.conf.json, app.security.csp) without its Tauri parts (ipc:), plus
-// frame-ancestors 'none' and X-Content-Type-Options: nosniff. The page may connect to the engine only:
+// Every response carries a Content-Security-Policy, frame-ancestors 'none' and
+// X-Content-Type-Options: nosniff. The page may connect to the engine only:
 // ENGINE_ORIGINS (space- or comma-separated origins) names it, by default the engine on this machine at
 // GLHF_ENGINE_PORT (8787), under both of its local names. It must be the address the dashboard was built
 // with (VITE_ENGINE_URL).

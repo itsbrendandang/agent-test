@@ -2,7 +2,7 @@
 
 The [README](../README.md) is the short, plain introduction. This page holds the detail: the two
 parts of the project, the paid-calls switch, the exact status, the commands, where things are, the
-tests, the paused Mac app and the known limits. To set up your machine, read
+tests and the known limits. To set up your machine, read
 [CONTRIBUTING.md](../CONTRIBUTING.md). For a map of the folders, read [codebase.md](codebase.md).
 
 ## Two parts, one engine
@@ -289,7 +289,6 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
 | `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |
-| `dashboard/src-tauri/` | The desktop app (Tauri). Paused. |
 | `dashboard/src/swarm/NewRun.tsx` | The form that starts a run from the dashboard. |
 | `board/` | Board review configuration, members, briefs. The folder and the API keep the name "board". |
 | `glhf/specialists/` | Domain specialist profiles and skill agents. Instructions only. Nothing runs them. |
@@ -297,7 +296,6 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `datasets/` | A catalogue of 1,262 public biology and chemistry datasets with their licences. Pointers only, no data. No code reads it yet. See [datasets/README.md](../datasets/README.md). |
 | `scripts/start.mjs`, `scripts/check.mjs` | What `npm start` and `npm run check` run. |
 | `deploy/`, `glhf/openmodels/` | Modal: hosting the app, and serving open models for the benchmark. Being built. |
-| `downloads/` | The paused Mac app's installer (54 MB). |
 | `Dockerfile`, `docker-compose.yml`, `docker/` | The container setup. |
 | `docs/` | Reference documents (list below). |
 
@@ -313,7 +311,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | [docs/drug-board.md](drug-board.md) | The board review: members, models, how statements are checked, what "verified" means. |
 | [docs/cost.md](cost.md), [docs/readiness.md](readiness.md) | Measured cost per run, and what works with paid calls on. Written before the provider change; parts are out of date. |
 | [docs/local-model.md](local-model.md) | Running with a local model (Ollama). |
-| [docs/proposals/](proposals/) | Proposals, not decisions: desktop app, agent sets and the Popper paper, licences, Modal. |
+| [docs/proposals/](proposals/) | Proposals, not decisions: agent sets and the Popper paper, licences, Modal. |
 | [glhf/docs/DESIGN.md](../glhf/docs/DESIGN.md) | Design of the swarm. |
 | [glhf/memory/README.md](../glhf/memory/README.md) | Swarm memory: how to approve or reject lessons. |
 | [glhf/bixbench_v1/README.md](../glhf/bixbench_v1/README.md) | The BixBench v1 adapter. |
@@ -355,48 +353,6 @@ file that does not finish.
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](status.md).
-
-## The Mac app (paused)
-
-**The desktop app is paused. Use the browser version above.** The download below is an older build: it
-does practice runs only and does not have the Demo/Real switch, the literature search or the newer
-screens. For Macs with Apple Silicon (M1 or newer), macOS 11 or later.
-
-1. Download [`AI-Scientist-Bot-macOS-Apple-Silicon.dmg`](../downloads/AI-Scientist-Bot-macOS-Apple-Silicon.dmg)
-   (54 MB): open that link and click the download button. The same file is on the
-   [desktop release page](https://github.com/itsbrendandang/agent-test/releases/tag/desktop-v0.2.0).
-   The repository is private, so you must be signed in to GitHub with an account that has access.
-2. Double-click the downloaded file. Drag **AI Scientist Bot** onto **Applications**.
-3. Open **Applications** and double-click **AI Scientist Bot**. The first time, macOS refuses to open it,
-   because the app is not signed with a paid Apple developer account. This is expected. Click **Done**.
-4. Open **System Settings**, then **Privacy & Security**, and scroll down to **Security**. Next to
-   *"AI Scientist Bot" was blocked to protect your Mac*, click **Open Anyway** and confirm. You do this once.
-5. The app opens after a second or two. It starts everything it needs by itself.
-
-If macOS says the app is "damaged", open **Terminal** and run this once, then open the app again:
-
-```
-xattr -dr com.apple.quarantine "/Applications/AI Scientist Bot.app"
-```
-
-What to expect:
-
-- **It does practice runs only.** Answers are fixed examples, not research. There is no key inside the
-  app and no way to turn real runs on in it yet.
-- **Board reviews, the chat, the run list and the graph work.** Swarm runs and the benchmark do not: they
-  need Docker and Python, which are not in the app.
-- **Your runs are kept** in `~/Library/Application Support/com.brendandang.aiscientistbot/`. Delete that
-  folder to remove them. To remove the app, drag it to the Bin.
-- **Quit with Cmd-Q.** Nothing keeps running afterwards.
-- **The window sizes itself to your screen**, and you can resize it.
-
-To check the download: its SHA-256 is
-`920d792e6b6fb634af8cfb8e26e7eb04bdb8d1f85d29a3c435d0e617ff1d417f`
-(`shasum -a 256 AI-Scientist-Bot-macOS-Apple-Silicon.dmg`).
-
-Not tested: an Intel Mac, a second Mac, and the first-open steps on a freshly downloaded copy. Windows
-and Linux have no app; use [Try it in your browser](../README.md#try-it). How it is built:
-[docs/proposals/desktop-app.md](proposals/desktop-app.md).
 
 ## Limits
 

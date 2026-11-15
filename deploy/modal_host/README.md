@@ -37,8 +37,7 @@ Why these choices:
   files. Two engines on one data folder would both continue the same review.
 - **Stops after 5 minutes** (`scaledown_window=300`). A stopped container costs nothing. The next
   request starts it again in 4 to 8 seconds.
-- **Node 26.13.1**, the Node line the repository uses (`Dockerfile`), pinned to the patch the
-  desktop app ships.
+- **Node 26.13.1**, the Node line the repository uses (`Dockerfile`), pinned to a patch release.
 
 ## Sign-in
 

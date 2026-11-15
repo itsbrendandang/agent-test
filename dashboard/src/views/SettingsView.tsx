@@ -10,48 +10,11 @@ import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
-import { call, isDesktop } from "@/system/desktop"
-
-const PROVIDERS = [
-  { id: "openai", name: "OpenAI", hint: "sk-..." },
-  { id: "anthropic", name: "Anthropic", hint: "sk-ant-..." },
-]
-
-type Result = { ok: boolean; detail: string } | "testing" | undefined
 
 // Settings: Your profile, Run mode, Session token, Appearance, Help, then Technical (closed at first). One heading style and one
 // container for every section. The cost of Real is said once (Run mode); what happens to API keys once (Connections).
-// Inside the desktop app only: its key form (keys go to the system keychain; the window never reads one back).
 export function SettingsView() {
   const characters = useCharacters()
-  const [saved, setSaved] = useState<Record<string, boolean>>({})
-  const [draft, setDraft] = useState<Record<string, string>>({})
-  const [result, setResult] = useState<Record<string, Result>>({})
-
-  const refresh = () =>
-    call<{ provider: string; saved: boolean }[]>("keys_status")
-      .then((list) => setSaved(Object.fromEntries(list.map((k) => [k.provider, k.saved]))))
-      .catch(() => {})
-  useEffect(() => { if (isDesktop) void refresh() }, [])
-
-  const note = (id: string, r: Result) => setResult((prev) => ({ ...prev, [id]: r }))
-  const test = async (id: string) => {
-    note(id, "testing")
-    try { note(id, await call<{ ok: boolean; detail: string }>("key_test", { providerId: id })) }
-    catch (e) { note(id, { ok: false, detail: String(e) }) }
-  }
-  const connect = async (id: string) => {
-    try {
-      await call("key_save", { providerId: id, key: draft[id] ?? "" })
-      setDraft((d) => ({ ...d, [id]: "" }))
-      await refresh()
-      await test(id)
-    } catch (e) { note(id, { ok: false, detail: String(e) }) }
-  }
-  const remove = async (id: string) => {
-    try { await call("key_delete", { providerId: id }); note(id, undefined); await refresh() }
-    catch (e) { note(id, { ok: false, detail: String(e) }) }
-  }
 
   return (
     <div className="page settings">
@@ -74,46 +37,6 @@ export function SettingsView() {
         <p className="muted small">Four plain steps: you ask, it searches and writes, statements are checked, you read the answer.</p>
         <button type="button" className="btn" onClick={openHelp}>How this works</button>
       </section>
-      {isDesktop && (
-      <section className="set-section keys" aria-labelledby="keys-title">
-        <h2 id="keys-title">Desktop app API keys</h2>
-        <p className="muted small">
-          Connect a model provider to test it. Keys are stored in your Mac's keychain, not in this window, and are
-          sent only to the provider they belong to. No agent uses them yet.
-        </p>
-        <ul>
-          {PROVIDERS.map((p) => {
-            const r = result[p.id]
-            return (
-              <li key={p.id}>
-                <div className="keys-name">
-                  <strong>{p.name}</strong>
-                  <span data-on={saved[p.id] || undefined}>{saved[p.id] ? "Key saved" : "Not connected"}</span>
-                </div>
-                {saved[p.id] ? (
-                  <div className="keys-actions">
-                    <button type="button" className="btn" disabled={r === "testing"} onClick={() => void test(p.id)}>
-                      {r === "testing" ? "Testing…" : "Test"}
-                    </button>
-                    <button type="button" className="link-btn" onClick={() => void remove(p.id)}>Remove</button>
-                  </div>
-                ) : (
-                  <form className="keys-actions" onSubmit={(e) => { e.preventDefault(); void connect(p.id) }}>
-                    <input type="password" name={`key-${p.id}`} aria-label={`${p.name} API key`} placeholder={p.hint}
-                      autoComplete="off" spellCheck={false} disabled={!isDesktop} value={draft[p.id] ?? ""}
-                      onChange={(e) => { const v = e.currentTarget.value; setDraft((d) => ({ ...d, [p.id]: v })) }} />
-                    <button type="submit" className="btn btn-primary" disabled={!isDesktop || !(draft[p.id] ?? "").trim()}>Connect</button>
-                  </form>
-                )}
-                <p className="keys-result" role="status" data-ok={typeof r === "object" ? r.ok : undefined}>
-                  {typeof r === "object" ? r.detail : ""}
-                </p>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-      )}
       <Technical />
     </div>
   )

@@ -203,7 +203,7 @@ test("ideal answers are hidden unless asked for on a finished run", async () => 
 
   // M5: the opt-in needs the session token. Without it nothing is revealed: not to a caller with no Origin, not
   // to the dashboard's Origin (a header any local program can send), not with a wrong token.
-  for (const headers of [{}, { origin: "http://127.0.0.1:5317" }, { "x-glhf-token": "0".repeat(48) }, { origin: "tauri://localhost", "x-glhf-token": "" }] as Record<string, string>[]) {
+  for (const headers of [{}, { origin: "http://127.0.0.1:5317" }, { "x-glhf-token": "0".repeat(48) }, { origin: "http://localhost:5317", "x-glhf-token": "" }] as Record<string, string>[]) {
     for (const flag of ["ideal=1", "ideal=true"]) for (const id of ["pair-a", "still-running", "no-such-run"]) {
       const res = await get<{ error: string; field: string; needsToken: boolean }>(`/api/bixv1/runs/${id}?${flag}`, { headers })
       assert.equal(res.status, 401, `${id} ${flag} ${JSON.stringify(headers)}`)
