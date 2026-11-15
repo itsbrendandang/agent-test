@@ -77,6 +77,17 @@ describe("full event log", () => {
     expect(practice.text).toBe("Searched sources for “q”: kept 1, dropped 0.")
     expect(eventRows([{ key: "start", type: "run.started", mock: false }, { ...search, provider: "europepmc" }], "board").find((r) => r.kind === "search")!.provider).toBe("europepmc")
   })
+  it("marks every row of the final round as final, so a filtered log keeps the final heading", () => {
+    const rows = eventRows([
+      { key: "r1", type: "round.started", round: 1, message: "Round 1." },
+      { key: "m1", type: "member.replied", member: "scout", round: 1, text: "a" },
+      { key: "r2", type: "round.started", round: 2, final: true, message: "Round 2. Final." },
+      { key: "m2", type: "member.replied", member: "scout", round: 2, text: "b" },
+      { key: "c2", type: "claim.checked", member: "scout", round: 2, claim: "b", verdict: "verified", checker: "first-pass" },
+    ], "board")
+    expect(rows.map((r) => r.round)).toEqual([{ n: 1 }, { n: 1 }, { n: 2, final: true }, { n: 2, final: true }, { n: 2, final: true }])
+    expect(filterRows(rows, { agent: "scout", kind: "", query: "" }).map((r) => r.round)).toEqual([{ n: 1 }, { n: 2, final: true }])
+  })
   it("combines agent, kind and word search filters including sources", () => {
     const rows = eventRows(events, "answer")
     expect(filterRows(rows, { agent: "specialist:toxicologist", kind: "write", query: "SAFETY note" })).toHaveLength(1)

@@ -76,6 +76,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
   const sources = new Map<number, LogSource[]>()
   const specialists = new Set<string>()
   const wrong = new Map<string, number>()
+  const finalRounds = new Set<number>()
   const real = run === "board" && ordered.some((e) => e.type === "run.started" && e.mock === false)
   const searchedWith = (e: LabEvent) => str(e.provider) ?? (real ? "exa" : undefined)
   for (const e of ordered) {
@@ -90,6 +91,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       const at = `${str(e.member)}|${num(e.round)}`
       wrong.set(at, (wrong.get(at) ?? 0) + 1)
     }
+    if (e.type === "round.started" && e.final === true && num(e.round) !== undefined) finalRounds.add(num(e.round)!)
     if (e.type === "step.started" && str(e.step)) steps.set(str(e.step)!, e)
     if (e.type === "sources") for (const item of objects(e.items)) if (num(item.n) !== undefined) sources.set(num(item.n)!, sourceLink(item.url, item.title))
   }
@@ -199,7 +201,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const title = /\((.+)\)\s*$/.exec(titles.get(agentId) ?? "")?.[1]
     const job = run === "board" && !note ? (specialists.has(agentId) ? SPECIALIST_JOB : BOARD_JOB[agentId] ?? title?.toLowerCase()) : undefined
     const contradicted = type === "member.replied" ? wrong.get(`${agentId}|${num(e.round)}`) : undefined
-    const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(e.final === true ? { final: true } : {}) } : undefined
+    const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(finalRounds.has(num(e.round)!) ? { final: true } : {}) } : undefined
     return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict), ...(str(e.member) && str(e.claim) ? { node: claimNodeId(str(e.member)!, str(e.claim)!) } : {}) } : {}), ...(type === "evidence.triaged" && searchedWith(e) ? { provider: searchedWith(e) } : {}) }]
   })
 }
