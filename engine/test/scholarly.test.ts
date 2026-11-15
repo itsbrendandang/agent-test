@@ -161,3 +161,17 @@ test("one paper found by two searches, under its PubMed address and its DOI addr
   const page = (url: string) => ({ item: { url, title: "Semaglutide and cardiovascular outcomes", text: "x" }, provider: "exa" as const })
   assert.equal(numberSources([page("https://a.org/1"), page("https://b.org/1")], 10).length, 2)
 })
+
+test("the notice a step shows first names a skipped source, and Europe PMC's own fallback says it is Europe PMC's", async () => {
+  // Europe PMC finds nothing for the full query, then the trial for fewer words; Semantic Scholar fails.
+  const shorter = (url: URL) => json(url.searchParams.get("query") === "semaglutide cardiovascular obesity" ? { resultList: { result: [] } } : EUROPEPMC)
+  const some = await scholarlyLive("semaglutide cardiovascular obesity", { fetchFn: fakeNet({ [LITERATURE_HOSTS.europepmc]: shorter, [LITERATURE_HOSTS.semanticscholar]: () => json({}, 503) }).fetchFn })
+  assert.deepEqual(some.notices, [
+    "Skipped because it could not be used: Semantic Scholar (answered 503).",
+    "Europe PMC: Nothing was found for the full query; these are the results for \"semaglutide cardiovascular\".",
+  ])
+  // Nothing found anywhere and one source failed: the failed source is named first.
+  const empty = () => json({ results: [], data: [], resultList: { result: [] } })
+  const none = await scholarlyLive("semaglutide cardiovascular obesity", { fetchFn: fakeNet({ [LITERATURE_HOSTS.europepmc]: empty, [LITERATURE_HOSTS.openalex]: empty, [LITERATURE_HOSTS.semanticscholar]: empty, [LITERATURE_HOSTS.arxiv]: () => json({}, 500) }).fetchFn })
+  assert.deepEqual(none.notices, ["Skipped because it could not be used: arXiv (answered 500).", "No paper with an abstract was found in any literature source. Try other terms."])
+})

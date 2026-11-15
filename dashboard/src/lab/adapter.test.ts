@@ -208,7 +208,7 @@ describe("a research answer (answerLab)", () => {
     expect(lib.map((t) => [t.id, t.back !== undefined])).toEqual([["step:search:europepmc:1", true], ["step:search:europepmc:2", false], ["step:search:chembl:1", false], ["step:search:clinicaltrials:1", false]])
     expect(m.characters.librarian.state).toBe("fetching") // still out for the others
     expect(m.characters.auditor.state).toBe("fetching") // screening the first results meanwhile
-    expect(lib[0]).toMatchObject({ label: "8 papers from PubMed and preprints (Europe PMC)", short: "8 papers · PubMed", outcome: "carried", provider: "europepmc" })
+    expect(lib[0]).toMatchObject({ label: "8 papers from the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)", short: "8 papers · literature", outcome: "carried", provider: "europepmc" })
     expect(m.searches).toEqual({ exa: 1, europepmc: 2, chembl: 1, clinicaltrials: 1 })
     // the Navigator gave its plan to the Scout and then to the Librarian, once each
     expect(trips(m, "navigator").map((t) => t.to)).toEqual(["scout", "librarian"])

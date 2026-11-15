@@ -10,6 +10,7 @@
 // Rules: a teammate moves only for an event that names its agent or step. What a field does not say is not guessed.
 // Text from a run (questions, statements, errors) is untrusted and is only ever passed on as text.
 import { provenanceOf } from "@/lib/provenance"
+import { searchPlace } from "@/research/providers"
 import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
@@ -98,10 +99,12 @@ const PLACE: Record<string, string> = {
 const NOUN: Record<string, string> = { exa: "result", europepmc: "paper", fixture: "example source" }
 /** One or two words for the tag over a parcel: where it came from. */
 const TAG: Record<string, string> = { exa: "Exa", europepmc: "PubMed", fixture: "examples", chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem" }
-const tagOf = (n: number, provider: string | undefined) => `${plural(n, nounOf(provider))}${provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
-const placeOf = (provider: string | undefined) => (provider ? PLACE[provider] ?? provider : "a search")
+/** A research answer's literature step asks four indexes at once, though it carries the provider "europepmc"; a board review's asks Europe PMC only. */
+const literature = (provider: string | undefined, research: boolean) => research && provider === "europepmc"
+const tagOf = (n: number, provider: string | undefined, research = false) => `${plural(n, nounOf(provider))}${literature(provider, research) ? " · literature" : provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
+const placeOf = (provider: string | undefined, research = false) => (!provider ? "a search" : literature(provider, research) ? searchPlace(provider) : PLACE[provider] ?? provider)
 /** "8 papers from PubMed and preprints (Europe PMC)". A practice run's example sources say what they are once: "4 example sources". */
-const fromPlace = (n: number, provider: string | undefined) => (provider === "fixture" ? plural(n, nounOf(provider)) : `${plural(n, nounOf(provider))} from ${placeOf(provider)}`)
+const fromPlace = (n: number, provider: string | undefined, research = false) => (provider === "fixture" ? plural(n, nounOf(provider)) : `${plural(n, nounOf(provider))} from ${placeOf(provider, research)}`)
 const nounOf = (provider: string | undefined) => (provider ? NOUN[provider] ?? "record" : "result")
 /** Who makes a search: the Scout for the web (and for a practice run's example sources), the Librarian for the literature and the databases. */
 const searcherOf = (provider: string | undefined): CharacterId => (provider === undefined || provider === "exa" || provider === "fixture" ? "scout" : "librarian")
@@ -505,13 +508,13 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const s = steps.get(str(e.step) ?? ""); if (!s?.running) break
         s.running = false
         const status = e.status === "empty" || e.status === "failed" || e.status === "cancelled" ? e.status : "completed"
-        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider)
+        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider, true)
         const error = str(e.error), consequence = str(e.consequence), summary = str(e.summary)
         let line: string, label = s.label, short = "", outcome: Trip["outcome"] = "carried"
         if (status === "failed") { line = `${s.label}: did not work.${error ? ` ${clip(error, 200)}` : ""}${consequence ? ` ${clip(consequence, 200)}` : ""}`; label = `nothing: ${s.label.charAt(0).toLowerCase()}${s.label.slice(1)} failed`; short = "failed"; outcome = "failed" }
         else if (status === "cancelled") { line = `${s.label}: stopped.`; label = "nothing (stopped)"; short = "stopped"; outcome = "empty" }
         else if (status === "empty") { line = `${s.label}: found nothing.`; label = `nothing from ${place}`; short = "nothing"; outcome = "empty" }
-        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider); short = tagOf(found ?? 0, s.provider); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
+        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider, true); short = tagOf(found ?? 0, s.provider, true); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
         else if (s.kind === "evaluate") { line = `${s.label}: kept ${kept ?? 0}${found !== undefined ? ` of ${found}` : ""}.`; label = `${plural(kept ?? 0, "source")} kept${found !== undefined ? ` of ${found}` : ""}`; short = `${kept ?? 0} kept`; outcome = (kept ?? 1) > 0 ? "carried" : "empty" }
         else line = `${s.label}: done.${summary ? ` ${clip(summary, 160)}` : ""}`
         if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: "discovery", label, short, at: s.at, back: at ?? s.at, outcome, ...(s.kind !== "evaluate" && s.provider && { provider: s.provider }) })

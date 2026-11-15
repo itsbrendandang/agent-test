@@ -216,7 +216,7 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
   const fetchFn = options.fetchFn ?? fetch, env = options.env ?? {}, ms = options.timeoutMs ?? SOURCE_TIMEOUT_MS
   const sources = SCHOLARLY_SOURCES
   const run = (source: ScholarlySource, signal: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> => {
-    if (source === "europepmc") return europePmcPapers(query, fetchFn, signal, MAX_BODY_BYTES)
+    if (source === "europepmc") return europePmcPapers(query, fetchFn, signal, MAX_BODY_BYTES).then((r) => ({ papers: r.papers, notices: r.notices.map((n) => `Europe PMC: ${n}`) }))
     const work = source === "openalex" ? openAlex(query, fetchFn, signal) : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env) : arxiv(query, fetchFn, signal)
     return work.then((papers) => ({ papers, notices: [] }))
   }
@@ -230,9 +230,8 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
   })
   if (failed.length === sources.length) throw new Error(`no literature source could be used: ${failed.join("; ")}`)
   const items = mergePapers(lists)
-  if (failed.length) notices.push(`Skipped because it could not be used: ${failed.join("; ")}.`)
-  if (!items.length) notices.unshift("No paper with an abstract was found in any literature source. Try other terms.")
-  return { items, notices }
+  const first = [...(failed.length ? [`Skipped because it could not be used: ${failed.join("; ")}.`] : []), ...(items.length ? [] : ["No paper with an abstract was found in any literature source. Try other terms."])]
+  return { items, notices: [...first, ...notices] }
 }
 
 /** A short reason without a key: only the message of our own errors, a fixed phrase for anything else. */
