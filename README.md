@@ -142,6 +142,29 @@ The address bar always says what is shown, so Back, Forward and a copied link re
 `#Lab/<kind>/<run id>?agent=<name>`, `#Graph/<kind>/<run id>?node=<node id>`, `#Agents/<name>`, `#Board/<run id>`,
 `#Compare/<run id>`. The code is in `dashboard/src/lib/links.ts`.
 
+**Details of every agent and entity.** In the Agent Log, an "Agents and entities in this run" card lists each
+agent with what it is doing now, and each identifier, source and statement the run names. Click one, or Details beside an
+agent's name in the log, to open its details in a side panel. Team review (Details beside each member and each
+source), Graph ("All details in this run") and Agents (a review member's Details) open the same panel.
+
+- An **agent** shows its role and purpose (from its `board/agents/*.md` file), model tier and model id, tools, what it
+  is doing now, its searches, the sources it found, its statements with each check's mark, the checks it made, its own
+  tokens and spend, and its messages in the log.
+- An **entity** (a source, a statement, or an identifier such as UniProt P01116, CHEMBL4535757, NCT04303780, a PMID or
+  a DOI) shows its links to the public record, every source that names it, the statements about it with each check,
+  and which agents touched it and when.
+
+The panels are built from the run's recorded events only (`dashboard/src/details/`), so they fill in while a run goes
+on. An identifier is found only in a form that names its database: a database address, or the database's name before
+it. What a run did not record is said, not guessed. Each agent's tokens come from new engine fields
+(`usage` on `member.replied`, `members` on `run.finished`); a run made before them says "Not recorded".
+
+![Agents and entities in a run, in the Agent Log](docs/images/details-cast.png)
+![An agent's details](docs/images/details-agent.png)
+![An identifier's details](docs/images/details-entity.png)
+
+These pictures show a made-up practice run (`dashboard/src/details/fixtures.ts`), not research.
+
 The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
 Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
 below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.
