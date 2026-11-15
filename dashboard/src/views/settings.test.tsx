@@ -27,12 +27,12 @@ const show = async (over: { paidLocked?: boolean; catalog?: object; paidCalls?: 
 const count = (text: string, pattern: RegExp) => (text.match(pattern) ?? []).length
 
 describe("structure", () => {
-  it("has Run mode, Session token, Appearance, Help, then Technical, each with the same heading level", async () => {
+  it("has Your profile, Run mode, Session token, Appearance, Help, then Technical, each with the same heading level", async () => {
     const { container } = await show()
     const sections = [...container.querySelectorAll(".page > .set-section")]
-    expect(sections.map((s) => s.querySelector("h2")!.textContent)).toEqual(["Run mode", "Session token", "Appearance", "Help", "Technical"])
-    expect(sections.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "SECTION", "SECTION", "DETAILS"])
-    expect([...container.querySelectorAll("h2")].filter((h) => !h.closest("dialog"))).toHaveLength(5) // one heading style: every section title is an h2, nothing else on the page is
+    expect(sections.map((s) => s.querySelector("h2")!.textContent)).toEqual(["Your profile", "Run mode", "Session token", "Appearance", "Help", "Technical"])
+    expect(sections.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "SECTION", "SECTION", "SECTION", "DETAILS"])
+    expect([...container.querySelectorAll("h2")].filter((h) => !h.closest("dialog"))).toHaveLength(6) // one heading style: every section title is an h2, nothing else on the page is
     expect(screen.queryByText("Next run: Demo or Real")).toBeNull(); expect(screen.queryByText("How the next run is made")).toBeNull()
     expect(screen.getByText("Choose how runs are made and see what the app is connected to.")).toBeInTheDocument()
   })
@@ -51,7 +51,8 @@ describe("structure", () => {
     expect(technical).toHaveTextContent("glhf/runs/.token") // Technical does show where the token is
     const rows = within(within(technical).getByRole("list", { name: "Tools and keys the engine found" })).getAllByRole("listitem")
     expect(rows.map((li) => li.querySelector(".pill")!.textContent)).toEqual(["found", "not found", "set", "not set", "set"])
-    expect(container.querySelectorAll("input:not([type=checkbox]):not([type=radio])")).toHaveLength(0) // nowhere to type a key
+    // the only places to type are the three profile fields: nowhere to type a key
+    expect([...container.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=radio])")].map((i) => `${i.type}:${i.name}`)).toEqual(["text:profile-name", "text:profile-organisation", "text:profile-role"])
     expect(screen.getAllByRole("radiogroup")).toHaveLength(1) // one mode control on the page
   })
   it("one Agents and skills group holds Board, Specialists and Skills; there is no separate Skills heading", async () => {
@@ -176,7 +177,7 @@ describe("Run mode is the one place to switch, and it cannot show a stale state"
     await userEvent.setup().click(screen.getByRole("radio", { name: "Demo" }))
     await waitFor(() => expect(to(t.sent, "POST", "/api/paid")).toHaveLength(1))
     expect(to(t.sent, "POST", "/api/paid")[0].body).toEqual({ on: false })
-    expect(await screen.findByRole("status")).toHaveTextContent("Locked by the person running the engine. Nothing was changed.")
+    expect(await within(screen.getByRole("region", { name: "Run mode" })).findByRole("status")).toHaveTextContent("Locked by the person running the engine. Nothing was changed.")
     expect(screen.getByRole("radio", { name: "Real" })).toBeChecked()
   })
   it("a change made elsewhere shows up on the next read, and nothing about the mode is stored in the browser", async () => {

@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import "@/research/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
-import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { HeaderSlot } from "@/components/HeaderSlot"
@@ -15,12 +14,12 @@ import { RecordList, type RecordItem } from "@/components/RecordRow"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type EffortId, type ProviderId } from "@/home/api"
-import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, sourcesWords, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
-import { EffortPicker } from "@/home/EffortPicker"
+import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, sourcesWords, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { PlanCard } from "@/home/PlanCard"
-import { plainDuration, plainWhen, runTitle } from "@/lib/format"
+import { plainWhen, runTitle } from "@/lib/format"
 import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
 import { AgentsWorking } from "@/research/AgentsWorking"
+import { AskBox } from "@/research/AskBox"
 import { ResearchAnswer } from "@/research/Answer"
 import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
@@ -53,7 +52,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [catalog, setCatalog] = useState<Catalog | null>()
   const [again, setAgain] = useState(0)
   const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
-  const [chosenEffort, setChosenEffort] = useState(loadEffort)
+  // A question sent from the Overview carries the level chosen there (Standard when it names none); it is not remembered as the person's choice.
+  const [chosenEffort, setChosenEffort] = useState<string | undefined>(() => (start.ask?.send ? start.ask.effort ?? "standard" : loadEffort()))
   const [stopNote, setStopNote] = useState<string>() // what the engine answered to Stop
   const [pane, setPane] = useState(loadInspector) // the inspector: shown or not, and how wide; remembered
   const [inspect, setInspect] = useState<{ id?: string; tab?: InspectorTab }>({}) // which answer and tab; none = the latest answer
@@ -111,19 +111,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
    * review this", make a plan for a team review, which starts nothing until it is confirmed (POST /api/chat).
    * An engine without the answer route gets the plan path for every depth.
    */
-  /** `standard`: answer at the Standard level whatever level is remembered (a question sent from the Overview). */
-  const send = async (question: string, how: "auto" | "review" = "auto", standard = false) => {
+  const send = async (question: string, how: "auto" | "review" = "auto") => {
     if (sending !== undefined) return
     const no = refuseText(question)
     if (no) { setProblem({ message: no, control: "box" }); box.current?.focus(); return }
     const asked = question.trim()
     setProblem(undefined); setSending(asked); setText("")
     const stop = (asking.current = new AbortController())
-    const direct = how === "auto" && (standard || effort !== "deep") && canAnswer !== "missing"
+    const direct = how === "auto" && effort !== "deep" && canAnswer !== "missing"
     try {
       if (direct) {
         try {
-          const started = await startResearch(asked, !standard && effort === "quick" ? "quick" : "standard", thread.current)
+          const started = await startResearch(asked, effort === "quick" ? "quick" : "standard", thread.current)
           if (stop.signal.aborted) return
           thread.current = started.thread; setCanAnswer("here"); setStarted((old) => [...old, started.id])
           setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: "", research: { id: started.id, question: asked, thread: started.thread } }] })
@@ -148,17 +147,19 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
     }
   }
 
-  // A question sent from the Overview is submitted once, exactly as if it had been typed here and Send pressed: the
-  // same token prompt, limits and refusals; a refusal leaves the text in the box with its message. The short wait
-  // makes it once even where React mounts twice in development (the first mount's timer is cleared).
+  // A question sent from the Overview is submitted once, at the level chosen there, exactly as if it had been typed
+  // here and Send pressed: the same token prompt, limits and refusals; Deep makes a plan that waits for its confirm
+  // step; a refusal leaves the text in the box with its message. It waits for the engine's catalog, which says which
+  // levels exist. The short timer makes it once even where React mounts twice in development.
   const sendNow = useRef(send)
   useEffect(() => { sendNow.current = send })
+  const handedOver = useRef(false)
   useEffect(() => {
     const ask = start.ask
-    if (!ask?.send) return
-    const timer = window.setTimeout(() => void sendNow.current(ask.question, "auto", true), 0)
+    if (!ask?.send || catalog === undefined || handedOver.current) return
+    const timer = window.setTimeout(() => { handedOver.current = true; void sendNow.current(ask.question) }, 0)
     return () => window.clearTimeout(timer)
-  }, [start])
+  }, [start, catalog])
 
   // Enter sends, Shift+Enter is a new line, and Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send: PromptInputTextarea does this.
   const clear = () => { asking.current?.abort(); thread.current = undefined; setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
@@ -191,31 +192,12 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const canCopy = typeof navigator !== "undefined" && !!navigator.clipboard?.writeText
 
   const composer = (
-    <div className="search-composer">
-      <PromptInput onSubmit={(message) => { void send(message.text) }}>
-        <PromptInputBody>
-          <PromptInputTextarea id="home-box" ref={box} rows={empty ? 2 : 1} maxLength={MAX_MESSAGE + 200} value={text} autoFocus aria-label="Ask a research question"
-            placeholder={empty ? "Ask a research question…" : "Ask a follow-up…"}
-            onChange={(e) => { setText(e.currentTarget.value); if (problem?.control === "box") setProblem(undefined) }}
-            onKeyDown={(e) => {
-              // Enter on an empty box says what to do instead of doing nothing (the Send button is disabled then).
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !text.trim()) { e.preventDefault(); void send(text) }
-            }}
-            aria-invalid={problem?.control === "box"} aria-describedby={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`} />
-        </PromptInputBody>
-        <PromptInputFooter className="search-foot">
-          {/* Clicks in the toolbar stay in the toolbar: the input group would otherwise move the focus away from the control. */}
-          <PromptInputTools className="search-tools" onClick={(e) => e.stopPropagation()}>
-            {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" compact />}
-          </PromptInputTools>
-          <span className="search-send">
-            {activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
-            <PromptInputSubmit className="btn btn-primary" size="sm" aria-label={sending !== undefined ? "Sending…" : "Send"} status={sending !== undefined ? "submitted" : undefined}
-              disabled={sending !== undefined || !text.trim()} title={sending !== undefined ? "Your question is being sent." : !text.trim() ? "Type a question first." : activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
-              {sending !== undefined ? "Sending…" : activeId ? "Send (queued)" : "Send"}</PromptInputSubmit>
-          </span>
-        </PromptInputFooter>
-      </PromptInput>
+    <AskBox id="home-box" textareaRef={box} rows={empty ? 2 : 1} value={text} autoFocus placeholder={empty ? "Ask a research question…" : "Ask a follow-up…"}
+      onChange={(next) => { setText(next); if (problem?.control === "box") setProblem(undefined) }} onSubmit={(asked) => void send(asked)}
+      efforts={efforts} effort={effort} onEffort={pickEffort} name="home-effort" busy={sending !== undefined}
+      invalid={problem?.control === "box"} describedBy={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`}
+      beforeSend={activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
+      sendLabel={activeId ? "Send (queued)" : undefined} sendTitle={activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
       {stopNote && activeId === undefined && <p className="muted small" role="status">{stopNote}</p>}
       {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
@@ -224,8 +206,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
         <span className="muted small" id="home-box-help">
           {/* One line, true for the mode. In Demo it is said on the empty screen only: an answer carries its own Practice badge. */}
           {demo ? (empty ? DEMO_LINE : "")
-            : effort === "deep" ? <>Deep plans a team review and asks you before anything starts{level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.</>
-            : effort ? answerLimitLine(catalog, effort === "quick" ? "quick" : "standard")
+            : effort ? answerLimitLine(catalog, effort)
             : "Enter sends. Shift+Enter adds a line."}
         </span>
         <details className="search-options" open={problem?.control === "effort" || problem?.control === "model" || undefined}>
@@ -248,7 +229,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           </div>
         </details>
       </div>
-    </div>
+    </AskBox>
   )
 
   // The inspector shows one answer: the one asked for, else the latest. It reads the events that answer received.

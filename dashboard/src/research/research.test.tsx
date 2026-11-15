@@ -2,7 +2,7 @@
 // a stand-in engine. Nothing here talks to a real engine.
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { StrictMode } from "react"
+import { StrictMode, useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
 import { saveEffort as saveEffortChoice } from "@/home/chat"
@@ -15,6 +15,7 @@ import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
 import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
+import { AskBox } from "./AskBox"
 import { identifierOf, markOf } from "./marks"
 import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
@@ -831,7 +832,7 @@ describe("a question the Overview asks to be sent", () => {
   })
   it("starts the search at once, once, at the Standard level, in a new conversation; in Demo with no prompt", async () => {
     const sent = table()
-    saveEffortChoice("deep") // a remembered level does not change what a question from the Overview does
+    saveEffortChoice("deep") // a remembered level does not change what a question from the Overview does: it names its own, or Standard
     sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
     setAsk("Does drug A protect the heart?", { send: true })
     render(<StrictMode><TokenPrompt /><HomeView onOpen={() => {}} /></StrictMode>) // mounted twice, as in development
@@ -908,5 +909,64 @@ describe("the limit line shown before anything is sent", () => {
     expect(answerLimitLine({ ...CATALOG_ON, research: { quick: { maxUsd: 0.15, maxSeconds: 120 } } }, "quick")).toBe("Quick answers on this page, with sources: at most $0.15 and 2 minutes.")
     expect(answerLimitLine(CATALOG_OFF)).toBe("Demo mode: answers are example text. Switch to Real for AI answers and web search.")
     expect(answerLimitLine(undefined)).toBe(""); expect(answerLimitLine(null)).toBe("")
+  })
+})
+
+describe("one question box for Research and the Overview", () => {
+  it("is a composer and nothing more: typing, Enter to send, Shift+Enter for a line, the Effort control, a Send that says why it is off", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn(), onEffort = vi.fn(), onFocusChange = vi.fn()
+    function Box() { const [v, setV] = useState(""); return <AskBox value={v} onChange={setV} onSubmit={onSubmit} efforts={CATALOG_ON.efforts} effort="standard" onEffort={onEffort} onFocusChange={onFocusChange} name="x-effort" /> }
+    const { container } = render(<Box />)
+    const box = screen.getByRole("textbox", { name: "Ask a research question" })
+    expect(container.querySelector(".search-composer")).not.toBeNull() // the same markup and classes as on Research
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Send" })).toHaveAttribute("title", "Type a question first.")
+    await user.click(box); expect(onFocusChange).toHaveBeenLastCalledWith(true)
+    await user.type(box, "One{Shift>}{Enter}{/Shift}two")
+    expect(box).toHaveValue("One\ntwo"); expect(onSubmit).not.toHaveBeenCalled()
+    await user.keyboard("{Enter}")
+    expect(onSubmit).toHaveBeenCalledTimes(1); expect(onSubmit).toHaveBeenLastCalledWith("One\ntwo")
+    await user.click(screen.getByRole("radio", { name: "Deep" })); expect(onEffort).toHaveBeenCalledWith("deep")
+    await user.tab(); expect(onFocusChange).toHaveBeenCalledWith(false)
+  })
+  it("shows no Effort control without levels, and says it is sending", () => {
+    render(<AskBox value="q" onChange={() => {}} onSubmit={() => {}} busy />)
+    expect(screen.queryByRole("radio")).toBeNull()
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled()
+  })
+  it("Research uses that same box", async () => {
+    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
+    const { container } = render(<HomeView onOpen={() => {}} />)
+    await screen.findByRole("radio", { name: "Standard" })
+    expect(container.querySelectorAll(".search-composer textarea#home-box")).toHaveLength(1)
+  })
+})
+
+describe("a question sent from the Overview at a chosen level", () => {
+  it("carries the level, and only one of the three", () => {
+    setAsk("Q", { send: true, effort: "quick" }); expect(takeAsk()).toEqual({ question: "Q", send: true, effort: "quick" })
+    sessionStorage.clear(); setAsk("Q", { send: true, effort: "enormous" as never }); expect(takeAsk()).toEqual({ question: "Q", send: true })
+  })
+  it("Quick is answered at Quick", async () => {
+    const sent = routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "POST /api/research": { status: 202, body: { id: "a-1", thread: "t-1", mode: "real" } } })
+    setAsk("Does drug A protect the heart?", { send: true, effort: "quick" })
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "quick" })
+    expect(localStorage.getItem("home.effort") ?? "").not.toBe("quick") // the level came with the question: it is not saved as the person's own choice
+  })
+  it("Deep makes a plan and starts nothing: the plan waits for its confirm step, as when Deep is chosen on Research", async () => {
+    const sent = routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "POST /api/chat": reply({ reply: "A plan.", plan: PLAN }) })
+    setAsk("Should we advance the hit?", { send: true, effort: "deep" })
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(to(sent, "POST", "/api/chat")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/chat")[0].body).toMatchObject({ effort: "deep" })
+    expect(to(sent, "POST", "/api/research")).toHaveLength(0)
+    expect(await screen.findByText("A plan for a review. Nothing has started.")).toBeInTheDocument() // the plan card, waiting for its confirm step
+    expect(sent.filter((r) => r.method === "POST" && /\/api\/chat\/plans\/.+\/start|\/api\/runs/.test(r.url))).toHaveLength(0)
+  })
+  it("the limit line covers Deep: a plan first, and its limits", () => {
+    expect(answerLimitLine(CATALOG_ON, "deep")).toMatch(/^Deep plans a team review and asks you before anything starts(: at most \$[\d.]+ and .+)?\.$/)
+    expect(answerLimitLine(CATALOG_OFF, "deep")).toBe("Demo mode: answers are example text. Switch to Real for AI answers and web search.")
   })
 })

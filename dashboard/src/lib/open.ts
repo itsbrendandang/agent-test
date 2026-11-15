@@ -38,26 +38,30 @@ export function takeOpenAnswer(): { id: string; question: string } | undefined {
 const ASK = "open.ask"
 /** The longest question the composer takes (the engine's own limit). */
 const ASK_MAX = 2000
+/** The level a handed-over question is to be answered at. */
+export type AskEffort = "quick" | "standard" | "deep"
+const LEVELS: readonly AskEffort[] = ["quick", "standard", "deep"]
 /**
  * Hand a question to Research. With `send`, Research starts the search at once, as if the person had typed it there
  * and pressed Send (same token prompt, limits and refusals); without it the question only waits in the composer.
  */
-export const setAsk = (question: string, options: { send?: boolean } = {}) => {
+export const setAsk = (question: string, options: { send?: boolean; effort?: AskEffort } = {}) => {
   try {
     const q = question.trim().slice(0, ASK_MAX)
     if (!q) { sessionStorage.removeItem(ASK); return }
-    sessionStorage.setItem(ASK, options.send === true ? JSON.stringify({ question: q, send: true }) : q) // unsent: the plain text, as before
+    sessionStorage.setItem(ASK, options.send === true ? JSON.stringify({ question: q, send: true, ...(options.effort && LEVELS.includes(options.effort) ? { effort: options.effort } : {}) }) : q) // unsent: the plain text, as before
   } catch { /* storage off: nothing is handed over */ }
 }
-export function takeAsk(): { question: string; send: boolean } | undefined {
+export function takeAsk(): { question: string; send: boolean; effort?: AskEffort } | undefined {
   try {
     const raw = sessionStorage.getItem(ASK)
     if (raw === null) return undefined
     window.setTimeout(() => sessionStorage.removeItem(ASK), 0) // after this render: a second mount in development reads the same
     // Sent: {"question", "send": true}. Anything else is the question itself, to be put in the box and not sent.
-    let sent: { question?: unknown; send?: unknown } | undefined
-    try { const v: unknown = JSON.parse(raw); if (v && typeof v === "object" && (v as { send?: unknown }).send === true) sent = v as { question?: unknown } } catch { /* plain text */ }
+    let sent: { question?: unknown; send?: unknown; effort?: unknown } | undefined
+    try { const v: unknown = JSON.parse(raw); if (v && typeof v === "object" && (v as { send?: unknown }).send === true) sent = v as { question?: unknown; effort?: unknown } } catch { /* plain text */ }
     const question = (sent ? (typeof sent.question === "string" ? sent.question : "") : raw).trim().slice(0, ASK_MAX)
-    return question ? { question, send: !!sent } : undefined
+    const effort = LEVELS.find((l) => l === sent?.effort)
+    return question ? { question, send: !!sent, ...(effort && { effort }) } : undefined
   } catch { return undefined }
 }

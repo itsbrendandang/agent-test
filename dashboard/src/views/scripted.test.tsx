@@ -110,7 +110,7 @@ describe("one place for each input", () => {
     const { container } = render(<SettingsView />)
     expect(await screen.findByText("ANTHROPIC_API_KEY")).toBeInTheDocument()
     expect(screen.queryByText("Desktop app API keys")).toBeNull()
-    expect(container.querySelectorAll("input:not([type=checkbox]):not([type=radio])")).toHaveLength(0) // only the "Show characters" tick and the Demo / Real control
+    expect([...container.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=radio])")].map((i) => i.name)).toEqual(["profile-name", "profile-organisation", "profile-role"]) // the profile fields only: no key field
     for (const gone of ["xAI", "Google Gemini"]) expect(screen.queryByText(gone)).toBeNull()
   })
 })

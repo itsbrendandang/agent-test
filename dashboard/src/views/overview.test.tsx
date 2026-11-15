@@ -100,7 +100,7 @@ describe("the welcome on the home page", () => {
     const onOpen = show({})
     await screen.findByText("Your research team is ready")
     const box = screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
-    const ask = screen.getByRole("button", { name: "Ask the team" }) as HTMLButtonElement
+    const ask = screen.getByRole("button", { name: /^Send/ }) as HTMLButtonElement
     expect(ask.disabled).toBe(true)
     await userEvent.click(screen.getByRole("button", { name: "What GLP-1s are working in the market right now?" }))
     expect(box.value).toBe("What GLP-1s are working in the market right now?")
@@ -110,7 +110,8 @@ describe("the welcome on the home page", () => {
     await userEvent.click(ask)
     expect(onOpen).toHaveBeenCalledWith("Home")
     // The question is handed to Research marked "send": Research starts the search through its own Send path.
-    expect(JSON.parse(sessionStorage.getItem("open.ask") ?? "null")).toEqual({ question: "What GLP-1s are working in the market right now?", send: true })
+    expect(JSON.parse(sessionStorage.getItem("open.ask") ?? "null")).toMatchObject({ question: "What GLP-1s are working in the market right now?", send: true })
+    expect(document.querySelector(".ov-hero .search-composer")).toBeTruthy() // the same composer as Research, not a look-alike
     expect(posts()).toHaveLength(0) // this page itself sends nothing to the engine
     sessionStorage.removeItem("open.ask")
     // The agents are named in text for a screen reader; the moving picture is hidden from it.

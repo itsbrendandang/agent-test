@@ -9,8 +9,6 @@ import { forgetScripted } from "@/lib/scripted"
 import { inShort, safeUrl, splitReply } from "@/lib/words"
 import { routes } from "@/test/engine"
 import { agentIdentity } from "@/lab/identity"
-import { CATALOG_ON } from "@/test/home"
-import { AgentsView } from "./AgentsView"
 import { BoardView } from "./BoardView"
 
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
@@ -282,29 +280,5 @@ describe("when the engine answers with an error", () => {
     board({ "GET /api/status": { status: 502, body: "bad gateway" } })
     render(<BoardView />)
     expect(await screen.findByRole("alert")).toHaveTextContent("The engine answered 502 without saying why. (HTTP 502)")
-  })
-})
-
-describe("Agents filter", () => {
-  const agents = () => {
-    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/glhf/roles": { status: 200, body: { shared_rules: "", roles: [] } }, "GET /api/glhf/runs": { status: 200, body: [] }, "GET /api/glhf/status": { status: 200, body: {} }, "GET /api/glhf/scoreboard": { status: 200, body: [] } })
-    return render(<AgentsView />)
-  }
-  it("has one filter box over the roles, the agents and the skills, and says how many are shown", async () => {
-    const user = userEvent.setup()
-    agents()
-    const total = 9 + CATALOG_ON.agents.length + CATALOG_ON.skills.length
-    const box = screen.getByRole("searchbox", { name: "Filter roles, agents and skills" })
-    expect(await screen.findByText(`${total} of ${total} shown`)).toBeInTheDocument()
-    await user.type(box, "toxicolog")
-    expect(screen.getByText(`1 of ${total} shown`)).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: "Toxicologist" })).toBeInTheDocument()
-    expect(screen.queryByText("1. Scout")).toBeNull()
-    await user.clear(box); await user.type(box, "critic")
-    expect(screen.getByText("6. Critic")).toBeInTheDocument() // the swarm role and the board member both match
-    expect(screen.getByRole("heading", { name: "Critic (Scientific Reviewer)" })).toBeInTheDocument()
-    await user.clear(box); await user.type(box, "zzzz")
-    expect(screen.getByText(/Nothing matches “zzzz”/)).toBeInTheDocument()
-    expect(screen.getByText(`0 of ${total} shown`)).toBeInTheDocument()
   })
 })

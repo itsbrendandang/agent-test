@@ -86,7 +86,7 @@ export default function App() {
         <Splash ready={shell.engine !== "unknown" && catalogAnswered} offline={shell.engine === "offline"} />
         <TokenPrompt />
         <HowItWorks open={help} onClose={() => setHelp(false)} />
-        <AppSidebar view={view} onGo={go} />
+        <AppSidebar view={view} onGo={go} paid={shell.paid} />
         <div className="app-body">
           <header className="app-header">
             <MenuButton />

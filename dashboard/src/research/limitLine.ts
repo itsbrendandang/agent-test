@@ -6,10 +6,18 @@ import { plainDuration } from "@/lib/format"
 
 export const DEMO_LINE = "Demo mode: answers are example text. Switch to Real for AI answers and web search."
 
-/** `effort`: the level a direct answer would use (the default is Standard). Empty until the engine's catalog is known. */
-export function answerLimitLine(catalog: Catalog | null | undefined, effort: "quick" | "standard" = "standard"): string {
+/**
+ * `effort`: the level the question would be asked at (the default is Standard). Quick and Standard answer on the
+ * page within the engine's own limits; Deep plans a team review and asks before anything starts. Empty until the
+ * engine's catalog is known.
+ */
+export function answerLimitLine(catalog: Catalog | null | undefined, effort: string = "standard"): string {
   if (!catalog) return ""
   if (catalog.paidCalls === false) return DEMO_LINE
-  const cap = catalog.research?.[effort]
+  if (effort === "deep") {
+    const level = catalog.efforts?.find((e) => e.id === "deep")
+    return `Deep plans a team review and asks you before anything starts${level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.`
+  }
+  const cap = catalog.research?.[effort === "quick" ? "quick" : "standard"]
   return `${effort === "quick" ? "Quick" : "Standard"} answers on this page, with sources${cap ? `: at most $${cap.maxUsd.toFixed(2)} and ${plainDuration(cap.maxSeconds * 1000)}` : ""}.`
 }

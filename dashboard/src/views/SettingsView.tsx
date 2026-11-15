@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState, type FormEvent } from "react"
 import { ENGINE } from "@/board/api"
 import { setCharactersShown, useCharacters } from "@/crew/store"
 import { ModeSwitch } from "@/components/PaidSwitch"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { PAID_CHANGED } from "@/lib/paidSwitch"
+import { clearProfile, saveProfile, useProfile } from "@/lib/profile"
 import { openHelp, useShell } from "@/lib/shell"
 import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
@@ -18,7 +19,7 @@ const PROVIDERS = [
 
 type Result = { ok: boolean; detail: string } | "testing" | undefined
 
-// Settings: Run mode, Session token, Appearance, Help, then Technical (closed at first). One heading style and one
+// Settings: Your profile, Run mode, Session token, Appearance, Help, then Technical (closed at first). One heading style and one
 // container for every section. The cost of Real is said once (Run mode); what happens to API keys once (Connections).
 // Inside the desktop app only: its key form (keys go to the system keychain; the window never reads one back).
 export function SettingsView() {
@@ -55,6 +56,7 @@ export function SettingsView() {
   return (
     <div className="page settings">
       <PageHead title="Settings" about="Choose how runs are made and see what the app is connected to." />
+      <YourProfile />
       <RunMode />
       <section className="set-section" aria-labelledby="token-title">
         <h2 id="token-title">Session token</h2>
@@ -126,6 +128,44 @@ const THING: Record<string, [string, string]> = {
   OPENAI_API_KEY: ["Key for OpenAI", "Lets real OpenAI models be used."],
   EXA_API_KEY: ["Key for web search (Exa)", "Lets the team look things up."],
   HF_TOKEN: ["Key for Hugging Face", "Lets benchmark data be downloaded."],
+}
+
+/**
+ * Your profile: a name, an organisation or client and an optional role, shown in the profile row of the navigation.
+ * The app has no accounts: this stays in this browser (lib/profile.ts) and is never sent to the engine.
+ */
+function YourProfile() {
+  const saved = useProfile()
+  const uid = useId()
+  const [draft, setDraft] = useState<{ name: string; organisation: string; role: string }>()
+  const [note, setNote] = useState<string>()
+  const form = draft ?? { name: saved?.name ?? "", organisation: saved?.organisation ?? "", role: saved?.role ?? "" }
+  const set = (field: "name" | "organisation" | "role", value: string) => { setDraft({ ...form, [field]: value }); setNote(undefined) }
+  const save = (e: FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setNote("Type a name first. Nothing was saved."); return }
+    saveProfile(form); setDraft(undefined); setNote("Saved in this browser.")
+  }
+  const clear = () => { clearProfile(); setDraft(undefined); setNote("Cleared. Nothing about you is stored in this browser now.") }
+  return (
+    <section className="set-section" aria-labelledby="profile-title">
+      <h2 id="profile-title">Your profile</h2>
+      <p className="muted small">Shown at the foot of the navigation. It stays in this browser and is never sent to the engine. There are no accounts to log in to.</p>
+      <form className="set-profile" onSubmit={save}>
+        <label htmlFor={`${uid}-name`}>Name</label>
+        <input id={`${uid}-name`} name="profile-name" type="text" autoComplete="name" maxLength={60} value={form.name} onChange={(e) => set("name", e.currentTarget.value)} aria-describedby={note ? `${uid}-note` : undefined} />
+        <label htmlFor={`${uid}-org`}>Organisation or client</label>
+        <input id={`${uid}-org`} name="profile-organisation" type="text" autoComplete="organization" maxLength={80} value={form.organisation} onChange={(e) => set("organisation", e.currentTarget.value)} />
+        <label htmlFor={`${uid}-role`}>Role <span className="muted">(optional)</span></label>
+        <input id={`${uid}-role`} name="profile-role" type="text" autoComplete="organization-title" maxLength={60} value={form.role} onChange={(e) => set("role", e.currentTarget.value)} />
+        <div className="set-profile-actions">
+          <button type="submit" className="btn btn-primary">Save</button>
+          {saved && <button type="button" className="btn" onClick={clear}>Clear</button>}
+          <span className="muted small" role="status" id={`${uid}-note`}>{note}</span>
+        </div>
+      </form>
+    </section>
+  )
 }
 
 interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean> }

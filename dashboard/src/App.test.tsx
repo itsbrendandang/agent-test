@@ -62,7 +62,7 @@ describe("one header row", () => {
 })
 
 describe("the navigation", () => {
-  it("has three primary places, a quieter More group, and Settings once at the foot", async () => {
+  it("has the primary places, a quieter More group, and Settings once: in the profile menu at the foot", async () => {
     await show("#Home")
     const nav = within(screen.getByRole("navigation", { name: "Places" }))
     const names = nav.getAllByRole("button").map((b) => b.textContent)
@@ -71,8 +71,11 @@ describe("the navigation", () => {
     expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Benchmarks"])
     for (const b of more) expect(b).toHaveAttribute("data-quiet")
     expect(nav.getByRole("button", { name: "Research" })).not.toHaveAttribute("data-quiet")
-    expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1)
-    expect(nav.queryByRole("button", { name: "Settings" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull() // no bare Settings item any more
+    const profile = screen.getByRole("button", { name: "Set up your profile: profile and settings" })
+    expect(profile).toHaveAttribute("aria-haspopup", "menu"); expect(profile).toHaveAttribute("aria-expanded", "false")
+    await userEvent.setup().click(profile)
+    expect(within(await screen.findByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Settings", "How this works"])
   })
   it("marks exactly one place as current, and moving changes the address, the header and the view", async () => {
     const t = await show("#Home")
@@ -83,9 +86,11 @@ describe("the navigation", () => {
     expect(window.location.hash).toBe("#Board") // the address keeps the old key
     expect(screen.getByTestId("place")).toHaveTextContent("Team review")
     expect(screen.getByRole("main")).toHaveTextContent("review view")
-    await t.user.click(screen.getByRole("button", { name: "Settings" }))
-    expect(current()).toEqual(["Settings"])
-    expect(screen.getByRole("main")).toHaveTextContent("settings view")
+    await t.user.click(screen.getByRole("button", { name: /profile and settings$/ }))
+    await t.user.click(await screen.findByRole("menuitem", { name: "Settings" }))
+    await waitFor(() => expect(screen.getByRole("main")).toHaveTextContent("settings view"))
+    expect(window.location.hash).toBe("#Settings")
+    expect(screen.getAllByRole("button").filter((b) => b.getAttribute("aria-current") === "page")).toEqual([screen.getByRole("button", { name: /profile and settings$/ })]) // the profile row is the current place
   })
   it.each([["#Experiments", "Saved research", "saved view"], ["#Swarm", "Compare", "compare view"], ["#Worlds", "Graph", "graph view"], ["#Runs", "Saved research", "saved view"],
     ["#Board", "Team review", "review view"], ["#Lab/board/r-1", "Agent Lab", "lab view"], ["#Lab", "Agent Lab", "lab view"], ["#Research", "Research", "research view"], ["#Home", "Research", "research view"], ["#Overview", "Overview", "overview view"], ["#Benchmarks", "Benchmarks", "benchmarks view"], ["", "Overview", "overview view"]])("the address %s still opens %s", async (hash, place, text) => {

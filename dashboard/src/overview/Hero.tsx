@@ -4,14 +4,16 @@
 // Pressing the send button hands the question to Research, which starts the search at once at the Standard level,
 // through its own Send path (the same token prompt and limits in Real). The line under the box says what that may
 // cost before the press. A starter question only fills the box.
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react"
-import { ArrowUp } from "lucide-react"
+import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { agentIdentity } from "@/lab/identity"
 import { Mascot } from "@/lab/Mascot"
 import { readEngine } from "@/lib/engine"
 import { setAsk } from "@/lib/open"
 import type { View } from "@/nav"
 import { STARTERS } from "@/overview/starters"
+import type { Catalog, EffortId } from "@/home/api"
+import { effortInEffect } from "@/home/chat"
+import { AskBox } from "@/research/AskBox"
 import { answerLimitLine } from "@/research/limitLine"
 import "@/overview/overview.css"
 
@@ -31,22 +33,21 @@ export function Hero({ onOpen }: { onOpen: (view: View) => void }) {
   const [focused, setFocused] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
   // What a Standard answer may cost, in Research's own words, shown before the press.
-  const [catalog, setCatalog] = useState<Parameters<typeof answerLimitLine>[0]>()
+  const [catalog, setCatalog] = useState<Catalog | null>()
+  const [effort, setEffort] = useState<EffortId>("standard")
   useEffect(() => {
     let stopped = false
-    readEngine<Parameters<typeof answerLimitLine>[0]>("/api/chat/catalog").then((c) => { if (!stopped) setCatalog(c) }, () => { if (!stopped) setCatalog(null) })
+    readEngine<Catalog>("/api/chat/catalog").then((c) => { if (!stopped) setCatalog(c) }, () => { if (!stopped) setCatalog(null) })
     return () => { stopped = true }
   }, [])
-  const limit = answerLimitLine(catalog)
+  const limit = answerLimitLine(catalog, effort)
   const eager = focused || text.trim().length > 0
-  const ask = (event?: FormEvent) => {
-    event?.preventDefault()
-    const question = text.trim()
-    if (!question) return
-    setAsk(question.slice(0, MAX), { send: true })
+  const ask = (asked: string) => {
+    const question = asked.trim()
+    if (!question) { box.current?.focus(); return }
+    setAsk(question.slice(0, MAX), { send: true, effort: catalog ? effortInEffect(catalog, effort) : effort })
     onOpen("Home")
   }
-  const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) ask(event) }
   return (
     <section className="ov-hero" aria-labelledby="ov-hero-title" data-eager={eager || undefined}>
       <div className="ov-stage" aria-hidden="true">
@@ -60,15 +61,10 @@ export function Hero({ onOpen }: { onOpen: (view: View) => void }) {
         })}
       </div>
       <h2 id="ov-hero-title">Your research team is ready</h2>
-      <form className="ov-ask" onSubmit={ask}>
-        <label className="sr-only" htmlFor="ov-ask-box">Ask a research question</label>
-        <textarea ref={box} id="ov-ask-box" rows={3} maxLength={MAX} placeholder="Ask the team to research a question, check a claim or plan an analysis" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
-        <div className="ov-ask-bar">
-          <span className="ov-chip">Standard search</span>
-          <button type="submit" disabled={!text.trim()} aria-label="Ask the team"><ArrowUp size={18} strokeWidth={2.4} aria-hidden="true" /></button>
-        </div>
-      </form>
-      <p className="ov-hero-note">Press the arrow and the team starts: they search, check each other and write it up while you do other things. {limit}</p>
+      {/* The same composer as Research (one component), so the two boxes cannot differ. */}
+      <AskBox id="ov-ask-box" textareaRef={box} rows={2} value={text} onChange={setText} onSubmit={(asked) => ask(asked)} onFocusChange={setFocused}
+        efforts={catalog?.efforts ?? []} effort={catalog ? effortInEffect(catalog, effort) : effort} onEffort={setEffort} name="overview-effort" />
+      <p className="ov-hero-note">Press Send and the team starts: they search, check each other and write it up while you do other things. {limit}</p>
       <div className="ov-row-label">Try asking</div>
       <div className="ov-starters" role="group" aria-label="Example questions">
         {STARTERS.map((starter) => (
