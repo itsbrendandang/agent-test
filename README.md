@@ -127,7 +127,7 @@ the key, so a typo cannot switch the limit off.
 The same agent, run, source or statement appears on several screens. Each one links to the others:
 
 - **An agent.** A face or a name in the Agent Log shows only that agent's messages. The line above the log then links
-  to its card in Agents. A card's Details link to its messages in the Agent Log. In the Overview Lab, the selected
+  to its card in Agents (a research answer's steps have no card). A card's Details link to its messages in the Agent Log. In the Overview Lab, the selected
   teammate links to its steps in the Agent Log. In a team review, each member under "Who took part" opens its
   messages, and each name in "The team" opens its card.
 - **A run.** The Agent Log links to the run's own screen (Research, Team review or Compare) and to its graph. Team
