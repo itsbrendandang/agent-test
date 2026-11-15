@@ -152,6 +152,10 @@ We say only what was really done.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
 
+- **Local shakedown (2026-11-15):** a fresh clone was set up, the test suite, the scripted demo
+  (score 1.000), and the web UI all ran on macOS. The full write-up, including what did not work,
+  is in [TEST-FINDINGS.md](TEST-FINDINGS.md).
+
 ## Benchmarks
 
 A first report, in words. Charts and a fuller scope come later.
