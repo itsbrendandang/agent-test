@@ -13,6 +13,7 @@ import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, reply, PLAN } from "@/test/home"
 import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
+import { OverviewView } from "@/views/OverviewView"
 import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
 import { AskBox } from "./AskBox"
@@ -820,6 +821,44 @@ describe("a question handed over from the Overview", () => {
     sessionStorage.setItem("open.answer", JSON.stringify({ id: "a-2", question: "Saved question" })); setAsk("Handed over")
     render(<HomeView onOpen={() => {}} />)
     expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("")
+  })
+})
+
+describe("a question answered on the Overview is Research's conversation", () => {
+  const THREAD = { items: [{ id: "a-1", thread: "t-1", question: "Does drug A protect the heart?", status: "running" }] }
+  const engine = () => routes({
+    "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] },
+    "GET /api/paid": { status: 200, body: { paid: false, caps: {} } },
+    "GET /api/research": (r) => (r.query.includes("thread=t-1") ? { status: 200, body: THREAD } : { status: 200, body: { items: [] } }),
+    "POST /api/research": (r) => ({ status: 202, body: { id: (r.body as { thread?: string }).thread ? "a-2" : "a-1", thread: "t-1", mode: "demo" } }),
+  })
+  it("opening Research shows it while it is still being written, and a follow-up there continues its thread", async () => {
+    const sent = engine()
+    // An earlier conversation in Research: the Overview's question starts a new one, as it did before.
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
+    const user = userEvent.setup()
+    const overview = render(<OverviewView onOpen={() => {}} />)
+    await screen.findByText("Let's research together!")
+    await user.type(screen.getByLabelText("Ask a research question"), "Does drug A protect the heart?")
+    await user.click(screen.getByRole("button", { name: /^Send/ }))
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "standard" })
+    await screen.findByRole("heading", { name: "Does drug A protect the heart?" }) // the inline answer stays on the Overview
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true))
+    await feed([{ seq: 1, at: 1, run: "a-1", type: "research.started", id: "a-1", question: "Does drug A protect the heart?", mode: "demo" } as unknown as ResearchEvent])
+    overview.unmount()
+
+    // Research, opened from the menu: the Overview's question and its answer, still running, are the conversation.
+    streams.length = 0
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1))
+    expect(screen.getAllByText("Does drug A protect the heart?").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Earlier question")).toBeNull()
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true)) // it follows the same answer
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument()) // still being written
+    await user.type(screen.getByRole("textbox", { name: "Ask a research question" }), "And the kidneys?{Enter}")
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(2))
+    expect(to(sent, "POST", "/api/research")[1].body).toMatchObject({ question: "And the kidneys?", thread: "t-1" })
   })
 })
 

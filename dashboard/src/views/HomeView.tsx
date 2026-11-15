@@ -41,6 +41,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   // What this visit starts from, read once: a saved answer opened from Saved research (shown as its question and the
   // answer), else this session's conversation; and a question typed on the Overview, which arrives in the box
   // UNSENT (sending is done here, where the limits are shown). A saved answer being opened wins over that question.
+  // A direct answer the Overview started is already this session's conversation (startConversation in home/chat).
   const [start] = useState(() => { const saved = takeOpenAnswer(); return { saved, ask: saved ? undefined : takeAsk() } })
   // A question the Overview asked to be SENT starts a new search: it is not added to an older conversation.
   const [turns, setTurns] = useState<Turn[]>(() => (start.saved ? [{ id: 1, role: "user", content: start.saved.question }, { id: 2, role: "assistant", content: "", research: start.saved }] : start.ask?.send ? [] : loadTurns()))

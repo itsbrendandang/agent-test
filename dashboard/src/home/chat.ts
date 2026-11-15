@@ -164,6 +164,13 @@ export function loadTurns(): Turn[] {
 export const saveTurns = (turns: Turn[]) => {
   try { if (turns.length) sessionStorage.setItem(STORE, JSON.stringify(turns)); else sessionStorage.removeItem(STORE) } catch { /* storage full or off: the conversation stays in memory */ }
 }
+/**
+ * A direct answer started from the Overview's question box becomes Research's conversation: a new one, as if New
+ * search had been pressed there and the question sent. Research shows it when it opens (also while it is still being
+ * written), and a follow-up there continues the answer's thread. The earlier conversation stays in Saved research.
+ */
+export const startConversation = (question: string, answer: { id: string; thread: string }) =>
+  saveTurns([{ id: 1, role: "user", content: question }, { id: 2, role: "assistant", content: "", research: { id: answer.id, question, thread: answer.thread } }])
 
 // ---- "What was checked"
 /** The newest row where both solvers ran with the same settings and both were graded. */
