@@ -98,13 +98,16 @@ function Message({ item }: { item: ChatItem }) {
   )
 }
 
+/** The agent menu's key for a row: its name, so two ids with the same name (two checkers both called "Second, more
+ * careful check") are one choice, not two that look the same. The engine's own steps keep their own key. */
+const agentKey = (r: EventRow) => (r.agentId === "engine" ? "engine" : `agent:${r.agent}`)
 /** The agent menu's choices: the team first, then the engine's own steps; each with its number of events. */
 function agentGroups(rows: readonly EventRow[]): FilterGroup[] {
   const seen = new Map<string, FilterOption>()
   for (const r of rows) {
-    const o = seen.get(r.agentId)
+    const o = seen.get(agentKey(r))
     if (o) o.count++
-    else seen.set(r.agentId, { value: r.agentId, label: r.agent, count: 1 })
+    else seen.set(agentKey(r), { value: agentKey(r), label: r.agent, count: 1 })
   }
   const all = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label))
   return [{ label: "Team", options: all.filter((o) => o.value !== "engine") }, { label: "System", options: all.filter((o) => o.value === "engine") }]
@@ -121,7 +124,7 @@ export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { i
   const [downloadError, setDownloadError] = useState("")
   const agents = useMemo(() => agentGroups(rows), [rows])
   const kinds = useMemo(() => kindGroups(rows), [rows])
-  const shown = useMemo(() => filterRows(rows, filter).filter((r) => view.notes || !r.note), [rows, filter, view.notes])
+  const shown = useMemo(() => filterRows(rows, { ...filter, agent: "" }).filter((r) => (!filter.agent || agentKey(r) === filter.agent) && (view.notes || !r.note)), [rows, filter, view.notes])
   const items = useMemo(() => chatItems(shown), [shown])
   const download = (format: "json" | "csv") => {
     try {

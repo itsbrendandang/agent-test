@@ -173,3 +173,16 @@ it("groups the agent menu, hides step notes and times from the View menu, and cl
   // The view stays as the reader set it.
   expect(screen.getByRole("status")).toHaveTextContent("3 of 5 events shown")
 })
+
+it("lists two agents with the same name once in the agent menu, and that choice shows both", () => {
+  const twins: EventRow[] = [
+    { id: "w1", agent: "Second check", agentId: "checker:a", kind: "check", text: "Checked claim one.", sources: [] },
+    { id: "w2", agent: "Second check", agentId: "checker:b", kind: "check", text: "Checked claim two.", sources: [] },
+    { id: "w3", agent: "Planner", agentId: "planner", kind: "prepare", text: "Planned.", sources: [] },
+  ]
+  render(<EventLog rows={twins} run={run} connection="ended" />)
+  openMenu(screen.getByRole("combobox", { name: "Agent" }))
+  expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["All agents", "Planner1", "Second check2"])
+  fireEvent.click(screen.getByRole("option", { name: /Second check/ }))
+  expect(screen.getByRole("status")).toHaveTextContent("2 of 3 events shown")
+})
