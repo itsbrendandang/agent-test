@@ -126,6 +126,7 @@ def src_europepmc(query: str, n: int) -> list[dict]:
             "doi": _clean_doi(r.get("doi")),
             "url": link,
             "abstract": _tags(str(r.get("abstractText", "")))[:MAX_ABSTRACT_CHARS],
+            "cited_by": int(r.get("citedByCount") or 0),
             "source": "Europe PMC",
         })
     return out
@@ -160,6 +161,7 @@ def src_openalex(query: str, n: int) -> list[dict]:
             "doi": _clean_doi(w.get("doi")),
             "url": w.get("doi") or w.get("id") or "",
             "abstract": _openalex_abstract(w.get("abstract_inverted_index")),
+            "cited_by": int(w.get("cited_by_count") or 0),
             "source": "OpenAlex",
         })
     return out
@@ -186,6 +188,7 @@ def src_crossref(query: str, n: int) -> list[dict]:
             "doi": _clean_doi(it.get("DOI")),
             "url": it.get("URL", ""),
             "abstract": _tags(it.get("abstract", "")),
+            "cited_by": int(it.get("is-referenced-by-count") or 0),
             "source": "Crossref",
         })
     return out
@@ -218,7 +221,7 @@ def src_arxiv(query: str, n: int) -> list[dict]:
 
 # --- source: Semantic Scholar ------------------------------------------------
 def src_semanticscholar(query: str, n: int) -> list[dict]:
-    fields = "title,authors,year,venue,abstract,externalIds,url"
+    fields = "title,authors,year,venue,abstract,externalIds,url,citationCount"
     params = {"query": query, "limit": str(n), "fields": fields}
     url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urllib.parse.urlencode(params)
     key = os.environ.get("S2_API_KEY") or os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
@@ -234,6 +237,7 @@ def src_semanticscholar(query: str, n: int) -> list[dict]:
             "doi": doi,
             "url": ("https://doi.org/" + doi) if doi else (p.get("url") or ""),
             "abstract": _tags(p.get("abstract") or "")[:MAX_ABSTRACT_CHARS],
+            "cited_by": int(p.get("citationCount") or 0),
             "source": "Semantic Scholar",
         })
     return out
@@ -368,18 +372,24 @@ def merge(results: list[dict]) -> list[dict]:
         key = r["doi"] or _norm_title(r["title"])
         if not key:
             continue
+        cb = int(r.get("cited_by", 0) or 0)
         if key not in best:
+            r["cited_by"] = cb
             best[key] = r
         else:
-            # keep the richer record; note the extra source
+            # merge duplicates: keep the richer abstract, the higher citation count,
+            # and remember every source the paper appeared in.
             cur = best[key]
-            if len(r["abstract"]) > len(cur["abstract"]):
-                r["source"] = f"{cur['source']} + {r['source']}" if r["source"] not in cur["source"] else cur["source"]
-                best[key] = r
-            elif r["source"] not in cur["source"]:
-                cur["source"] = f"{cur['source']} + {r['source']}"
-    # sort: ones with abstracts first, then newer
-    return sorted(best.values(), key=lambda r: (bool(r["abstract"]), r["year"]), reverse=True)
+            cur_cb = int(cur.get("cited_by", 0) or 0)
+            merged_sources = cur["source"] if r["source"] in cur["source"] else f"{cur['source']} + {r['source']}"
+            winner = r if len(r["abstract"]) > len(cur["abstract"]) else cur
+            winner["source"] = merged_sources
+            winner["cited_by"] = max(cb, cur_cb)
+            best[key] = winner
+    # sort: abstracts first, then most-cited, then newest.
+    return sorted(best.values(),
+                  key=lambda r: (bool(r["abstract"]), int(r.get("cited_by", 0) or 0), r["year"]),
+                  reverse=True)
 
 
 def safe_name(s: str, limit: int = 70) -> str:
@@ -394,16 +404,27 @@ def save(query: str, items: list[dict], sources: list[str], dest: Path) -> Path:
              f"_Sources: {', '.join(sources)}. {len(items)} unique results._", ""]
     for i, it in enumerate(items, 1):
         where = ", ".join(x for x in [it["venue"], it["year"]] if x)
+        cb = int(it.get("cited_by", 0) or 0)
+        cites = f"  ·  cited by {cb}" if cb else ""
         lines += [
             f"## {i}. {it['title']}",
             f"- {it['authors']}" if it["authors"] else "",
-            f"- {where}  ·  **{it['source']}**",
+            f"- {where}  ·  **{it['source']}**{cites}",
             f"- {('https://doi.org/' + it['doi']) if it['doi'] else it['url']}",
             "",
             it["abstract"] or "_No abstract available._",
             "",
         ]
     path.write_text("\n".join(l for l in lines if l is not None), encoding="utf-8")
+    return path
+
+
+def save_json(query: str, items: list[dict], dest: Path) -> Path:
+    """Machine-readable version, so the app/agents can read the evidence programmatically."""
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / f"{safe_name(query)}.json"
+    path.write_text(json.dumps({"query": query, "results": items}, indent=2, ensure_ascii=False),
+                    encoding="utf-8")
     return path
 
 
@@ -415,6 +436,7 @@ def main() -> None:
     p.add_argument("--sources", nargs="*", default=list(SOURCES),
                    choices=list(SOURCES), help="which databases (default: all)")
     p.add_argument("--per-source", type=int, default=5, help="results per source (default 5)")
+    p.add_argument("--json", action="store_true", help="also write a machine-readable .json")
     p.add_argument("--dest", type=Path, default=OUT_ROOT, help=f"output dir ({OUT_ROOT})")
     args = p.parse_args()
 
@@ -425,19 +447,32 @@ def main() -> None:
     if not queries:
         raise SystemExit('Give a query, e.g. "KRAS G12C inhibitor resistance", or --file claims.txt')
 
+    from concurrent.futures import ThreadPoolExecutor
+
     for q in queries:
         print(f"[query] {q}")
         collected: list[dict] = []
-        for name in args.sources:
+
+        def fetch_one(name: str) -> tuple[str, list[dict] | str]:
             try:
-                hits = SOURCES[name](q, args.per_source)
-                collected += hits
-                print(f"  {name:<10} {len(hits)} results")
-            except Exception as e:
-                print(f"  {name:<10} failed: {e}")
+                return name, SOURCES[name](q, args.per_source)
+            except Exception as e:  # keep the other sources going
+                return name, f"failed: {e}"
+
+        # Query all sources at once instead of one-by-one (much faster).
+        with ThreadPoolExecutor(max_workers=len(args.sources)) as pool:
+            for name, result in pool.map(fetch_one, args.sources):
+                if isinstance(result, str):
+                    print(f"  {name:<16} {result}")
+                else:
+                    collected += result
+                    print(f"  {name:<16} {len(result)} results")
+
         merged = merge(collected)
         path = save(q, merged, args.sources, args.dest)
         print(f"  -> {len(merged)} unique -> {path}")
+        if args.json:
+            print(f"  -> json -> {save_json(q, merged, args.dest)}")
     print(f"\nDone. Evidence corpus in {args.dest} (gitignored).")
 
 
