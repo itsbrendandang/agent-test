@@ -72,14 +72,17 @@ export interface KnownVariants {
 /** The entry with its sequence: what a structure comparison needs. Not stored in the answer (the sequence can be long). */
 export interface Entry extends KnownVariants { sequence: string; all: KnownVariant[] }
 
-/** What to look up for an answer: an accession, or a gene symbol to find the reviewed human entry of. */
-export type Target = { accession: string } | { gene: string }
+/**
+ * What to look up for an answer: an accession, or a gene symbol to find the reviewed human entry of. `fallback`: the
+ * answer's first UniProt source, read when the symbol finds no entry (it was not a gene: CF, ALS, HIV-1).
+ */
+export type Target = { accession: string } | { gene: string; fallback?: string }
 
 /**
  * The protein an answer is about, for the variant lookup, or undefined when it is about none. In order: an accession
  * written in the question; a gene symbol in a question that speaks of variants or mutations (or names a substitution
- * such as G12D), through the answer's UniProt source for that gene when there is one; else the first UniProt source of
- * the answer.
+ * such as G12D), through the answer's UniProt source for that gene when there is one, and the first UniProt source of the
+ * answer when the symbol finds no entry; else the first UniProt source of the answer.
  */
 export function variantTarget(question: string, sources: { url: string; provider: string; title?: string }[]): Target | undefined {
   const uniprot = sources.flatMap((s) => {
@@ -93,7 +96,7 @@ export function variantTarget(question: string, sources: { url: string; provider
   const gene = aboutVariants ? tokens.find((t) => GENE.test(t) && /[A-Z]{2}/.test(t) && !NOT_GENES.has(t) && !CHANGE.test(t)) : undefined
   if (gene) {
     const source = uniprot.find((s) => s.title.includes(`(${gene})`))
-    return source ? { accession: source.accession } : { gene }
+    return source ? { accession: source.accession } : { gene, ...(uniprot[0] ? { fallback: uniprot[0].accession } : {}) }
   }
   return uniprot[0] ? { accession: uniprot[0].accession } : undefined
 }
@@ -149,15 +152,17 @@ export function pickVariants(all: KnownVariant[], named: string[] = [], max = MA
     .slice(0, max).map(plain)
 }
 
-/** Read one UniProt entry (and find it by gene symbol first when that is the target). Throws ServiceError. */
+/**
+ * Read one UniProt entry (and find it by gene symbol first when that is the target; the target's fallback when the
+ * symbol finds none). Throws ServiceError.
+ */
 export async function readEntry(target: Target, http: Http, named: string[] = []): Promise<Entry | undefined> {
   const h = limited(http, MAX_REQUESTS)
   let accession = "accession" in target ? target.accession : ""
-  if (!accession) {
-    const gene = "gene" in target ? target.gene : ""
-    if (!GENE.test(gene)) return undefined
-    const found = list(rec((await h.json("uniprot", geneUrl(gene))).body).results).map(rec)
+  if (!accession && "gene" in target) {
+    const found = GENE.test(target.gene) ? list(rec((await h.json("uniprot", geneUrl(target.gene))).body).results).map(rec) : []
     accession = String(found[0]?.primaryAccession ?? "")
+    if (!ACCESSION.test(accession)) accession = target.fallback ?? ""
     if (!ACCESSION.test(accession)) return undefined
   }
   if (!ACCESSION.test(accession)) throw new ServiceError("UniProt: not an accession")

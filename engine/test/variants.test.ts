@@ -64,7 +64,7 @@ test("which protein an answer is about: an accession in the question, then a gen
   assert.equal(variantTarget("Which DNA mutations does the FDA list?", []), undefined, "common upper-case words are not genes")
   const mdm2 = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/Q00987/entry#function", title: "E3 ubiquitin-protein ligase Mdm2 (MDM2): function (UniProt Q00987)" }
   const tp53 = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/P04637/variant-viewer", title: "Cellular tumor antigen p53 (TP53): natural variants (UniProt P04637)" }
-  assert.deepEqual(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2]), { gene: "TP53" }, "the gene the question names wins over another protein's source")
+  assert.deepEqual(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2]), { gene: "TP53", fallback: "Q00987" }, "the gene the question names wins over another protein's source")
   assert.deepEqual(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2, tp53]), { accession: "P04637" }, "a source is used when it is the named gene's")
   assert.deepEqual(variantTarget("Which variants of P04637 bind MDM2?", [mdm2]), { accession: "P04637" }, "an accession in the question wins over the sources")
   assert.deepEqual(changesIn("Compare G12D, G13D and G12D with p53"), ["G12D", "G13D"])
@@ -101,6 +101,31 @@ test("one lookup: the gene search, then the entry; kept answers are not asked ag
   assert.equal(u.asked.length, 2, "the entry was kept: not asked again")
   assert.equal(await lookupVariants({ gene: "NOSUCHGENE" }, [], u.http), undefined)
   assert.equal(await readEntry({ accession: "Q99999" }, u.http), undefined)
+})
+
+test("a symbol in the question that finds an entry wins over the sources; one that finds none falls back to the first UniProt source", async () => {
+  const asked: string[] = []
+  const as = (accession: string, gene: string) => ({ ...ENTRY, primaryAccession: accession, genes: [{ geneName: { value: gene } }] })
+  const fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+    const url = String(input)
+    asked.push(url)
+    if (url === geneUrl("TP53")) return json({ results: [{ primaryAccession: "P04637" }] })
+    if (url === entryUrl("P04637")) return json(as("P04637", "TP53"))
+    if (url === entryUrl("Q00987")) return json(as("Q00987", "MDM2"))
+    if (url === entryUrl("P13569")) return json(as("P13569", "CFTR"))
+    if (url.startsWith("https://rest.uniprot.org/uniprotkb/search?")) return json({ results: [] })
+    throw new Error(`a test tried to reach ${url}`)
+  }) as typeof globalThis.fetch
+  const http = createHttp({ fetch, minGapMs: 0, cacheMs: 60_000 })
+  const mdm2 = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/Q00987/entry#function", title: "E3 ubiquitin-protein ligase Mdm2 (MDM2): function (UniProt Q00987)" }
+  const cftr = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/P13569/entry#disease_variants", title: "Cystic fibrosis transmembrane conductance regulator (CFTR): involvement in disease (UniProt P13569)" }
+  const tp53 = await lookupVariants(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2])!, [], http)
+  assert.deepEqual([tp53?.accession, tp53?.gene], ["P04637", "TP53"], "TP53 is looked up, not the MDM2 source")
+  asked.length = 0
+  const cf = await lookupVariants(variantTarget("Which mutations cause CF?", [cftr])!, [], http)
+  assert.deepEqual([cf?.accession, cf?.gene], ["P13569", "CFTR"], "CF is not a gene: CFTR, the answer's UniProt source, is looked up")
+  assert.deepEqual(asked, [geneUrl("CF"), entryUrl("P13569")], "within the lookup's two requests")
+  assert.equal(await lookupVariants(variantTarget("Which mutations cause CF?", [])!, [], http), undefined, "no source to fall back to: no entry, not an error")
 })
 
 test("the comparison: the same model folds the reference and each variant; the confidence at the changed position and its change; a failure only marks its row", async () => {

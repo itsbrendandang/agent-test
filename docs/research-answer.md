@@ -66,8 +66,10 @@ this field, shows no strip. Europe PMC and the databases give no pictures.
 When an answer is about a protein, code looks up the variants of it that are already reported. Nothing new is made or
 proposed. The protein is, in this order: an accession in the question; a gene symbol in a question about variants or
 mutations (or one that names a change such as G12D), through the answer's UniProt source for that gene when it has
-one; else the first UniProt source of the answer (`variantTarget` in `engine/src/variants/known.ts`). So "Do TP53
-mutations change MDM2 binding?" looks up TP53, even when an MDM2 source comes first.
+one; else the first UniProt source of the answer (`variantTarget` and `readEntry` in `engine/src/variants/known.ts`).
+So "Do TP53 mutations change MDM2 binding?" looks up TP53, even when an MDM2 source comes first. A symbol that finds no
+reviewed human entry is not a gene (CF, ALS, HIV-1): then the answer's first UniProt source is read instead, so "Which
+mutations cause CF?" with a CFTR source looks up CFTR.
 
 - **What is looked up.** The UniProt entry: its natural variants and mutagenesis features, each with the papers UniProt
   cites (PubMed). Code keeps single-residue changes that cite at least one paper and match the entry's sequence. At most
