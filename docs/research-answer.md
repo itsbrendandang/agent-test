@@ -339,7 +339,7 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they
 usually come: `research.queued`, `research.started`, `step.started` / `step.progress` / `step.finished` (kinds:
 prepare, hypothesize, search, evaluate, write, check, review, revise, save; status: completed, empty, failed, cancelled),
-`opening`, `hypotheses`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`,
+`opening`, `short.path` (short path only), `hypotheses`, `sources`, `selection`, `answer.delta`, `answer.written`, `review.started`,
 `statement.checked`, `hypothesis.checked`,
 `review.note`, `answer.revised`, `review.resolved`, `sources.cited`, `recommendations`, `missing`,
 `artifact.created`, and one of
