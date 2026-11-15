@@ -401,10 +401,59 @@ describe("LabPanel and Lab", () => {
   it("lists the activity newest first, and the visiting specialists", () => {
     render(<LabPanel model={fixtureModel()} selected="scout" />)
     const lines = within(screen.getByRole("log")).getAllByRole("listitem").map((li) => li.textContent)
-    expect(lines[0]).toMatch(/Reporter: writing the answer: did not work\./)
+    expect(lines[0]).toMatch(/^Reporter writing the answer: did not work\./)
     expect(lines.at(-1)).toMatch(/Fixture: the run started\./)
     expect(screen.getByText("Visiting specialists")).toBeInTheDocument()
     expect(screen.getByText(/Why it joined: Fixture\./)).toBeInTheDocument()
+  })
+
+  it("draws the activity as a rail: a marked dot, the face and name once for a teammate's entries in a row, a chip, the time", () => {
+    const at = new Date(2026, 10, 14, 1, 15, 7).getTime()
+    const model = { ...fixtureModel(), log: [
+      { id: "a", at, text: "The answer started." },
+      { id: "b", at: at + 1000, text: "Investigator 2: loading example sources.", who: "Investigator 2", agent: "librarian" as const, kind: "search" as const },
+      { id: "c", at: at + 2000, text: "Investigator 2: loading example sources: found 4.", who: "Investigator 2", agent: "librarian" as const, kind: "search" as const, did: "loading example sources: found", chips: ["4 example sources"] },
+      { id: "d", at: at + 3000, text: "Proposer gave the hypotheses to test to the Investigator 2.", who: "Proposer", agent: "proposer" as const, kind: "handoff" as const, did: "gave", chips: ["hypotheses to test", "to Investigator 2"] },
+      { id: "e", at: at + 4000, text: "Reporter: writing the answer: did not work. The model stopped.", who: "Reporter", agent: "reporter" as const, tone: "bad" as const, kind: "failed" as const, did: "writing the answer: did not work.", note: "The model stopped." },
+    ] }
+    render(<LabPanel model={model} selected="scout" />)
+    const items = within(screen.getByRole("log")).getAllByRole("listitem")
+    // newest first; every entry is one item that reads as a sentence, with the time to the minute
+    expect(items.map((li) => li.textContent)).toEqual([
+      "Reporter writing the answer: did not work.1:15 amThe model stopped.",
+      "Proposer gave hypotheses to test to Investigator 21:15 am",
+      "Investigator 2 loading example sources: found 4 example sources1:15 am",
+      "Investigator 2 loading example sources.1:15 am",
+      "The answer started.1:15 am",
+    ])
+    expect(items.map((li) => li.getAttribute("data-kind"))).toEqual(["failed", "handoff", "search", "search", "note"])
+    for (const li of items) expect(li.querySelector(".lab-log-dot svg")).not.toBeNull() // a mark in every dot, never the tint alone
+    expect(items[0].querySelector(".lab-log-dot")).toHaveAttribute("title", "Failed")
+    // the face: once for a teammate's entries in a row, none for a line that is nobody's
+    expect(items.map((li) => li.querySelector("svg.lab-log-face")?.getAttribute("data-agent") ?? null)).toEqual(["reporter", "proposer", "librarian", null, null])
+    expect(items[3]).toHaveAttribute("data-cont")
+    expect(items[3].querySelector(".lab-sr")).toHaveTextContent("Investigator 2") // still said to a screen reader
+    // what was carried and to whom: chips
+    expect([...items[1].querySelectorAll(".lab-log-chip")].map((c) => c.textContent)).toEqual(["hypotheses to test", "to Investigator 2"])
+    expect(items[2].querySelector("time")).toHaveAttribute("title", "1:15:09 am") // the whole time on hover
+    // a failed step keeps its mark and what the engine said
+    expect(items[0]).toHaveAttribute("data-tone", "bad")
+    expect(items[0].querySelector("blockquote")).toHaveTextContent("The model stopped.")
+    expect(document.querySelector(".lab-log-day")).toBeNull() // one day: no day pill
+  })
+
+  it("names the day only when the activity is of more than one day", () => {
+    const day1 = new Date(2020, 2, 3, 23, 59, 0).getTime(), day2 = new Date(2020, 2, 4, 0, 1, 0).getTime()
+    const model = { ...fixtureModel(), log: [
+      { id: "a", at: day1, text: "Scout: searching.", who: "Scout" },
+      { id: "b", at: day2, text: "Scout: searching: found 2.", who: "Scout" },
+      { id: "c", at: day2 + 1000, text: "The answer is finished.", tone: "good" as const },
+    ] }
+    render(<LabPanel model={model} selected="scout" />)
+    const items = within(screen.getByRole("log")).getAllByRole("listitem")
+    expect(items.map((li) => li.querySelector(".lab-log-day")?.textContent ?? null)).toEqual(["4 Mar 2020", null, "3 Mar 2020"])
+    expect(items[2].querySelector("svg.lab-log-face")).not.toBeNull() // a new day starts a new group: the face is drawn again
+    expect(items[0]).toHaveAttribute("data-kind", "done")
   })
 
   it("renders run text as text, never as markup", () => {

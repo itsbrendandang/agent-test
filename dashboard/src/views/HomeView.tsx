@@ -20,7 +20,9 @@ import { EffortPicker } from "@/home/EffortPicker"
 import { PlanCard } from "@/home/PlanCard"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
 import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
+import { AgentsWorking } from "@/research/AgentsWorking"
 import { ResearchAnswer } from "@/research/Answer"
+import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
 import { Inspector } from "@/research/Inspector"
 import { InspectorPane, InspectorToggle } from "@/research/InspectorPane"
@@ -40,9 +42,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   // What this visit starts from, read once: a saved answer opened from Saved research (shown as its question and the
   // answer), else this session's conversation; and a question typed on the Overview, which arrives in the box
   // UNSENT (sending is done here, where the limits are shown). A saved answer being opened wins over that question.
-  const [start] = useState(() => { const saved = takeOpenAnswer(); return { saved, ask: saved ? "" : takeAsk() ?? "" } })
-  const [turns, setTurns] = useState<Turn[]>(() => (start.saved ? [{ id: 1, role: "user", content: start.saved.question }, { id: 2, role: "assistant", content: "", research: start.saved }] : loadTurns()))
-  const [text, setText] = useState(start.ask)
+  const [start] = useState(() => { const saved = takeOpenAnswer(); return { saved, ask: saved ? undefined : takeAsk() } })
+  // A question the Overview asked to be SENT starts a new search: it is not added to an older conversation.
+  const [turns, setTurns] = useState<Turn[]>(() => (start.saved ? [{ id: 1, role: "user", content: start.saved.question }, { id: 2, role: "assistant", content: "", research: start.saved }] : start.ask?.send ? [] : loadTurns()))
+  const [text, setText] = useState(start.ask && !start.ask.send ? start.ask.question : "")
+  const [started, setStarted] = useState<string[]>([]) // the answers started on this visit (not restored ones)
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
   const [problem, setProblem] = useState<Problem>()
   const [picked, setPicked] = useState(AUTO) // "auto", or "provider model"
@@ -107,20 +111,21 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
    * review this", make a plan for a team review, which starts nothing until it is confirmed (POST /api/chat).
    * An engine without the answer route gets the plan path for every depth.
    */
-  const send = async (question: string, how: "auto" | "review" = "auto") => {
+  /** `standard`: answer at the Standard level whatever level is remembered (a question sent from the Overview). */
+  const send = async (question: string, how: "auto" | "review" = "auto", standard = false) => {
     if (sending !== undefined) return
     const no = refuseText(question)
     if (no) { setProblem({ message: no, control: "box" }); box.current?.focus(); return }
     const asked = question.trim()
     setProblem(undefined); setSending(asked); setText("")
     const stop = (asking.current = new AbortController())
-    const direct = how === "auto" && effort !== "deep" && canAnswer !== "missing"
+    const direct = how === "auto" && (standard || effort !== "deep") && canAnswer !== "missing"
     try {
       if (direct) {
         try {
-          const started = await startResearch(asked, effort === "quick" ? "quick" : "standard", thread.current)
+          const started = await startResearch(asked, !standard && effort === "quick" ? "quick" : "standard", thread.current)
           if (stop.signal.aborted) return
-          thread.current = started.thread; setCanAnswer("here")
+          thread.current = started.thread; setCanAnswer("here"); setStarted((old) => [...old, started.id])
           setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: "", research: { id: started.id, question: asked, thread: started.thread } }] })
           return
         } catch (error) {
@@ -142,6 +147,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       if (!stop.signal.aborted) { setSending(undefined); box.current?.focus() }
     }
   }
+
+  // A question sent from the Overview is submitted once, exactly as if it had been typed here and Send pressed: the
+  // same token prompt, limits and refusals; a refusal leaves the text in the box with its message. The short wait
+  // makes it once even where React mounts twice in development (the first mount's timer is cleared).
+  const sendNow = useRef(send)
+  useEffect(() => { sendNow.current = send })
+  useEffect(() => {
+    const ask = start.ask
+    if (!ask?.send) return
+    const timer = window.setTimeout(() => void sendNow.current(ask.question, "auto", true), 0)
+    return () => window.clearTimeout(timer)
+  }, [start])
 
   // Enter sends, Shift+Enter is a new line, and Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send: PromptInputTextarea does this.
   const clear = () => { asking.current?.abort(); thread.current = undefined; setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
@@ -167,7 +184,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const activeId = active && "research" in active ? active.research.id : undefined
   const stop = () => { if (activeId) void cancelResearch(activeId).then((message) => setStopNote(message)) }
   const firstQuestion = turns.find((t) => t.role === "user")?.content ?? sending ?? ""
-  const cap = effort === "quick" || effort === "standard" ? catalog?.research?.[effort] : undefined
   const lastAnswer = turns.findLast((t) => t.role === "assistant")?.id
   /** Ask the question of this answer again. The earlier answer stays; the new one is added below it. */
   const retry = (turnId: number) => { const at = turns.findIndex((t) => t.id === turnId); const asked = turns.slice(0, at).findLast((t) => t.role === "user"); if (asked) void send(asked.content) }
@@ -207,9 +223,9 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       <div className="search-under">
         <span className="muted small" id="home-box-help">
           {/* One line, true for the mode. In Demo it is said on the empty screen only: an answer carries its own Practice badge. */}
-          {demo ? (empty ? "Demo mode: answers are example text. Switch to Real for AI answers and web search." : "")
+          {demo ? (empty ? DEMO_LINE : "")
             : effort === "deep" ? <>Deep plans a team review and asks you before anything starts{level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.</>
-            : effort ? <>{effort === "quick" ? "Quick" : "Standard"} answers on this page, with sources{cap ? `: at most $${cap.maxUsd.toFixed(2)} and ${plainDuration(cap.maxSeconds * 1000)}` : ""}.</>
+            : effort ? answerLimitLine(catalog, effort === "quick" ? "quick" : "standard")
             : "Enter sends. Shift+Enter adds a line."}
         </span>
         <details className="search-options" open={problem?.control === "effort" || problem?.control === "model" || undefined}>
@@ -271,7 +287,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
-                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops
+                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer} composerStops fresh={started.includes(t.research.id)}
                         onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
                         onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
                         onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
@@ -335,7 +351,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {sending !== undefined && (
                   <>
                     <UserMessage>{sending}</UserMessage>
-                    <Working>{effort !== "deep" && canAnswer !== "missing" ? "Starting…" : catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the reply…"}</Working>
+                    {effort !== "deep" && canAnswer !== "missing" ? <AgentsWorking>Sending your question…</AgentsWorking> : <Working>{ catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the reply…"}</Working>}
                   </>
                 )}
               </ConversationContent>

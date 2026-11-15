@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { answerLab, boardLab, stepCharacter, swarmLab, swarmProvenance, swarmTimes, visitorRoom, type LabEvent } from "./adapter"
 import { PRACTICE_ANSWER, PRACTICE_REVIEW } from "./fixtures/practice"
 import { CANCELLED_ANSWER, FAILED_ANSWER, REAL_ANSWER, REVIEW_WITH_VISITOR, SWARM_NOTES, SWARM_RUN, T0 } from "./fixtures/streams"
-import { CHARACTER_IDS, type CharacterId, type LabModel } from "./model"
+import { CHARACTER_IDS, dayName, logDid, logKind, type CharacterId, type LabModel } from "./model"
 
 const states = (m: LabModel) => Object.fromEntries(CHARACTER_IDS.map((id) => [id, m.characters[id].inRun ? m.characters[id].state : "not in run"]))
 const upTo = (events: LabEvent[], seq: number) => events.filter((e) => (e.seq as number) <= seq)
@@ -343,6 +343,33 @@ describe("a research answer (answerLab)", () => {
     const m = answerLab([{ seq: 1, at: T0, type: "research.queued", after: "a-1" }])
     expect(m).toMatchObject({ status: "waiting", note: "Waiting for the answer before it to finish." })
     expect(answerLab([{ seq: 1, at: T0, type: "research.queued", after: "a-1" }, REAL_ANSWER[0] && { ...REAL_ANSWER[0], seq: 2 }]).status).toBe("running")
+  })
+})
+
+describe("the activity log's parts", () => {
+  const parts = (m: LabModel, starts: string) => { const l = m.log.find((x) => x.text.startsWith(starts))!; return { agent: l.agent, kind: logKind(l), did: logDid(l), chips: l.chips, note: l.note } }
+  it("says each line again in parts: who, what it did, what it carried, the run's own text", () => {
+    const review = boardLab(REVIEW_WITH_VISITOR)
+    expect(parts(review, "Scout searched the web (Exa)")).toEqual({ agent: "scout", kind: "search", did: "searched the web (Exa), screened out 2 and brought back", chips: ["3 results"], note: "placeholder web query" })
+    expect(parts(review, "Scout searched ChEMBL")).toEqual({ agent: "scout", kind: "search", did: "searched ChEMBL: nothing kept (3 results screened out).", chips: undefined, note: "placeholder database query" })
+    expect(parts(review, "Round 1 started.")).toMatchObject({ agent: "navigator", did: "started round 1." })
+    const answer = answerLab(REAL_ANSWER)
+    expect(parts(answer, "Librarian: searching PubMed and preprints: found 8.")).toMatchObject({ agent: "librarian", kind: "search", did: "searching PubMed and preprints: found", chips: ["8 papers"] })
+    expect(parts(answer, "The draft is written.")).toMatchObject({ agent: "reporter", kind: "write", did: "wrote the draft." })
+    expect(parts(answer, "The answer is finished.")).toMatchObject({ agent: undefined, kind: "done" })
+    const failed = answerLab(FAILED_ANSWER).log.find((l) => l.tone === "bad" && l.who)!
+    expect(failed).toMatchObject({ kind: "failed" })
+    expect(failed.did).toMatch(/: did not work\.$/)
+    // every line that has a teammate has its face, and its parts never lose the name's sentence
+    for (const m of [review, answer, answerLab(PRACTICE_ANSWER), boardLab(PRACTICE_REVIEW), swarmLab(SWARM_RUN, SWARM_NOTES)])
+      for (const l of m.log) { if (l.who && CHARACTER_IDS.some((id) => (m.characters[id].label ?? "") === l.who)) expect(l.agent, l.text).toBeDefined(); expect(logDid(l).length, l.text).toBeGreaterThan(0) }
+  })
+  it("names a day for the log's pill", () => {
+    const now = new Date(2026, 10, 15, 9, 0, 0).getTime()
+    expect(dayName(new Date(2026, 10, 15, 0, 5).getTime(), now)).toBe("Today")
+    expect(dayName(new Date(2026, 10, 14, 23, 55).getTime(), now)).toBe("Yesterday")
+    expect(dayName(new Date(2026, 10, 2, 12).getTime(), now)).toBe("2 Nov")
+    expect(dayName(new Date(2025, 11, 31, 12).getTime(), now)).toBe("31 Dec 2025")
   })
 })
 

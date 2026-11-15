@@ -15,7 +15,7 @@ import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
 import {
   CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
-  type Activity, type CharacterId, type LabModel, type LabState, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
+  type Activity, type CharacterId, type LabModel, type LabState, type LogKind, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
 } from "./model"
 
 /** An event as it arrives: an object with a type. Every other field is checked before it is used. */
@@ -59,8 +59,10 @@ export class Build {
   }
   /** One search was reported. */
   searched(provider: string | undefined) { if (provider) (this.model.searches ??= {})[provider] = (this.model.searches[provider] ?? 0) + 1 }
-  log(at: number | undefined, text: string, who?: string, tone?: LogLine["tone"]) {
-    this.model.log.push({ id: `l${this.lines++}`, at: at ?? this.model.at ?? 0, text, ...(who && { who }), ...(tone && { tone }) })
+  /** One line of the activity log. `parts`: the same sentence in parts (what it did, what it carried, the run's text it is about), for the log's rows. */
+  log(at: number | undefined, text: string, who?: string, tone?: LogLine["tone"], parts?: Pick<LogLine, "kind" | "did" | "chips" | "note">) {
+    const agent = who ? CHARACTER_IDS.find((id) => this.name(id) === who) : undefined
+    this.model.log.push({ id: `l${this.lines++}`, at: at ?? this.model.at ?? 0, text, ...(who && { who }), ...(tone && { tone }), ...(agent && { agent }), ...parts })
     if (this.model.log.length > LOG_KEPT) this.model.log.shift()
   }
   /** The run ended well: whoever did something is done; whoever had nothing to do stays idle and says so. */
@@ -104,6 +106,9 @@ const nounOf = (provider: string | undefined) => (provider ? NOUN[provider] ?? "
 /** Who makes a search: the Scout for the web (and for a practice run's example sources), the Librarian for the literature and the databases. */
 const searcherOf = (provider: string | undefined): CharacterId => (provider === undefined || provider === "exa" || provider === "fixture" ? "scout" : "librarian")
 
+const lower = (s: string) => `${s.charAt(0).toLowerCase()}${s.slice(1)}`
+/** The kind of a research step, for the mark on the log's rail. */
+const stepKind = (kind: string): LogKind => (kind === "search" || kind === "fetch" ? "search" : kind === "evaluate" ? "screen" : kind === "write" || kind === "revise" || kind === "hypothesize" || kind === "save" ? "write" : kind === "check" || kind === "review" ? "check" : "note")
 const markLabel = (verdict: unknown, text: string) => { const m = markOf(verdict); return { label: `${MARK_GLYPH[m]} ${MARK_WORD[m]}: “${clip(text, 80)}”`, short: `${MARK_GLYPH[m]} ${MARK_WORD[m]}`, mark: m } }
 
 // ── 1. A team review ─────────────────────────────────────────────────────────────────────────────
@@ -233,7 +238,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
           b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : what, at)
         }
         for (const v of visitors.values()) { v.state = "working"; v.doing = what; v.since = at }
-        b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, b.name("navigator"))
+        b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, b.name("navigator"), undefined, { did: final ? "asked for final positions." : `started round ${round}.` })
         break
       }
       case "evidence.triaged": {
@@ -247,7 +252,12 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         const brought = provider === "fixture" ? (kept > 0 ? `Brought back ${label}.` : `Looked at ${place}: ${label}.`) : kept > 0 ? `Searched ${place}${asked} and brought back ${label}.` : `Searched ${place}${asked}: ${label}.`
         if (b.who(who).state === "working") b.set(who, "working", `Round ${round}: ${brought.charAt(0).toLowerCase()}${brought.slice(1)} It still has its reply to write.`, at)
         else b.set(who, "done", brought, at)
-        b.log(at, `${b.name(who)} ${brought.charAt(0).toLowerCase()}${brought.slice(1)}`, b.name(who))
+        const screened = dropped ? `, screened out ${dropped}` : ""
+        b.log(at, `${b.name(who)} ${brought.charAt(0).toLowerCase()}${brought.slice(1)}`, b.name(who), undefined, {
+          kind: "search", ...(query && { note: clip(query, 240) }),
+          ...(kept > 0 ? { did: provider === "fixture" ? `brought back${dropped ? ` (${dropped} more screened out)` : ""}` : `searched ${place}${screened} and brought back`, chips: [plural(kept, nounOf(provider))] }
+            : { did: `${provider === "fixture" ? "looked at" : "searched"} ${place}: nothing kept${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}.` }),
+        })
         break
       }
       case "member.replied": {
@@ -264,12 +274,12 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         if (!id || (roster && visitors.has(member))) {
           const v = visitor(member)
           v.state = none ? "idle" : "handing-off"; v.doing = none ? `No task in round ${r}.` : `Round ${r}: gave its reply to the lead scientist.`; v.since = at
-          if (!none) b.log(at, `${v.name} replied in round ${r}.`, v.name)
+          if (!none) b.log(at, `${v.name} replied in round ${r}.`, v.name, undefined, { kind: "write" })
         } else if (none) b.set(id, "idle", `No task in round ${r}.`, at)
         else {
           b.set(id, "handing-off", `Round ${r}: gave its reply to the lead scientist.`, at)
           b.trip(id, { id: `reply:${r}:${member}`, kind: "handoff", room: "planning", to: "navigator", label: `its round-${r} reply for the lead scientist`, short: "reply", at: at ?? 0 })
-          b.log(at, `${b.name(id)} replied in round ${r}.`, b.name(id))
+          b.log(at, `${b.name(id)} replied in round ${r}.`, b.name(id), undefined, { kind: "write" })
         }
         // The round's statements are checked once the replies are in.
         if (b.who("guardian").state !== "fetching") b.set("guardian", "fetching", `Checking round ${r}'s statements against their sources.`, at)
@@ -281,7 +291,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         checked[mark]++; inRound++
         b.trip("guardian", { id: `check:${str(e.key) ?? `${at}:${claim}`}`, kind: "fetch", room: "review", label, short, at: at ?? 0, back: at ?? 0, outcome: "carried" })
         if (b.who("guardian").state !== "fetching") b.set("guardian", "fetching", `Checking round ${num(e.round) ?? round}'s statements against their sources.`, at)
-        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined, { kind: "check", did: "checked a statement:", chips: [`${MARK_GLYPH[mark]} ${MARK_WORD[mark]}`], note: clip(claim, 240) })
         break
       }
       case "constraint": b.log(at, `A limit was reached: ${clip(str(e.detail) ?? str(e.reason) ?? "", 160)}`, undefined, "warn"); break
@@ -291,7 +301,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         b.trip("navigator", { id: "memo", kind: "handoff", room: "report", to: "reporter", label: "the decision memo", short: "memo", at: at ?? 0 })
         if (b.who("reporter").inRun) b.set("reporter", "done", "The decision memo is written.", at)
         b.set("finisher", "done", "Checked the memo: every required section is present.", at)
-        b.log(at, "The decision memo was written.", b.name("navigator"), "good")
+        b.log(at, "The decision memo was written.", b.name("navigator"), "good", { kind: "write", did: "wrote the decision memo." })
         break
       case "run.finished": {
         guardianDone(at)
@@ -430,7 +440,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
           const made = from.made ?? MADE[from.kind] ?? "its work", giver = from.who
           b.trip(giver, { id: `handoff:${from.id}>${who}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${b.name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
           if (!running(giver).length && b.who(giver).state !== "failed") b.set(giver, "handing-off", `Gave ${made} to the ${b.name(who)}.`, at)
-          b.log(at, `${b.name(giver)} gave ${made} to the ${b.name(who)}.`, b.name(giver))
+          b.log(at, `${b.name(giver)} gave ${made} to the ${b.name(who)}.`, b.name(giver), undefined, { kind: "handoff", did: "gave", chips: [made.replace(/^(the|its) /, ""), `to ${b.name(who)}`] })
         }
         steps.set(id, { id, kind, label, provider, who, at: at ?? 0, running: true, ...(inv && { investigator: true }), ...(inv && kind === "write" && { made: `its section${hyp ? ` on ${hyp}` : ""}` }) })
         lastWho = who
@@ -441,7 +451,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
           if (kind === "search") b.searched(provider)
           b.set(who, "fetching", doing, at)
         } else b.set(who, "working", doing, at)
-        b.log(at, `${b.name(who)}: ${doing.charAt(0).toLowerCase()}${doing.slice(1)}`, b.name(who))
+        b.log(at, `${b.name(who)}: ${doing.charAt(0).toLowerCase()}${doing.slice(1)}`, b.name(who), undefined, { kind: stepKind(kind), ...(kind === "search" && query && { did: `${lower(label)}.`, note: clip(query, 240) }) })
         break
       }
       case "step.progress": {
@@ -469,7 +479,15 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         if (left.length) { const next = left.at(-1)!; b.set(s.who, isFetch(next.kind) ? "fetching" : "working", `${next.label}.`, b.who(s.who).since) }
         else b.set(s.who, status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "done", line, at)
         if (status === "completed") finished.push(s)
-        b.log(at, `${b.name(s.who)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`, b.name(s.who), status === "failed" ? "bad" : status === "empty" ? "warn" : undefined)
+        const said = [error, consequence].filter(Boolean).map((t) => clip(t!, 240)).join(" ")
+        b.log(at, `${b.name(s.who)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`, b.name(s.who), status === "failed" ? "bad" : status === "empty" ? "warn" : undefined, {
+          kind: status === "failed" ? "failed" : stepKind(s.kind),
+          ...(status === "failed" ? { did: `${lower(s.label)}: did not work.`, ...(said && { note: said }) }
+            : status !== "completed" ? {}
+            : s.kind === "search" || s.kind === "fetch" ? { did: `${lower(s.label)}: found`, chips: [plural(found ?? 0, nounOf(s.provider))] }
+            : s.kind === "evaluate" ? { did: `${lower(s.label)}: kept`, chips: [`${kept ?? 0}${found !== undefined ? ` of ${found}` : ""}`] }
+            : summary ? { did: `${lower(s.label)}: done.`, note: clip(summary, 240) } : {}),
+        })
         break
       }
       case "statement.checked": {
@@ -477,11 +495,11 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const text = str(e.text); if (text === undefined) break
         const { label, short, mark } = markLabel(e.verdict, text)
         b.trip("guardian", { id: `check:${e.stage === "final" ? "final" : "draft"}:${num(e.index) ?? n}`, kind: "fetch", room: "review", label, short, at: at ?? 0, back: at ?? 0, outcome: "carried" })
-        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} checked a statement: ${label}`, b.name("guardian"), mark === "contradicted" ? "bad" : undefined, { kind: "check", did: "checked a statement:", chips: [`${MARK_GLYPH[mark]} ${MARK_WORD[mark]}`], note: clip(text, 240) })
         break
       }
-      case "review.note": if (str(e.text)) b.log(at, `${b.name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, b.name("critic"), e.severity === "blocking" ? "warn" : undefined); break
-      case "hypotheses": if (Array.isArray(e.items)) b.log(at, e.items.length ? `${plural(e.items.length, "hypothesis", "hypotheses")} set up. ${HYPOTHESES_NOTE}` : "No hypothesis was needed for this question.", b.name("proposer")); break
+      case "review.note": if (str(e.text)) b.log(at, `${b.name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, b.name("critic"), e.severity === "blocking" ? "warn" : undefined, { kind: e.severity === "blocking" ? "warn" : "check", did: `raised a ${str(e.severity) ?? "minor"} note:`, note: clip(str(e.text)!, 240) }); break
+      case "hypotheses": if (Array.isArray(e.items)) b.log(at, e.items.length ? `${plural(e.items.length, "hypothesis", "hypotheses")} set up. ${HYPOTHESES_NOTE}` : "No hypothesis was needed for this question.", b.name("proposer"), undefined, e.items.length ? { kind: "write", did: "set up", chips: [plural(e.items.length, "hypothesis", "hypotheses")], note: HYPOTHESES_NOTE } : { did: "needed no hypothesis for this question." }); break
       case "hypothesis.checked": {
         // The mark is the engine's (code works it out); the same words as the Research view. In a practice run it
         // is an example, said without a mark.
@@ -494,16 +512,16 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         // code works the result out; the Guardian carries it to the investigator whose hypothesis it is, else to where the hypotheses were set up
         const to = investigatorOf(str(e.agent))?.who ?? "proposer"
         b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: characterOf(to).room, to, label, short: practice ? `${id}: example` : `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
-        b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), !practice && mark === "contradicted" ? "bad" : undefined)
+        b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), !practice && mark === "contradicted" ? "bad" : undefined, { kind: "check", did: `brought the result for hypothesis ${id}:`, chips: [said, `to ${b.name(to)}`], note: sides })
         break
       }
-      case "review.resolved": if (Array.isArray(e.notes)) { const closed = (e.notes as Record<string, unknown>[]).filter((x) => x?.resolved === true).length; b.log(at, `${b.name("critic")} judged its notes against the revised answer: ${closed} of ${e.notes.length} resolved.`, b.name("critic")) } break
+      case "review.resolved": if (Array.isArray(e.notes)) { const closed = (e.notes as Record<string, unknown>[]).filter((x) => x?.resolved === true).length; b.log(at, `${b.name("critic")} judged its notes against the revised answer: ${closed} of ${e.notes.length} resolved.`, b.name("critic"), undefined, { kind: "check", did: "judged its notes against the revised answer:", chips: [`${closed} of ${e.notes.length} resolved`] }) } break
       case "sources": if (Array.isArray(e.items)) b.log(at, `${plural(e.items.length, "source")} numbered for the writer.`); break
-      case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, b.name("auditor")); break
-      case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${b.name("finisher")} saved ${clip(file, 60)}.`, b.name("finisher")); break }
+      case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, b.name("auditor"), undefined, { kind: "screen", did: "selected", chips: [Array.isArray(e.notSelected) ? `${e.selected.length} of ${plural(e.selected.length + e.notSelected.length, "source")}` : plural(e.selected.length, "source")] }); break
+      case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${b.name("finisher")} saved ${clip(file, 60)}.`, b.name("finisher"), undefined, { kind: "write", did: "saved", chips: [clip(file, 60)] }); break }
       case "missing": if (Array.isArray(e.items) && e.items.length) b.log(at, `Named as not found or not checked: ${plural(e.items.length, "item")}.`, undefined, "warn"); break
-      case "answer.written": b.log(at, "The draft is written.", b.name("reporter")); break
-      case "answer.revised": b.log(at, "The answer was revised.", b.name("reviser")); break
+      case "answer.written": b.log(at, "The draft is written.", b.name("reporter"), undefined, { kind: "write", did: "wrote the draft." }); break
+      case "answer.revised": b.log(at, "The answer was revised.", b.name("reviser"), undefined, { kind: "write", did: "revised the answer." }); break
       case "research.finished": {
         m.status = "done"
         const note = str(e.note); if (note) m.note = clip(note, 300)

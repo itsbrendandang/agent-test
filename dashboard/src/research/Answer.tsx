@@ -9,6 +9,7 @@ import { provenanceOf } from "@/lib/provenance"
 import { plainDuration } from "@/lib/format"
 import { runLimit, safeUrl, spent } from "@/lib/words"
 import { Activity } from "./Activity"
+import { AgentsWorking } from "./AgentsWorking"
 import { Hypotheses } from "./Hypotheses"
 import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
@@ -36,13 +37,15 @@ interface Props {
   onStatus?: (status: AnswerState["status"]) => void
   /** Take a queued follow-up out again before it starts. */
   onRemove?: () => void
+  /** Started on this visit (not restored): it shows the agents while it has nothing to show yet. */
+  fresh?: boolean
   /** The composer below offers Stop for this answer, so the answer does not show a second one. */
   composerStops?: boolean
   /** Open the inspector on this answer, at a tab. */
   onInspect?: (tab: "evidence" | "results" | "activity") => void
 }
 
-export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops }: Props) {
+export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect, composerStops, fresh }: Props) {
   const { events, lost } = useResearchEvents(id)
   const s = useMemo(() => foldAnswer(events), [events])
   const key = useId().replace(/[^a-z0-9]/gi, "")
@@ -65,6 +68,12 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
   const listed = s.selection ? s.selection.selected.length + s.selection.notSelected.length : 0
   const picked = s.selection?.counts ?? { selected: s.selection?.selected.length ?? 0, unique: listed, results: Math.max(listed, sourceCounts(s).found ?? 0) }
   const shownTitle = (title: string) => (demo ? title.replace(/\s*\((?:mock|demo|scripted)\)\s*$/i, "") : title)
+  // An answer started on this visit shows the agents until it has something to show, and for at least 0.6 s, so
+  // that a practice answer, which arrives at once, does not flash them. The content is never held back for it.
+  const nothingYet = working && s.status !== "queued" && !s.markdown && s.hypotheses.length === 0 && s.sources.length === 0
+  const [seen, setSeen] = useState(false) // 0.6 s have passed since this answer came on screen
+  useEffect(() => { const timer = window.setTimeout(() => setSeen(true), 600); return () => window.clearTimeout(timer) }, [])
+  const waiting = !!fresh && s.status !== "queued" && !lost && (nothingYet || !seen)
   const byIndex = new Map(s.statements.map((st) => [st.index, st]))
   const goTo = (n: number) => { setLit(n); document.getElementById(`${uid}-source-${n}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }) }
   const mark = (st: Statement) => {
@@ -99,7 +108,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
       </p>
 
       {/* Timing is said once, in the activity line below. Before there is a step to count, the preparation says it is running. */}
-      {prep && (prep.running || prep.failed) && <p className="answer-prep mono" data-running={prep.running || undefined}>{prep.running ? "Preparing search…" : "Preparation did not finish"}</p>}
+      {prep && ((prep.running && !waiting) || prep.failed) && <p className="answer-prep mono" data-running={prep.running || undefined}>{prep.running ? "Preparing search…" : "Preparation did not finish"}</p>}
       {/* A practice answer says what it is once, beside its badge: the engine's own "this is a demo" opening is not repeated. */}
       {s.opening && !demo && <p className="answer-opening">{s.opening}</p>}
       {s.resumed && <p className="muted small">Continued after the engine restarted.</p>}
@@ -110,9 +119,11 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {onRemove && <button type="button" className="link-btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(() => onRemove()) }}>Remove</button>}
         </div>
       )}
+      {waiting && <AgentsWorking>{working ? progressLine(s) : "The answer is ready."}</AgentsWorking>}
       {working && s.status !== "queued" && !lost && (
         <div className="answer-working">
-          <Working>{progressLine(s)}</Working>
+          {/* Until the answer has something to show: the agents, with the engine's current step in words. Then the quiet line. */}
+          {!waiting && <Working>{progressLine(s)}</Working>}
           {!demo && s.caps && <span className="muted small">{runLimit(s.caps.maxUsd)} · {plainDuration(s.caps.maxSeconds * 1000)}</span>}
           {!composerStops && <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>}
           {stopping && <span className="muted small" role="status">{stopping}</span>}

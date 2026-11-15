@@ -96,7 +96,7 @@ describe("Overview", () => {
 })
 
 describe("the welcome on the home page", () => {
-  it("hands a typed question to Research without sending anything, and a starter question fills the box", async () => {
+  it("a starter question fills the box, and the send button hands the question to Research to start", async () => {
     const onOpen = show({})
     await screen.findByText("Your research team is ready")
     const box = screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
@@ -109,8 +109,9 @@ describe("the welcome on the home page", () => {
     const posts = () => (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls.filter(([, init]) => init?.method && init.method !== "GET")
     await userEvent.click(ask)
     expect(onOpen).toHaveBeenCalledWith("Home")
-    expect(sessionStorage.getItem("open.ask")).toBe("What GLP-1s are working in the market right now?")
-    expect(posts()).toHaveLength(0) // nothing was sent to the engine from this page
+    // The question is handed to Research marked "send": Research starts the search through its own Send path.
+    expect(JSON.parse(sessionStorage.getItem("open.ask") ?? "null")).toEqual({ question: "What GLP-1s are working in the market right now?", send: true })
+    expect(posts()).toHaveLength(0) // this page itself sends nothing to the engine
     sessionStorage.removeItem("open.ask")
     // The agents are named in text for a screen reader; the moving picture is hidden from it.
     expect(document.querySelector(".ov-stage")?.getAttribute("aria-hidden")).toBe("true")

@@ -38,11 +38,26 @@ export function takeOpenAnswer(): { id: string; question: string } | undefined {
 const ASK = "open.ask"
 /** The longest question the composer takes (the engine's own limit). */
 const ASK_MAX = 2000
-export const setAsk = (question: string) => { try { const q = question.trim().slice(0, ASK_MAX); if (q) sessionStorage.setItem(ASK, q); else sessionStorage.removeItem(ASK) } catch { /* storage off: nothing is handed over */ } }
-export function takeAsk(): string | undefined {
+/**
+ * Hand a question to Research. With `send`, Research starts the search at once, as if the person had typed it there
+ * and pressed Send (same token prompt, limits and refusals); without it the question only waits in the composer.
+ */
+export const setAsk = (question: string, options: { send?: boolean } = {}) => {
   try {
-    const q = sessionStorage.getItem(ASK)
-    if (q !== null) window.setTimeout(() => sessionStorage.removeItem(ASK), 0) // after this render: a second mount in development reads the same
-    return q ? q.slice(0, ASK_MAX) : undefined
+    const q = question.trim().slice(0, ASK_MAX)
+    if (!q) { sessionStorage.removeItem(ASK); return }
+    sessionStorage.setItem(ASK, options.send === true ? JSON.stringify({ question: q, send: true }) : q) // unsent: the plain text, as before
+  } catch { /* storage off: nothing is handed over */ }
+}
+export function takeAsk(): { question: string; send: boolean } | undefined {
+  try {
+    const raw = sessionStorage.getItem(ASK)
+    if (raw === null) return undefined
+    window.setTimeout(() => sessionStorage.removeItem(ASK), 0) // after this render: a second mount in development reads the same
+    // Sent: {"question", "send": true}. Anything else is the question itself, to be put in the box and not sent.
+    let sent: { question?: unknown; send?: unknown } | undefined
+    try { const v: unknown = JSON.parse(raw); if (v && typeof v === "object" && (v as { send?: unknown }).send === true) sent = v as { question?: unknown } } catch { /* plain text */ }
+    const question = (sent ? (typeof sent.question === "string" ? sent.question : "") : raw).trim().slice(0, ASK_MAX)
+    return question ? { question, send: !!sent } : undefined
   } catch { return undefined }
 }

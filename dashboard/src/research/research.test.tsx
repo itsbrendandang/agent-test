@@ -2,9 +2,12 @@
 // a stand-in engine. Nothing here talks to a real engine.
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
+import { saveEffort as saveEffortChoice } from "@/home/chat"
 import { forgetScripted } from "@/lib/scripted"
+import { TOKEN_HEADER } from "@/lib/token"
 import { setAsk, takeAsk } from "@/lib/open"
 import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, reply, PLAN } from "@/test/home"
@@ -13,6 +16,7 @@ import { HomeView } from "@/views/HomeView"
 import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
 import { identifierOf, markOf } from "./marks"
+import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
 import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
@@ -809,11 +813,100 @@ describe("a question handed over from the Overview", () => {
     expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1)
   })
   it("is capped at the composer's limit, an empty one is nothing, and a saved answer being opened wins over it", () => {
-    setAsk("x".repeat(5000)); expect(takeAsk()).toHaveLength(2000)
+    setAsk("x".repeat(5000)); expect(takeAsk()?.question).toHaveLength(2000)
     sessionStorage.clear(); setAsk("   "); expect(takeAsk()).toBeUndefined()
     engine(); sessionStorage.clear()
     sessionStorage.setItem("open.answer", JSON.stringify({ id: "a-2", question: "Saved question" })); setAsk("Handed over")
     render(<HomeView onOpen={() => {}} />)
     expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("")
+  })
+})
+
+describe("a question the Overview asks to be sent", () => {
+  const table = (extra: Parameters<typeof routes>[0] = {}) => routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "POST /api/research": { status: 202, body: { id: "a-1", thread: "t-1", mode: "demo" } }, ...extra })
+  it("reads both forms: a plain question is not sent, a sent one says so", () => {
+    setAsk("One"); expect(takeAsk()).toEqual({ question: "One", send: false })
+    sessionStorage.clear(); setAsk("Two", { send: true }); expect(takeAsk()).toEqual({ question: "Two", send: true })
+    sessionStorage.clear(); sessionStorage.setItem("open.ask", '{"question":"Three"}'); expect(takeAsk()).toEqual({ question: '{"question":"Three"}', send: false }) // only an explicit send:true sends
+  })
+  it("starts the search at once, once, at the Standard level, in a new conversation; in Demo with no prompt", async () => {
+    const sent = table()
+    saveEffortChoice("deep") // a remembered level does not change what a question from the Overview does
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
+    setAsk("Does drug A protect the heart?", { send: true })
+    render(<StrictMode><TokenPrompt /><HomeView onOpen={() => {}} /></StrictMode>) // mounted twice, as in development
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "standard" }) // no thread: a new search
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1))
+    expect(screen.queryByText("Earlier question")).toBeNull()
+    expect(screen.queryByRole("dialog")).toBeNull() // no prompt of any kind
+    await new Promise((r) => setTimeout(r, 30))
+    expect(to(sent, "POST", "/api/research")).toHaveLength(1); expect(to(sent, "POST", "/api/chat")).toHaveLength(0)
+    expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("")
+  })
+  it("in Real without a token: the token prompt shows and nothing is started until the token is given", async () => {
+    const sent = table({ "POST /api/research": (r) => (r.headers[TOKEN_HEADER] === "tok-1" ? { status: 202, body: { id: "a-1", thread: "t-1", mode: "real" } } : { status: 401, body: { error: "token needed", field: "token", needsToken: true } }) })
+    setAsk("Does drug A protect the heart?", { send: true })
+    render(<><TokenPrompt /><HomeView onOpen={() => {}} /></>)
+    const prompt = await screen.findByRole("dialog")
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull() // nothing started
+    expect(to(sent, "POST", "/api/research").every((r) => !(r as unknown as { headers: Record<string, string> }).headers?.[TOKEN_HEADER])).toBe(true)
+    const user = userEvent.setup()
+    await user.type(within(prompt).getByLabelText("Session token"), "tok-1")
+    await user.click(within(prompt).getByRole("button", { name: "Use this token" }))
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1))
+  })
+  it("a refusal leaves the question in the composer with the usual message, and no answer", async () => {
+    table({ "POST /api/research": { status: 429, body: { error: "cap", field: "budget" } } })
+    setAsk("Does drug A protect the heart?", { send: true })
+    render(<HomeView onOpen={() => {}} />)
+    const box = screen.getByRole("textbox", { name: "Ask a research question" })
+    await waitFor(() => expect(box).toHaveValue("Does drug A protect the heart?"))
+    expect(await screen.findByRole("alert")).toBeInTheDocument()
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull()
+  })
+})
+
+describe("the wait before an answer has anything to show", () => {
+  it("an answer started on this visit shows the agents with the engine's current step in words, until content arrives", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const real = lines(S_REAL)
+      const { container } = await show(real.slice(0, 2), { fresh: true })
+      const wait = container.querySelector(".agents-working")!
+      expect(wait).toHaveAttribute("role", "status"); expect(wait).toHaveAttribute("aria-live", "polite")
+      expect(wait.querySelectorAll(".agents-one svg")).toHaveLength(6); expect(wait.querySelector(".agents-row")).toHaveAttribute("aria-hidden", "true")
+      const step = foldAnswer(real.slice(0, 2)).steps.at(-1)!
+      expect(wait.querySelector(".agents-line")!.textContent).toBe(progressLine(foldAnswer(real.slice(0, 2)))) // the engine's own step, never an invented line
+      expect(step.label.length).toBeGreaterThan(0)
+      await act(async () => { vi.advanceTimersByTime(700) })
+      const upTo = real.findIndex((e) => e.type === "sources")
+      await feed(real.slice(2, upTo + 1))
+      expect(container.querySelector(".agents-working")).toBeNull() // gone when the first content is there
+      expect(container.querySelector(".working")).not.toBeNull() // the quiet line goes on while the rest is made
+    } finally { vi.useRealTimers() }
+  })
+  it("stays about 0.6 s when the whole answer arrives at once, without holding the answer back", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const { container } = await show(lines(S_DEMO), { fresh: true })
+      expect(container.querySelector(".agents-working")).not.toBeNull()
+      expect(container.querySelector(".answer-text")).not.toBeNull() // the answer is already on screen under it
+      await act(async () => { vi.advanceTimersByTime(650) })
+      expect(container.querySelector(".agents-working")).toBeNull()
+    } finally { vi.useRealTimers() }
+  })
+  it("a restored answer does not show the agents", async () => {
+    const { container } = await show(lines(S_REAL).slice(0, 2))
+    expect(container.querySelector(".agents-working")).toBeNull(); expect(container.querySelector(".working")).not.toBeNull()
+  })
+})
+
+describe("the limit line shown before anything is sent", () => {
+  it("in Real says what a Standard answer may cost and how long it may take; in Demo that it is example text", () => {
+    expect(answerLimitLine({ ...CATALOG_ON, research: { standard: { maxUsd: 0.6, maxSeconds: 240 }, quick: { maxUsd: 0.15, maxSeconds: 120 } } })).toBe("Standard answers on this page, with sources: at most $0.60 and 4 minutes.")
+    expect(answerLimitLine({ ...CATALOG_ON, research: { quick: { maxUsd: 0.15, maxSeconds: 120 } } }, "quick")).toBe("Quick answers on this page, with sources: at most $0.15 and 2 minutes.")
+    expect(answerLimitLine(CATALOG_OFF)).toBe("Demo mode: answers are example text. Switch to Real for AI answers and web search.")
+    expect(answerLimitLine(undefined)).toBe(""); expect(answerLimitLine(null)).toBe("")
   })
 })

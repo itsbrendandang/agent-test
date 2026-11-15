@@ -4,11 +4,60 @@
 // cannot disagree about what was reported.
 import { SearchCredit } from "@/components/Shared"
 import type { SearchProvider } from "@/board/api"
+import { AgentAvatar } from "./AgentAvatar"
 import { Mascot } from "./Mascot"
-import { CLAIM_GLYPH, CLAIM_WORD, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, roomOf, shortTime, type CharacterId, type LabModel } from "./model"
+import { CLAIM_GLYPH, CLAIM_WORD, LOG_KIND_WORD, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, dayName, logDid, logKind, roomOf, shortTime, type CharacterId, type LabModel, type LogKind, type LogLine } from "./model"
 import "./lab.css"
 
 const IDLE_HINT = "Teammates stay at their places until the engine reports work."
+
+/** The mark in a log entry's dot on the rail, one a kind of step: the kind is never said by the tint alone. */
+const KIND_MARK: Record<LogKind, React.ReactNode> = {
+  search: <><circle cx="5.2" cy="5.2" r="3.2" /><path d="M7.6 7.6 10.5 10.5" /></>,
+  screen: <path d="M1.5 2.5h9L7 6.6v3.6L5 9V6.6z" />,
+  write: <><path d="M2 10l.6-2.6L8.4 1.6l2 2L4.6 9.4z" /><path d="M7.2 2.8l2 2" /></>,
+  check: <><path d="M6 1.2 10 2.7v3.1c0 2.3-1.6 4-4 5-2.4-1-4-2.7-4-5V2.7z" /><path d="M4.3 5.9l1.2 1.2 2.2-2.4" strokeWidth="1.2" /></>, // a shield: a check was made; its result is in the words, not in this mark
+  handoff: <path d="M1.5 6h8.5M6.8 2.8 10 6l-3.2 3.2" />,
+  failed: <path d="M2.8 2.8l6.4 6.4M9.2 2.8 2.8 9.2" />,
+  warn: <><path d="M6 2v5" /><path d="M6 9.6v.2" /></>,
+  done: <><path d="M3 11V1.5" /><path d="M3 2h6.5L8 4.5 9.5 7H3" /></>,
+  note: <circle cx="6" cy="6" r="1.6" fill="currentColor" />,
+}
+
+/**
+ * The activity, newest first, on a rail: a dot with the step's mark, the teammate's face and name (once for its
+ * entries in a row), what it did, what it carried as a chip, the time. A day's name is shown only when the entries
+ * are of more than one day. Every entry is one list item that reads as a sentence.
+ */
+function ActivityLog({ lines }: { lines: LogLine[] }) {
+  const dayOf = (l: LogLine) => (l.at > 0 ? new Date(l.at).toDateString() : "")
+  const days = new Set(lines.map(dayOf).filter(Boolean)).size
+  return (
+    <div role="log" aria-labelledby="lab-activity">
+      <ol className="lab-log" reversed>
+        {lines.map((l, i) => {
+          const above = lines[i - 1], kind = logKind(l)
+          const newDay = days > 1 && !!dayOf(l) && (!above || dayOf(above) !== dayOf(l))
+          const cont = !!l.who && !newDay && above?.who === l.who // the same teammate as the entry above: its face is not drawn again
+          return (
+            <li key={l.id} data-kind={kind} data-tone={l.tone} data-who={l.who ? "" : undefined} data-cont={cont || undefined}>
+              {newDay && <span className="lab-log-day">{dayName(l.at)}</span>}
+              <span className="lab-log-dot" aria-hidden="true" title={LOG_KIND_WORD[kind]}><svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{KIND_MARK[kind]}</svg></span>
+              {l.who && !cont && <AgentAvatar name={l.agent ?? l.who} size={24} className="lab-log-face" />}
+              <p className="lab-log-text">
+                {l.who && <><span className={cont ? "lab-sr" : "lab-log-who"}>{l.who}</span>{" "}</>}
+                <span className="lab-log-did">{l.who ? logDid(l) : l.text}</span>
+                {l.chips?.map((c) => <span key={c}>{" "}<span className="lab-log-chip">{c}</span></span>)}
+              </p>
+              {l.at > 0 && <time dateTime={new Date(l.at).toISOString()} title={clockTime(l.at)}>{shortTime(l.at)}</time>}
+              {l.note && <blockquote className="lab-log-note">{l.note}</blockquote>}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
 
 export function LabPanel({ model, selected, compact = false }: { model: LabModel; selected: CharacterId; compact?: boolean }) {
   const c = characterOf(selected), a = model.characters[selected]
@@ -96,7 +145,7 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
       <hr />
       <h3 id="lab-activity">Activity</h3>
       {newest.length
-        ? <ol className="lab-log" role="log" aria-labelledby="lab-activity" reversed>{newest.map((l) => <li key={l.id} data-tone={l.tone} title={l.text}>{l.at > 0 ? <time dateTime={new Date(l.at).toISOString()}>{clockTime(l.at)}</time> : <time />}<span>{l.text}</span></li>)}</ol>
+        ? <ActivityLog lines={newest} />
         : <p className="lab-hint">{model.status === "empty" ? "No run yet. " : "Nothing reported yet. "}{IDLE_HINT}</p>}
     </aside>
   )

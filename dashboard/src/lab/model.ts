@@ -172,7 +172,36 @@ export interface Activity {
 /** A method specialist that joined a team review: shown as a visitor in the room that fits, under its real name. */
 export interface Visitor { id: string; name: string; title: string; why?: string; room: RoomId; state: LabState; doing: string; since?: number }
 
-export interface LogLine { id: string; at: number; text: string; who?: string; tone?: "bad" | "good" | "warn" }
+/** What kind of step a line of the activity log is about: it picks the mark on the log's rail. */
+export type LogKind = "search" | "screen" | "write" | "check" | "handoff" | "failed" | "warn" | "done" | "note"
+export const LOG_KIND_WORD: Record<LogKind, string> = { search: "Search", screen: "Screening", write: "Writing", check: "Check", handoff: "Hand-off", failed: "Failed", warn: "Needs a look", done: "Finished", note: "Note" }
+/**
+ * One line of the activity log. `text` is the whole sentence. The rest says the same thing in parts, for a row with a
+ * face: `who` did it (`agent`: which character), `did` is what it did, `chips` what it fetched or handed over and to
+ * whom, `note` the run's own text the line is about (a query, a statement, an error).
+ */
+export interface LogLine {
+  id: string; at: number; text: string; who?: string; tone?: "bad" | "good" | "warn"
+  agent?: CharacterId; kind?: LogKind; did?: string; chips?: string[]; note?: string
+}
+/** The kind of a line: what the adapter said, else what its tone says. */
+export const logKind = (l: LogLine): LogKind => l.kind ?? (l.tone === "bad" ? "failed" : l.tone === "warn" ? "warn" : l.tone === "good" ? "done" : "note")
+/** What a line says its teammate did, without the name: the adapter's own words, else the sentence after "Name: " or "Name ". */
+export function logDid(l: LogLine): string {
+  if (l.did !== undefined) return l.did
+  if (l.who && l.text.startsWith(`${l.who}: `)) return l.text.slice(l.who.length + 2)
+  if (l.who && l.text.startsWith(`${l.who} `)) return l.text.slice(l.who.length + 1)
+  return l.text
+}
+/** The day a time falls on, for a pill in the log: "Today", "Yesterday", else "14 Nov" (with the year when it is another year). */
+export function dayName(at: number, now: number = Date.now()): string {
+  const d = new Date(at), n = new Date(now)
+  const days = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000)
+  if (days === 0) return "Today"
+  if (days === 1) return "Yesterday"
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]
+  return `${d.getDate()} ${month}${d.getFullYear() === n.getFullYear() ? "" : ` ${d.getFullYear()}`}`
+}
 
 /** The states a claim moves through in the claims engine. Only the engine's code moves a claim; the lab shows the state it is given. */
 export type ClaimState = "triaged" | "piloting" | "in_workup" | "under_review" | "sent_back" | "supported" | "rejected" | "not_established"

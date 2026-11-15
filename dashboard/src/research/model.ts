@@ -227,7 +227,7 @@ export function progressLine(s: AnswerState): string {
   if (s.markdown) return "Writing…"
   if (s.sources.length) return `Kept ${s.sources.length} source${s.sources.length === 1 ? "" : "s"}. Writing…`
   const last = s.searches.at(-1)
-  if (!last) return "Getting ready…"
+  if (!last) return "Started. Waiting for the first step…"
   if (last.ran === undefined) return `Searching ${providerPlace(last.provider)}…`
   if (!last.ran) return `The search of ${providerPlace(last.provider)} did not run${last.reason ? `: ${last.reason}` : "."}`
   return `Found ${last.found ?? 0} in ${providerPlace(last.provider)}, kept ${last.kept ?? 0}.`

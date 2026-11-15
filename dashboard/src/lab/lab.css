@@ -168,14 +168,43 @@
 .lab-panel hr { margin: 2px 0; border: 0; border-top: 1px solid var(--lab-line); width: 100%; }
 .lab-credits { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; color: var(--lab-muted); }
 .lab-credits b { font-family: var(--lab-mono); font-weight: 500; color: var(--lab-ink); }
-/* The activity: one line an event, the time in the mono font, newest first. The whole text is in the line's title. */
-.lab-log { margin: 0; padding: 0; list-style: none; color: var(--lab-ink); display: grid; gap: 0; }
-.lab-log li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--lab-line); }
-.lab-log li:last-child { border-bottom: 0; }
-.lab-log time { font-family: var(--lab-mono); font-size: 12px; color: var(--lab-muted); white-space: nowrap; }
-.lab-log span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; line-height: 1.4; overflow-wrap: anywhere; }
-.lab-log li[data-tone="bad"] span { color: var(--lab-fail); }
-.lab-log li[data-tone="good"] span { color: var(--success, #0d5f37); }
+/* The activity, newest first, on a rail: a dot with the step's mark, the face and name, what was done, a chip for
+   what was carried, the time. Lines wrap; nothing is cut. */
+.lab-log { margin: 0; padding: 0; list-style: none; color: var(--lab-ink); }
+.lab-log li { position: relative; display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) auto; column-gap: 7px; align-items: start; padding: 5px 0; }
+.lab-log li::before { content: ""; position: absolute; left: 8.5px; top: 0; bottom: 0; width: 1px; background: var(--lab-wall); }
+.lab-log li:first-child::before { top: 14px; }
+.lab-log li:last-child::before { bottom: auto; height: 14px; }
+.lab-log li:only-child::before { display: none; }
+.lab-log li[data-who]:not([data-cont]) { padding-top: 9px; }
+.lab-log li[data-who]:not([data-cont]):first-child { padding-top: 5px; }
+.lab-log-dot { grid-column: 1; position: relative; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--lab-wall); background: var(--lab-plate); color: var(--lab-muted); }
+.lab-log li[data-who]:not([data-cont]) .lab-log-dot { margin-top: 3px; }
+.lab-log li[data-kind="search"] .lab-log-dot { background: #e6effb; border-color: #b9cdea; color: #1f4f8f; }
+.lab-log li[data-kind="screen"] .lab-log-dot { background: #efe9fa; border-color: #cfc2ea; color: #56388f; }
+.lab-log li[data-kind="write"] .lab-log-dot { background: #fbf0d9; border-color: #e6cf9c; color: var(--lab-job); }
+.lab-log li[data-kind="check"] .lab-log-dot { background: #eceef4; border-color: #c3c9da; color: #38456b; }
+.lab-log li[data-kind="done"] .lab-log-dot { background: #e2f3e8; border-color: #b4d9c1; color: var(--success, #0d5f37); }
+.lab-log li[data-kind="handoff"] .lab-log-dot { background: #e3f2f1; border-color: #b3d8d5; color: #17605b; }
+.lab-log li[data-kind="warn"] .lab-log-dot { background: #fdf3cf; border-color: #e3cd7a; color: #6b5200; }
+.lab-log li[data-kind="failed"] .lab-log-dot { background: #ffe9e9; border-color: var(--lab-fail); color: var(--lab-fail); }
+.lab-log-face { grid-column: 2; }
+.lab-log-text { grid-column: 3; margin: 0; min-width: 0; font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.lab-log li[data-who]:not([data-cont]) .lab-log-text { padding-top: 2px; }
+.lab-log li:not([data-who]) .lab-log-text { grid-column: 2 / 4; }
+.lab-log-who { font-weight: 600; }
+.lab-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.lab-log-did { color: var(--lab-muted); }
+.lab-log li:not([data-who]) .lab-log-did { color: var(--lab-ink); }
+.lab-log li[data-tone="bad"] .lab-log-did { color: var(--lab-fail); }
+.lab-log li[data-tone="good"]:not([data-who]) .lab-log-did { color: var(--success, #0d5f37); font-weight: 600; }
+.lab-log-chip { display: inline-block; padding: 0 6px; border: 1px solid var(--lab-wall); border-radius: 6px; background: var(--lab-plate); font-size: 11.5px; line-height: 1.5; font-weight: 500; color: var(--lab-ink); overflow-wrap: anywhere; }
+.lab-log time { grid-column: 4; padding-top: 1px; font-family: var(--lab-mono); font-size: 10.5px; line-height: 1.8; color: var(--lab-muted); white-space: nowrap; }
+.lab-log li[data-who]:not([data-cont]) time { padding-top: 3px; }
+.lab-log-note { grid-column: 3 / 5; margin: 3px 0 1px; padding: 5px 8px; border: 1px solid var(--lab-line); border-radius: 8px; background: var(--lab-ground); font-size: 12px; line-height: 1.45; color: var(--lab-ink); overflow-wrap: anywhere; }
+.lab-log li:not([data-who]) .lab-log-note { grid-column: 2 / 5; }
+.lab-log li[data-kind="failed"] .lab-log-note { border-color: #f3bcbc; background: #fff6f6; }
+.lab-log-day { grid-column: 1 / -1; justify-self: start; position: relative; margin: 4px 0 6px; padding: 1px 9px; border: 1px solid var(--lab-wall); border-radius: 999px; background: var(--lab-plate); font-size: 11px; font-weight: 600; color: var(--lab-muted); }
 .lab-visitors { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .lab-visitors li { line-height: 1.4; }
 .lab-hint { color: var(--lab-muted); font-size: 12px; line-height: 1.5; margin: 0; }

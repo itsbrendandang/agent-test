@@ -381,3 +381,12 @@
 /* the last thing in the conversation scrolls clear of the composer */
 .search-thread { padding-bottom: 40px !important; }
 .search-under:empty, .search-under > span:empty { display: none; }
+
+/* ---- the wait before an answer has anything to show: the agents, bouncing, and what is really happening ---- */
+.agents-working { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 6px 0 2px; }
+.agents-row { display: flex; align-items: flex-end; gap: 6px; height: 46px; }
+.agents-one { width: 34px; height: 38px; transform-origin: 50% 100%; animation: agents-hop 0.9s ease-in-out infinite; }
+.agents-one svg { width: 100%; height: 100%; display: block; }
+.agents-line { font-size: 13px; color: var(--text-muted, #6b675f); }
+@keyframes agents-hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-9px); } 60% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .agents-one { animation: none; } }

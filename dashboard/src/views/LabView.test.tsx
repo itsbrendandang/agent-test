@@ -64,7 +64,8 @@ describe("LabView", () => {
     expect(document.querySelector('[data-provenance="live"]')).toHaveTextContent("Live research") // run.started said mock: false
     expect(agent("Scout")).toHaveAttribute("data-state", "working")
     expect(agent("Lead Scientist")).toHaveAttribute("data-state", "working")
-    expect(screen.getByText(/Scout searched the web \(Exa\) for “placeholder web query”/)).toBeInTheDocument()
+    const entries = within(screen.getByRole("log")).getAllByRole("listitem").map((li) => li.textContent ?? "")
+    expect(entries.some((t) => /^Scout searched the web \(Exa\).* and brought back \d+ results?/.test(t) && t.includes("placeholder web query"))).toBe(true)
     expect(screen.getAllByText(/Search powered by/).length).toBeGreaterThan(0) // credited because the run's own event says provider exa
   })
 
@@ -187,7 +188,7 @@ describe("LabView", () => {
     await emit(second, ...REAL_ANSWER.slice(8, 20)) // the engine sends some events again
     expect(screen.getByText(/Connected to the engine\./)).toBeInTheDocument()
     const log = within(screen.getByRole("log")).getAllByRole("listitem").map((li) => li.textContent ?? "")
-    expect(log.filter((l) => l.includes("searching PubMed and preprints: found 8."))).toHaveLength(1)
+    expect(log.filter((l) => l.includes("searching PubMed and preprints: found 8 papers"))).toHaveLength(1)
     expect(agent("Auditor")).toHaveAttribute("data-state", "done")
     // out of order: an event from before the break arrives late and changes nothing that came after
     await emit(second, REAL_ANSWER[4])
