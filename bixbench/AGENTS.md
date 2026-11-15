@@ -103,3 +103,13 @@ use of that. Treat the numbers as unverified until re-run on the current code.)
   --budget-tool-calls 90 --out results_gpt51/ --workers 12
 - Sonnet-5-5 partial (4 studies, results/): bix-12 0.867, bix-11 0.722 —
   kept for cross-model reference, NOT part of the official baseline.
+
+## Official baseline vs ablation
+- **Official baseline: `results_gpt51/`** (accuracy 0.260 on the pooled
+  official metric; caps 500k tokens / 90 tool calls / 600s per run).
+  The swarm must use these caps.
+- **Ablation: `results_gpt51_nobudget/`** (accuracy 0.240, uncapped, ~4.98M
+  solver tokens). Raw records in git as `bin_nobudget/` (ideal answers
+  stripped). No evidence the caps reduced accuracy: 64 vs 59 correct out of
+  246 is within noise, and per-study swings go both ways. The 0.260 vs 0.240
+  difference should not be read as a real difference.

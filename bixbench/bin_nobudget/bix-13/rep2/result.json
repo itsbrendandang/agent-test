@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-13",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-13-q1": "Cannot be determined: the DESeq2 differential expression results (including log2 fold-changes and BH-adjusted p-values for each gene and strain) are not provided, and R/DESeq2 cannot be run in this environment from the raw counts alone.",
+    "bix-13-q2": "Cannot be determined: identifying genes uniquely significantly differentially expressed in JBX98 requires DESeq2 output (BH-adjusted p-values for each strain vs JBX1), which is not available and cannot be generated here.",
+    "bix-13-q3": "Cannot be determined: the pre-shrinkage dispersion estimates from a DESeq2 model that accounts for Replicate, Strain, and Media are not available, and DESeq2 cannot be executed in this environment to obtain them.",
+    "bix-13-q4": "Cannot be determined: the total percentage of genes uniquely significantly differentially expressed in \u0394lasI (JBX98) or \u0394rhlI (JBX97) relative to JBX1 requires DESeq2 results that are not present and cannot be computed here.",
+    "bix-13-q5": "Cannot be determined: counting genes uniquely significantly differentially expressed in at least one single mutant but not the double mutant requires DESeq2 contrast results for all three mutants vs JBX1, which are not available and cannot be produced in this environment."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 28944,
+      "output_tokens": 2035,
+      "total_tokens": 30979,
+      "tool_calls": 10,
+      "model_calls": 10
+    },
+    "elapsed_seconds": 34.225,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-13-q1": {
+      "predicted": "Cannot be determined: the DESeq2 differential expression results (including log2 fold-changes and BH-adjusted p-values for each gene and strain) are not provided, and R/DESeq2 cannot be run in this environment from the raw counts alone.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q2": {
+      "predicted": "Cannot be determined: identifying genes uniquely significantly differentially expressed in JBX98 requires DESeq2 output (BH-adjusted p-values for each strain vs JBX1), which is not available and cannot be generated here.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q3": {
+      "predicted": "Cannot be determined: the pre-shrinkage dispersion estimates from a DESeq2 model that accounts for Replicate, Strain, and Media are not available, and DESeq2 cannot be executed in this environment to obtain them.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q4": {
+      "predicted": "Cannot be determined: the total percentage of genes uniquely significantly differentially expressed in \u0394lasI (JBX98) or \u0394rhlI (JBX97) relative to JBX1 requires DESeq2 results that are not present and cannot be computed here.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q5": {
+      "predicted": "Cannot be determined: counting genes uniquely significantly differentially expressed in at least one single mutant but not the double mutant requires DESeq2 contrast results for all three mutants vs JBX1, which are not available and cannot be produced in this environment.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 0,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "tool_calls": 0,
+      "model_calls": 0
+    },
+    "elapsed_seconds": 0.0,
+    "exhaustion_reason": null
+  }
+}

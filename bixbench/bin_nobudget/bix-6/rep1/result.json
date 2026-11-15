@@ -1,0 +1,102 @@
+{
+  "study_id": "bix-6",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-6-q1": "Acute Tcells showed the strongest evidence of pathway enrichment when combining replicates using the minimum p-value in the over-representation analysis.",
+    "bix-6-q3": "Twelve pathways remain significantly enriched (adjusted p-value < 0.05) across all three rounds of chronic T cell exposure.",
+    "bix-6-q4": "The Spearman correlation coefficient between replicates for chronic round 1 genes is approximately 0.021.",
+    "bix-6-q5": "Approximately 63% of screening conditions (excluding the no T cells control) showed significant enrichment of immune-relevant pathways.",
+    "bix-6-q6": "The Spearman correlation coefficient between replicates S1 and S2 for the acute T cell screen MAGeCK p-values is approximately 0.022.",
+    "bix-6-q7": "In chronic screen round 2, the most significantly enriched pathway is \u201cCytokine Signaling in Immune system.\u201d"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 23728,
+      "output_tokens": 1730,
+      "total_tokens": 25458,
+      "tool_calls": 10,
+      "model_calls": 10
+    },
+    "elapsed_seconds": 102.163,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-6-q1": {
+      "predicted": "Acute Tcells showed the strongest evidence of pathway enrichment when combining replicates using the minimum p-value in the over-representation analysis.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-6-q3": {
+      "predicted": "Twelve pathways remain significantly enriched (adjusted p-value < 0.05) across all three rounds of chronic T cell exposure.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q4": {
+      "predicted": "The Spearman correlation coefficient between replicates for chronic round 1 genes is approximately 0.021.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-6-q5": {
+      "predicted": "Approximately 63% of screening conditions (excluding the no T cells control) showed significant enrichment of immune-relevant pathways.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q6": {
+      "predicted": "The Spearman correlation coefficient between replicates S1 and S2 for the acute T cell screen MAGeCK p-values is approximately 0.022.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-6-q7": {
+      "predicted": "In chronic screen round 2, the most significantly enriched pathway is \u201cCytokine Signaling in Immune system.\u201d",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.3333333333333333,
+    "precision": 0.3333333333333333,
+    "coverage": 1.0,
+    "n_total": 6,
+    "n_correct": 2,
+    "n_sure": 6
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 669,
+      "output_tokens": 28,
+      "total_tokens": 697,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.465,
+    "exhaustion_reason": null
+  }
+}

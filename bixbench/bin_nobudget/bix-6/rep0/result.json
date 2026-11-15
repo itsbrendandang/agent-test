@@ -1,0 +1,102 @@
+{
+  "study_id": "bix-6",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-6-q1": "All the tested T cell exposure conditions (acute T cells and chronic rounds 1\u20133) showed equally weak evidence of pathway enrichment; their most significant pathways had the same adjusted p-value (q \u2248 1.0).",
+    "bix-6-q3": "0 pathways are significantly enriched (adjusted p-value < 0.05) in all three chronic exposure rounds.",
+    "bix-6-q4": "The Spearman correlation coefficient between chronic round 1 replicates (S1 vs S2) is approximately 0.021.",
+    "bix-6-q5": "0% of screening conditions with T cells (acute T cells and chronic rounds 1\u20133) showed significant enrichment of immune-relevant pathways at adjusted p-value < 0.05.",
+    "bix-6-q6": "The Spearman correlation coefficient between acute T cell screen replicates S1 and S2 for MAGeCK p-values is approximately 0.022.",
+    "bix-6-q7": "'2-LTR circle formation' is the most significantly enriched pathway in chronic screen round 2 (though its adjusted p-value is ~1.0, i.e., not significant)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 19625,
+      "output_tokens": 3155,
+      "total_tokens": 22780,
+      "tool_calls": 8,
+      "model_calls": 8
+    },
+    "elapsed_seconds": 109.441,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-6-q1": {
+      "predicted": "All the tested T cell exposure conditions (acute T cells and chronic rounds 1\u20133) showed equally weak evidence of pathway enrichment; their most significant pathways had the same adjusted p-value (q \u2248 1.0).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-6-q3": {
+      "predicted": "0 pathways are significantly enriched (adjusted p-value < 0.05) in all three chronic exposure rounds.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q4": {
+      "predicted": "The Spearman correlation coefficient between chronic round 1 replicates (S1 vs S2) is approximately 0.021.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-6-q5": {
+      "predicted": "0% of screening conditions with T cells (acute T cells and chronic rounds 1\u20133) showed significant enrichment of immune-relevant pathways at adjusted p-value < 0.05.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q6": {
+      "predicted": "The Spearman correlation coefficient between acute T cell screen replicates S1 and S2 for MAGeCK p-values is approximately 0.022.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-6-q7": {
+      "predicted": "'2-LTR circle formation' is the most significantly enriched pathway in chronic screen round 2 (though its adjusted p-value is ~1.0, i.e., not significant).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.3333333333333333,
+    "precision": 0.3333333333333333,
+    "coverage": 1.0,
+    "n_total": 6,
+    "n_correct": 2,
+    "n_sure": 6
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 705,
+      "output_tokens": 28,
+      "total_tokens": 733,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.114,
+    "exhaustion_reason": null
+  }
+}

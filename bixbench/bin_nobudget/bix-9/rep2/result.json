@@ -1,0 +1,81 @@
+{
+  "study_id": "bix-9",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-9-q3": "In the dentate gyrus (using p < 0.05, |log2FC| > 0.5, baseMean > 10, Control as reference): 509 genes are DE in good vs control, 129 in bad vs control, and 194 in good vs bad. There is substantial but incomplete overlap: 42 genes are DE in both good vs control and bad vs control; 85 genes are shared between good vs control and good vs bad; 34 between bad vs control and good vs bad; and 11 genes are DE in all three contrasts simultaneously. Thus, there is a mix of unique and shared DEGs, with only a small core set common to all three groups (no complete overlap, but clear partial overlaps among pairs and a small three-way overlap).",
+    "bix-9-q4": "The one-way ANOVA testing the effect of Category (Tissue\u2013Response combination) on global gene expression (PC1) yields a p-value of approximately 2.0 \u00d7 10^-84 (PR(>F) = 2.011220e-84).",
+    "bix-9-q5": "Bad responders show the highest number of significantly differentially expressed genes compared to controls in final blood (Comparison 6: 326 genes with |log2FC| > 0.5 and baseMean > 10)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 292704,
+      "output_tokens": 6776,
+      "total_tokens": 299480,
+      "tool_calls": 38,
+      "model_calls": 38
+    },
+    "elapsed_seconds": 3211.614,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-9-q3": {
+      "predicted": "In the dentate gyrus (using p < 0.05, |log2FC| > 0.5, baseMean > 10, Control as reference): 509 genes are DE in good vs control, 129 in bad vs control, and 194 in good vs bad. There is substantial but incomplete overlap: 42 genes are DE in both good vs control and bad vs control; 85 genes are shared between good vs control and good vs bad; 34 between bad vs control and good vs bad; and 11 genes are DE in all three contrasts simultaneously. Thus, there is a mix of unique and shared DEGs, with only a small core set common to all three groups (no complete overlap, but clear partial overlaps among pairs and a small three-way overlap).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-9-q4": {
+      "predicted": "The one-way ANOVA testing the effect of Category (Tissue\u2013Response combination) on global gene expression (PC1) yields a p-value of approximately 2.0 \u00d7 10^-84 (PR(>F) = 2.011220e-84).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-9-q5": {
+      "predicted": "Bad responders show the highest number of significantly differentially expressed genes compared to controls in final blood (Comparison 6: 326 genes with |log2FC| > 0.5 and baseMean > 10).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 3,
+    "n_correct": 0,
+    "n_sure": 3
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 524,
+      "output_tokens": 14,
+      "total_tokens": 538,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.232,
+    "exhaustion_reason": null
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-19",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-19-q1": "337",
+    "bix-19-q2": "0.2163",
+    "bix-19-q3": "0.9564",
+    "bix-19-q4": "1.0656",
+    "bix-19-q5": "337"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 5790,
+      "output_tokens": 691,
+      "total_tokens": 6481,
+      "tool_calls": 4,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 13.032,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-19-q1": {
+      "predicted": "337",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-19-q2": {
+      "predicted": "0.2163",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-19-q3": {
+      "predicted": "0.9564",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-19-q4": {
+      "predicted": "1.0656",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-19-q5": {
+      "predicted": "337",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 5,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 137,
+      "output_tokens": 7,
+      "total_tokens": 144,
+      "tool_calls": 0,
+      "model_calls": 1
+    },
+    "elapsed_seconds": 0.454,
+    "exhaustion_reason": null
+  }
+}

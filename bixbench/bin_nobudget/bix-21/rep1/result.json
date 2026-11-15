@@ -1,0 +1,67 @@
+{
+  "study_id": "bix-21",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-21-q2": "Cannot be determined from the provided dataset; no table or annotation containing fungal gene saturation values is present."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 10694,
+      "output_tokens": 245,
+      "total_tokens": 10939,
+      "tool_calls": 3,
+      "model_calls": 3
+    },
+    "elapsed_seconds": 5.411,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-21-q2": {
+      "predicted": "Cannot be determined from the provided dataset; no table or annotation containing fungal gene saturation values is present.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0,
+    "coverage": 0.0,
+    "n_total": 1,
+    "n_correct": 0,
+    "n_sure": 0
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 126,
+      "output_tokens": 8,
+      "total_tokens": 134,
+      "tool_calls": 0,
+      "model_calls": 1
+    },
+    "elapsed_seconds": 0.602,
+    "exhaustion_reason": null
+  }
+}

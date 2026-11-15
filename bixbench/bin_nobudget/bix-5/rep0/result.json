@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-5",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-5-q1": "Response to transforming growth factor beta (GO:0071559).",
+    "bix-5-q4": "Extracellular matrix organization (GO:0030198)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 66692,
+      "output_tokens": 1616,
+      "total_tokens": 68308,
+      "tool_calls": 14,
+      "model_calls": 13
+    },
+    "elapsed_seconds": 45.108,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-5-q1": {
+      "predicted": "Response to transforming growth factor beta (GO:0071559).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-5-q4": {
+      "predicted": "Extracellular matrix organization (GO:0030198).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 2,
+    "n_correct": 0,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 258,
+      "output_tokens": 14,
+      "total_tokens": 272,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.018,
+    "exhaustion_reason": null
+  }
+}

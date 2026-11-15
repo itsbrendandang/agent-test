@@ -1,0 +1,64 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Some datasets params were ignored: ['download_mode', 'remote_files', 'extraction_mode']. Make sure to use only valid params for the dataset builder and to have a up-to-date version of the `datasets` library.
+Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 205 examples [00:00, 52278.98 examples/s]
+loaded 20 studies: ['bix-1', 'bix-10', 'bix-11', 'bix-12', 'bix-13', 'bix-14', 'bix-16', 'bix-17', 'bix-18', 'bix-19', 'bix-2', 'bix-20', 'bix-21', 'bix-3', 'bix-4', 'bix-5', 'bix-6', 'bix-7', 'bix-8', 'bix-9']
+[done] bix-1 rep1 acc=0.0 tokens=6694 stop=submitted
+[done] bix-1 rep0 acc=0.0 tokens=16687 stop=submitted
+[done] bix-12 rep1 acc=0.4 tokens=7095 stop=submitted
+[done] bix-12 rep2 acc=0.2 tokens=20348 stop=submitted
+[done] bix-1 rep2 acc=0.0 tokens=18697 stop=submitted
+[done] bix-12 rep0 acc=0.2 tokens=11287 stop=submitted
+[done] bix-13 rep0 acc=0.0 tokens=12026 stop=submitted
+[done] bix-11 rep0 acc=0.0 tokens=29940 stop=submitted
+[done] bix-13 rep1 acc=0.0 tokens=10315 stop=submitted
+[done] bix-11 rep1 acc=0.0 tokens=20593 stop=submitted
+[done] bix-11 rep2 acc=0.6666666666666666 tokens=92096 stop=submitted
+[done] bix-10 rep2 acc=0.0 tokens=32061 stop=submitted
+[done] bix-10 rep0 acc=0.8571428571428571 tokens=37027 stop=submitted
+[done] bix-13 rep2 acc=0.0 tokens=30979 stop=submitted
+[done] bix-10 rep1 acc=0.0 tokens=105677 stop=submitted
+[done] bix-18 rep0 acc=1.0 tokens=6005 stop=submitted
+[done] bix-18 rep2 acc=0.8 tokens=5384 stop=submitted
+[done] bix-18 rep1 acc=0.8 tokens=6697 stop=submitted
+[done] bix-17 rep2 acc=0.0 tokens=69582 stop=submitted
+[done] bix-14 rep1 acc=0.0 tokens=27737 stop=submitted
+[done] bix-17 rep1 acc=0.0 tokens=74446 stop=submitted
+[done] bix-19 rep0 acc=0.4 tokens=6590 stop=submitted
+[done] bix-19 rep1 acc=1.0 tokens=6481 stop=submitted
+[done] bix-19 rep2 acc=0.4 tokens=6233 stop=submitted
+[done] bix-17 rep0 acc=0.0 tokens=142027 stop=submitted
+[done] bix-16 rep2 acc=0.25 tokens=26510 stop=submitted
+[done] bix-14 rep0 acc=0.0 tokens=143836 stop=submitted
+[done] bix-21 rep1 acc=0.0 tokens=10939 stop=submitted
+[done] bix-21 rep0 acc=0.0 tokens=87093 stop=submitted
+[done] bix-2 rep1 acc=0.0 tokens=53157 stop=submitted
+[done] bix-16 rep0 acc=0.5 tokens=9751 stop=submitted
+[done] bix-16 rep1 acc=0.5 tokens=19420 stop=submitted
+[done] bix-21 rep2 acc=0.0 tokens=70826 stop=submitted
+[done] bix-4 rep0 acc=0.0 tokens=24096 stop=submitted
+[done] bix-20 rep1 acc=0.0 tokens=61130 stop=submitted
+[done] bix-20 rep2 acc=0.5 tokens=96371 stop=submitted
+[done] bix-4 rep1 acc=0.0 tokens=125224 stop=submitted
+[done] bix-4 rep2 acc=0.14285714285714285 tokens=53311 stop=submitted
+[done] bix-14 rep2 acc=0.0 tokens=211679 stop=submitted
+[done] bix-5 rep0 acc=0.0 tokens=68308 stop=submitted
+[done] bix-5 rep1 acc=0.0 tokens=47611 stop=submitted
+[done] bix-2 rep2 acc=0.5 tokens=200732 stop=submitted
+[done] bix-6 rep2 acc=0.3333333333333333 tokens=11298 stop=submitted
+[done] bix-8 rep0 acc=0.3333333333333333 tokens=5723 stop=submitted
+[done] bix-20 rep0 acc=0.0 tokens=181822 stop=submitted
+[done] bix-8 rep1 acc=0.16666666666666666 tokens=5582 stop=submitted
+[done] bix-3 rep0 acc=0.0 tokens=48788 stop=submitted
+[done] bix-8 rep2 acc=0.16666666666666666 tokens=5519 stop=submitted
+[done] bix-7 rep0 acc=0.0 tokens=60351 stop=submitted
+[done] bix-6 rep0 acc=0.3333333333333333 tokens=22780 stop=submitted
+[done] bix-5 rep2 acc=0.0 tokens=116924 stop=submitted
+[done] bix-6 rep1 acc=0.3333333333333333 tokens=25458 stop=submitted
+[done] bix-2 rep0 acc=0.5 tokens=348948 stop=submitted
+[done] bix-7 rep1 acc=0.0 tokens=108935 stop=submitted
+[done] bix-7 rep2 acc=0.6666666666666666 tokens=220111 stop=submitted
+[done] bix-3 rep1 acc=0.0 tokens=236048 stop=submitted
+[done] bix-3 rep2 acc=0.0 tokens=201066 stop=submitted
+[done] bix-9 rep0 acc=0.0 tokens=371434 stop=submitted
+[done] bix-9 rep2 acc=0.0 tokens=299480 stop=submitted
+[done] bix-9 rep1 acc=0.3333333333333333 tokens=598211 stop=submitted

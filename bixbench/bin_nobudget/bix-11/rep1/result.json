@@ -1,0 +1,102 @@
+{
+  "study_id": "bix-11",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-11-q1": "The median treeness for animals is higher by approximately 0.1530 (animals 0.9334 minus fungi 0.7803).",
+    "bix-11-q2": "100% of fungal genes have treeness values above 0.06.",
+    "bix-11-q3": "The maximum treeness value among animal genes is approximately 0.999999.",
+    "bix-11-q4": "The Mann-Whitney U statistic comparing animal vs fungal treeness values is 23727.0.",
+    "bix-11-q5": "The p-value from the Mann-Whitney U test is approximately 5.72\u00d710^-40.",
+    "bix-11-q6": "The median treeness value for fungal genes is approximately 0.7803."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 18367,
+      "output_tokens": 2226,
+      "total_tokens": 20593,
+      "tool_calls": 8,
+      "model_calls": 8
+    },
+    "elapsed_seconds": 47.662,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-11-q1": {
+      "predicted": "The median treeness for animals is higher by approximately 0.1530 (animals 0.9334 minus fungi 0.7803).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-11-q2": {
+      "predicted": "100% of fungal genes have treeness values above 0.06.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-11-q3": {
+      "predicted": "The maximum treeness value among animal genes is approximately 0.999999.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-11-q4": {
+      "predicted": "The Mann-Whitney U statistic comparing animal vs fungal treeness values is 23727.0.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-11-q5": {
+      "predicted": "The p-value from the Mann-Whitney U test is approximately 5.72\u00d710^-40.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-11-q6": {
+      "predicted": "The median treeness value for fungal genes is approximately 0.7803.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 6,
+    "n_correct": 0,
+    "n_sure": 6
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 790,
+      "output_tokens": 42,
+      "total_tokens": 832,
+      "tool_calls": 0,
+      "model_calls": 6
+    },
+    "elapsed_seconds": 3.648,
+    "exhaustion_reason": null
+  }
+}

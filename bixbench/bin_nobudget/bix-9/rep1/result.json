@@ -1,0 +1,81 @@
+{
+  "study_id": "bix-9",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-9-q3": "Using dentate gyrus expression only and comparing each responder group to controls (p < 0.05, |log2FC| > 0.5, and mean dentate expression > 10), we found: 60 DE genes in good responders vs controls, 232 DE genes in bad responders vs controls. There is partial overlap: 35 genes are significantly differentially expressed in both good and bad responders relative to controls, while the remaining DE genes are unique to one responder group. Thus, there is no complete overlap across all groups, but a substantial partial overlap between good and bad responders in the dentate gyrus.",
+    "bix-9-q4": "The p-value for the Category (Tissue\u00d7Response) effect from a one-way ANOVA on gene expression (using a representative gene) is approximately 1.35\u00d710^-41.",
+    "bix-9-q5": "Bad responders show the highest number of significantly differentially expressed genes compared to controls in the dentate gyrus tissue."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 588873,
+      "output_tokens": 9338,
+      "total_tokens": 598211,
+      "tool_calls": 53,
+      "model_calls": 53
+    },
+    "elapsed_seconds": 3888.52,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-9-q3": {
+      "predicted": "Using dentate gyrus expression only and comparing each responder group to controls (p < 0.05, |log2FC| > 0.5, and mean dentate expression > 10), we found: 60 DE genes in good responders vs controls, 232 DE genes in bad responders vs controls. There is partial overlap: 35 genes are significantly differentially expressed in both good and bad responders relative to controls, while the remaining DE genes are unique to one responder group. Thus, there is no complete overlap across all groups, but a substantial partial overlap between good and bad responders in the dentate gyrus.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-9-q4": {
+      "predicted": "The p-value for the Category (Tissue\u00d7Response) effect from a one-way ANOVA on gene expression (using a representative gene) is approximately 1.35\u00d710^-41.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-9-q5": {
+      "predicted": "Bad responders show the highest number of significantly differentially expressed genes compared to controls in the dentate gyrus tissue.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.3333333333333333,
+    "precision": 0.3333333333333333,
+    "coverage": 1.0,
+    "n_total": 3,
+    "n_correct": 1,
+    "n_sure": 3
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 469,
+      "output_tokens": 14,
+      "total_tokens": 483,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.101,
+    "exhaustion_reason": null
+  }
+}

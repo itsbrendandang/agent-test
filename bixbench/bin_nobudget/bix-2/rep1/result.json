@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-2",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-2-q1": "Among individuals with a BLM variant (Affected + Carrier), approximately 54% of CHIP variants are somatic with VAF < 0.3 (mean proportion \u22480.264 in Affected and \u22480.274 in Carriers, summing to \u22480.538 of all CHIP variants).",
+    "bix-2-q2": "In the Control Children cohort, about 29% of CHIP variants have VAF between 0.3 and 0.7 (mean proportion \u22480.291)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 51956,
+      "output_tokens": 1201,
+      "total_tokens": 53157,
+      "tool_calls": 12,
+      "model_calls": 12
+    },
+    "elapsed_seconds": 40.796,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-2-q1": {
+      "predicted": "Among individuals with a BLM variant (Affected + Carrier), approximately 54% of CHIP variants are somatic with VAF < 0.3 (mean proportion \u22480.264 in Affected and \u22480.274 in Carriers, summing to \u22480.538 of all CHIP variants).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-2-q2": {
+      "predicted": "In the Control Children cohort, about 29% of CHIP variants have VAF between 0.3 and 0.7 (mean proportion \u22480.291).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 2,
+    "n_correct": 0,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 469,
+      "output_tokens": 14,
+      "total_tokens": 483,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.031,
+    "exhaustion_reason": null
+  }
+}

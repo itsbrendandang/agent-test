@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-1",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-1-q1": "Cannot be determined: the environment lacks R/DESeq2/clusterProfiler required to run the specified pipeline, so the adjusted p-value for \u201cregulation of T cell activation\u201d cannot be computed from the provided data.",
+    "bix-1-q2": "Cannot be determined: the required GO enrichment analysis with enrichGO and simplify() cannot be executed because R and the needed Bioconductor packages are not available in this environment."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 15516,
+      "output_tokens": 1171,
+      "total_tokens": 16687,
+      "tool_calls": 6,
+      "model_calls": 6
+    },
+    "elapsed_seconds": 27.691,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-1-q1": {
+      "predicted": "Cannot be determined: the environment lacks R/DESeq2/clusterProfiler required to run the specified pipeline, so the adjusted p-value for \u201cregulation of T cell activation\u201d cannot be computed from the provided data.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-1-q2": {
+      "predicted": "Cannot be determined: the required GO enrichment analysis with enrichGO and simplify() cannot be executed because R and the needed Bioconductor packages are not available in this environment.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 2,
+    "n_correct": 0,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "tool_calls": 0,
+      "model_calls": 0
+    },
+    "elapsed_seconds": 0.0,
+    "exhaustion_reason": null
+  }
+}

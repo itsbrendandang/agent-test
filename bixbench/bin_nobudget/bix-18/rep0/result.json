@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-18",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-18-q1": "0.076",
+    "bix-18-q2": "82,000",
+    "bix-18-q3": "Approximately 71% reduction in mean colony area for the \u0394lasR mutant compared to wildtype.",
+    "bix-18-q4": "Approximately 0.032",
+    "bix-18-q5": "About 0.29 (i.e., the \u0394lasR mutant mean area is ~29% of wildtype)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 5431,
+      "output_tokens": 574,
+      "total_tokens": 6005,
+      "tool_calls": 4,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 11.772,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-18-q1": {
+      "predicted": "0.076",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-18-q2": {
+      "predicted": "82,000",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": null
+    },
+    "bix-18-q3": {
+      "predicted": "Approximately 71% reduction in mean colony area for the \u0394lasR mutant compared to wildtype.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-18-q4": {
+      "predicted": "Approximately 0.032",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-18-q5": {
+      "predicted": "About 0.29 (i.e., the \u0394lasR mutant mean area is ~29% of wildtype).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 5,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 521,
+      "output_tokens": 21,
+      "total_tokens": 542,
+      "tool_calls": 0,
+      "model_calls": 3
+    },
+    "elapsed_seconds": 1.604,
+    "exhaustion_reason": null
+  }
+}

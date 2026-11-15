@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-3",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-3-q1": "Using the precomputed DESeq2 results that match the requested contrast (Final blood vs Baseline blood within Control animals), there are 53 genes with FDR (padj) < 0.05, |log2FC| > 1, and baseMean \u2265 10.",
+    "bix-3-q2": "For the Final blood vs Baseline blood comparison, 53 of 25,402 genes are differentially expressed under the specified thresholds, giving an estimated proportion of 0.0021 with a Wilson 95% confidence interval of approximately [0.0016, 0.0027].",
+    "bix-3-q3": "Using padj < 0.05 and |log2FoldChange| > 1, 52 genes are significantly differentially expressed specifically in the dentate gyrus vs baseline blood comparison only (i.e., they are not significant in either dentate gyrus vs final blood or final blood vs baseline blood).",
+    "bix-3-q4": "There are 14 genes that are significantly differentially expressed (padj < 0.05 and |log2FoldChange| > 1) across all three comparisons: final blood vs baseline blood, dentate gyrus vs baseline blood, and dentate gyrus vs final blood.",
+    "bix-3-q5": "Based on a binomial exact test with a 5% threshold on the fraction of differentially expressed genes, the dentate gyrus vs baseline blood comparison shows negligible effects (its DE proportion does not exceed the threshold)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 230264,
+      "output_tokens": 5784,
+      "total_tokens": 236048,
+      "tool_calls": 25,
+      "model_calls": 25
+    },
+    "elapsed_seconds": 2943.501,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-3-q1": {
+      "predicted": "Using the precomputed DESeq2 results that match the requested contrast (Final blood vs Baseline blood within Control animals), there are 53 genes with FDR (padj) < 0.05, |log2FC| > 1, and baseMean \u2265 10.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-3-q2": {
+      "predicted": "For the Final blood vs Baseline blood comparison, 53 of 25,402 genes are differentially expressed under the specified thresholds, giving an estimated proportion of 0.0021 with a Wilson 95% confidence interval of approximately [0.0016, 0.0027].",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-3-q3": {
+      "predicted": "Using padj < 0.05 and |log2FoldChange| > 1, 52 genes are significantly differentially expressed specifically in the dentate gyrus vs baseline blood comparison only (i.e., they are not significant in either dentate gyrus vs final blood or final blood vs baseline blood).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-3-q4": {
+      "predicted": "There are 14 genes that are significantly differentially expressed (padj < 0.05 and |log2FoldChange| > 1) across all three comparisons: final blood vs baseline blood, dentate gyrus vs baseline blood, and dentate gyrus vs final blood.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-3-q5": {
+      "predicted": "Based on a binomial exact test with a 5% threshold on the fraction of differentially expressed genes, the dentate gyrus vs baseline blood comparison shows negligible effects (its DE proportion does not exceed the threshold).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 0,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 1231,
+      "output_tokens": 35,
+      "total_tokens": 1266,
+      "tool_calls": 0,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 2.708,
+    "exhaustion_reason": null
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "overall": {
+    "accuracy": 0.23983739837398374,
+    "precision": 0.2706422018348624,
+    "coverage": 0.8861788617886179,
+    "n_questions": 246,
+    "n_correct": 59
+  },
+  "per_study": {
+    "bix-1": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 42078,
+      "total_seconds": 75.8,
+      "n_forced": 0
+    },
+    "bix-10": {
+      "repeats": 3,
+      "accuracy_mean": 0.2857142857142857,
+      "accuracy_std": 0.4948716593053935,
+      "total_tokens": 174765,
+      "total_seconds": 175.3,
+      "n_forced": 0
+    },
+    "bix-11": {
+      "repeats": 3,
+      "accuracy_mean": 0.2222222222222222,
+      "accuracy_std": 0.38490017945975047,
+      "total_tokens": 142629,
+      "total_seconds": 140.6,
+      "n_forced": 0
+    },
+    "bix-12": {
+      "repeats": 3,
+      "accuracy_mean": 0.26666666666666666,
+      "accuracy_std": 0.11547005383792516,
+      "total_tokens": 38730,
+      "total_seconds": 101.0,
+      "n_forced": 0
+    },
+    "bix-13": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 53320,
+      "total_seconds": 86.5,
+      "n_forced": 0
+    },
+    "bix-14": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 383252,
+      "total_seconds": 301.1,
+      "n_forced": 0
+    },
+    "bix-16": {
+      "repeats": 3,
+      "accuracy_mean": 0.4166666666666667,
+      "accuracy_std": 0.14433756729740643,
+      "total_tokens": 55681,
+      "total_seconds": 251.9,
+      "n_forced": 0
+    },
+    "bix-17": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 286055,
+      "total_seconds": 118.3,
+      "n_forced": 0
+    },
+    "bix-18": {
+      "repeats": 3,
+      "accuracy_mean": 0.8666666666666667,
+      "accuracy_std": 0.11547005383792512,
+      "total_tokens": 18086,
+      "total_seconds": 32.7,
+      "n_forced": 0
+    },
+    "bix-19": {
+      "repeats": 3,
+      "accuracy_mean": 0.6,
+      "accuracy_std": 0.34641016151377546,
+      "total_tokens": 19304,
+      "total_seconds": 42.0,
+      "n_forced": 0
+    },
+    "bix-2": {
+      "repeats": 3,
+      "accuracy_mean": 0.3333333333333333,
+      "accuracy_std": 0.28867513459481287,
+      "total_tokens": 602837,
+      "total_seconds": 433.5,
+      "n_forced": 0
+    },
+    "bix-20": {
+      "repeats": 3,
+      "accuracy_mean": 0.16666666666666666,
+      "accuracy_std": 0.28867513459481287,
+      "total_tokens": 339323,
+      "total_seconds": 330.7,
+      "n_forced": 0
+    },
+    "bix-21": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 168858,
+      "total_seconds": 57.6,
+      "n_forced": 0
+    },
+    "bix-3": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 485902,
+      "total_seconds": 6227.9,
+      "n_forced": 0
+    },
+    "bix-4": {
+      "repeats": 3,
+      "accuracy_mean": 0.047619047619047616,
+      "accuracy_std": 0.08247860988423225,
+      "total_tokens": 202631,
+      "total_seconds": 110.3,
+      "n_forced": 0
+    },
+    "bix-5": {
+      "repeats": 3,
+      "accuracy_mean": 0.0,
+      "accuracy_std": 0.0,
+      "total_tokens": 232843,
+      "total_seconds": 244.8,
+      "n_forced": 0
+    },
+    "bix-6": {
+      "repeats": 3,
+      "accuracy_mean": 0.3333333333333333,
+      "accuracy_std": 0.0,
+      "total_tokens": 59536,
+      "total_seconds": 259.0,
+      "n_forced": 0
+    },
+    "bix-7": {
+      "repeats": 3,
+      "accuracy_mean": 0.2222222222222222,
+      "accuracy_std": 0.38490017945975047,
+      "total_tokens": 389397,
+      "total_seconds": 375.0,
+      "n_forced": 0
+    },
+    "bix-8": {
+      "repeats": 3,
+      "accuracy_mean": 0.2222222222222222,
+      "accuracy_std": 0.09622504486493762,
+      "total_tokens": 16824,
+      "total_seconds": 42.9,
+      "n_forced": 0
+    },
+    "bix-9": {
+      "repeats": 3,
+      "accuracy_mean": 0.1111111111111111,
+      "accuracy_std": 0.19245008972987523,
+      "total_tokens": 1269125,
+      "total_seconds": 10275.4,
+      "n_forced": 0
+    }
+  },
+  "total_tokens": 4981176,
+  "total_seconds": 19682.288
+}

@@ -1,0 +1,109 @@
+{
+  "study_id": "bix-4",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-4-q1": "41.77% of fungal genes have DVMC values below 0.3.",
+    "bix-4-q2": "The median DVMC value for animal genes is 0.5102.",
+    "bix-4-q3": "The Mann-Whitney U statistic comparing animal and fungal DVMC values is 18,715.0.",
+    "bix-4-q4": "The standard deviation of animal DVMC values is 0.2915.",
+    "bix-4-q5": "The median fungal DVMC value is 0.3212.",
+    "bix-4-q6": "The highest animal DVMC value is 1.4881.",
+    "bix-4-q7": "The DVMC value for the fungal ortholog 324863at2759 is 0.5161."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 22828,
+      "output_tokens": 1268,
+      "total_tokens": 24096,
+      "tool_calls": 6,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 22.483,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-4-q1": {
+      "predicted": "41.77% of fungal genes have DVMC values below 0.3.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-4-q2": {
+      "predicted": "The median DVMC value for animal genes is 0.5102.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-4-q3": {
+      "predicted": "The Mann-Whitney U statistic comparing animal and fungal DVMC values is 18,715.0.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-4-q4": {
+      "predicted": "The standard deviation of animal DVMC values is 0.2915.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-4-q5": {
+      "predicted": "The median fungal DVMC value is 0.3212.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-4-q6": {
+      "predicted": "The highest animal DVMC value is 1.4881.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-4-q7": {
+      "predicted": "The DVMC value for the fungal ortholog 324863at2759 is 0.5161.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 7,
+    "n_correct": 0,
+    "n_sure": 7
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 922,
+      "output_tokens": 49,
+      "total_tokens": 971,
+      "tool_calls": 0,
+      "model_calls": 7
+    },
+    "elapsed_seconds": 3.804,
+    "exhaustion_reason": null
+  }
+}

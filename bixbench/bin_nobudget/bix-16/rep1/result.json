@@ -1,0 +1,88 @@
+{
+  "study_id": "bix-16",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-16-q1": "CCND1",
+    "bix-16-q2": "Right-skewed (skewness \u2248 0.60 for log2(TPM+1) across all cell lines).",
+    "bix-16-q3": "0 genes show Spearman correlation \u2265 0.6 between expression and essentiality.",
+    "bix-16-q4": "Approximately 21.8% of genes (q < 0.05 after Benjamini\u2013Hochberg correction)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 18140,
+      "output_tokens": 1280,
+      "total_tokens": 19420,
+      "tool_calls": 9,
+      "model_calls": 9
+    },
+    "elapsed_seconds": 94.046,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-16-q1": {
+      "predicted": "CCND1",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-16-q2": {
+      "predicted": "Right-skewed (skewness \u2248 0.60 for log2(TPM+1) across all cell lines).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-16-q3": {
+      "predicted": "0 genes show Spearman correlation \u2265 0.6 between expression and essentiality.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-16-q4": {
+      "predicted": "Approximately 21.8% of genes (q < 0.05 after Benjamini\u2013Hochberg correction).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.5,
+    "precision": 0.5,
+    "coverage": 1.0,
+    "n_total": 4,
+    "n_correct": 2,
+    "n_sure": 4
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 350,
+      "output_tokens": 14,
+      "total_tokens": 364,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 0.983,
+    "exhaustion_reason": null
+  }
+}

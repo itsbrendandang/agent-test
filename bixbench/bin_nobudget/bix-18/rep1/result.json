@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-18",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-18-q1": "0.076 (Wildtype has the largest mean area and this mean circularity)",
+    "bix-18-q2": "82,000 \u00b5m\u00b2 (to the nearest thousand; exact mean \u2248 82,442 \u00b5m\u00b2)",
+    "bix-18-q3": "Approximately 71% reduction in mean colony area for \u0394lasR compared to wildtype",
+    "bix-18-q4": "Approximately 0.032 for the circularity SEM of the rhlR- mutant",
+    "bix-18-q5": "About 0.29 (\u0394lasR mean area is roughly 29% of wildtype)"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 6242,
+      "output_tokens": 455,
+      "total_tokens": 6697,
+      "tool_calls": 5,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 12.32,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-18-q1": {
+      "predicted": "0.076 (Wildtype has the largest mean area and this mean circularity)",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-18-q2": {
+      "predicted": "82,000 \u00b5m\u00b2 (to the nearest thousand; exact mean \u2248 82,442 \u00b5m\u00b2)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-18-q3": {
+      "predicted": "Approximately 71% reduction in mean colony area for \u0394lasR compared to wildtype",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-18-q4": {
+      "predicted": "Approximately 0.032 for the circularity SEM of the rhlR- mutant",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-18-q5": {
+      "predicted": "About 0.29 (\u0394lasR mean area is roughly 29% of wildtype)",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.8,
+    "precision": 0.8,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 4,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 710,
+      "output_tokens": 28,
+      "total_tokens": 738,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.504,
+    "exhaustion_reason": null
+  }
+}

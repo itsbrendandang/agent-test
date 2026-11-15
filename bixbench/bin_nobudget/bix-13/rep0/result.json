@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-13",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-13-q1": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so differential expression with the specified method and thresholds cannot be computed.",
+    "bix-13-q2": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so differential expression with the specified method and FDR control cannot be computed.",
+    "bix-13-q3": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so dispersion estimates from the required model cannot be obtained.",
+    "bix-13-q4": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so the required differential expression calls and resulting percentages cannot be computed.",
+    "bix-13-q5": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so overlaps/uniqueness of DE genes between strains cannot be computed as specified."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 10060,
+      "output_tokens": 1966,
+      "total_tokens": 12026,
+      "tool_calls": 5,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 29.224,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-13-q1": {
+      "predicted": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so differential expression with the specified method and thresholds cannot be computed.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q2": {
+      "predicted": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so differential expression with the specified method and FDR control cannot be computed.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q3": {
+      "predicted": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so dispersion estimates from the required model cannot be obtained.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q4": {
+      "predicted": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so the required differential expression calls and resulting percentages cannot be computed.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-13-q5": {
+      "predicted": "Cannot be determined: the environment does not provide DESeq2 (Rscript is unavailable), so overlaps/uniqueness of DE genes between strains cannot be computed as specified.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 0,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "tool_calls": 0,
+      "model_calls": 0
+    },
+    "elapsed_seconds": 0.0,
+    "exhaustion_reason": null
+  }
+}

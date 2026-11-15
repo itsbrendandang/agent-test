@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-2",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-2-q1": "Among individuals with a BLM variant (carriers or affected), 4.27% of CHIP variants have VAF < 0.3 and are therefore classified as somatic by this definition.",
+    "bix-2-q2": "0%; there are no CHIP variants in the dataset annotated as belonging to a Control Children cohort, so the percentage with VAF between 0.3 and 0.7 is 0%."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 341588,
+      "output_tokens": 7360,
+      "total_tokens": 348948,
+      "tool_calls": 33,
+      "model_calls": 33
+    },
+    "elapsed_seconds": 235.406,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-2-q1": {
+      "predicted": "Among individuals with a BLM variant (carriers or affected), 4.27% of CHIP variants have VAF < 0.3 and are therefore classified as somatic by this definition.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-2-q2": {
+      "predicted": "0%; there are no CHIP variants in the dataset annotated as belonging to a Control Children cohort, so the percentage with VAF between 0.3 and 0.7 is 0%.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.5,
+    "precision": 0.5,
+    "coverage": 1.0,
+    "n_total": 2,
+    "n_correct": 1,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 450,
+      "output_tokens": 14,
+      "total_tokens": 464,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.278,
+    "exhaustion_reason": null
+  }
+}

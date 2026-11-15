@@ -1,0 +1,109 @@
+{
+  "study_id": "bix-10",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-10-q1": "In the multivariable ordinal logistic regression including patients_seen_cat and expect_interact_cat, the odds ratio for higher COVID-19 severity for BCG vs placebo is 1.29.",
+    "bix-10-q2": "In the adjusted ordinal logistic regression (controlling for patients_seen_cat and TRTGRP_cat), the odds ratio for higher COVID-19 severity for healthcare workers who expect to interact with patients (Yes vs No) is 1.03.",
+    "bix-10-q3": "None of the patient volume groups (1\u201350, 51\u2013100, >100 patients) show a statistically significant (p<0.05) difference in COVID-19 severity between BCG and placebo by chi-square test.",
+    "bix-10-q4": "The chi-square p-value for the association between BCG vaccination and COVID-19 severity among healthcare workers who expect to interact with patients is 0.0424 (approximately).",
+    "bix-10-q5": "For healthcare workers seeing >100 patients, the chi-square p-value for the association between vaccination status and disease severity is 0.4142.",
+    "bix-10-q6": "For healthcare workers seeing 1\u201350 patients, the chi-square p-value for the association between vaccination status and disease severity is 0.0735.",
+    "bix-10-q7": "Because the adjusted odds ratio for higher COVID-19 severity for workers who expect to interact with patients (Yes vs No) is 1.03, there is effectively 0% reduction (a slight, non-significant 3% increase) in odds rather than a reduction."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 100949,
+      "output_tokens": 4728,
+      "total_tokens": 105677,
+      "tool_calls": 12,
+      "model_calls": 12
+    },
+    "elapsed_seconds": 68.192,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-10-q1": {
+      "predicted": "In the multivariable ordinal logistic regression including patients_seen_cat and expect_interact_cat, the odds ratio for higher COVID-19 severity for BCG vs placebo is 1.29.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-10-q2": {
+      "predicted": "In the adjusted ordinal logistic regression (controlling for patients_seen_cat and TRTGRP_cat), the odds ratio for higher COVID-19 severity for healthcare workers who expect to interact with patients (Yes vs No) is 1.03.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-10-q3": {
+      "predicted": "None of the patient volume groups (1\u201350, 51\u2013100, >100 patients) show a statistically significant (p<0.05) difference in COVID-19 severity between BCG and placebo by chi-square test.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-10-q4": {
+      "predicted": "The chi-square p-value for the association between BCG vaccination and COVID-19 severity among healthcare workers who expect to interact with patients is 0.0424 (approximately).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-10-q5": {
+      "predicted": "For healthcare workers seeing >100 patients, the chi-square p-value for the association between vaccination status and disease severity is 0.4142.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-10-q6": {
+      "predicted": "For healthcare workers seeing 1\u201350 patients, the chi-square p-value for the association between vaccination status and disease severity is 0.0735.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-10-q7": {
+      "predicted": "Because the adjusted odds ratio for higher COVID-19 severity for workers who expect to interact with patients (Yes vs No) is 1.03, there is effectively 0% reduction (a slight, non-significant 3% increase) in odds rather than a reduction.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 0.8571428571428571,
+    "n_total": 7,
+    "n_correct": 0,
+    "n_sure": 6
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 1327,
+      "output_tokens": 43,
+      "total_tokens": 1370,
+      "tool_calls": 0,
+      "model_calls": 6
+    },
+    "elapsed_seconds": 3.123,
+    "exhaustion_reason": null
+  }
+}

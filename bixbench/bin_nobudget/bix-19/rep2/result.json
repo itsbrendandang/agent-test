@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-19",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-19-q1": "337 samples per group (rounded up from 336.54)",
+    "bix-19-q2": "Cohen\u2019s d \u2248 0.22 (KD vs CTRL, using pooled SD)",
+    "bix-19-q3": "Shapiro\u2013Wilk W statistic for KD NeuN counts: 0.9564 (approx.)",
+    "bix-19-q4": "F-statistic for Hemisphere \u00d7 Sex interaction: 1.07 (approximately)",
+    "bix-19-q5": "337 samples per group (rounded up from 336.54) are required for 80% power at \u03b1 = 0.05"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 5567,
+      "output_tokens": 666,
+      "total_tokens": 6233,
+      "tool_calls": 4,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 11.634,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-19-q1": {
+      "predicted": "337 samples per group (rounded up from 336.54)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-19-q2": {
+      "predicted": "Cohen\u2019s d \u2248 0.22 (KD vs CTRL, using pooled SD)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-19-q3": {
+      "predicted": "Shapiro\u2013Wilk W statistic for KD NeuN counts: 0.9564 (approx.)",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-19-q4": {
+      "predicted": "F-statistic for Hemisphere \u00d7 Sex interaction: 1.07 (approximately)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-19-q5": {
+      "predicted": "337 samples per group (rounded up from 336.54) are required for 80% power at \u03b1 = 0.05",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.4,
+    "precision": 0.4,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 2,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 712,
+      "output_tokens": 28,
+      "total_tokens": 740,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 1.967,
+    "exhaustion_reason": null
+  }
+}

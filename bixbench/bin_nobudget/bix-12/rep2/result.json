@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-12",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-12-q2": "3.27% (median percentage of parsimony-informative sites in fungi).",
+    "bix-12-q3": "Undefined (both groups\u2019 lowest percentages are 0%, so the ratio is 0/0).",
+    "bix-12-q4": "Mann-Whitney U statistic for percentages (animals vs fungi) is 7048.5.",
+    "bix-12-q5": "29 parsimony-informative sites (maximum in any animal gene alignment).",
+    "bix-12-q6": "Mann-Whitney U statistic for raw counts (animals vs fungi) is 6808.0."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 19086,
+      "output_tokens": 1262,
+      "total_tokens": 20348,
+      "tool_calls": 4,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 33.041,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-12-q2": {
+      "predicted": "3.27% (median percentage of parsimony-informative sites in fungi).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-12-q3": {
+      "predicted": "Undefined (both groups\u2019 lowest percentages are 0%, so the ratio is 0/0).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-12-q4": {
+      "predicted": "Mann-Whitney U statistic for percentages (animals vs fungi) is 7048.5.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-12-q5": {
+      "predicted": "29 parsimony-informative sites (maximum in any animal gene alignment).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-12-q6": {
+      "predicted": "Mann-Whitney U statistic for raw counts (animals vs fungi) is 6808.0.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.2,
+    "precision": 0.2,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 1,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 674,
+      "output_tokens": 35,
+      "total_tokens": 709,
+      "tool_calls": 0,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 2.706,
+    "exhaustion_reason": null
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "study_id": "bix-17",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-17-q2": "The median number of somatic CHIP variants (VAF < 0.3, after excluding intronic/intergenic/UTR variants and reference zygosity) among BLM mutation carriers is 3."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 68248,
+      "output_tokens": 1334,
+      "total_tokens": 69582,
+      "tool_calls": 10,
+      "model_calls": 9
+    },
+    "elapsed_seconds": 32.566,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-17-q2": {
+      "predicted": "The median number of somatic CHIP variants (VAF < 0.3, after excluding intronic/intergenic/UTR variants and reference zygosity) among BLM mutation carriers is 3.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 1,
+    "n_correct": 0,
+    "n_sure": 1
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "tool_calls": 0,
+      "model_calls": 0
+    },
+    "elapsed_seconds": 0.0,
+    "exhaustion_reason": null
+  }
+}

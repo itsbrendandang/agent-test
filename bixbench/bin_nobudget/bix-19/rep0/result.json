@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-19",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-19-q1": "337 samples per group",
+    "bix-19-q2": "Cohen\u2019s d \u2248 0.22 (KD vs CTRL, using pooled SD)",
+    "bix-19-q3": "Shapiro\u2013Wilk W statistic for KD NeuN counts \u2248 0.956",
+    "bix-19-q4": "F-statistic for the Hemisphere \u00d7 Sex interaction \u2248 1.07",
+    "bix-19-q5": "337 samples per group"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 5822,
+      "output_tokens": 768,
+      "total_tokens": 6590,
+      "tool_calls": 4,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 17.347,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-19-q1": {
+      "predicted": "337 samples per group",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-19-q2": {
+      "predicted": "Cohen\u2019s d \u2248 0.22 (KD vs CTRL, using pooled SD)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-19-q3": {
+      "predicted": "Shapiro\u2013Wilk W statistic for KD NeuN counts \u2248 0.956",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-19-q4": {
+      "predicted": "F-statistic for the Hemisphere \u00d7 Sex interaction \u2248 1.07",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-19-q5": {
+      "predicted": "337 samples per group",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.4,
+    "precision": 0.4,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 2,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 687,
+      "output_tokens": 28,
+      "total_tokens": 715,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.42,
+    "exhaustion_reason": null
+  }
+}

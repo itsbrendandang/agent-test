@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-12",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-12-q2": "3.27%",
+    "bix-12-q3": "The minimum percentages are 0% in both groups, so the ratio is undefined (effectively infinite).",
+    "bix-12-q4": "7048.5",
+    "bix-12-q5": "29",
+    "bix-12-q6": "6808.0"
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 9787,
+      "output_tokens": 1500,
+      "total_tokens": 11287,
+      "tool_calls": 5,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 36.029,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-12-q2": {
+      "predicted": "3.27%",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-12-q3": {
+      "predicted": "The minimum percentages are 0% in both groups, so the ratio is undefined (effectively infinite).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-12-q4": {
+      "predicted": "7048.5",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-12-q5": {
+      "predicted": "29",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-12-q6": {
+      "predicted": "6808.0",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.2,
+    "precision": 0.2,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 1,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 618,
+      "output_tokens": 35,
+      "total_tokens": 653,
+      "tool_calls": 0,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 2.649,
+    "exhaustion_reason": null
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "study_id": "bix-16",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-16-q1": "CCND1 (595)",
+    "bix-16-q2": "The gene expression distribution (log2(TPM+1) across all cell lines is moderately right-skewed (skewness \u2248 0.60).",
+    "bix-16-q3": "0 genes have a Spearman correlation \u2265 0.6 between expression and essentiality across cell lines.",
+    "bix-16-q4": "Approximately 21.9% of genes show a statistically significant Spearman correlation (FDR q<0.05, Benjamini-Hochberg) between expression and essentiality in either direction."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 8245,
+      "output_tokens": 1506,
+      "total_tokens": 9751,
+      "tool_calls": 5,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 91.387,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-16-q1": {
+      "predicted": "CCND1 (595)",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-16-q2": {
+      "predicted": "The gene expression distribution (log2(TPM+1) across all cell lines is moderately right-skewed (skewness \u2248 0.60).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-16-q3": {
+      "predicted": "0 genes have a Spearman correlation \u2265 0.6 between expression and essentiality across cell lines.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-16-q4": {
+      "predicted": "Approximately 21.9% of genes show a statistically significant Spearman correlation (FDR q<0.05, Benjamini-Hochberg) between expression and essentiality in either direction.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.5,
+    "precision": 0.5,
+    "coverage": 1.0,
+    "n_total": 4,
+    "n_correct": 2,
+    "n_sure": 4
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 371,
+      "output_tokens": 14,
+      "total_tokens": 385,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 0.996,
+    "exhaustion_reason": null
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "study_id": "bix-20",
+  "repeat": 0,
+  "seed": 0,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-20-q1": "Among Affected (BSyn proband) samples, 31 of 53 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.585.",
+    "bix-20-q2": "Among Control samples that are not Mother/Father, 81 of 148 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.547.",
+    "bix-20-q3": "Among Carrier samples, no somatic CHIP variants (VAF < 0.3) passed the filters, so the benign proportion is 0 (0/0, effectively no variants observed).",
+    "bix-20-q4": "Among Mother/Father samples, 16 of 41 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.390."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 175253,
+      "output_tokens": 6569,
+      "total_tokens": 181822,
+      "tool_calls": 22,
+      "model_calls": 22
+    },
+    "elapsed_seconds": 183.507,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-20-q1": {
+      "predicted": "Among Affected (BSyn proband) samples, 31 of 53 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.585.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-20-q2": {
+      "predicted": "Among Control samples that are not Mother/Father, 81 of 148 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.547.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-20-q3": {
+      "predicted": "Among Carrier samples, no somatic CHIP variants (VAF < 0.3) passed the filters, so the benign proportion is 0 (0/0, effectively no variants observed).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-20-q4": {
+      "predicted": "Among Mother/Father samples, 16 of 41 somatic CHIP variants (VAF < 0.3) were benign, giving a proportion of approximately 0.390.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 4,
+    "n_correct": 0,
+    "n_sure": 4
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 997,
+      "output_tokens": 28,
+      "total_tokens": 1025,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.306,
+    "exhaustion_reason": null
+  }
+}

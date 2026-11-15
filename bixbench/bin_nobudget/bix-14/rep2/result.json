@@ -1,0 +1,81 @@
+{
+  "study_id": "bix-14",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-14-q1": "No BLM-mutation carrier variants have VAF < 0.3 in this dataset (n = 0), so the fraction that are annotated as synonymous is undefined (effectively 0/0).",
+    "bix-14-q2": "Within the VAF < 0.3 subset, there are no qualifying variants in either the parental control group or the affected BLM-mutation group (both n = 0), so the missense variant frequency and their difference are undefined (NaN).",
+    "bix-14-q3": "After filtering out reference calls and variants in intronic, intergenic, or UTR regions, zero non-reference exonic variants in CHIP genes remain across the 86 samples (count = 0)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 204678,
+      "output_tokens": 7001,
+      "total_tokens": 211679,
+      "tool_calls": 20,
+      "model_calls": 19
+    },
+    "elapsed_seconds": 163.358,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-14-q1": {
+      "predicted": "No BLM-mutation carrier variants have VAF < 0.3 in this dataset (n = 0), so the fraction that are annotated as synonymous is undefined (effectively 0/0).",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-14-q2": {
+      "predicted": "Within the VAF < 0.3 subset, there are no qualifying variants in either the parental control group or the affected BLM-mutation group (both n = 0), so the missense variant frequency and their difference are undefined (NaN).",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    },
+    "bix-14-q3": {
+      "predicted": "After filtering out reference calls and variants in intronic, intergenic, or UTR regions, zero non-reference exonic variants in CHIP genes remain across the 86 samples (count = 0).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 0.3333333333333333,
+    "n_total": 3,
+    "n_correct": 0,
+    "n_sure": 1
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 459,
+      "output_tokens": 15,
+      "total_tokens": 474,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.209,
+    "exhaustion_reason": null
+  }
+}

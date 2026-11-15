@@ -1,0 +1,88 @@
+{
+  "study_id": "bix-20",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-20-q1": "Among BSyn probands (BLM mutation status = Affected), after filtering as specified, 100% (1.0) of somatic CHIP variants with VAF < 0.3 are classified as benign (benign or likely benign).",
+    "bix-20-q2": "In samples classified as Controls (patients without BLM mutation and not parents), there are no qualifying somatic CHIP variants (VAF < 0.3) after filtering, so the benign proportion cannot be estimated from these data (no variants).",
+    "bix-20-q3": "Among Carrier samples, after filtering as specified, 100% (1.0) of somatic CHIP variants with VAF < 0.3 are classified as benign (benign or likely benign).",
+    "bix-20-q4": "For Mother/Father (parent) samples, there are no qualifying somatic CHIP variants (VAF < 0.3) after filtering, so the benign proportion cannot be estimated from these data (no variants)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 91945,
+      "output_tokens": 4426,
+      "total_tokens": 96371,
+      "tool_calls": 16,
+      "model_calls": 16
+    },
+    "elapsed_seconds": 83.612,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-20-q1": {
+      "predicted": "Among BSyn probands (BLM mutation status = Affected), after filtering as specified, 100% (1.0) of somatic CHIP variants with VAF < 0.3 are classified as benign (benign or likely benign).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-20-q2": {
+      "predicted": "In samples classified as Controls (patients without BLM mutation and not parents), there are no qualifying somatic CHIP variants (VAF < 0.3) after filtering, so the benign proportion cannot be estimated from these data (no variants).",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-20-q3": {
+      "predicted": "Among Carrier samples, after filtering as specified, 100% (1.0) of somatic CHIP variants with VAF < 0.3 are classified as benign (benign or likely benign).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-20-q4": {
+      "predicted": "For Mother/Father (parent) samples, there are no qualifying somatic CHIP variants (VAF < 0.3) after filtering, so the benign proportion cannot be estimated from these data (no variants).",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.5,
+    "precision": 1.0,
+    "coverage": 0.5,
+    "n_total": 4,
+    "n_correct": 2,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 1022,
+      "output_tokens": 29,
+      "total_tokens": 1051,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.706,
+    "exhaustion_reason": null
+  }
+}

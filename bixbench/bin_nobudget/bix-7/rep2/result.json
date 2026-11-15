@@ -1,0 +1,81 @@
+{
+  "study_id": "bix-7",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-7-q1": "0 BLM mutation status groups (Carrier or Affected) show a significantly different CHIP variant frequency from control when restricting to non-reference exome variants; there are no such CHIP variants in this dataset under those filters.",
+    "bix-7-q2": "58.16 CHIP variants per sample on average after filtering out intronic, intergenic, and UTR variants (among non-reference variants).",
+    "bix-7-q3": "13,047 CHIP-call variants remain in the dataset after removing reference calls (i.e., all non-reference genotype rows)."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 216479,
+      "output_tokens": 3632,
+      "total_tokens": 220111,
+      "tool_calls": 20,
+      "model_calls": 19
+    },
+    "elapsed_seconds": 184.428,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-7-q1": {
+      "predicted": "0 BLM mutation status groups (Carrier or Affected) show a significantly different CHIP variant frequency from control when restricting to non-reference exome variants; there are no such CHIP variants in this dataset under those filters.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-7-q2": {
+      "predicted": "58.16 CHIP variants per sample on average after filtering out intronic, intergenic, and UTR variants (among non-reference variants).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-7-q3": {
+      "predicted": "13,047 CHIP-call variants remain in the dataset after removing reference calls (i.e., all non-reference genotype rows).",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.6666666666666666,
+    "precision": 0.6666666666666666,
+    "coverage": 1.0,
+    "n_total": 3,
+    "n_correct": 2,
+    "n_sure": 3
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 361,
+      "output_tokens": 14,
+      "total_tokens": 375,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.243,
+    "exhaustion_reason": null
+  }
+}

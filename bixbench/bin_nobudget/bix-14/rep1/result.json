@@ -1,0 +1,81 @@
+{
+  "study_id": "bix-14",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-14-q1": "Among BLM mutation carriers, 30 out of 108 variants with VAF < 0.3 are annotated as synonymous (\u224827.8%).",
+    "bix-14-q2": "Among variants with VAF < 0.3, the missense variant frequency is 11/108 (\u224810.2%) in the parental carrier controls and 2/60 (\u22483.3%) in the BLM-affected (BSyn probands) group, a difference of about 6.9 percentage points (\u22480.07 absolute).",
+    "bix-14-q3": "After filtering, 22,272 non-reference exonic variants in CHIP genes remain across the 86 samples."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 25901,
+      "output_tokens": 1836,
+      "total_tokens": 27737,
+      "tool_calls": 9,
+      "model_calls": 7
+    },
+    "elapsed_seconds": 50.95,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-14-q1": {
+      "predicted": "Among BLM mutation carriers, 30 out of 108 variants with VAF < 0.3 are annotated as synonymous (\u224827.8%).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-14-q2": {
+      "predicted": "Among variants with VAF < 0.3, the missense variant frequency is 11/108 (\u224810.2%) in the parental carrier controls and 2/60 (\u22483.3%) in the BLM-affected (BSyn probands) group, a difference of about 6.9 percentage points (\u22480.07 absolute).",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-14-q3": {
+      "predicted": "After filtering, 22,272 non-reference exonic variants in CHIP genes remain across the 86 samples.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 0.6666666666666666,
+    "n_total": 3,
+    "n_correct": 0,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 470,
+      "output_tokens": 14,
+      "total_tokens": 484,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.144,
+    "exhaustion_reason": null
+  }
+}

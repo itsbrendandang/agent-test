@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-5",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-5-q1": "No biological process shows statistically significant enrichment in diseased versus control fibroblast samples at conventional FDR thresholds; the weakest gene-level signal has FDR\u22480.88, so no GO term can be robustly prioritized as \u201cmost enriched.\u201d",
+    "bix-5-q4": "Similarly, no biological process can be identified as significantly enriched in ASXL1\u2011mutated fibroblasts based on this dataset, because no genes reach conventional significance in the disease\u2013control contrast (minimum FDR\u22480.88), precluding reliable GO enrichment results."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 115094,
+      "output_tokens": 1830,
+      "total_tokens": 116924,
+      "tool_calls": 12,
+      "model_calls": 11
+    },
+    "elapsed_seconds": 117.461,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-5-q1": {
+      "predicted": "No biological process shows statistically significant enrichment in diseased versus control fibroblast samples at conventional FDR thresholds; the weakest gene-level signal has FDR\u22480.88, so no GO term can be robustly prioritized as \u201cmost enriched.\u201d",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-5-q4": {
+      "predicted": "Similarly, no biological process can be identified as significantly enriched in ASXL1\u2011mutated fibroblasts based on this dataset, because no genes reach conventional significance in the disease\u2013control contrast (minimum FDR\u22480.88), precluding reliable GO enrichment results.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0,
+    "coverage": 0.0,
+    "n_total": 2,
+    "n_correct": 0,
+    "n_sure": 0
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 335,
+      "output_tokens": 15,
+      "total_tokens": 350,
+      "tool_calls": 0,
+      "model_calls": 2
+    },
+    "elapsed_seconds": 1.012,
+    "exhaustion_reason": null
+  }
+}

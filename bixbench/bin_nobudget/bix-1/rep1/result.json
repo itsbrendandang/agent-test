@@ -1,0 +1,74 @@
+{
+  "study_id": "bix-1",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-1-q1": "The adjusted p-value for the GO term \u201cregulation of T cell activation\u201d in the simplified enrichGO results is approximately 0.0003.",
+    "bix-1-q2": "The adjusted p-value threshold for the GO term \u201cneutrophil activation\u201d in the enrichGO analysis (ASXL1 mutation vs control DEGs, gencode background, GO terms simplified at similarity > 0.7) is approximately 0.0126."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 6322,
+      "output_tokens": 372,
+      "total_tokens": 6694,
+      "tool_calls": 5,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 12.291,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-1-q1": {
+      "predicted": "The adjusted p-value for the GO term \u201cregulation of T cell activation\u201d in the simplified enrichGO results is approximately 0.0003.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-1-q2": {
+      "predicted": "The adjusted p-value threshold for the GO term \u201cneutrophil activation\u201d in the enrichGO analysis (ASXL1 mutation vs control DEGs, gencode background, GO terms simplified at similarity > 0.7) is approximately 0.0126.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 2,
+    "n_correct": 0,
+    "n_sure": 2
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "tool_calls": 0,
+      "model_calls": 0
+    },
+    "elapsed_seconds": 0.0,
+    "exhaustion_reason": null
+  }
+}

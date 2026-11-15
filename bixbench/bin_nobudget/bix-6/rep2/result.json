@@ -1,0 +1,102 @@
+{
+  "study_id": "bix-6",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-6-q1": "Acute noTcells S2 (tied in minimum p-value with Acute Tcells S1 and Chronic Round3 S1, all at 2\u00d710\u207b\u2076).",
+    "bix-6-q3": "Cannot be determined from the available data, because the Reactome pathway gene identifiers do not match the gene identifiers in the MAGeCK results, preventing valid pathway over-representation analysis across rounds.",
+    "bix-6-q4": "Spearman \u03c1 \u2248 0.021 (p \u2248 0.0012) between Chronic Round1 S1 and S2 MAGeCK p-values.",
+    "bix-6-q5": "Cannot be determined from the available data, because pathway-level enrichment p-values for each condition are not computable given the mismatch between Reactome gene IDs and the MAGeCK gene identifiers.",
+    "bix-6-q6": "Spearman \u03c1 \u2248 0.022 (p \u2248 8.7\u00d710\u207b\u2074) between Acute Tcells S1 and S2 MAGeCK p-values.",
+    "bix-6-q7": "Cannot be determined from the available data, because the most significantly enriched pathway in Chronic Round2 requires pathway over-representation statistics that cannot be computed with the mismatched gene identifiers."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 10010,
+      "output_tokens": 1288,
+      "total_tokens": 11298,
+      "tool_calls": 6,
+      "model_calls": 6
+    },
+    "elapsed_seconds": 47.376,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-6-q1": {
+      "predicted": "Acute noTcells S2 (tied in minimum p-value with Acute Tcells S1 and Chronic Round3 S1, all at 2\u00d710\u207b\u2076).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-6-q3": {
+      "predicted": "Cannot be determined from the available data, because the Reactome pathway gene identifiers do not match the gene identifiers in the MAGeCK results, preventing valid pathway over-representation analysis across rounds.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q4": {
+      "predicted": "Spearman \u03c1 \u2248 0.021 (p \u2248 0.0012) between Chronic Round1 S1 and S2 MAGeCK p-values.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade> correct </grade>"
+    },
+    "bix-6-q5": {
+      "predicted": "Cannot be determined from the available data, because pathway-level enrichment p-values for each condition are not computable given the mismatch between Reactome gene IDs and the MAGeCK gene identifiers.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": null
+    },
+    "bix-6-q6": {
+      "predicted": "Spearman \u03c1 \u2248 0.022 (p \u2248 8.7\u00d710\u207b\u2074) between Acute Tcells S1 and S2 MAGeCK p-values.",
+      "grade": 1,
+      "grade_type": "correct",
+      "judge_raw": "<grade>correct</grade>"
+    },
+    "bix-6-q7": {
+      "predicted": "Cannot be determined from the available data, because the most significantly enriched pathway in Chronic Round2 requires pathway over-representation statistics that cannot be computed with the mismatched gene identifiers.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.3333333333333333,
+    "precision": 0.4,
+    "coverage": 0.8333333333333334,
+    "n_total": 6,
+    "n_correct": 2,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 713,
+      "output_tokens": 29,
+      "total_tokens": 742,
+      "tool_calls": 0,
+      "model_calls": 4
+    },
+    "elapsed_seconds": 2.474,
+    "exhaustion_reason": null
+  }
+}

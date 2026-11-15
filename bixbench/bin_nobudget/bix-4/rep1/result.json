@@ -1,0 +1,109 @@
+{
+  "study_id": "bix-4",
+  "repeat": 1,
+  "seed": 1,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-4-q1": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+    "bix-4-q2": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+    "bix-4-q3": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present, so a Mann-Whitney U comparing animals and fungi cannot be computed.",
+    "bix-4-q4": "Cannot be determined from the provided data: animal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+    "bix-4-q5": "Cannot be determined from the provided data: fungal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+    "bix-4-q6": "Cannot be determined from the provided data: animal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+    "bix-4-q7": "Cannot be determined from the provided data: a PhyKIT DVMC value for fungal ortholog 324863at2759 is not present or derivable from the available files."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 122891,
+      "output_tokens": 2333,
+      "total_tokens": 125224,
+      "tool_calls": 11,
+      "model_calls": 11
+    },
+    "elapsed_seconds": 42.6,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-4-q1": {
+      "predicted": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    },
+    "bix-4-q2": {
+      "predicted": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    },
+    "bix-4-q3": {
+      "predicted": "Cannot be determined from the provided data: DVMC values from PhyKIT are not present, so a Mann-Whitney U comparing animals and fungi cannot be computed.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    },
+    "bix-4-q4": {
+      "predicted": "Cannot be determined from the provided data: animal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-4-q5": {
+      "predicted": "Cannot be determined from the provided data: fungal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    },
+    "bix-4-q6": {
+      "predicted": "Cannot be determined from the provided data: animal DVMC values from PhyKIT are not present or computable given only the IQ-TREE log files in this dataset.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade> refused </grade>"
+    },
+    "bix-4-q7": {
+      "predicted": "Cannot be determined from the provided data: a PhyKIT DVMC value for fungal ortholog 324863at2759 is not present or derivable from the available files.",
+      "grade": 0,
+      "grade_type": "refused",
+      "judge_raw": "<grade>refused</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0,
+    "coverage": 0.0,
+    "n_total": 7,
+    "n_correct": 0,
+    "n_sure": 0
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 1042,
+      "output_tokens": 54,
+      "total_tokens": 1096,
+      "tool_calls": 0,
+      "model_calls": 7
+    },
+    "elapsed_seconds": 3.871,
+    "exhaustion_reason": null
+  }
+}

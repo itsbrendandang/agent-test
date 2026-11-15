@@ -1,0 +1,95 @@
+{
+  "study_id": "bix-3",
+  "repeat": 2,
+  "seed": 2,
+  "model": "gpt-5.1",
+  "provider": "openai",
+  "submitted": true,
+  "forced": false,
+  "stop_reason": "submitted",
+  "error": null,
+  "answers": {
+    "bix-3-q1": "14 genes.",
+    "bix-3-q2": "Using the Wilson method, the 95% confidence interval for the DE proportion (FDR<0.05, |log2FC|>1, baseMean\u226510) between Final and Baseline blood is approximately 0.00033 to 0.00093 (i.e., 0.033%\u20130.093%).",
+    "bix-3-q3": "42 genes are specifically differentially expressed in dentate gyrus vs baseline blood (padj < 0.05 and |log2FoldChange| > 1) and not DE in either dentate gyrus vs final blood or final vs baseline blood.",
+    "bix-3-q4": "0 genes are differentially expressed across all three comparisons (Final vs Baseline blood, Dentate gyrus vs Baseline blood, Dentate gyrus vs Final blood) under padj < 0.05 and |log2FoldChange| > 1.",
+    "bix-3-q5": "None of the three tissue comparisons shows negligible effects under a 5% threshold; all three (Final vs Baseline blood, Dentate gyrus vs Baseline blood, Dentate gyrus vs Final blood) have proportions of DE genes that are significantly different from 5% by an exact binomial test."
+  },
+  "budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": 1000000000,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 195724,
+      "output_tokens": 5342,
+      "total_tokens": 201066,
+      "tool_calls": 29,
+      "model_calls": 29
+    },
+    "elapsed_seconds": 3121.568,
+    "exhaustion_reason": null
+  },
+  "grades": {
+    "bix-3-q1": {
+      "predicted": "14 genes.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-3-q2": {
+      "predicted": "Using the Wilson method, the 95% confidence interval for the DE proportion (FDR<0.05, |log2FC|>1, baseMean\u226510) between Final and Baseline blood is approximately 0.00033 to 0.00093 (i.e., 0.033%\u20130.093%).",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-3-q3": {
+      "predicted": "42 genes are specifically differentially expressed in dentate gyrus vs baseline blood (padj < 0.05 and |log2FoldChange| > 1) and not DE in either dentate gyrus vs final blood or final vs baseline blood.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade> incorrect </grade>"
+    },
+    "bix-3-q4": {
+      "predicted": "0 genes are differentially expressed across all three comparisons (Final vs Baseline blood, Dentate gyrus vs Baseline blood, Dentate gyrus vs Final blood) under padj < 0.05 and |log2FoldChange| > 1.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    },
+    "bix-3-q5": {
+      "predicted": "None of the three tissue comparisons shows negligible effects under a 5% threshold; all three (Final vs Baseline blood, Dentate gyrus vs Baseline blood, Dentate gyrus vs Final blood) have proportions of DE genes that are significantly different from 5% by an exact binomial test.",
+      "grade": 0,
+      "grade_type": "incorrect",
+      "judge_raw": "<grade>incorrect</grade>"
+    }
+  },
+  "metrics": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "coverage": 1.0,
+    "n_total": 5,
+    "n_correct": 0,
+    "n_sure": 5
+  },
+  "grader_model": "gpt-4o",
+  "grader_budget": {
+    "caps": {
+      "max_input_tokens": null,
+      "max_output_tokens": null,
+      "max_total_tokens": null,
+      "max_tool_calls": null,
+      "max_seconds": null
+    },
+    "used": {
+      "input_tokens": 1191,
+      "output_tokens": 35,
+      "total_tokens": 1226,
+      "tool_calls": 0,
+      "model_calls": 5
+    },
+    "elapsed_seconds": 2.929,
+    "exhaustion_reason": null
+  }
+}
