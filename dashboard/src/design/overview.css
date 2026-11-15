@@ -143,6 +143,8 @@
 .ov-page > .ov-lab { width: min(1100px, 100%); max-width: none; }
 .ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
 .ov-answer { min-width: 0; }
+.ov-answer-open { font-weight: inherit; text-align: left; }
+.ov-answer-status { color: var(--text-muted); }
 .ov-counts { font-size: 13px; color: var(--text-muted); }
 .ov-counts b { color: var(--text); font-weight: 650; }
 /* Under the question box the lab keeps one screen's height: its side panel (and the activity list in it) scrolls. */

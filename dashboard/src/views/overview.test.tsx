@@ -104,9 +104,18 @@ describe("the Agent Lab under the question box", () => {
     // When the answer ends, the line says so and the counts are read again.
     const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
     const before = reads()
-    await feed([{ seq: 4, at: 4, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
+    await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
     await waitFor(() => expect(reads()).toBeGreaterThan(before))
+    // The finished answer is not printed here: one line, and the links to its chat in Research.
+    expect(screen.getByText("The answer is ready in the Research chat.")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("hERG blocking is a known risk")
+    expect(onOpen).not.toHaveBeenCalled() // still no jump to Research by itself
+    await userEvent.click(screen.getByRole("button", { name: "Open in Research chat" }))
+    expect(onOpen).toHaveBeenLastCalledWith("Home")
+    await userEvent.click(screen.getByRole("button", { name: "Is hERG a risk for KRAS G12C inhibitors?" }))
+    expect(onOpen).toHaveBeenCalledTimes(2)
+    expect(sessionStorage.getItem("open.answer")).toBeNull() // the chat it opens is the conversation with its thread (home.chat above)
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
