@@ -173,20 +173,18 @@ def parse_mode(mode: str) -> tuple[str, int]:
     return base, int(rest) if rest.strip().isdigit() else 0
 
 
-def review_split(*, auditor: bool = True, critic: bool = True) -> dict[str, float]:
-    """REVIEW_SPLIT with a reviewer that is off giving its part to the other one."""
+def review_split(*, auditor: bool = True) -> dict[str, float]:
+    """REVIEW_SPLIT; without the auditor (--no-auditor) its part goes to the critic."""
     split = dict(REVIEW_SPLIT)
     if not auditor:
         split["critique"] += split.pop("audit")
-    if not critic:
-        split["audit"] = split.get("audit", 0.0) + split.pop("critique")
     return split
 
 
 def _review_share(role: str, round_no: int, flags: SwarmFlags) -> float:
     """The share of the claim's allocation `role` may have spent by the end of round `round_no`."""
     rounds = max(1, flags.review_rounds)
-    split = review_split(auditor=flags.auditor, critic=flags.critic)
+    split = review_split(auditor=flags.auditor)
     done = min(max(round_no, 1), rounds)
     return (
         stage_share("review", pilot=flags.pilot, review=flags.review)

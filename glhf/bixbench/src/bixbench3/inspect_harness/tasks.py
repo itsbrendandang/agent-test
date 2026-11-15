@@ -42,7 +42,6 @@ def bixbench3_cases(
     memory_dir: str | None = None,
     seed: int | None = None,
     engine: str = "phases",
-    no_critic: bool = False,
     no_auditor: bool = False,
     no_pilot: bool = False,
     no_retriage: bool = False,
@@ -84,7 +83,6 @@ def bixbench3_cases(
             exa=exa,
             memory_dir=memory_dir,
             engine=engine,
-            no_critic=no_critic,
             no_auditor=no_auditor,
             no_pilot=no_pilot,
             no_retriage=no_retriage,
@@ -114,7 +112,6 @@ def bixbench3_cases(
             "review_rounds": review_rounds if solver == "glhf" else None,
             "engine": engine if solver == "glhf" else None,
             "ablations": {
-                "no_critic": no_critic,
                 "no_auditor": no_auditor,
                 "no_pilot": no_pilot,
                 "no_retriage": no_retriage,

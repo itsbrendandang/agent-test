@@ -769,7 +769,6 @@ def glhf_swarm(
     exa: bool = False,
     memory_dir: str | None = None,
     engine: str = "phases",
-    no_critic: bool = False,
     no_auditor: bool = False,
     no_pilot: bool = False,
     no_retriage: bool = False,
@@ -787,7 +786,6 @@ def glhf_swarm(
     if engine not in ("phases", "claims"):
         raise ValueError(f"unknown engine {engine!r}; use 'phases' or 'claims'")
     flags = SwarmFlags.from_options(
-        no_critic=no_critic,
         no_auditor=no_auditor,
         no_pilot=no_pilot,
         no_retriage=no_retriage,

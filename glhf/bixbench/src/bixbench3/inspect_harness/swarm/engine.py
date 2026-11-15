@@ -247,7 +247,7 @@ async def run_claims(
         # The auditor and the critic review on their own; neither waits for the other's report.
         await asyncio.gather(
             each(audit, reviewing) if flags.auditor else asyncio.sleep(0),
-            each(critique, reviewing) if flags.critic else asyncio.sleep(0),
+            each(critique, reviewing),
         )
         await hooks.after_critique(n)
         for record in reviewing:
@@ -257,14 +257,11 @@ async def run_claims(
             state, reason, evidence = review_outcome(
                 ledger,
                 record,
-                # Without a critic (--no-critic) only the registered tests can support a claim.
-                critic_completed=critic_done.get(record.id, False) if flags.critic else True,
+                critic_completed=critic_done.get(record.id, False),
                 rounds_left=flags.review_rounds - n,
                 budget_left=budget_left,
             )
             evidence["round"] = n
-            if not flags.critic:
-                evidence["critic"] = "off (--no-critic)"
             board.move(record.id, state, ENGINE, reason, evidence)
         held = retriage(board, held, enabled=flags.retriage)
         for record in board.in_state(State.SENT_BACK):
