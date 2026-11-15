@@ -103,12 +103,13 @@ export function AgentsView() {
         {shown.length === 0 && <p className="empty-note">No agent matches{filter.trim() ? <> “{filter.trim()}”</> : null}{group !== "all" ? ` in ${GROUP_WORD[group]}` : ""}. Every word has to appear in the name, job or tools. Try fewer words.</p>}
         <ul className="members" aria-label="Agents">
           {shown.map((m) => (
-            <li key={m.key} className="member-card card-surface" data-group={m.group}>
+            <li key={m.key} className="member-card" data-group={m.group}>
               <div className="member-top">
                 <AgentAvatar name={m.agent} size={40} />
+                <h3 className="member-name">{m.name}</h3>
+                <span className="member-dots" aria-hidden="true" />
                 <span className="pill" data-kind="outline">{GROUP_WORD[m.group]}</span>
               </div>
-              <h3>{m.name}</h3>
               <p className="member-job">{m.job}</p>
               <dl className="member-fields">
                 <div><dt>Works on</dt><dd>{m.worksOn}</dd></div>
