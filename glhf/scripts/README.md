@@ -15,7 +15,8 @@ agents answer them → count how many they got right.
 | `fetch_eval_data.py` | **Downloads** science-question datasets from Hugging Face onto your computer. | Once per dataset. |
 | `eval_adapter.py` | **Runs** a solver on those questions and **scores** it against the known answers. | Every time you want a score. |
 | `demo.sh` | **One-command demo** that does download + run + score together, with explanations. | To quickly show it works. |
-| `fetch_research.py` | **Collects reference papers** about this project's ideas (swarm, falsification, AI scientists, benchmarks) as readable files. | To build a background/reference corpus. |
+| `fetch_literature.py` | **Collects biomedical evidence** (PubMed/Europe PMC abstracts) to back up the claims the agents make. Same source the app uses. | To cache an evidence corpus for claim-checking. |
+| `fetch_research.py` | **Collects background papers** about this project's ideas (swarm, falsification, AI scientists) from arXiv. | For the writeup / understanding the method. |
 
 So: `fetch` = get the data, `adapter` = run the test, `demo.sh` = both at once,
 `fetch_research.py` = gather background reading.
@@ -27,7 +28,27 @@ So: `fetch` = get the data, `adapter` = run the test, `demo.sh` = both at once,
 - **Reference research material** (`fetch_research.py`): real papers *about the ideas
   our project is built on*, saved as text for background reading or to feed the agents.
 
-## Reference research material (`fetch_research.py`)
+## Evidence corpus for claim-checking (`fetch_literature.py`)  <- most relevant
+
+The app verifies claims with `literature_search`, which queries **Europe PMC**
+(PubMed + preprints) live (see `engine/src/literature.ts`). This script hits the
+**same source** and saves the abstracts, so you have a cached evidence base to
+inspect, cite, demo offline, or reuse across runs.
+
+```bash
+python3 glhf/scripts/fetch_literature.py "KRAS G12C covalent inhibitor resistance"
+python3 glhf/scripts/fetch_literature.py --file claims.txt    # one query per line
+python3 glhf/scripts/fetch_literature.py "TP53 mutation prognosis" --max 8
+```
+
+Each query saves one Markdown file under `glhf/data/literature/` with the top
+abstracts (title, journal, year, URL, abstract) — the same fields the live tool
+uses. Query tip: 3–6 PubMed-style keywords, no sentences.
+
+**Note:** the app already does this live during a run, so this is a *cache/offline
+backup* of the evidence, not a new capability.
+
+## Background papers (`fetch_research.py`)
 
 Downloads open-access papers from arXiv that match our project's core ideas
 (multi-agent swarms, LLM debate/critique, hypothesis falsification, AI scientists,
