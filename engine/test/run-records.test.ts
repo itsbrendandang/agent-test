@@ -143,6 +143,8 @@ test("npm start: mode, paid switch, keys (yes or no only), direct answers, and a
   assert.match(other.warnings[0] ?? "", /runs commit aaaaaaaaaa, but this folder is at bbbbbbbbbb/)
   const older = engineSummary({ mock: true, paidCalls: false }, "b".repeat(40), true)
   assert.match(older.warnings[0] ?? "", /does not say which code it runs/)
+  const unknown = engineSummary({ ...status, manifest: { commit: null, dirty: null } }, "b".repeat(40), true)
+  assert.match(unknown.warnings[0] ?? "", /cannot say which commit it runs/)
   assert.match(engineSummary({ ...status, paidSource: "switch" }, null, false).lines.join("\n"), /turned on in the app/)
   assert.match(engineSummary(undefined, null, true).warnings[0] ?? "", /Could not read the engine's mode/)
   assert.ok(!JSON.stringify(engineSummary(status, null, true)).includes("sk-"), "never a key value")

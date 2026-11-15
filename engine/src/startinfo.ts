@@ -29,6 +29,7 @@ export function engineSummary(status: EngineStatus | undefined, here: string | n
   if (!reused) return { lines, warnings }
   lines.push(`This engine was already running on port ${port}: its mode comes from how it was started, not from .env now.`)
   if (!status.manifest) warnings.push(`The engine on port ${port} does not say which code it runs, so it is older than this folder's code. Stop it, then run npm start again.`)
+  else if (!commit && here) warnings.push(`The engine on port ${port} cannot say which commit it runs (it was started without git), so it may not be this folder's code. Stop it, then run npm start again to use this folder's code.`)
   else if (commit && here && commit !== here) warnings.push(`The engine on port ${port} runs commit ${commit.slice(0, 10)}, but this folder is at ${here.slice(0, 10)}. It was started from another folder or before an update. Stop it, then run npm start again to use this folder's code.`)
   return { lines, warnings }
 }
