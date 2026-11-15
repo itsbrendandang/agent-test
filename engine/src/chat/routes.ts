@@ -21,7 +21,6 @@ import { boardMembers, buildCatalog, type Catalog, loadSkills, PROVIDER_KEY, typ
 import { callModel, type Fetch, prompt, readReply, type Turn } from "./model.ts"
 import { loadSpecialists } from "../specialists.ts"
 import { rosterFor } from "./roster.ts"
-import { directAnswers } from "../research/preview.ts"
 import { agentsFor, checkBrief, claimStart, DEFAULT_EFFORT, derive, effortOf, efforts, type EffortId, isEffort, type Limits, loadPlan, MAX_BRIEF, methodSkills, overridesApplied, type Plan, planFrom, savePlan, within } from "./plan.ts"
 
 export interface ChatDeps {
@@ -270,8 +269,7 @@ export async function handleChat(req: IncomingMessage, res: ServerResponse, part
   const route = parts.slice(2).join("/") // "", "catalog", "search", "plans/<id>/start"
   try {
     trust(req, deps, "scripted", "the chat routes")
-    // directAnswers: false when a question on the Research screen would get a plan instead of an answer (Real mode without RESEARCH_PREVIEW=1).
-    if (route === "catalog" && req.method === "GET") return json(200, { ...buildCatalog(deps.config, deps.env), efforts: efforts(deps.config), defaultEffort: DEFAULT_EFFORT, directAnswers: directAnswers(deps.mock, deps.env) })
+    if (route === "catalog" && req.method === "GET") return json(200, { ...buildCatalog(deps.config, deps.env), efforts: efforts(deps.config), defaultEffort: DEFAULT_EFFORT })
     // The members of one run (the lead, the board members it kept, the specialists a plan added), or of the config when no run is named.
     if (route === "roster" && req.method === "GET") return json(200, rosterFor(deps.config, new URL(req.url ?? "/", "http://x").searchParams.get("run")))
     if (route === "search" && req.method === "GET") {

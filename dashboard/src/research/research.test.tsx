@@ -446,17 +446,6 @@ describe("the adapter, contract v2", () => {
     // ...but it says why, so the plan is not mistaken for an answer
     expect(screen.getByText(/Direct answers are switched off on this engine\. In Real mode they need the engine started with RESEARCH_PREVIEW=1\./)).toHaveAttribute("role", "status")
   })
-  it("Real mode, and the catalog says direct answers are off: the Search screen says so before anything is asked", async () => {
-    routes({ "GET /api/chat/catalog": { status: 200, body: { ...CATALOG_ON, directAnswers: false } }, "GET /api/status": { status: 200, body: {} } })
-    render(<HomeView onOpen={() => {}} />)
-    expect(await screen.findByText(/Direct answers are switched off on this engine/)).toBeInTheDocument()
-  })
-  it("direct answers on (or an engine that does not say): no such note", async () => {
-    routes({ "GET /api/chat/catalog": { status: 200, body: { ...CATALOG_ON, directAnswers: true } }, "GET /api/status": { status: 200, body: {} } })
-    render(<HomeView onOpen={() => {}} />)
-    await screen.findByRole("radio", { name: "Standard" })
-    expect(screen.queryByText(/Direct answers are switched off/)).toBeNull()
-  })
 })
 
 describe("a demo answer exactly as the engine streams it today (contract v2)", () => {

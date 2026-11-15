@@ -24,8 +24,6 @@ export interface Catalog {
   search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number }; /** What a run started now would search with. */ provider?: "exa" | "fixture"; literature?: { provider: string; free: boolean; keyNeeded: boolean; available: boolean } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
-  /** False when a question on the Search screen gets a plan instead of a direct answer (Real mode without RESEARCH_PREVIEW=1). Absent on older engines. */
-  directAnswers?: boolean
   /** Absent on an engine without effort levels: then no selector is shown and no effort is sent. */
   efforts?: Effort[]
   defaultEffort?: EffortId

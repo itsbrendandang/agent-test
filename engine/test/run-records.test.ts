@@ -80,15 +80,13 @@ test("RESEARCH_PREVIEW: direct answers always in Demo mode, in Real mode only wi
   assert.match(previewLine(true, {}), /DEMO answers, nothing is spent.*now not set/)
 })
 
-test("GET /api/status and the chat catalog report the preview switch, and the status carries the manifest", async () => {
+test("GET /api/status reports the preview switch, and the status carries the manifest", async () => {
   for (const [mock, env, preview, direct] of [[false, {}, false, false], [false, { RESEARCH_PREVIEW: "1" }, true, true], [true, {}, false, true]] as const) {
     const app = createApp({ config: tempConfig(), mock, env: { ...env } })
     const url = await serve((req, res) => void app.handler(req, res))
     const status = await getJson(`${url}/api/status`)
     assert.deepEqual([status.researchPreview, status.directAnswers], [preview, direct], `mock ${mock}, ${JSON.stringify(env)}`)
     assert.deepEqual(Object.keys(status.manifest as object).sort(), ["commit", "dirty", "hashes", "versions"])
-    const catalog = await getJson(`${url}/api/chat/catalog`)
-    assert.equal(catalog.directAnswers, direct)
   }
 })
 

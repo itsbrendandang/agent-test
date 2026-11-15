@@ -207,7 +207,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       invalid={problem?.control === "box"} describedBy={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`}
       beforeSend={activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
       sendLabel={activeId ? "Send (queued)" : undefined} sendTitle={activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
-      {(answersOff || catalog?.directAnswers === false) && <p className="muted small" role="status" id="home-direct-off">{DIRECT_ANSWERS_OFF}</p>}
+      {answersOff && <p className="muted small" role="status" id="home-direct-off">{DIRECT_ANSWERS_OFF}</p>}
       {stopNote && activeId === undefined && <p className="muted small" role="status">{stopNote}</p>}
       {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
