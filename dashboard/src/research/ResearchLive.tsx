@@ -10,7 +10,7 @@
 // Reduced motion (the system setting) and "Pause motion" (the scene's own button) are honoured by the scene.
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import { Lab } from "@/lab/Lab"
-import { answerLab, answerOrder, num, type LabEvent } from "@/lab/adapter"
+import { answerLab, answerOrder, num, str, type LabEvent } from "@/lab/adapter"
 import { CHARACTERS, clip, plural } from "@/lab/model"
 import { countAt, defaultPace, lengthOf, timelineOf } from "@/lab/replay"
 import { useSeenEvents } from "./api"
@@ -76,7 +76,12 @@ export function ResearchLive({ answer, fresh = false, children }: Props) {
   // Who the engine has reported doing something: a step, a walk. A teammate with a role in answers but no step yet stays idle at its desk.
   // Counted before the answer's end, which sends every teammate back to its desk (or marks it done) whether it worked or not.
   const worked = useMemo(() => answerLab(ordered.filter((e) => !ENDS.has(String(e.type))), answer), [ordered, answer])
-  const took = CHARACTERS.filter((c) => { const a = worked.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + worked.visitors.filter((v) => v.state !== "idle").length
+  // A method specialist took part once a step of its own started, unless the engine ended that step without asking it.
+  const guests = useMemo(() => {
+    const notAsked = new Set(ordered.filter((e) => e.type === "step.finished" && str(e.summary)?.startsWith("Not asked")).map((e) => e.step))
+    return new Set(ordered.filter((e) => e.type === "step.started" && !notAsked.has(e.step) && worked.visitors.some((v) => v.id === e.agent)).map((e) => e.agent)).size
+  }, [ordered, worked])
+  const took = CHARACTERS.filter((c) => { const a = worked.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + guests
   const has = !!answer && took > 0 // before the first step there is nobody to show: the answer says it is starting
   const live = full.status === "running" || full.status === "waiting"
   const finished = full.status === "done" || full.status === "failed" || full.status === "cancelled"
