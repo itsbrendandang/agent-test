@@ -171,7 +171,7 @@ function Status({ state: s }: { state: AnswerState }) {
         {s.error && <><dt>What went wrong</dt><dd data-found="false">{s.error}</dd></>}
         {s.finished?.stopped && <><dt>Ended early</dt><dd>{s.finished.stopped === "cap" ? "at its spending limit" : s.finished.stopped === "time" ? "at its time limit" : "the app was switched to Demo"}</dd></>}
       </dl>
-      <Activity steps={s.steps} working={working} totalSeconds={s.finished?.seconds ?? s.seconds} defaultOpen />
+      <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} defaultOpen />
     </section>
   )
 }

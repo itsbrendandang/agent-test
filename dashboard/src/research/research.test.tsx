@@ -15,12 +15,13 @@ import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
 import { OverviewView } from "@/views/OverviewView"
 import { Activity } from "./Activity"
+import { searchPlace } from "./providers"
 import { ResearchAnswer } from "./Answer"
 import { AskBox } from "./AskBox"
 import { identifierOf, markOf } from "./marks"
 import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
-import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
+import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, providerPlace, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
@@ -476,7 +477,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   const STEPS = foldAnswer(EVENTS).steps
   it("is one quiet line until asked: the step count and the engine's total, then the rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} totalSeconds={41} />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} totalSeconds={41} />)
     expect(screen.getByText(new RegExp(`^${STEPS.length} steps · 41s$`))).toBeInTheDocument()
     expect(screen.queryByRole("list", { name: "Activity" })).toBeNull()
     await user.click(screen.getByRole("button", { name: "View activity" }))
@@ -493,7 +494,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
       { step: "write", kind: "write", label: "Writing the answer", status: "running" as const },
       { step: "check", kind: "check", label: "Checking 6 statements", status: "running" as const, done: 2, total: 6 },
     ]
-    render(<Activity steps={steps} working defaultOpen />)
+    render(<Activity steps={steps} working place={searchPlace} defaultOpen />)
     const [failed, empty, writing, checking] = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
     expect(failed).toHaveTextContent("✕"); expect(failed).toHaveTextContent("failed"); expect(failed).toHaveTextContent("0.1s") // never shown as done
     expect(empty).toHaveTextContent("○"); expect(empty).toHaveTextContent("found nothing"); expect(empty).toHaveTextContent("0.8s")
@@ -509,7 +510,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   })
   it("offers Expand all from six rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} defaultOpen />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} defaultOpen />)
     expect(STEPS.length).toBeGreaterThanOrEqual(6)
     await user.click(screen.getByRole("button", { name: "Expand all" }))
     expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(STEPS.length)
@@ -656,6 +657,13 @@ describe("a team review as the same activity (Deep)", () => {
     const broke = reviewActivity([...events, ev(9500, { type: "run.failed", error: "The provider refused the model." })])
     expect(broke.steps.at(-1)).toMatchObject({ status: "failed", error: "The provider refused the model." }); expect(broke.failed).toBe("The provider refused the model.")
     expect(reviewActivity([])).toEqual({ steps: [], working: false, seconds: undefined, failed: undefined })
+  })
+  it("a team review's literature search asked Europe PMC only, so its activity row says so", () => {
+    const review = reviewActivity([ev(1000, { type: "run.started", runId: "r", brief: "b", title: "T", mock: false }), ev(1600, { type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "europepmc", items: [] })])
+    render(<Activity steps={review.steps} working={false} place={providerPlace} defaultOpen />)
+    const row = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")[0]
+    expect(row).toHaveTextContent("PubMed and preprints")
+    expect(row).not.toHaveTextContent("OpenAlex")
   })
 })
 

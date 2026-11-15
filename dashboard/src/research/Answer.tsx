@@ -131,7 +131,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
-      <Activity steps={s.steps} working={working} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
+      <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
       {lost && working && (
         <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
