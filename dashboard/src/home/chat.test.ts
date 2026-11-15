@@ -44,7 +44,7 @@ describe("chatRequest", () => {
 describe("what may be sent", () => {
   it("refuses empty and too long text", () => {
     expect(refuseText("   ")).toMatch(/Type a question/)
-    expect(refuseText("x".repeat(MAX_MESSAGE + 1))).toMatch(/at most 4,000 characters/)
+    expect(refuseText("x".repeat(MAX_MESSAGE + 1))).toMatch(/at most 2,000 characters/)
     expect(refuseText("Is hERG a risk?")).toBeUndefined()
   })
   it.each(["sk-ant-api03-abcdefghijklmnop", "my key is sk-proj-ABCDEFGHIJKLMNOPQRST", "sk-or-v1-0123456789abcdef", "AIzaSyA-0123456789abcdefghij", "xai-0123456789abcdefghij", "hf_abcdefghijklmnopqrstuv"])("refuses text that holds an API key: %s", (text) => {
@@ -175,7 +175,7 @@ describe("search helpers", () => {
     expect(moveActive(0, "ArrowDown", 0)).toBe(-1)
   })
   it("opens runs in their view and agents and skills in Agents", () => {
-    expect((["swarm", "board", "agent", "skill"] as const).map((kind) => viewOfResult({ kind }))).toEqual(["Swarm", "Board", "Agents", "Agents"])
+    expect((["swarm", "board", "agent", "skill"] as const).map((kind) => viewOfResult({ kind }))).toEqual(["Compare", "Board", "Agents", "Agents"])
   })
 })
 

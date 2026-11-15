@@ -2,6 +2,7 @@
 // the interface can only save, delete, test, and ask whether one is saved.
 use std::time::Duration;
 
+// Kept at the pre-rename value so keys already saved in the keychain still resolve.
 const SERVICE: &str = "com.brendandang.drugboard";
 
 struct Provider {

@@ -15,8 +15,7 @@ const SLEEP_AFTER_MS = 45_000
 // The crew lives quietly in the side rail. Easter eggs:
 //  - poke a character: it says something; poke it 5 times and it looks startled
 //  - leave the app alone for 45s: they fall asleep
-//  - click the logo 5 times: the crew strolls across the window
-export function SideCrew({ parade }: { parade: number }) {
+export function SideCrew() {
   const { crew } = useCrew()
   const [bubble, setBubble] = useState<{ id: string; text: string } | null>(null)
   const [dizzy, setDizzy] = useState<string | null>(null)
@@ -75,13 +74,6 @@ export function SideCrew({ parade }: { parade: number }) {
         })}
       </div>
 
-      {parade > 0 && (
-        <div key={parade} className="parade" aria-hidden="true">
-          {crew.map((m, i) => (
-            <span key={m.id} style={{ animationDelay: `${i * 0.6}s` }}><CrewSprite member={m} mood="happy" size={64} /></span>
-          ))}
-        </div>
-      )}
     </>
   )
 }

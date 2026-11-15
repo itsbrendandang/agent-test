@@ -1,8 +1,11 @@
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { ENGINE } from "@/board/api"
-import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
+import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Shared"
+import { swarmScripted, useBoardScripted } from "@/lib/scripted"
+import type { GlhfRun } from "@/swarm/api"
 import { runState } from "@/lib/status"
 import { fmtScore } from "@/lib/format"
+import { viewOfKind } from "@/lib/open"
 import { usePaidCalls } from "@/lib/paid"
 import { engineFetch } from "@/lib/token"
 
@@ -33,7 +36,7 @@ const isAnswer = (x: unknown): x is Answer => {
 // Two ways to find an experiment. Ask: a question in plain words, answered by a model from an index of every
 // run, with the runs it used. Search: over swarm runs (task, model, claims, problems, reports) and drug board
 // runs (brief, memo, checked claims). The engine does the matching; every word must appear.
-export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") => void }) {
+export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
   const [query, setQuery] = useState(() => sessionStorage.getItem("experiments.q") ?? "")
   useEffect(() => sessionStorage.removeItem("experiments.q"), [])
   const [kind, setKind] = useState<Kind>("all")
@@ -84,10 +87,22 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
   const scope = kind === "swarm" ? "swarm runs only" : kind === "board" ? "drug board runs only" : ""
 
   const shown = (hits ?? []).filter((h) => kind === "all" || h.kind === kind)
+  // Scripted or real is read from each run itself: a swarm run's own model, a board review's own run.started event.
+  const [swarmRuns, setSwarmRuns] = useState<Record<string, GlhfRun>>({})
+  const anyHits = hits !== undefined
+  useEffect(() => {
+    if (!anyHits) return
+    let stale = false
+    fetch(`${ENGINE}/api/glhf/runs`).then((r) => (r.ok ? r.json() : [])).then((list: unknown) => {
+      if (!stale && Array.isArray(list)) setSwarmRuns(Object.fromEntries((list as GlhfRun[]).filter((r) => r && typeof r.id === "string").map((r) => [r.id, r])))
+    }, () => undefined)
+    return () => { stale = true }
+  }, [anyHits])
+  const boardFlags = useBoardScripted(shown.filter((h) => h.kind === "board").slice(0, 40).map((h) => h.id))
   const open = (h: { kind: "swarm" | "board"; id: string }) => {
     sessionStorage.setItem(`open.${h.kind}`, h.id)
     if (query.trim()) sessionStorage.setItem("experiments.q", query) // so Back returns to the same search
-    onOpen(h.kind === "swarm" ? "Swarm" : "Board")
+    onOpen(viewOfKind(h.kind))
   }
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const mark = (text: string) => {
@@ -98,7 +113,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
 
   return (
     <div className="page">
-      <PageHead title="Experiments" about="Find any past run. Ask a question in plain words, or search by task, model, status, or any text in the claims, problems, reports and memos." />
+      <PageHead title="Runs" about="Find any past run. Ask a question in plain words, or search by task, model, status, or any text in the claims, problems, reports and memos." />
       <section className="exp-ask card-surface" aria-label="Ask about experiments">
         <form onSubmit={ask}>
           <label htmlFor="experiment-ask">Ask</label>
@@ -111,6 +126,8 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
         <p id="experiment-ask-help" className="muted small" hidden={asked.state !== "idle"}>
           {paid === "off"
             ? <>Paid calls are off, so no model is asked: Ask does a keyword search over {scope || "every run"} and says so. Press Enter to ask.</>
+            : paid === "unknown"
+            ? <>The engine answers from a summary of {scope || "every run"}, with a model or with a keyword search. Each answer says which. Press Enter to ask.</>
             : <>A model reads a summary of {scope || "every run"} and answers from it, naming the runs it used. Open a run to check the answer. Press Enter to ask.</>}
         </p>
         <div className="exp-answer" aria-live="polite" aria-busy={asked.state === "loading"}>
@@ -147,7 +164,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
         </div>
       </section>
       <div className="exp-bar">
-        <input type="search" name="experiment-search" aria-label="Search experiments by keyword" autoFocus autoComplete="off" value={query}
+        <input type="search" name="experiment-search" aria-label="Search experiments by keyword" autoComplete="off" value={query}
           placeholder="Try: demo, single agent, refuted, hERG, header rows…" onChange={(e) => setQuery(e.currentTarget.value)} />
         <div role="group" aria-label="Kind of experiment" className="exp-kinds">
           {(["all", "swarm", "board"] as const).map((k) => (
@@ -168,6 +185,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Swarm" | "Board") 
                 <b>{mark(h.title)}</b>
                 <StatusPill state={runState(h.status, h.kind !== "swarm" || h.score !== undefined)} />
                 <span className="pill exp-kind">{h.kind === "swarm" ? "swarm run" : "drug board"}</span>
+                <ModeLabel scripted={h.kind === "swarm" ? swarmScripted(swarmRuns[h.id]) : boardFlags[h.id]} demo={h.kind === "swarm" && swarmRuns[h.id]?.task === "demo"} />
                 {h.score !== undefined && <span className="exp-score" title="Score from the grader, out of 1">{fmtScore(h.score)}</span>}
               </span>
               <span className="muted small"><span className="run-id" title={h.id}>{mark(h.id)}</span> · started {new Date(h.startedAt).toLocaleString()}</span>

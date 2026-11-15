@@ -1,300 +1,64 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "@ui-sdk/react/button"
-import { Input, InputClear, InputGroup } from "@ui-sdk/react/input"
-import { Slider, SliderControl, SliderIndicator, SliderThumb, SliderTrack, SliderValue } from "@ui-sdk/react/slider"
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs"
-import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle"
-import { Toolbar, ToolbarButton } from "@ui-sdk/react/toolbar"
-import {
-  Activity, BarChart3, Expand, Globe2, Home, Layers, PanelRightClose, PanelRightOpen,
-  FlaskConical, LayoutDashboard, Microscope, Search, Pause, Play, RotateCcw, Settings, SkipForward, Sparkles, Users,
-} from "lucide-react"
-import { Buddy, Mark } from "./components/Buddy"
-import { PaidIndicator } from "./components/Shared"
-import { TokenPrompt } from "./components/TokenPrompt"
-import { fmtMetric as fmt } from "./lib/format"
-import { usePaidCalls } from "./lib/paid"
-import { initialView, viewOfHash, type View } from "./nav"
-import { HomeView } from "./views/HomeView"
-import { ParamPanel } from "./components/ParamPanel"
+// The shell: one status line on top, a rail of views on the left, and the view. Which view shows is in the URL hash.
+import { lazy, Suspense, useEffect, useState } from "react"
+import { FlaskConical, GitCompareArrows, Home, ListChecks, Settings, Share2, Users } from "lucide-react"
+import { Mark } from "./components/Buddy"
 import { SideCrew } from "./components/SideCrew"
-import { SimCard } from "./components/SimCard"
-import { Splash } from "./components/Splash"
-import { Timeline } from "./components/Timeline"
-import { emptySimulation } from "./sim/empty"
-import { categoryLabels, simulations } from "./sim/registry"
-import { defaults, type Category, type Params } from "./sim/types"
-import { useSimulation } from "./sim/useSimulation"
+import { StatusLine } from "./components/StatusLine"
+import { TokenPrompt } from "./components/TokenPrompt"
+import { ViewBoundary } from "./components/ViewBoundary"
+import { useShell } from "./lib/shell"
+import { initialView, viewOfHash, VIEWS, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
 import { BoardView } from "./views/BoardView"
 import { ExperimentsView } from "./views/ExperimentsView"
-import { OverviewView } from "./views/OverviewView"
-import { PlaceholderView } from "./views/PlaceholderView"
+import { HomeView } from "./views/HomeView"
 import { SettingsView } from "./views/SettingsView"
 import { SwarmView } from "./views/SwarmView"
 
-// Heavy pieces (markdown renderer, charts) load only when they are first shown.
-const CopilotPanel = lazy(() => import("./components/CopilotPanel").then((m) => ({ default: m.CopilotPanel })))
-const MetricsChart = lazy(() => import("./components/MetricsChart").then((m) => ({ default: m.MetricsChart })))
-const SeriesChart = lazy(() => import("./components/MetricsChart").then((m) => ({ default: m.SeriesChart })))
-const AnalyticsView = lazy(() => import("./views/AnalyticsView").then((m) => ({ default: m.AnalyticsView })))
+// The graph brings a 3D library with it: it loads only when the Graph view is opened, and if it fails to load
+// only that view says so (ViewBoundary), not the whole app. views/WorldsView.tsx belongs to the graph work.
+const WorldsView = lazy(() => import("./views/WorldsView").then((m) => ({ default: m.WorldsView })))
 
-const categories = Object.keys(categoryLabels) as Category[]
-
-const rail: { label: View; icon: typeof Home; hint: string }[] = [
-  { label: "Home", icon: Home, hint: "" },
-  { label: "Swarm", icon: Microscope, hint: "" },
-  { label: "Board", icon: FlaskConical, hint: "" },
-  { label: "Experiments", icon: Search, hint: "" },
-  { label: "Overview", icon: LayoutDashboard, hint: "" },
-  { label: "Simulations", icon: Layers, hint: "" },
-  { label: "Agents", icon: Users, hint: "" },
-  { label: "Worlds", icon: Globe2, hint: "World and map definitions shared across simulations." },
-  { label: "Analytics", icon: BarChart3, hint: "" },
-  { label: "Settings", icon: Settings, hint: "App preferences and model / API configuration." },
-]
-
-const viewFromHash = () => viewOfHash(window.location.hash)
-
+const ICON: Record<View, typeof Home> = { Home, Runs: ListChecks, Compare: GitCompareArrows, Board: FlaskConical, Agents: Users, Graph: Share2, Settings }
 export default function App() {
-  const [simId, setSimId] = useState(simulations[0]?.id ?? emptySimulation.id)
-  const sim = simulations.find((s) => s.id === simId) ?? simulations[0] ?? emptySimulation
-  const [paramsBySim, setParamsBySim] = useState<Record<string, Params>>({})
-  const params = useMemo(() => paramsBySim[sim.id] ?? defaults(sim), [paramsBySim, sim])
-  const [running, setRunning] = useState(true)
-  const [speed, setSpeed] = useState(1)
-  const [inspector, setInspector] = useState(true)
-  const [tab, setTab] = useState("copilot")
-  const [parade, setParade] = useState(0)
-  const logoClicks = useRef(0)
-  const paid = usePaidCalls()
-  const [view, setView] = useState<string>(() => initialView(window.location.hash))
+  const [view, setView] = useState<View>(() => initialView(window.location.hash))
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {
-    const sync = () => { const v = viewFromHash(); if (v) setView(v) }
+    const sync = () => { const v = viewOfHash(window.location.hash); if (v) setView(v) }
     window.addEventListener("hashchange", sync)
     return () => window.removeEventListener("hashchange", sync)
   }, [])
-  const [query, setQuery] = useState("")
-  const [filters, setFilters] = useState<string[]>([])
-  const idle = sim === emptySimulation
-  const active = running && !idle
-  const { canvasRef, tick, history, events, reset, step, log } = useSimulation(sim, params, active, speed)
-  const go = (label: string) => { setView(label); window.location.hash = label }
-  const latest = history[history.length - 1] ?? {}
-
-  const setParam = (key: string, value: number | boolean | string) =>
-    setParamsBySim((all) => ({ ...all, [sim.id]: { ...params, [key]: value } }))
-
-  const visible = simulations.filter(
-    (s) =>
-      (!filters.length || filters.includes(s.category)) &&
-      (s.name + s.description + (s.tags ?? []).join(" ")).toLowerCase().includes(query.toLowerCase()),
-  )
-  const recommended = visible.filter((s) => s.category !== "custom")
-  const others = visible.filter((s) => s.category === "custom")
-
-  const launch = (id: string) => {
-    setSimId(id)
-    setRunning(true)
-  }
-  const togglePlay = (on: boolean) => {
-    setRunning(on)
-    log({ kind: on ? "info" : "warning", label: on ? "Resumed" : "Paused", detail: `at tick ${tick}` })
-  }
-
-  const kpis = Object.entries(latest).slice(0, 3)
+  const go = (next: View) => { setView(next); window.location.hash = next }
+  const shell = useShell()
 
   return (
-    <Suspense fallback={null}>
     <div className="app">
-      <Splash />
       <TokenPrompt />
-      <nav className="rail" aria-label="Main">
-        <button type="button" className="mark-btn" aria-label="Drug Board" onClick={() => {
-          logoClicks.current += 1
-          if (logoClicks.current % 5 === 0) setParade((n) => n + 1)
-        }}><Mark /></button>
-        <div className="rail-items">
-          {rail.map(({ label, icon: Icon }) => (
-            <Button key={label} aria-label={label} title={label} data-active={label === view || undefined}
-              aria-current={label === view ? "page" : undefined} onClick={() => go(label)}>
+      <StatusLine shell={shell} onOpenSettings={() => go("Settings")} />
+      <nav className="rail" aria-label="Views">
+        <span className="rail-mark" aria-hidden="true"><Mark size={30} /></span>
+        {VIEWS.map((label) => {
+          const Icon = ICON[label]
+          return (
+            <button key={label} type="button" className="rail-item" aria-current={label === view ? "page" : undefined} onClick={() => go(label)}>
               <Icon size={18} aria-hidden="true" />
-            </Button>
-          ))}
-        </div>
-        <SideCrew parade={parade} />
-        <div className="avatar" aria-hidden="true">BD</div>
+              <span>{label}</span>
+            </button>
+          )
+        })}
+        <SideCrew />
       </nav>
-
-      <section className="list" aria-label="Simulations" hidden={view !== "Simulations"}>
-        <header className="list-head">
-          <h2>Simulations available <span className="count">{simulations.length}</span></h2>
-        </header>
-        <InputGroup className="search">
-          <Input type="search" aria-label="Search simulations" placeholder="Search" value={query}
-            onChange={(e) => setQuery(e.currentTarget.value)} />
-          <InputClear aria-label="Clear search" />
-        </InputGroup>
-        <ToggleGroup multiple aria-label="Filter by category" className="chips" value={filters}
-          onValueChange={(v) => setFilters(v as string[])}>
-          {categories.map((c) => (
-            <Toggle key={c} value={c}>{categoryLabels[c]}</Toggle>
-          ))}
-        </ToggleGroup>
-
-        <div className="cards">
-          {recommended.length > 0 && <h3>Recommended</h3>}
-          {recommended.map((s) => (
-            <SimCard key={s.id} sim={s} index={simulations.indexOf(s)} active={s.id === sim.id}
-              running={running} value={s.id === sim.id ? latest[s.headline ?? ""] : undefined} onLaunch={launch} />
-          ))}
-          {others.length > 0 && <h3>Other simulations</h3>}
-          {others.map((s) => (
-            <SimCard key={s.id} sim={s} index={simulations.indexOf(s)} active={s.id === sim.id}
-              running={running} value={s.id === sim.id ? latest[s.headline ?? ""] : undefined} onLaunch={launch} />
-          ))}
-          {visible.length === 0 && (
-            <p className="muted">
-              {simulations.length === 0 ? "No simulations yet. Add one in src/sim/registry.ts." : "No simulations match."}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <main className="main" hidden={view !== "Simulations"}>
-        <section className="map card-surface" aria-label="Simulation view">
-          <canvas ref={canvasRef} />
-          <div className="map-title">
-            <h1>{idle ? "Nothing running" : `${sim.name} overview`}</h1>
-            <p>{idle ? "Add a simulation to put the crew to work" : `Tick ${tick.toLocaleString()} · ${categoryLabels[sim.category]} simulation`}</p>
-          </div>
-          {idle && (
-            <div className="map-empty">
-              <Buddy species="egg" mood="sleeping" size={84} />
-              <p>No simulation loaded</p>
-              <span className="muted small">Add one in src/sim/registry.ts</span>
-            </div>
-          )}
-
-          <Toolbar aria-label="Simulation tools" className="map-tools">
-            <Toggle aria-label={running ? "Pause" : "Play"} pressed={running} onPressedChange={togglePlay}>
-              {running ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-            </Toggle>
-            <ToolbarButton aria-label="Step" onClick={step} disabled={running}>
-              <SkipForward size={16} aria-hidden="true" />
-            </ToolbarButton>
-            <ToolbarButton aria-label="Reset" onClick={reset}>
-              <RotateCcw size={16} aria-hidden="true" />
-            </ToolbarButton>
-            <Toggle aria-label="Inspector" pressed={inspector} onPressedChange={setInspector}>
-              {inspector ? <PanelRightClose size={16} aria-hidden="true" /> : <PanelRightOpen size={16} aria-hidden="true" />}
-            </Toggle>
-            <ToolbarButton aria-label="Full screen" onClick={() => canvasRef.current?.parentElement?.requestFullscreen()}>
-              <Expand size={16} aria-hidden="true" />
-            </ToolbarButton>
-          </Toolbar>
-
-          {inspector && (
-            <aside className="inspector" aria-label="Simulation analysis">
-              <div className="inspector-head">
-                <Sparkles size={14} aria-hidden="true" />
-                <h2>Simulation analysis</h2>
-              </div>
-              <Tabs value={tab} onValueChange={(v) => v && setTab(v)}>
-                <TabsList aria-label="Inspector sections">
-                  <TabsTab value="copilot">Copilot</TabsTab>
-                  <TabsTab value="controls">Controls</TabsTab>
-                  <TabsTab value="metrics">Metrics</TabsTab>
-                  <TabsTab value="about">About</TabsTab>
-                </TabsList>
-                <TabsPanel value="copilot" className="copilot-panel">
-                  {tab === "copilot" && view === "Simulations" && <CopilotPanel
-                    context={{
-                      sim, params, metrics: latest, tick, running,
-                      play: () => setRunning(true),
-                      pause: () => setRunning(false),
-                      reset,
-                      setParam,
-                    }}
-                  />}
-                </TabsPanel>
-                <TabsPanel value="controls">
-                  <Slider className="speed" min={0.25} max={10} step={0.25} value={speed}
-                    onValueChange={(v) => setSpeed(v as number)} format={{ maximumFractionDigits: 2 }}>
-                    <div className="param-head">
-                      <span className="label">Speed (steps / frame)</span>
-                      <SliderValue />
-                    </div>
-                    <SliderControl>
-                      <SliderTrack>
-                        <SliderIndicator />
-                        <SliderThumb aria-label="Speed" />
-                      </SliderTrack>
-                    </SliderControl>
-                  </Slider>
-                  <ParamPanel specs={sim.params} values={params} resetOn={sim.resetOn ?? []} onChange={setParam} />
-                </TabsPanel>
-                <TabsPanel value="metrics">
-                  {tab === "metrics" && <MetricsChart history={history} />}
-                </TabsPanel>
-                <TabsPanel value="about">
-                  <p className="about">{sim.description}</p>
-                </TabsPanel>
-              </Tabs>
-              <div className="kpi-strip">
-                {kpis.map(([k, v]) => (
-                  <div key={k}>
-                    <Activity size={14} aria-hidden="true" />
-                    <strong>{fmt(v)}</strong>
-                    <span>{k}</span>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          )}
-        </section>
-
-        <section className="bottom">
-          <Timeline events={events} />
-          <article className="status card-surface" aria-label="Run status">
-            <div className="status-preview">
-              {sim.headline && view === "Simulations" && (
-                <SeriesChart history={history} metric={sim.headline} color="#1b1a17" className="aspect-auto h-[70px] w-full" />
-              )}
-            </div>
-            <div className="status-body">
-              <div className="status-row">
-                <h2>Run status</h2>
-                <span className={`pill ${active ? "pill-success" : "pill-warning"}`}>{idle ? "Resting" : running ? "Running" : "Paused"}</span>
-              </div>
-              <p className="muted small">RUN-{String(simulations.indexOf(sim) + 1).padStart(4, "0")}</p>
-              <p className="big">{fmt(latest[sim.headline ?? ""])} <span className="muted small">{sim.headline}</span></p>
-              <dl>
-                <dt>Ticks</dt><dd>{tick.toLocaleString()}</dd>
-                <dt>Speed</dt><dd>{speed}×</dd>
-              </dl>
-            </div>
-          </article>
-        </section>
+      <main className="page-host">
+        <ViewBoundary view={view}>
+          {view === "Home" && <HomeView onOpen={go} />}
+          {view === "Runs" && <ExperimentsView onOpen={go} />}
+          {view === "Compare" && <SwarmView />}
+          {view === "Board" && <BoardView />}
+          {view === "Agents" && <AgentsView />}
+          {view === "Graph" && <Suspense fallback={<div className="page"><p className="muted" role="status">Loading the graph…</p></div>}><WorldsView /></Suspense>}
+          {view === "Settings" && <SettingsView />}
+        </ViewBoundary>
       </main>
-
-      {view === "Analytics" && <AnalyticsView sim={sim} history={history} events={events} tick={tick} />}
-      {view === "Overview" && (
-        <OverviewView simCount={simulations.length} tick={tick} eventCount={events.length} active={active}
-          onOpenSimulations={() => go("Simulations")} onMeetCrew={() => go("Agents")} onOpenKeys={() => go("Settings")} />
-      )}
-      {view === "Home" && <HomeView onOpen={go} />}
-      {view === "Swarm" && <SwarmView onSearch={(q) => { sessionStorage.setItem("experiments.q", q); go("Experiments") }} />}
-      {view === "Board" && <BoardView />}
-      {view === "Agents" && <AgentsView />}
-      {view === "Experiments" && <ExperimentsView onOpen={go} />}
-      {view === "Settings" && <SettingsView />}
-      {!["Home", "Swarm", "Board", "Simulations", "Analytics", "Overview", "Agents", "Experiments", "Settings"].includes(view) && (
-        <PlaceholderView title={view} hint={rail.find((r) => r.label === view)!.hint} />
-      )}
-      <footer className="shell-foot"><PaidIndicator state={paid} onOpen={() => go("Settings")} /></footer>
     </div>
-    </Suspense>
   )
 }

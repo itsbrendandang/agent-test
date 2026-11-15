@@ -7,6 +7,7 @@ import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type Pr
 import { CatalogPanel } from "@/home/CatalogPanel"
 import { chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, viewOfResult, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
+import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
 import { SearchBox } from "@/home/SearchBox"
 import { setOpen, setOpenItem, viewOfKind } from "@/lib/open"
@@ -15,7 +16,7 @@ const ABOUT = "Ask a research question. The answer says whether a model wrote it
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
-export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agents") => void }) {
+export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Agents") => void }) {
   const [turns, setTurns] = useState<Turn[]>(loadTurns)
   const [text, setText] = useState("")
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
@@ -23,6 +24,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
   const [picked, setPicked] = useState(AUTO) // "auto", or "provider model"
   const [catalog, setCatalog] = useState<Catalog | null>()
   const [again, setAgain] = useState(0)
+  const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
   const [chosenEffort, setChosenEffort] = useState(loadEffort)
   const box = useRef<HTMLTextAreaElement>(null)
   const end = useRef<HTMLDivElement>(null)
@@ -30,7 +32,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
 
   useEffect(() => {
     let stale = false
-    getCatalog().then((c) => { if (!stale) setCatalog(c) }, () => { if (!stale) setCatalog(null) })
+    getCatalog().then((c) => { if (!stale) { setCatalog(c); setWhyNone(undefined) } },
+      (error: unknown) => { if (!stale) { setCatalog(null); setWhyNone(error instanceof ChatRefused && error.status !== 0 ? error.message : undefined) } })
     return () => { stale = true }
   }, [again])
   useEffect(() => saveTurns(turns), [turns])
@@ -97,11 +100,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
   const empty = turns.length === 0 && sending === undefined
 
   return (
-    <div className="page home-chat">
+    <div className="page home-chat" data-wide>
       <PageHead title="Home" about={ABOUT}>
         {!empty && <button type="button" className="btn" onClick={clear}>Clear conversation</button>}
+        <SearchBox onOpen={openResult} />
       </PageHead>
-      <SearchBox onOpen={openResult} />
       <div className="home-cols">
         <section className="home-main" aria-label="Conversation">
           <div className="home-log" role="log" aria-live="polite" aria-label="Messages">
@@ -154,14 +157,12 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
 
           <form className="home-composer card-surface" onSubmit={submit}>
             <label htmlFor="home-box">Ask a research question</label>
-            <textarea id="home-box" ref={box} rows={3} maxLength={MAX_MESSAGE + 200} value={text} autoFocus placeholder="For example: should we advance a compound with a hERG IC50 of 6 µM?"
+            <textarea id="home-box" ref={box} rows={2} maxLength={MAX_MESSAGE + 200} value={text} autoFocus placeholder="For example: should we advance a compound with a hERG IC50 of 6 µM?"
               onChange={(e) => { setText(e.currentTarget.value); if (problem?.control === "box") setProblem(undefined) }} onKeyDown={key}
               aria-invalid={problem?.control === "box"} aria-describedby={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`} />
             {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
-            {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" />}
-            {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
             <div className="home-composer-foot">
-              <span className="muted small" id="home-box-help">Enter sends. Shift+Enter starts a new line. Do not type API keys here.</span>
+              {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" />}
               <label className="home-model">
                 <span className="small">Model</span>
                 <select value={choice.model ? picked : AUTO} disabled={offered.length === 0} onChange={(e) => { setPicked(e.target.value); if (problem?.control === "model") setProblem(undefined) }}
@@ -172,11 +173,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Swarm" | "Board" | "Agent
               </label>
               <button type="submit" className="btn btn-primary" disabled={sending !== undefined || !text.trim()}>{sending !== undefined ? "Sending…" : "Send"}</button>
             </div>
+            {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
             {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
-            {catalog?.paidCalls === false && <p className="muted small" id="home-model-help">Paid calls are off, so no model is asked: replies are keyword searches or fixed text, and each reply says which.</p>}
+            <p className="muted small">
+              <span id="home-box-help">Enter sends. Shift+Enter starts a new line. Do not type API keys here.</span>
+              {catalog?.paidCalls === false && <span id="home-model-help"> Paid calls are off, so no model is asked: replies are keyword searches or fixed text, and each reply says which.</span>}
+            </p>
           </form>
         </section>
-        <CatalogPanel catalog={catalog} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
+        <div className="home-side">
+          <Checked onOpen={openRun} />
+          <CatalogPanel catalog={catalog} why={whyNone} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
+        </div>
       </div>
     </div>
   )

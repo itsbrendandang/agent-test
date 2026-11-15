@@ -1,6 +1,6 @@
 // Small pieces every engine-backed view uses, so titles, status words and the offline state look the same everywhere.
 import type { ReactNode } from "react"
-import { HOW_TO_TURN_ON, PAID_LABEL, type PaidState } from "@/lib/paid"
+import type { Scripted } from "@/lib/scripted"
 import { STATE_KIND, type RunState } from "@/lib/status"
 
 /** Page title with one sentence that says what the view is for. Controls go in `children`. */
@@ -36,12 +36,15 @@ export function EngineOffline({ needs, onRetry }: { needs: string; onRetry?: () 
   )
 }
 
-/** Always on screen: may the engine spend money? Opens Settings, which says how a person changes it. */
-export function PaidIndicator({ state, onOpen }: { state: PaidState; onOpen: () => void }) {
+/**
+ * How a result was made, from the run itself: by scripted models (fixed text, no research) or by real ones. Shown
+ * next to every result. Nothing is shown while the run has not said.
+ */
+export function ModeLabel({ scripted, demo }: { scripted: Scripted; demo?: boolean }) {
+  if (scripted === undefined && !demo) return null
   return (
-    <button type="button" className="paid-indicator" data-state={state} onClick={onOpen}
-      title={state === "unknown" ? "The engine did not say whether paid calls are allowed. It may be offline." : HOW_TO_TURN_ON}>
-      <span aria-hidden="true" />{PAID_LABEL[state]}
-    </button>
+    <span className="pill mode-label" data-kind={scripted ? "neutral" : scripted === false ? "info" : "warning"} data-mode={scripted ? "scripted" : scripted === false ? "real" : "demo"}>
+      {scripted ? "scripted: fixed text, not research" : scripted === false ? "real model" : ""}{demo ? `${scripted === undefined ? "" : " · "}demo case` : ""}
+    </span>
   )
 }

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Buddy, type Mood } from "@/components/Buddy"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type Status, useRunEvents, type Verdict } from "@/board/api"
-import { EngineOffline, PageHead, StatusPill } from "@/components/Shared"
+import { EngineOffline, ModeLabel, PageHead, StatusPill } from "@/components/Shared"
 import { runState } from "@/lib/status"
 import { fmtDuration } from "@/lib/format"
 import "@/board/board.css"
@@ -88,8 +88,11 @@ export function BoardView() {
     if (m.role === "lead") return "alert"
     return current?.replies.some((r) => r.member === m.name) ? "happy" : "working"
   }
-  const scriptedWhy = status?.paidCalls === false ? "Paid calls are off, so the board runs with scripted models."
-    : "The engine has no OPENROUTER_API_KEY, so the board runs with scripted models."
+  // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
+  const startedAs = events.find((e): e is Of<"run.started"> => e.type === "run.started")?.mock
+  const scripted = startedAs ?? status?.mock ?? false
+  const nextWhy = status?.paidCalls === false ? "Paid calls are off, so a new review runs with scripted models."
+    : "The engine has no OPENROUTER_API_KEY, so a new review runs with scripted models."
   const resume = async () => {
     if (!runId) return
     setError("")
@@ -101,7 +104,7 @@ export function BoardView() {
 
   if (offline) return (
     <div className="page board">
-      <PageHead title="Drug Candidate Board" about={ABOUT} />
+      <PageHead title="Board review" about={ABOUT} />
       <EngineOffline needs="The board runs in the engine. Without API keys it uses scripted models, which are free." onRetry={load} />
     </div>
   )
@@ -120,8 +123,7 @@ export function BoardView() {
 
   return (
     <div className="page board">
-      <PageHead title="Drug Candidate Board" about={ABOUT}>
-        {status?.mock && <span className="pill" data-kind="warning" title={scriptedWhy}>Scripted models</span>}
+      <PageHead title="Board review" about={ABOUT}>
       </PageHead>
       <div className="board-banner card-surface">
         <h2 id="board-run-label">Review</h2>
@@ -150,22 +152,25 @@ export function BoardView() {
           {roster.map((m) => <span key={m.name} title={m.title}><Buddy seed={m.name} mood={mood(m)} size={m.role === "lead" ? 44 : 34} /></span>)}
         </div>
         <p className="headline" role="status">{headline}</p>
-        {status?.mock && <p className="muted small board-scripted">{scriptedWhy} Replies are fixed text, not real analysis, and cost nothing.</p>}
+        {runId && startedAs !== undefined && <p className="board-scripted" data-testid="run-mode"><ModeLabel scripted={startedAs} /> <span className="muted small">{startedAs ? "This review ran with scripted models. It cost nothing." : "This review ran with real models."}</span></p>}
+        {status?.mock && <p className="muted small board-scripted" data-testid="next-mode">{nextWhy}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {failed && <p className="pill" data-kind="danger">{failed.error}</p>}
       </section>
 
       {memoText && (
         <section className="card-surface decision" aria-label="Decision">
-          <span className="eyebrow">Recommendation</span>
+          <p className="board-resulthead"><span className="eyebrow">Recommendation</span><ModeLabel scripted={startedAs} /></p>
           <h2 className="decision-text">{plain(bullets(memo["decision"])[0]) || "See memo"}</h2>
           {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
           <p className="trust">
             <span className="v v-verified">{count("verified")} verified</span>
             {count("contradicted") > 0 && <span className="v v-contradicted">{count("contradicted")} contradicted</span>}
             {count("unsupported") > 0 && <span className="v v-unsupported">{count("unsupported")} unsupported</span>}
+            {count("unchecked") > 0 && <span className="v v-unchecked">{count("unchecked")} unchecked</span>}
             <span className="muted small">of {claims.length} claims checked against {uniqueEvidence.length} sources</span>
           </p>
+          <p className="muted small">Verified: a source supports the claim. Contradicted: a source goes against it. Unsupported: no source was found. Unchecked: no checker ruled on it. A checker decides each one; the board does not.</p>
           <div className="decision-lists">
             {memo["unresolved tensions"] && <div><h3>Open questions</h3><ul>{bullets(memo["unresolved tensions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
             {memo["next actions"] && <div><h3>Next steps</h3><ul>{bullets(memo["next actions"]).map((b) => <li key={b}>{plain(b)}</li>)}</ul></div>}
@@ -180,21 +185,6 @@ export function BoardView() {
 
       {details && (
         <div className="board-grid">
-          <section className="card-surface" aria-label="Roster">
-            <h2>Board</h2>
-            {roster.map((m) => (
-              <div key={m.name} className="member" title={m.deliverable}>
-                <Buddy seed={m.name} mood={mood(m)} size={40} />
-                <div>
-                  <strong>{m.title}</strong>
-                  <span>{m.role === "lead" ? "Runs the board, writes the memo" : m.deliverable}</span>
-                  <code>{m.modelId}</code>
-                </div>
-              </div>
-            ))}
-            {status && <p className="muted small">Limits: {status.meeting.max_rounds} rounds · {status.meeting.max_minutes} min · ${status.meeting.max_usd}</p>}
-          </section>
-
           <section className="card-surface" aria-label="Deliberation">
             <h2>Discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
             {rounds.length === 0 && <p className="muted small">{runId ? "No replies yet." : "Nothing to show until the board is convened."}</p>}
@@ -246,6 +236,21 @@ export function BoardView() {
             <h2>Full memo</h2>
             {memoText ? <div className="memo"><Streamdown>{memoText}</Streamdown></div> : <p className="muted small">Written when the board finishes.</p>}
           </section>
+          <details className="card-surface board-more">
+            <summary>The board: who took part, and the limits</summary>
+            {roster.map((m) => (
+              <div key={m.name} className="member" title={m.deliverable}>
+                <Buddy seed={m.name} mood={mood(m)} size={40} />
+                <div>
+                  <strong>{m.title}</strong>
+                  <span>{m.role === "lead" ? "Runs the board, writes the memo" : m.deliverable}</span>
+                  <code title={scripted ? `A real run would use ${m.modelId}` : m.modelId}>{scripted ? "scripted model" : m.modelId}</code>
+                </div>
+              </div>
+            ))}
+            {status && <p className="muted small">Limits: {status.meeting.max_rounds} rounds · {status.meeting.max_minutes} min · ${status.meeting.max_usd}</p>}
+          </details>
+
         </div>
       )}
     </div>

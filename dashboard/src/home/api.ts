@@ -74,6 +74,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const run = typeof b.id === "string" ? b.id : typeof b.run === "string" ? b.run : undefined
   throw new ChatRefused(typeof b.error === "string" ? b.error : `The engine answered ${r.status}.`, r.status, typeof b.field === "string" ? b.field : undefined, run)
 }
+/** The engine is running but has no chat routes: it was started before they existed. Not the same as "not running". */
+export const NO_CHAT_ROUTES = "This engine is running, but it has no chat routes yet. Restart it from the repo root with npm run engine."
+const routeMissing = (error: unknown): never => { throw error instanceof ChatRefused && error.status === 404 ? new ChatRefused(NO_CHAT_ROUTES, 404) : error }
 const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
 
 const isRuns = (x: unknown): x is CitedRun[] => Array.isArray(x) && x.every((r) => r && (r.kind === "swarm" || r.kind === "board") && typeof r.id === "string")
@@ -89,14 +92,14 @@ export function isCatalog(x: unknown): x is Catalog {
 }
 
 export async function getCatalog(): Promise<Catalog> {
-  const body = await call<unknown>("/api/chat/catalog")
+  const body = await call<unknown>("/api/chat/catalog").catch(routeMissing)
   if (!isCatalog(body)) throw new ChatRefused("The engine sent a catalog this page cannot read.", 200)
   return body
 }
 
 /** Sends the conversation. Rejects with ChatRefused; a 2xx reply that is not a chat reply is refused too. */
 export async function sendChat(request: ChatRequest): Promise<ChatReply> {
-  const body = await call<Partial<ChatReply>>("/api/chat", json(request))
+  const body = await call<Partial<ChatReply>>("/api/chat", json(request)).catch(routeMissing)
   if (!body || typeof body.reply !== "string" || (body.mode !== "ai" && body.mode !== "keyword" && body.mode !== "scripted")) {
     throw new ChatRefused("The engine sent a reply this page cannot read.", 200)
   }
@@ -125,7 +128,7 @@ export async function searchAll(q: string, kind: SearchKind | "all", limit = 20,
     throw new ChatRefused("The engine cannot be reached. Start it from the repo root with npm run engine.", 0)
   }
   const body = (await r.json().catch(() => undefined)) as Partial<SearchReply> & { error?: unknown } | undefined
-  if (!r.ok) throw new ChatRefused(typeof body?.error === "string" ? body.error : `The engine answered ${r.status}.`, r.status)
+  if (!r.ok) throw new ChatRefused(r.status === 404 ? NO_CHAT_ROUTES : typeof body?.error === "string" ? body.error : `The engine answered ${r.status}.`, r.status)
   if (!body || !Array.isArray(body.results)) throw new ChatRefused("The engine sent search results this page cannot read.", 200)
   return body.results.filter((x) => x && KINDS.includes(x.kind) && typeof x.id === "string" && typeof x.title === "string")
     .map((x) => ({ ...x, excerpt: typeof x.excerpt === "string" ? x.excerpt : "" }))

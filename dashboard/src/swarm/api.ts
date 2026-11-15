@@ -68,6 +68,8 @@ export interface LedgerClaim {
 export interface LedgerIssue {
   id: string; severity: "blocking" | "major" | "minor"; artifact_ids: string[]; problem: string
   evidence: string; raised_by: string; status: "open" | "fixed" | "wontfix"; resolution: string
+  /** A critic round completed after the fix. Absent on older ledgers. */
+  rechecked?: boolean
 }
 export interface LedgerEvent { kind: string; phase?: string; [k: string]: unknown }
 export interface Ledger {

@@ -1,4 +1,4 @@
-# Dashboard
+# AI Scientist Bot dashboard
 
 The web UI for the GLHF swarm and the drug candidate board. It talks to the engine on
 `http://localhost:8787` (change with `VITE_ENGINE_URL`). Start the engine first: `npm run engine`

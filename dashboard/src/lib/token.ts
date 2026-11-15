@@ -27,7 +27,7 @@ export const forgetToken = () => { try { sessionStorage.removeItem(KEY) } catch 
 export const useHasToken = (): boolean => useSyncExternalStore(subscribe, () => getToken() !== undefined)
 
 // One question at a time: the prompt (TokenPrompt, mounted once in the shell) shows `asking` and answers it.
-export interface Asking { why: string; rejected: boolean }
+export interface Asking { why: string; rejected: boolean; /** The file the engine says holds the token. */ file: string }
 let asking: Asking | undefined
 let waiting: ((token: string | undefined) => void)[] = []
 export const useAsking = (): Asking | undefined => useSyncExternalStore(subscribe, () => asking)
@@ -39,17 +39,23 @@ export function answer(token: string | undefined) {
   changed()
   for (const tell of all) tell(token?.trim())
 }
-function ask(why: string, rejected: boolean): Promise<string | undefined> {
+function ask(need: Need, rejected: boolean): Promise<string | undefined> {
   return new Promise((tell) => {
     waiting.push(tell)
-    if (!asking) { asking = { why, rejected }; changed() }
+    if (!asking) { asking = { ...need, rejected }; changed() }
   })
 }
 
-const needsToken = async (r: Response): Promise<string | undefined> => {
+interface Need { why: string; file: string }
+/** Is this the engine's "send the token" answer (401 {error, field: "token", needsToken: true, tokenFile})? */
+const needsToken = async (r: Response): Promise<Need | undefined> => {
   if (r.status !== 401) return undefined
-  const body = (await r.clone().json().catch(() => ({}))) as { needsToken?: unknown; error?: unknown }
-  return body?.needsToken === true ? (typeof body.error === "string" ? body.error : "The engine asked for its session token.") : undefined
+  const body = (await r.clone().json().catch(() => ({}))) as { needsToken?: unknown; error?: unknown; tokenFile?: unknown }
+  if (body?.needsToken !== true) return undefined
+  return {
+    why: typeof body.error === "string" ? body.error.slice(0, 500) : "The engine asked for its session token.",
+    file: typeof body.tokenFile === "string" && body.tokenFile.length <= 300 ? body.tokenFile : TOKEN_FILE,
+  }
 }
 const withToken = (init: RequestInit | undefined, token: string | undefined): RequestInit | undefined =>
   token ? { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), [TOKEN_HEADER]: token } } : init

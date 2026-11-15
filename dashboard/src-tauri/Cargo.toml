@@ -1,7 +1,7 @@
 [package]
-name = "drug-board"
+name = "ai-scientist-bot"
 version = "0.1.0"
-description = "Drug Board desktop dashboard"
+description = "AI Scientist Bot desktop dashboard"
 authors = ["Brendan Dang"]
 license = ""
 repository = ""

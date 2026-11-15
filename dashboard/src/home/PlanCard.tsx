@@ -81,10 +81,10 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
   return (
     <section className="home-plan card-surface" aria-labelledby={`${uid}-title`} data-state={state.state}>
       <header className="home-plan-head">
-        <span className="swarm-eyebrow">Research plan · board review · nothing has started</span>
+        <span className="swarm-eyebrow">Plan · board review · nothing has started</span>
         <span className="pill" data-kind={plan.paid ? "warning" : "neutral"}>{plan.paid ? "Paid: uses paid models or search" : "Scripted: costs nothing"}</span>
       </header>
-      <h3 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h3>
+      <h2 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h2>
       <p className="home-plan-question">“{plan.question}”</p>
 
       {plan.warnings.length > 0 && (
@@ -95,11 +95,11 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
         <>
           <div className="home-plan-grid">
             <div>
-              <h4>Agents ({plan.agents.length})</h4>
+              <h3>Agents ({plan.agents.length})</h3>
               <ul className="home-why">{plan.agents.map((a) => <li key={a.name}><b>{a.title}</b><span className="muted small">{a.why}</span></li>)}</ul>
             </div>
             <div>
-              <h4>Skills ({plan.skills.length})</h4>
+              <h3>Skills ({plan.skills.length})</h3>
               {plan.skills.length === 0 ? <p className="muted small">None.</p>
                 : <ul className="home-why">{plan.skills.map((s) => <li key={s.name}><b>{s.name}</b><span className="muted small">{s.why}</span></li>)}</ul>}
             </div>
@@ -171,14 +171,14 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
       {state.state === "open" && step === "view" && (
         <footer className="newrun-foot">
           <button type="button" className="btn" onClick={() => onState({ state: "discarded" })}>Discard</button>
-          <button type="button" className="btn btn-primary" disabled={paidOff || !!replanning} onClick={() => { setAgreed(false); setRefused(""); setErrors({}); setStep("confirm") }}>Start research</button>
+          <button type="button" className="btn btn-primary" disabled={paidOff || !!replanning} onClick={() => { setAgreed(false); setRefused(""); setErrors({}); setStep("confirm") }}>{plan.paid ? "Start research" : "Start scripted run (not research)"}</button>
         </footer>
       )}
       {state.state === "open" && step !== "view" && (
         <footer className="newrun-foot">
           <button type="button" className="btn" disabled={step === "sending"} onClick={() => { setStep("view"); setAgreed(false) }}>Back</button>
           <button type="button" className="btn btn-primary" disabled={step === "sending" || !!block} onClick={() => void start()}>
-            {step === "sending" ? "Starting…" : plan.paid ? "Start paid research" : "Start scripted run"}
+            {step === "sending" ? "Starting…" : plan.paid ? "Start paid research" : "Start scripted run (not research)"}
           </button>
         </footer>
       )}

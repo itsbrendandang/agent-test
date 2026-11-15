@@ -1,7 +1,9 @@
 // The rules of the Home chat, apart from its markup so they can be tested: the labels, what is sent, what a person
 // must do before a plan may start, and where an engine refusal is shown.
 import { HOW_TO_TURN_ON } from "@/lib/paid"
+import type { RunSummary } from "@/board/api"
 import { fmtDuration } from "@/lib/format"
+import type { ScoreRow } from "@/swarm/api"
 import type { Catalog, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, SearchKind, SearchResult, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
@@ -19,9 +21,10 @@ export const EXAMPLES = [
   "Plan a review of a covalent kinase inhibitor with poor solubility.",
 ]
 
-export const MAX_MESSAGE = 4000
-/** How many past messages go with a new one. Older ones stay on screen but are not sent. */
-export const MAX_HISTORY = 40
+// The engine's own limits (engine/src/chat/routes.ts): a question of at most 2,000 characters, at most 20 messages.
+export const MAX_MESSAGE = 2000
+/** How many messages go in one request, the new question included. Older ones stay on screen but are not sent. */
+export const MAX_HISTORY = 20
 
 /** What happened to the plan of one reply. */
 export type PlanState = { state: "open" } | { state: "discarded" } | { state: "expired" } | { state: "started"; runId: string }
@@ -38,7 +41,7 @@ export const KEY_REFUSAL = "This looks like an API key, so it was not sent. Keys
 /** Why this text cannot be sent, or undefined when it can. */
 export function refuseText(text: string): string | undefined {
   if (!text.trim()) return "Type a question first."
-  if (text.length > MAX_MESSAGE) return `A message can have at most ${MAX_MESSAGE.toLocaleString("en-US")} characters.`
+  if (text.trim().length > MAX_MESSAGE) return `A message can have at most ${MAX_MESSAGE.toLocaleString("en-US")} characters.`
   if (looksLikeKey(text)) return KEY_REFUSAL
   return undefined
 }
@@ -150,7 +153,7 @@ export const SEARCH_KINDS: readonly { id: SearchKind | "all"; label: string }[] 
 ]
 export const KIND_LABEL: Record<SearchKind, string> = { swarm: "swarm run", board: "board review", agent: "agent", skill: "skill" }
 /** Where a result opens: a run in its view, an agent or a skill in the Agents view. */
-export const viewOfResult = (r: Pick<SearchResult, "kind">): "Swarm" | "Board" | "Agents" => (r.kind === "swarm" ? "Swarm" : r.kind === "board" ? "Board" : "Agents")
+export const viewOfResult = (r: Pick<SearchResult, "kind">): "Compare" | "Board" | "Agents" => (r.kind === "swarm" ? "Compare" : r.kind === "board" ? "Board" : "Agents")
 
 /** Text cut into pieces, with the pieces that are one of the query's words marked. Matching ignores case. */
 export function highlight(text: string, query: string): { text: string; hit: boolean }[] {
@@ -162,3 +165,14 @@ export function highlight(text: string, query: string): { text: string; hit: boo
 /** The row the arrow keys move to. -1 is the search field itself; the ends do not wrap. */
 export const moveActive = (active: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End", count: number): number =>
   count === 0 ? -1 : key === "ArrowDown" ? Math.min(count - 1, active + 1) : key === "ArrowUp" ? Math.max(-1, active - 1) : key === "Home" ? 0 : count - 1
+
+// ---- "What was checked"
+/** The newest row where both solvers ran with the same settings and both were graded. */
+export const pairedRow = (rows: unknown): ScoreRow | undefined =>
+  (Array.isArray(rows) ? (rows as ScoreRow[]) : []).find((r) => r && r.diff !== undefined && r.single?.score !== undefined && r.swarm?.score !== undefined)
+/** The newest finished review, else the newest. */
+export const latestReview = (runs: unknown): RunSummary | undefined => {
+  const list = Array.isArray(runs) ? (runs as RunSummary[]).filter((r) => r && typeof r.id === "string") : []
+  return list.find((r) => r.status === "done") ?? list[0]
+}
+

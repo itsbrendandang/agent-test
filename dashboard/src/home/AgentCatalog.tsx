@@ -21,7 +21,12 @@ export function AgentCatalog() {
     const card = document.getElementById(targetId)
     if (!card) return
     marked.current = true
-    card.scrollIntoView?.({ block: "center" }); card.focus({ preventScroll: true })
+    card.focus({ preventScroll: true })
+    // The role cards above load after this one and push it down, so bring it back into view until the page has settled.
+    const show = () => card.scrollIntoView?.({ block: "center" })
+    show()
+    const later = [400, 1500].map((ms) => window.setTimeout(show, ms))
+    return () => later.forEach(window.clearTimeout)
   }, [catalog, targetId])
 
   if (catalog === undefined) return target ? <p className="muted small" role="status">Loading the agents and skills…</p> : null

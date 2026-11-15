@@ -1,0 +1,716 @@
+// Home as a person uses it, against a stand-in engine. Nothing here reaches the network.
+import { act, render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { TokenPrompt } from "@/components/TokenPrompt"
+import { AgentCatalog } from "@/home/AgentCatalog"
+import type { Catalog } from "@/home/api"
+import { TOKEN_HEADER } from "@/lib/token"
+import { routes, to } from "@/test/engine"
+import { CATALOG_OFF, CATALOG_ON, PLAN, reply, SCRIPTED_PLAN } from "@/test/home"
+import { HomeView } from "./HomeView"
+
+/** Event streams the page opened (board run progress). jsdom has no EventSource. */
+const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
+beforeEach(() => {
+  streams.length = 0
+  vi.stubGlobal("EventSource", class { url: string; onmessage?: (m: { data: string }) => void; constructor(url: string) { this.url = url; streams.push(this) } close() {} })
+})
+const emit = (event: object) => act(() => { for (const s of streams) s.onmessage?.({ data: JSON.stringify({ key: JSON.stringify(event), at: 0, ...event }) }) })
+
+type Table = Parameters<typeof routes>[0]
+function home(catalog: Catalog | "down", table: Table = {}) {
+  const sent = routes({ ...(catalog !== "down" && { "GET /api/chat/catalog": { status: 200, body: catalog } }), ...table })
+  const onOpen = vi.fn()
+  const view = render(<><TokenPrompt /><HomeView onOpen={onOpen} /></>)
+  const box = () => screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
+  const user = userEvent.setup()
+  const ask = async (text: string) => { await user.type(box(), `${text}{Enter}`) }
+  return { sent, onOpen, view, box, user, ask, chats: () => to(sent, "POST", "/api/chat") }
+}
+const planCard = async () => within(await screen.findByRole("region", { name: PLAN.briefTitle }))
+const paidPlan = () => ({ "POST /api/chat": reply({ plan: PLAN }) })
+
+describe("empty conversation", () => {
+  it("shows example questions, and sends one when it is pressed", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply() })
+    const examples = within(screen.getByRole("group", { name: "Example questions" })).getAllByRole("button")
+    expect(examples.length).toBeGreaterThanOrEqual(3)
+    expect(examples.length).toBeLessThanOrEqual(4)
+    expect(screen.queryByRole("button", { name: "Clear conversation" })).toBeNull()
+    const question = examples[1].textContent!
+    await t.user.click(examples[1])
+    await waitFor(() => expect(t.chats()).toHaveLength(1))
+    expect(t.chats()[0].body).toMatchObject({ messages: [{ role: "user", content: question }] })
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Example questions" })).toBeNull())
+  })
+})
+
+describe("sending", () => {
+  it("Enter sends the question with the conversation so far; Shift+Enter is a new line", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": [reply({ reply: "First answer" }), reply({ reply: "Second answer" })] })
+    await screen.findByRole("radio", { name: "Standard" })
+    await t.user.type(t.box(), "line one{Shift>}{Enter}{/Shift}line two")
+    expect(t.chats()).toHaveLength(0)
+    expect(t.box().value).toBe("line one\nline two")
+    await t.user.keyboard("{Enter}")
+    expect(await screen.findByText("First answer")).toBeInTheDocument()
+    expect(t.chats()[0].body).toEqual({ messages: [{ role: "user", content: "line one\nline two" }], effort: "standard" })
+    expect(t.box().value).toBe("")
+    await t.ask("And then?")
+    expect(await screen.findByText("Second answer")).toBeInTheDocument()
+    expect(t.chats()[1].body).toEqual({ effort: "standard", messages: [
+      { role: "user", content: "line one\nline two" }, { role: "assistant", content: "First answer" }, { role: "user", content: "And then?" },
+    ] })
+  })
+  it("sends nothing for an empty box, and says what to do", async () => {
+    const t = home(CATALOG_ON)
+    await t.user.type(t.box(), "   {Enter}")
+    expect(t.chats()).toHaveLength(0)
+    expect(t.box()).toHaveAccessibleDescription(/Type a question first/)
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled()
+  })
+  it("does not send text that holds an API key", async () => {
+    const t = home(CATALOG_ON)
+    await t.ask("use sk-ant-api03-abcdefghijklmnop please")
+    expect(t.chats()).toHaveLength(0)
+    expect(t.box()).toHaveAccessibleDescription(/looks like an API key, so it was not sent/)
+    expect(t.view.container.querySelector("input[type=password], input[name*=key i]")).toBeNull() // the page has no place for a key
+  })
+  it("shows that it is waiting, and does not send a second question meanwhile", async () => {
+    let answer!: (r: { status: number; body: unknown }) => void
+    const t = home(CATALOG_ON, { "POST /api/chat": () => new Promise((done) => { answer = done }) })
+    await t.ask("Slow question")
+    expect(await screen.findByText(/Waiting for the engine's reply/)).toBeInTheDocument()
+    expect(screen.getByText("Slow question")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled()
+    await t.user.type(t.box(), "Another{Enter}")
+    expect(t.chats()).toHaveLength(1)
+    answer(reply({ reply: "Done" }))
+    expect(await screen.findByText("Done")).toBeInTheDocument()
+    expect(screen.queryByText(/Waiting for the engine's reply/)).toBeNull()
+  })
+  it("when the engine cannot be reached: says so, keeps the question in the box, adds nothing to the conversation", async () => {
+    const t = home(CATALOG_ON)
+    await t.ask("Is hERG a risk?")
+    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/engine cannot be reached/))
+    expect(t.box().value).toBe("Is hERG a risk?")
+    expect(screen.queryByRole("article")).toBeNull()
+    expect(sessionStorage.getItem("home.chat")).toBeNull()
+  })
+  it("shows a refusal about the model next to the model choice", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": { status: 400, body: { error: "model claude-sonnet-5-5 is not available", field: "model" } } })
+    await t.user.selectOptions(await screen.findByLabelText("Model"), "claude-sonnet-5-5")
+    await t.ask("q")
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveAccessibleDescription("model claude-sonnet-5-5 is not available"))
+    expect(screen.getByLabelText("Model")).toBeInvalid()
+    expect(t.box()).toBeValid()
+    expect(t.chats()[0].body).toMatchObject({ provider: "anthropic", model: "claude-sonnet-5-5" })
+  })
+  it("offers models only from providers whose key is present, and none while paid calls are off", async () => {
+    const on = home(CATALOG_ON)
+    await waitFor(() => expect([...(screen.getByLabelText("Model") as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Let the engine choose", "claude-sonnet-5-5", "claude-haiku-5-5"]))
+    on.view.unmount()
+    home(CATALOG_OFF)
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("None: paid calls are off"))
+    expect(screen.getByLabelText("Model")).toBeDisabled()
+  })
+  it("keeps the conversation for the session, and Clear removes it", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ reply: "Kept answer" }) })
+    await t.ask("Kept question")
+    await screen.findByText("Kept answer")
+    t.view.unmount()
+    const again = home(CATALOG_ON)
+    expect(screen.getByText("Kept question")).toBeInTheDocument()
+    expect(screen.getByText("Kept answer")).toBeInTheDocument()
+    expect(localStorage.getItem("home.chat")).toBeNull()
+    await again.user.click(screen.getByRole("button", { name: "Clear conversation" }))
+    expect(screen.queryByText("Kept answer")).toBeNull()
+    expect(sessionStorage.getItem("home.chat")).toBeNull()
+    expect(screen.getByRole("group", { name: "Example questions" })).toBeInTheDocument()
+  })
+  it("asks for the session token when the engine needs it, then sends the question again with it", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": [{ status: 401, body: { error: "chat with a model needs the session token", field: "token", needsToken: true } }, reply({ reply: "With token" })] })
+    await t.ask("q")
+    await t.user.type(await screen.findByLabelText("Session token"), "s3cr3t{Enter}")
+    expect(await screen.findByText("With token")).toBeInTheDocument()
+    expect(t.chats().map((c) => c.headers[TOKEN_HEADER])).toEqual([undefined, "s3cr3t"])
+    expect(t.view.container.innerHTML).not.toContain("s3cr3t")
+  })
+})
+
+describe("replies", () => {
+  it.each([["ai", "AI answer"], ["keyword", "Keyword search, not an AI answer"], ["scripted", "Scripted: fixed text, not research"]] as const)("labels a %s reply '%s' and shows the engine's note", async (mode, label) => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode, note: `note for ${mode}` }) })
+    await t.ask("q")
+    const article = within(await screen.findByRole("article", { name: "Reply" }))
+    expect(article.getByText(label)).toBeInTheDocument()
+    expect(article.getByText(`note for ${mode}`)).toBeInTheDocument()
+  })
+  it("renders reply text as text, never as HTML", async () => {
+    const evil = '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> **not bold** [link](javascript:alert(1))'
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ reply: evil, note: "<b>note</b>" }) })
+    await t.ask("q")
+    const article = await screen.findByRole("article", { name: "Reply" })
+    expect(within(article).getByText(evil)).toBeInTheDocument()
+    expect(article.querySelector("img, script, a, b, strong")).toBeNull()
+    expect((window as unknown as { pwned?: number }).pwned).toBeUndefined()
+  })
+  it("shows cited runs as cards that open the run in its view", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ runs: [
+      { kind: "swarm", id: "202611141543-demo-glhf", title: "Task demo · swarm · mock", why: "claim C2 was refuted" },
+      { kind: "board", id: "202611142034-kras", title: "Drug board · kras", why: "decided on hERG" },
+    ] }) })
+    await t.ask("q")
+    const cards = within(await screen.findByRole("list", { name: "Runs this reply used" })).getAllByRole("button")
+    expect(cards).toHaveLength(2)
+    expect(cards[0]).toHaveTextContent("claim C2 was refuted")
+    expect(t.onOpen).not.toHaveBeenCalled() // a reply never navigates away by itself
+    await t.user.click(cards[1])
+    expect(sessionStorage.getItem("open.board")).toBe("202611142034-kras")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
+    await t.user.click(cards[0])
+    expect(sessionStorage.getItem("open.swarm")).toBe("202611141543-demo-glhf")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Compare")
+  })
+})
+
+describe("plan card", () => {
+  it("shows the question, agents and why, skills, Exa, models, limits, estimate, warnings, and the brief folded away", async () => {
+    const t = home(CATALOG_ON, paidPlan())
+    await t.ask("Should we advance CMP-0423?")
+    const card = await planCard()
+    expect(card.getByText("“Should we advance CMP-0423?”")).toBeInTheDocument()
+    expect(card.getByText("Toxicologist")).toBeInTheDocument()
+    expect(card.getByText("The question is about a hERG liability.")).toBeInTheDocument()
+    expect(card.getByText("Medicinal Chemist")).toBeInTheDocument()
+    expect(card.getByText("herg-triage")).toBeInTheDocument()
+    expect(card.getByText("Patch-clamp data is in the brief.")).toBeInTheDocument()
+    expect(card.getByText("used (a paid service)")).toBeInTheDocument()
+    expect(card.getByText("claude-opus").closest("dd")).toHaveTextContent("lead claude-opus · members claude-sonnet · checker gpt-mini")
+    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    expect(card.getByText(/about \$1\.80/)).toHaveTextContent("(6 agents, 4 rounds, list prices)")
+    expect(within(card.getByRole("list", { name: "Warnings" })).getByText("Exa search has no key on this machine.")).toBeInTheDocument()
+    expect(card.getByText(/nothing has started/)).toBeInTheDocument()
+    const brief = card.getByText("Read the brief the agents would get").closest("details")!
+    expect(brief).not.toHaveAttribute("open")
+    expect(brief.querySelector("script")).toBeNull()
+    expect(card.getByRole("button", { name: "Start research" })).toBeEnabled()
+    expect(card.getByRole("button", { name: "Discard" })).toBeEnabled()
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-1/start")).toHaveLength(0)
+  })
+  it("writes 'unknown' when the engine has no estimate", async () => {
+    const t = home(CATALOG_OFF, { "POST /api/chat": reply({ mode: "scripted", plan: SCRIPTED_PLAN }) })
+    await t.ask("q")
+    expect((await planCard()).getByText(/^unknown/)).toHaveTextContent("unknown (scripted models cost nothing)")
+  })
+  it("Discard starts nothing and can be undone", async () => {
+    const t = home(CATALOG_ON, paidPlan())
+    await t.ask("q")
+    const card = await planCard()
+    await t.user.click(card.getByRole("button", { name: "Discard" }))
+    expect(card.getByText(/Discarded\. Nothing was started\./)).toBeInTheDocument()
+    expect(card.queryByRole("button", { name: "Start research" })).toBeNull()
+    expect(t.sent.filter((s) => s.url.includes("/start"))).toHaveLength(0)
+    await t.user.click(card.getByRole("button", { name: "Bring it back" }))
+    expect(card.getByRole("button", { name: "Start research" })).toBeInTheDocument()
+  })
+})
+
+describe("confirm step", () => {
+  const start = (answer: Table[string]) => ({ ...paidPlan(), "POST /api/chat/plans/plan-1/start": answer })
+  const toConfirm = async (t: ReturnType<typeof home>) => {
+    await t.ask("q")
+    const card = await planCard()
+    await t.user.click(card.getByRole("button", { name: "Start research" }))
+    return card
+  }
+  const starts = (t: ReturnType<typeof home>) => to(t.sent, "POST", "/api/chat/plans/plan-1/start")
+
+  it("'Start research' starts nothing: it restates what will run and what it may cost", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    const step = within(card.getByRole("group", { name: "Confirm before starting" }))
+    expect(step.getByText(/This may spend money/).closest("p")).toHaveTextContent("estimated: about $1.80")
+    expect(step.getByText(/A board review with 2 agents: Toxicologist, Medicinal Chemist/)).toBeInTheDocument()
+    expect(step.getByLabelText("Cost limit (USD)")).toHaveValue(5)
+    expect(step.getByLabelText("Time limit (minutes)")).toHaveValue(15)
+    expect(step.getByLabelText("Rounds")).toHaveValue(4)
+    expect(starts(t)).toHaveLength(0)
+  })
+  it("a paid plan cannot start without the tick, and Enter sends nothing", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    const go = card.getByRole("button", { name: "Start paid research" })
+    expect(go).toBeDisabled()
+    await t.user.click(go)
+    await t.user.keyboard("{Enter}")
+    await t.user.click(card.getByLabelText("Rounds")); await t.user.keyboard("{Enter}")
+    await t.user.click(card.getByLabelText("Cost limit (USD)")); await t.user.keyboard("{Enter}")
+    expect(starts(t)).toHaveLength(0)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    expect(go).toBeEnabled()
+    await t.user.click(go)
+    await waitFor(() => expect(starts(t)).toHaveLength(1))
+    expect(starts(t)[0].body).toEqual({ confirm: true, effort: "standard" })
+  })
+  it("Back clears the tick", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Back" }))
+    await t.user.click(card.getByRole("button", { name: "Start research" }))
+    expect(card.getByLabelText(/I understand that this spends money/)).not.toBeChecked()
+    expect(card.getByRole("button", { name: "Start paid research" })).toBeDisabled()
+    expect(starts(t)).toHaveLength(0)
+  })
+  it("sends lowered limits and the agents that stay ticked", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    await t.user.clear(card.getByLabelText("Cost limit (USD)")); await t.user.type(card.getByLabelText("Cost limit (USD)"), "2")
+    await t.user.click(card.getByRole("checkbox", { name: "Medicinal Chemist" }))
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    await waitFor(() => expect(starts(t)).toHaveLength(1))
+    expect(starts(t)[0].body).toEqual({ confirm: true, effort: "standard", limits: { maxUsd: 2, maxMinutes: 15, maxRounds: 4 }, agents: ["toxicologist"] })
+  })
+  it("will not raise a limit: the message is next to the input and nothing is sent", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    await t.user.clear(card.getByLabelText("Cost limit (USD)")); await t.user.type(card.getByLabelText("Cost limit (USD)"), "50")
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    expect(card.getByLabelText("Cost limit (USD)")).toHaveAccessibleDescription(/can be lowered, not raised above 5/)
+    expect(starts(t)).toHaveLength(0)
+  })
+  it("while paid calls are off a paid plan cannot be started, and the card says how a person turns them on", async () => {
+    const t = home(CATALOG_OFF, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    await t.ask("q")
+    const card = await planCard()
+    const note = card.getByRole("note")
+    expect(note).toHaveTextContent("paid calls are off, so it cannot be started")
+    expect(note).toHaveTextContent("NO_PAID_CALLS=0")
+    expect(note).toHaveTextContent("The dashboard cannot turn them on")
+    const open = card.getByRole("button", { name: "Start research" })
+    expect(open).toBeDisabled()
+    await t.user.click(open)
+    expect(card.queryByRole("group", { name: "Confirm before starting" })).toBeNull()
+    expect(starts(t)).toHaveLength(0)
+  })
+  it("a scripted plan needs no tick, and still starts only from the confirm step", async () => {
+    const t = home(CATALOG_OFF, { "POST /api/chat": reply({ mode: "scripted", plan: SCRIPTED_PLAN }), "POST /api/chat/plans/plan-s/start": { status: 201, body: { kind: "board", id: "run-s" } } })
+    await t.ask("q")
+    const card = await planCard()
+    expect(card.queryByRole("note")).toBeNull()
+    expect(card.queryByRole("button", { name: "Start research" })).toBeNull() // a scripted run is not called research
+    await t.user.click(card.getByRole("button", { name: "Start scripted run (not research)" }))
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(0)
+    expect(card.queryByLabelText(/I understand that this spends money/)).toBeNull()
+    expect(card.getByText(/costs nothing and does no real research/)).toBeInTheDocument()
+    await t.user.click(card.getByRole("button", { name: "Start scripted run (not research)" }))
+    await waitFor(() => expect(to(t.sent, "POST", "/api/chat/plans/plan-s/start")).toHaveLength(1))
+  })
+
+  it("after 201 shows the run, follows its status, and opens it in the Board view", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "202611150900-kras" } }))
+    const card = await toConfirm(t)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    const run = within(await card.findByRole("status"))
+    expect(run.getByText("running")).toBeInTheDocument()
+    expect(run.getByLabelText("202611150900-kras")).toBeInTheDocument()
+    expect(streams.at(-1)!.url).toMatch(/\/api\/runs\/202611150900-kras\/events$/)
+    expect(card.queryByRole("button", { name: /Start/ })).toBeNull()
+    await emit({ type: "round.started", round: 1, message: "go", final: false })
+    await emit({ type: "member.replied", round: 1, member: "toxicologist", text: "x" })
+    await emit({ type: "claim.checked", round: 1, member: "toxicologist", claim: "c", kind: "k", verdict: "verified", checker: "jev" })
+    expect(run.getByText(/round 1 · 1 reply · 1 claim checked/)).toBeInTheDocument()
+    await emit({ type: "memo.written", path: "memo.md", decision: "Go with conditions" })
+    await emit({ type: "run.finished", usd: 1.25, minutes: 2 })
+    expect(run.getByText("done")).toBeInTheDocument()
+    expect(run.getByText("Decision: Go with conditions")).toBeInTheDocument()
+    expect(run.getByText(/took 2:00 · cost \$1\.25/)).toBeInTheDocument()
+    expect(t.onOpen).not.toHaveBeenCalled() // starting a plan does not navigate away
+    await t.user.click(run.getByRole("button", { name: "Open in the Board view" }))
+    expect(sessionStorage.getItem("open.board")).toBe("202611150900-kras")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
+  })
+  it("shows a failed run as failed, with the engine's text", async () => {
+    const t = home(CATALOG_ON, start({ status: 201, body: { kind: "board", id: "run-1" } }))
+    const card = await toConfirm(t)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    const run = within(await card.findByRole("status"))
+    await emit({ type: "run.failed", error: "budget reached" })
+    expect(run.getByText("failed")).toBeInTheDocument()
+    expect(run.getByText("budget reached")).toBeInTheDocument()
+  })
+
+  const refusedWith = async (answer: { status: number; body: unknown }) => {
+    const t = home(CATALOG_ON, start(answer))
+    const card = await toConfirm(t)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    await waitFor(() => expect(starts(t)).toHaveLength(1))
+    return { t, card }
+  }
+  it("400 with a field: the message is next to that control, and the plan can be sent again", async () => {
+    const { card } = await refusedWith({ status: 400, body: { error: "maxMinutes must be at least 5", field: "limits.maxMinutes" } })
+    await waitFor(() => expect(card.getByLabelText("Time limit (minutes)")).toHaveAccessibleDescription("maxMinutes must be at least 5"))
+    expect(card.getByLabelText("Time limit (minutes)")).toBeInvalid()
+    expect(card.getByLabelText("Cost limit (USD)")).toBeValid()
+    expect(card.queryByText(/The plan was not started/)).toBeNull()
+    expect(card.getByRole("button", { name: "Start paid research" })).toBeEnabled()
+  })
+  it("400 about the agents: next to the agents", async () => {
+    const { card } = await refusedWith({ status: 400, body: { error: "the lead cannot be removed", field: "agents" } })
+    expect(await card.findByText("the lead cannot be removed")).toBeInTheDocument()
+    expect(card.getByRole("group", { name: "Agents to include" })).toHaveAccessibleDescription("the lead cannot be removed")
+  })
+  it("400 without a field: under the card", async () => {
+    const { card } = await refusedWith({ status: 400, body: { error: "the brief is too long" } })
+    expect(await card.findByRole("alert")).toHaveTextContent("The plan was not started: the brief is too long")
+  })
+  it("403: shows the engine's text and how paid calls are turned on", async () => {
+    const { card } = await refusedWith({ status: 403, body: { error: "starting a board run with real models is refused." } })
+    const alert = await card.findByRole("alert")
+    expect(alert).toHaveTextContent("starting a board run with real models is refused.")
+    expect(alert).toHaveTextContent("NO_PAID_CALLS=0")
+    expect(card.queryByRole("status")).toBeNull()
+  })
+  it("404: the plan has expired and can no longer be started", async () => {
+    const { card } = await refusedWith({ status: 404, body: { error: "no such plan" } })
+    expect(await card.findByText(/This plan has expired/)).toHaveTextContent("Ask the question again to get a new plan")
+    expect(card.queryByRole("button", { name: /Start/ })).toBeNull()
+    expect(card.queryByRole("button", { name: "Discard" })).toBeNull()
+  })
+  it("409 that names the run: follows that run instead of starting another", async () => {
+    const { card, t } = await refusedWith({ status: 409, body: { error: "this plan was already started", id: "run-earlier" } })
+    expect(within(await card.findByRole("status")).getByLabelText("run-earlier")).toBeInTheDocument()
+    expect(starts(t)).toHaveLength(1)
+  })
+  it("409 without a run: says it was already started", async () => {
+    const { card } = await refusedWith({ status: 409, body: { error: "this plan was already started" } })
+    expect(await card.findByRole("alert")).toHaveTextContent("this plan was already started This plan was already started. Look for its run in the Board view.")
+  })
+  it("401 needsToken: asks for the token, then starts with it", async () => {
+    const t = home(CATALOG_ON, start([{ status: 401, body: { error: "starting a paid plan needs the session token", field: "token", needsToken: true } }, { status: 201, body: { kind: "board", id: "run-1" } }]))
+    const card = await toConfirm(t)
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    await t.user.type(await screen.findByLabelText("Session token"), "s3cr3t{Enter}")
+    expect(await card.findByRole("status")).toBeInTheDocument()
+    expect(starts(t).map((s) => s.headers[TOKEN_HEADER])).toEqual([undefined, "s3cr3t"])
+  })
+})
+
+describe("effort", () => {
+  it("is three segments with what the level implies in visible text; the choice is sent and remembered", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply() })
+    const group = within(await screen.findByRole("group", { name: "Effort" }))
+    expect(group.getAllByRole("radio").map((r) => (r as HTMLInputElement).value)).toEqual(["quick", "standard", "deep"])
+    expect(group.getByRole("radio", { name: "Standard" })).toBeChecked() // the engine's default
+    expect(group.getByText(/A full board review\./)).toHaveTextContent("6 agents · up to 4 rounds · up to 15:00 · up to $5.00 · strong models · Exa search, up to 8 searches")
+    await t.user.click(group.getByRole("radio", { name: "Deep" }))
+    expect(group.getByText(/Every agent, more rounds\./)).toHaveTextContent("all agents · up to 8 rounds · up to 1:00:00 · up to $20.00")
+    expect(localStorage.getItem("home.effort")).toBe("deep")
+    await t.ask("q")
+    await waitFor(() => expect(t.chats()).toHaveLength(1))
+    expect(t.chats()[0].body).toMatchObject({ effort: "deep" })
+  })
+  it("can be changed with the arrow keys", async () => {
+    const t = home(CATALOG_ON)
+    const standard = await screen.findByRole("radio", { name: "Standard" })
+    standard.focus()
+    await t.user.keyboard("{ArrowRight}")
+    expect(screen.getByRole("radio", { name: "Deep" })).toBeChecked()
+    await t.user.keyboard("{ArrowLeft}{ArrowLeft}")
+    expect(screen.getByRole("radio", { name: "Quick" })).toBeChecked()
+  })
+  it("starts from the remembered choice", async () => {
+    localStorage.setItem("home.effort", "quick")
+    home(CATALOG_ON)
+    expect(await screen.findByRole("radio", { name: "Quick" })).toBeChecked()
+  })
+  it("is not shown, and not sent, on an engine without effort levels", async () => {
+    const t = home({ ...CATALOG_ON, efforts: undefined, defaultEffort: undefined }, { "POST /api/chat": reply() })
+    await t.ask("q")
+    await waitFor(() => expect(t.chats()).toHaveLength(1))
+    expect("effort" in (t.chats()[0].body as object)).toBe(false)
+    expect(screen.queryByRole("group", { name: "Effort" })).toBeNull()
+  })
+  it("a refusal about the effort is shown next to the effort choice", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": { status: 400, body: { error: "effort deep is not allowed while paid calls are off", field: "effort" } } })
+    await screen.findByRole("group", { name: "Effort" })
+    await t.ask("q")
+    expect(await screen.findByText("effort deep is not allowed while paid calls are off")).toBeInTheDocument()
+    expect(t.box()).toBeValid()
+  })
+  it("the plan card shows its effort; changing it asks the engine for a new plan and edits nothing locally", async () => {
+    const deep = { ...PLAN, id: "plan-2", effort: "deep" as const, limits: { maxUsd: 20, maxMinutes: 60, maxRounds: 8 }, estimate: { usd: 9, basis: "all agents" } }
+    const t = home(CATALOG_ON, { "POST /api/chat": [reply({ plan: PLAN }), reply({ reply: "A deeper plan.", plan: deep })], "POST /api/chat/plans/plan-2/start": { status: 201, body: { kind: "board", id: "run-2" } } })
+    await t.ask("Should we advance CMP-0423?")
+    let card = await planCard()
+    const picker = within(card.getByRole("group", { name: "Effort for this plan" }))
+    expect(picker.getByRole("radio", { name: "Standard" })).toBeChecked()
+    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    await t.user.click(picker.getByRole("radio", { name: "Deep" }))
+    await waitFor(() => expect(t.chats()).toHaveLength(2))
+    expect(t.chats()[1].body).toEqual({ effort: "deep", messages: [{ role: "user", content: "Should we advance CMP-0423?" }] })
+    expect(await screen.findByText("A deeper plan.")).toBeInTheDocument()
+    card = await planCard()
+    expect(card.getByText("at most $20.00 · 1:00:00 · 8 rounds")).toBeInTheDocument() // the engine's numbers
+    expect(screen.getAllByRole("article", { name: "Reply" })).toHaveLength(1) // replaced, not added
+    expect(screen.getByRole("group", { name: "Effort" }).querySelector("input:checked")).toHaveAttribute("value", "standard") // the chat's own choice is untouched
+    await t.user.click(card.getByRole("button", { name: "Start research" }))
+    await t.user.click(card.getByLabelText(/I understand that this spends money/))
+    await t.user.click(card.getByRole("button", { name: "Start paid research" }))
+    await waitFor(() => expect(to(t.sent, "POST", "/api/chat/plans/plan-2/start")).toHaveLength(1))
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-2/start")[0].body).toEqual({ confirm: true, effort: "deep" })
+    expect(to(t.sent, "POST", "/api/chat/plans/plan-1/start")).toHaveLength(0)
+  })
+  it("keeps the old plan and says why when the engine sends no new one", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": [reply({ plan: PLAN }), reply({ reply: "No plan this time." })] })
+    await t.ask("q")
+    const card = await planCard()
+    await t.user.click(within(card.getByRole("group", { name: "Effort for this plan" })).getByRole("radio", { name: "Quick" }))
+    expect(await card.findByText(/answered without a plan for this effort, so the plan here is unchanged/)).toBeInTheDocument()
+    expect(card.getByText("at most $5.00 · 15:00 · 4 rounds")).toBeInTheDocument()
+    expect(within(card.getByRole("group", { name: "Effort for this plan" })).getByRole("radio", { name: "Standard" })).toBeChecked()
+  })
+})
+
+describe("what this can use", () => {
+  it("lists providers and Exa with key present or missing, and never a key", async () => {
+    const t = home(CATALOG_ON)
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    const row = (name: string) => panel.getByText(name).closest("li")!
+    await waitFor(() => expect(row("Claude (Anthropic)")).toHaveTextContent("key present"))
+    expect(row("OpenAI")).toHaveTextContent("key missing")
+    expect(row("OpenRouter")).toHaveTextContent("key missing")
+    expect(row("Exa search")).toHaveTextContent("key missing")
+    expect(panel.getByText("Paid calls on")).toBeInTheDocument()
+    expect(t.view.container.querySelectorAll("input[type=password], input[type=text]")).toHaveLength(0)
+  })
+  it("says paid calls are off and how a person turns them on", async () => {
+    home(CATALOG_OFF)
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    expect(await panel.findByText("Paid calls off: scripted runs only")).toBeInTheDocument()
+    expect(panel.getByRole("region", { name: "Paid calls" })).toHaveTextContent("NO_PAID_CALLS=0")
+    // a key that is present is not shown as usable while paid calls are off
+    const claude = panel.getByText("Claude (Anthropic)").closest("li")!
+    expect(within(claude).getByText("key present · off")).toHaveAttribute("data-kind", "neutral")
+    expect(panel.getByText("OpenAI").closest("li")).toHaveTextContent("key missing")
+  })
+  it("groups agents as Board and Specialists, with triggers", async () => {
+    home(CATALOG_ON)
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    const board = (await panel.findByText("Board")).closest("details")!
+    expect(board).toHaveTextContent("(2)")
+    expect(board).toHaveTextContent("Lead Scientist")
+    expect(board).toHaveTextContent("Toxicologist")
+    const specialists = panel.getByText("Specialists").closest("details")!
+    expect(specialists).toHaveTextContent("PK Modeller")
+    expect(specialists).toHaveTextContent("Used when: the question is about dose or exposure")
+    expect(board).not.toHaveTextContent("PK Modeller")
+  })
+  it("marks a skill that is not installed as index only", async () => {
+    home(CATALOG_ON)
+    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+    const skill = (name: string) => panel.getByText(name).closest("li")!
+    await waitFor(() => expect(skill("admet-benchmarks")).toHaveTextContent("index only, not installed"))
+    expect(skill("herg-triage")).not.toHaveTextContent("index only")
+    expect(panel.getByText(/1 installed of 2/)).toBeInTheDocument()
+  })
+  it("says the engine is not running when the catalog cannot be read, and tries again", async () => {
+    const t = home("down")
+    const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
+    expect(await panel.findByText("Engine not running")).toBeInTheDocument()
+    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
+    await t.user.click(panel.getByRole("button", { name: "Try again" }))
+    expect(await panel.findByText("Paid calls on")).toBeInTheDocument()
+  })
+})
+
+describe("what was checked", () => {
+  const BOARD = [{ id: "r-new", brief: "kras.md", rounds: 0, startedAt: 2, status: "running", claims: 0 }, { id: "r-done", brief: "kras.md", rounds: 3, startedAt: 1, status: "done", claims: 3 }]
+  const ROWS = [
+    { task: "demo", model: "mock", swarm: { id: "s-only", phase: "done", startedAt: 3, extras: [], score: 1 }, note: "no matching baseline" },
+    { task: "demo", model: "mock", timeLimit: 1800, single: { id: "single-1", phase: "done", startedAt: 1, extras: [], score: 1 }, swarm: { id: "swarm-1", phase: "done", startedAt: 2, extras: [], score: 1 }, diff: 0 },
+  ]
+  it("shows the latest finished review's verdict counts with its own scripted label, and the like-for-like row", async () => {
+    const t = home(CATALOG_ON, { "GET /api/runs": { status: 200, body: BOARD }, "GET /api/glhf/scoreboard": { status: 200, body: ROWS } })
+    const strip = within(screen.getByRole("region", { name: "What was checked" }))
+    const review = await strip.findByRole("button", { name: /Latest board review/ })
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/runs/r-done/events"))).toBe(true)) // the finished one, not the newest
+    await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: true })
+    for (const verdict of ["verified", "verified", "contradicted", "unsupported"]) await emit({ type: "claim.checked", round: 1, member: "m", claim: `c-${verdict}-${Math.random()}`, kind: "k", verdict, checker: "jev" })
+    expect(review).toHaveTextContent("scripted: fixed text, not research")
+    expect(review).toHaveTextContent("2 verified")
+    expect(review).toHaveTextContent("1 contradicted")
+    expect(review).toHaveTextContent("1 unsupported")
+    expect(review).toHaveTextContent("of 4 claims")
+    const pair = strip.getByRole("button", { name: /Swarm vs single agent/ })
+    expect(pair).toHaveTextContent("1.000 vs 1.000 · a tie")
+    expect(pair).toHaveTextContent("scripted: fixed text, not research · demo case")
+    expect(strip.getByText(/No model decides its own verdict/)).toBeInTheDocument()
+    await t.user.click(pair)
+    expect(sessionStorage.getItem("open.swarm")).toBe("swarm-1")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Compare")
+    await t.user.click(review)
+    expect(sessionStorage.getItem("open.board")).toBe("r-done")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
+  })
+  it("labels a real review real even though paid calls are off now", async () => {
+    home(CATALOG_OFF, { "GET /api/runs": { status: 200, body: [BOARD[1]] } })
+    const review = await within(screen.getByRole("region", { name: "What was checked" })).findByRole("button", { name: /Latest board review/ })
+    await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: false })
+    expect(review).toHaveTextContent("real model")
+    expect(review).not.toHaveTextContent("scripted")
+  })
+  it("says so when nothing has been checked yet", async () => {
+    home(CATALOG_ON, { "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/scoreboard": { status: 200, body: [] } })
+    expect(await within(screen.getByRole("region", { name: "What was checked" })).findByText(/Nothing has been checked yet/)).toBeInTheDocument()
+  })
+})
+
+describe("an engine that was started before the chat routes existed", () => {
+  it("says the engine has no chat routes, not that it is not running", async () => {
+    const t = home("down", { "GET /api/chat/catalog": { status: 404, body: { error: "not found" } }, "POST /api/chat": { status: 404, body: { error: "not found" } } })
+    const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
+    expect(await panel.findByText(/running, but it has no chat routes yet/)).toBeInTheDocument()
+    expect(panel.queryByText("Engine not running")).toBeNull()
+    await t.ask("q")
+    await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/it has no chat routes yet\. Restart it/))
+    expect(t.box()).toHaveValue("q")
+  })
+})
+
+describe("search", () => {
+  const RESULTS = { status: 200, body: { mode: "keyword", results: [
+    { kind: "swarm", id: "202611141543-demo-glhf", title: "Task demo · swarm · mock", excerpt: "claim C2 refuted: hERG rows missing", status: "done", score: 1, startedAt: 1794688999518 },
+    { kind: "board", id: "202611142034-kras", title: "Drug board · kras hERG", excerpt: "hERG IC50 of 6 uM fails", status: "done" },
+    { kind: "agent", id: "toxicologist", title: "Toxicologist", excerpt: "Judges hERG safety margins" },
+    { kind: "skill", id: "herg-triage", title: "herg-triage", excerpt: "How to read hERG patch-clamp data." },
+  ] } }
+  const field = () => screen.getByRole("combobox", { name: "Search" })
+  const options = () => within(screen.getByRole("listbox", { name: "Search results" })).findAllByRole("option")
+  const searches = (t: ReturnType<typeof home>) => to(t.sent, "GET", "/api/chat/search")
+
+  it("is a field of its own, labelled apart from the chat box", () => {
+    home(CATALOG_ON)
+    expect(field()).not.toBe(screen.getByLabelText("Ask a research question"))
+    expect(field()).toHaveAccessibleDescription(/Search finds runs, agents and skills that already exist.*To ask a question or plan research, use the chat box/)
+  })
+  it("waits until typing pauses, then asks once; it never calls the chat", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    expect(searches(t)).toHaveLength(0)
+    expect(await options()).toHaveLength(4)
+    expect(searches(t)).toHaveLength(1)
+    expect(searches(t)[0].query).toBe("?q=herg&kind=all&limit=20")
+    expect(t.chats()).toHaveLength(0)
+  })
+  it("shows kind, status, score, and marks the matches", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    const rows = await options()
+    expect(rows[0]).toHaveTextContent("swarm run")
+    expect(rows[0]).toHaveTextContent("done")
+    expect(rows[0]).toHaveTextContent("1.000")
+    expect(rows[2]).toHaveTextContent("agent")
+    expect([...rows[1].querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["hERG", "hERG"])
+    expect(screen.getByText(/4 results · keyword search, no model/)).toBeInTheDocument()
+  })
+  it("filters by kind with the chips", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    await options()
+    await t.user.click(screen.getByRole("button", { name: "Skills" }))
+    await waitFor(() => expect(searches(t).at(-1)!.query).toBe("?q=herg&kind=skill&limit=20"))
+    expect(screen.getByRole("button", { name: "Skills" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false")
+  })
+  it("arrow keys move through the results and Enter opens a run through takeOpen", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    const rows = await options()
+    await t.user.keyboard("{ArrowDown}{ArrowDown}")
+    expect(rows[1]).toHaveAttribute("aria-selected", "true")
+    expect(field()).toHaveAttribute("aria-activedescendant", rows[1].id)
+    await t.user.keyboard("{ArrowUp}")
+    expect(rows[0]).toHaveAttribute("aria-selected", "true")
+    await t.user.keyboard("{End}")
+    expect(rows[3]).toHaveAttribute("aria-selected", "true")
+    await t.user.keyboard("{Home}{ArrowDown}{Enter}")
+    expect(sessionStorage.getItem("open.board")).toBe("202611142034-kras")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
+    expect(t.chats()).toHaveLength(0)
+  })
+  it("Enter without moving opens the first result; a click opens the one clicked", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    await options()
+    await t.user.keyboard("{Enter}")
+    expect(sessionStorage.getItem("open.swarm")).toBe("202611141543-demo-glhf")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Compare")
+  })
+  it("opens an agent or a skill in the Agents view at that item", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    const rows = await options()
+    await t.user.click(rows[3])
+    expect(sessionStorage.getItem("open.agents")).toBe("skill:herg-triage")
+    expect(t.onOpen).toHaveBeenLastCalledWith("Agents")
+    t.view.unmount()
+    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
+    render(<AgentCatalog />)
+    const card = (await screen.findByText("herg-triage")).closest("li")!
+    await waitFor(() => expect(card).toHaveAttribute("data-target"))
+    expect(card).toHaveFocus()
+    expect(screen.getByText("Toxicologist").closest("article")).not.toHaveAttribute("data-target")
+  })
+  it("Escape closes the results and keeps the words", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.type(field(), "herg")
+    await options()
+    await t.user.keyboard("{Escape}")
+    expect(field()).toHaveAttribute("aria-expanded", "false")
+    expect(field()).toHaveValue("herg")
+  })
+  it("'/' and Ctrl+K or Cmd+K put the cursor in the search field, but '/' typed into the chat box is just a slash", async () => {
+    const t = home(CATALOG_ON)
+    expect(t.box()).toHaveFocus()
+    await t.user.keyboard("/")
+    expect(t.box()).toHaveFocus()
+    expect(t.box()).toHaveValue("/")
+    await t.user.keyboard("{Control>}k{/Control}")
+    expect(field()).toHaveFocus()
+    t.box().focus()
+    await t.user.keyboard("{Meta>}k{/Meta}")
+    expect(field()).toHaveFocus()
+    ;(document.activeElement as HTMLElement).blur()
+    await t.user.keyboard("/")
+    expect(field()).toHaveFocus()
+    expect(field()).toHaveValue("")
+  })
+  it("with nothing typed asks nothing, and says what search is for and how to use it", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
+    await t.user.click(field())
+    await new Promise((done) => setTimeout(done, 300))
+    expect(searches(t)).toHaveLength(0)
+    expect(field()).toHaveAttribute("aria-expanded", "false")
+    expect(screen.getByText(/Type a word to search/)).toBeVisible()
+    expect(within(screen.getByRole("listbox", { name: "Search results" })).queryAllByRole("option")).toHaveLength(0)
+  })
+  it("says so when nothing matches, and points to the chat box for questions", async () => {
+    const t = home(CATALOG_ON, { "GET /api/chat/search": { status: 200, body: { results: [], mode: "keyword" } } })
+    await t.user.type(field(), "zzz")
+    expect(await screen.findByText(/Nothing matches “zzz”\. Try fewer words\. To ask a question, use the chat box\./)).toBeInTheDocument()
+  })
+  it("says so when the search fails", async () => {
+    const t = home(CATALOG_ON)
+    await t.user.type(field(), "herg")
+    expect(await screen.findByText(/Search did not work: The engine cannot be reached/)).toBeInTheDocument()
+  })
+})

@@ -1,9 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Drug Board",
-  "mainBinaryName": "drug-board",
+  "productName": "AI Scientist Bot",
+  "mainBinaryName": "ai-scientist-bot",
   "version": "0.1.0",
-  "identifier": "com.brendandang.drugboard",
+  "identifier": "com.brendandang.aiscientistbot",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:5317",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Drug Board",
+        "title": "AI Scientist Bot",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,

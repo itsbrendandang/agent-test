@@ -68,7 +68,7 @@ export function SettingsView() {
                 </div>
                 {saved[p.id] ? (
                   <div className="keys-actions">
-                    <button type="button" className="toon-btn toon-btn-light" disabled={r === "testing"} onClick={() => void test(p.id)}>
+                    <button type="button" className="btn" disabled={r === "testing"} onClick={() => void test(p.id)}>
                       {r === "testing" ? "Testing…" : "Test"}
                     </button>
                     <button type="button" className="link-btn" onClick={() => void remove(p.id)}>Remove</button>
@@ -78,7 +78,7 @@ export function SettingsView() {
                     <input type="password" name={`key-${p.id}`} aria-label={`${p.name} API key`} placeholder={p.hint}
                       autoComplete="off" spellCheck={false} disabled={!isDesktop} value={draft[p.id] ?? ""}
                       onChange={(e) => { const v = e.currentTarget.value; setDraft((d) => ({ ...d, [p.id]: v })) }} />
-                    <button type="submit" className="toon-btn" disabled={!isDesktop || !(draft[p.id] ?? "").trim()}>Connect</button>
+                    <button type="submit" className="btn btn-primary" disabled={!isDesktop || !(draft[p.id] ?? "").trim()}>Connect</button>
                   </form>
                 )}
                 <p className="keys-result" role="status" data-ok={typeof r === "object" ? r.ok : undefined}>

@@ -5,8 +5,15 @@ import type { Catalog, CatalogAgent, ProviderId } from "./api"
 
 const PROVIDER_NAME: Record<ProviderId, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI", openrouter: "OpenRouter" }
 
-function Key({ present }: { present: boolean }) {
-  return <span className="pill" data-kind={present ? "success" : "warning"}>{present ? "key present" : "key missing"}</span>
+/** A key that is present is only usable while paid calls are on: then green. With paid calls off it is neutral and says so. */
+function Key({ present, usable }: { present: boolean; usable: boolean }) {
+  return (
+    <>
+      <span className="pill" data-kind={!present ? "warning" : usable ? "success" : "neutral"} title={present && !usable ? "The key is there, but it is not used while paid calls are off." : undefined}>
+        {!present ? "key missing" : usable ? "key present" : "key present · off"}
+      </span>
+    </>
+  )
 }
 
 function Agents({ title, agents }: { title: string; agents: CatalogAgent[] }) {
@@ -31,15 +38,18 @@ function Agents({ title, agents }: { title: string; agents: CatalogAgent[] }) {
 interface Props {
   /** undefined: loading. null: the engine could not be reached or sent something unreadable. */
   catalog: Catalog | null | undefined
+  /** Why there is no catalog, when the engine is running but could not give one. */
+  why?: string
   onRetry: () => void
 }
 
-export function CatalogPanel({ catalog, onRetry }: Props) {
+export function CatalogPanel({ catalog, why, onRetry }: Props) {
   return (
     <aside className="home-catalog card-surface" aria-labelledby="home-catalog-title">
       <h2 id="home-catalog-title">What this can use</h2>
       {catalog === undefined && <p className="muted small" role="status">Asking the engine…</p>}
-      {catalog === null && <EngineOffline needs="Models, agents and skills are listed by the engine." onRetry={onRetry} />}
+      {catalog === null && !why && <EngineOffline needs="Models, agents and skills are listed by the engine." onRetry={onRetry} />}
+      {catalog === null && why && <div role="alert"><p className="home-paidoff">{why}</p><button type="button" className="btn" onClick={onRetry}>Try again</button></div>}
       {catalog && (
         <>
           <section aria-label="Paid calls">
@@ -53,11 +63,11 @@ export function CatalogPanel({ catalog, onRetry }: Props) {
             <ul className="home-keys">
               {catalog.providers.map((p) => (
                 <li key={p.id}>
-                  <span>{PROVIDER_NAME[p.id] ?? p.id}</span><Key present={p.keyPresent} />
+                  <span>{PROVIDER_NAME[p.id] ?? p.id}</span><Key present={p.keyPresent} usable={catalog.paidCalls} />
                   {p.models.length > 0 && <span className="muted small home-models">{p.models.join(", ")}</span>}
                 </li>
               ))}
-              <li><span>Exa search</span><Key present={catalog.search.exa.keyPresent} /></li>
+              <li><span>Exa search</span><Key present={catalog.search.exa.keyPresent} usable={catalog.paidCalls} /></li>
             </ul>
             <p className="muted small">Keys live in the engine's .env file. This page never shows or asks for one.</p>
           </section>

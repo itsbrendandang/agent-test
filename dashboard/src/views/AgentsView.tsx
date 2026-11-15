@@ -41,7 +41,7 @@ export function AgentsView() {
 
   return (
     <div className="page">
-      <PageHead title="Agents" about={crew.length ? "Who does the work: the nine roles of the swarm with their instructions, and the crew characters shown in the side rail." : "Who does the work: the nine roles of the swarm, in the order they run, with their instructions."} />
+      <PageHead title="Agents and skills" about={crew.length ? "Who does the work: the nine roles of the swarm with their instructions, and the crew characters shown in the side rail." : "Who does the work: the nine roles of the swarm, in the order they run, with their instructions."} />
       <SwarmTeam />
       <AgentCatalog />
       {crew.length > 0 && <>
@@ -77,7 +77,7 @@ export function AgentsView() {
               </div>
             </fieldset>
             <div className="upload-row">
-              <label className="toon-btn toon-btn-light">
+              <label className="btn upload-btn">
                 Upload your own
                 <input type="file" accept="image/png,image/webp,image/gif,image/jpeg,image/svg+xml" hidden
                   onChange={(e) => { void upload(m.id, e.currentTarget.files?.[0]); e.currentTarget.value = "" }} />

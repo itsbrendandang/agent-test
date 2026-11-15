@@ -4,15 +4,12 @@ import { render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SideCrew } from "@/components/SideCrew"
 import { AgentsView } from "@/views/AgentsView"
-import { OverviewView } from "@/views/OverviewView"
 import { DEFAULT_CREW, demoCrew } from "./store"
 
 const NAMES = ["Momo", "Ember", "Fuji"]
-const overview = () => <OverviewView simCount={0} tick={0} eventCount={0} active={false} onOpenSimulations={() => {}} onMeetCrew={() => {}} onOpenKeys={() => {}} />
 const views = [
-  ["the side rail", () => <SideCrew parade={1} />],
+  ["the rail", () => <SideCrew />],
   ["the Agents view", () => <AgentsView />],
-  ["the Overview", overview],
 ] as const
 
 beforeEach(() => {
@@ -41,17 +38,12 @@ describe("flag off (the default)", () => {
     expect(localStorage.getItem("simlab.crew.v1")).toContain("Pixel") // hidden, not deleted
   })
   it("leaves no empty box behind", () => {
-    const rail = render(<SideCrew parade={1} />)
+    const rail = render(<SideCrew />)
     expect(rail.container).toBeEmptyDOMElement()
     rail.unmount()
     const agents = render(<AgentsView />)
     expect(agents.container.querySelector(".cast-card:not(.team-card)")).toBeNull()
     expect(screen.queryByText("Your crew")).toBeNull()
-    agents.unmount()
-    const home = render(overview())
-    expect(home.container.querySelector(".home-crew")).toBeNull()
-    expect(screen.queryByRole("button", { name: "Crew" })).toBeNull()
-    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument()
   })
   it("keeps the nine swarm role cards in the Agents view", () => {
     const { container } = render(<AgentsView />)
@@ -63,8 +55,8 @@ describe("flag off (the default)", () => {
 
 describe("flag on", () => {
   beforeEach(() => vi.stubEnv("VITE_DEMO_CREW", "1"))
-  it("names the characters in the side rail", () => {
-    render(<SideCrew parade={0} />)
+  it("names the characters in the rail", () => {
+    render(<SideCrew />)
     for (const [name, role] of [["Momo", "Researcher"], ["Ember", "Builder"], ["Fuji", "Reviewer"]]) expect(screen.getByRole("button", { name: `${name}, ${role}` })).toBeInTheDocument()
   })
   it("shows the crew editor in the Agents view", () => {
@@ -72,14 +64,9 @@ describe("flag on", () => {
     expect(screen.getByText("Your crew")).toBeInTheDocument()
     for (const name of NAMES) expect(screen.getByDisplayValue(name)).toBeInTheDocument()
   })
-  it("shows them on the Overview", () => {
-    render(overview())
-    for (const name of NAMES) expect(screen.getByText(name)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Crew" })).toBeInTheDocument()
-  })
   it("shows what a browser saved in their place", () => {
     localStorage.setItem("simlab.crew.v1", JSON.stringify([{ id: "x", name: "Pixel", role: "Scout", species: "egg" }]))
-    render(<SideCrew parade={0} />)
+    render(<SideCrew />)
     expect(screen.getByRole("button", { name: "Pixel, Scout" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /Momo/ })).toBeNull()
   })
