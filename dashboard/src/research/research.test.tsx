@@ -853,15 +853,13 @@ describe("a question answered on the Overview is Research's conversation", () =>
     // An earlier conversation in Research: the Overview's question starts a new one, as it did before.
     sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
     const user = userEvent.setup()
-    const overview = render(<OverviewView onOpen={() => {}} />)
-    await screen.findByText("Let's research together!")
-    await user.type(screen.getByLabelText("Ask a research question"), "Does drug A protect the heart?")
+    const onOpen = vi.fn()
+    const overview = render(<OverviewView onOpen={onOpen} />)
+    await user.type(await screen.findByLabelText("Ask a research question"), "Does drug A protect the heart?")
     await user.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
     expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "standard" })
-    await screen.findByRole("heading", { name: "Does drug A protect the heart?" }) // the inline answer stays on the Overview
-    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true))
-    await feed([{ seq: 1, at: 1, run: "a-1", type: "research.started", id: "a-1", question: "Does drug A protect the heart?", mode: "demo" } as unknown as ResearchEvent])
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home")) // the home page hands the started answer to Research
     overview.unmount()
 
     // Research, opened from the menu: the Overview's question and its answer, still running, are the conversation.

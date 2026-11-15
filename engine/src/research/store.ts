@@ -61,6 +61,32 @@ export function listRecords(config: BoardConfig, now = Date.now()): ResearchReco
 export const threadRecords = (config: BoardConfig, thread: string, now = Date.now()): ResearchRecord[] =>
   listRecords(config, now).filter((r) => r.thread === thread).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
 
+/**
+ * One short line per answer for GET /api/research?all=1 (the Overview's totals, metrics and the list of research still
+ * running). Only what the record holds: no answer text, no source text, no prompt. `step` is the step running now and
+ * `agents` who has taken part so far, in the order they first worked; `checks` counts the cited sentences by the verdict
+ * code gave them. Fields the record does not have yet are left out, never filled with a guess.
+ */
+export function shortLine(r: Partial<ResearchRecord> & Pick<ResearchRecord, "id" | "question" | "status" | "startedAt">) {
+  const steps = Array.isArray(r.steps) ? r.steps : [], statements = Array.isArray(r.statements) ? r.statements : [], sources = Array.isArray(r.sources) ? r.sources : []
+  const agents = [...new Set([...steps.map((s) => s.agent), ...(r.specialists ?? []).map((s) => s.agent)].filter((a): a is string => typeof a === "string" && a.length > 0))].slice(0, 20)
+  const running = r.status === "running" ? steps.findLast((s) => s.status === "running") : undefined
+  const checks = { verified: 0, contradicted: 0, unsupported: 0, unchecked: 0 }
+  for (const s of statements) if (s.verdict in checks) checks[s.verdict]++
+  return {
+    id: r.id, thread: r.thread, question: r.question.slice(0, 200), status: r.status, mode: r.mode, startedAt: r.startedAt, finishedAt: r.finishedAt, usd: r.usd,
+    ...(r.effort ? { effort: r.effort } : {}),
+    ...(typeof r.workStartedAt === "number" ? { workStartedAt: r.workStartedAt } : {}),
+    ...(typeof r.seconds === "number" ? { seconds: r.seconds } : {}),
+    ...(r.caps ? { maxUsd: r.caps.maxUsd } : {}),
+    ...(running ? { step: { label: running.label.slice(0, 200), ...(running.agent ? { agent: running.agent } : {}) } } : {}),
+    agents,
+    searches: (Array.isArray(r.searches) ? r.searches : []).filter((s) => s.ran).length,
+    sources: { kept: sources.filter((s) => s.earlier !== true).length, cited: sources.filter((s) => s.cited === true).length },
+    checks,
+  }
+}
+
 export interface ThreadLine { thread: string; title: string; updatedAt: number; answers: number; status: ResearchRecord["status"] }
 
 /** One line per thread for a sidebar, newest first: the first question as the title, the latest answer's status. */

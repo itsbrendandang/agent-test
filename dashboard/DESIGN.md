@@ -193,8 +193,9 @@ A first-time visitor gets from opening the app to a finished result, and underst
   row on Board and Compare (`.next-steps`). No empty state, error or finished state is a dead end.
 - **Errors a person can act on**: what went wrong, what to do ("Start it with: npm start"), one "Try again"
   button, and the engine's own text under "Details" (`EngineOffline` in `Shared.tsx`).
-- **Where you were**: the last view (`app.view`) and the last run of each kind (`last.board`, `last.swarm`) are
-  remembered. An address can name a run: `#Board/<id>`, `#Compare/<id>` (`src/nav.ts`, `src/lib/open.ts`).
+- **Where you were**: the app opens on the Overview (the home page) unless the address names a view. The last run of
+  each kind (`last.board`, `last.swarm`) is remembered. An address can name a run: `#Board/<id>`, `#Compare/<id>`
+  (`src/nav.ts`, `src/lib/open.ts`).
 - **Advanced controls** (model, limits, team choice) sit under "Research options". How a result was made (its
   provenance badge) is never hidden.
 - **Help**: "How this works" in Settings opens the four-step picture (`src/components/HowItWorks.tsx`).

@@ -1,6 +1,7 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
 // Three places carry the everyday loop (ask, read, find again). One quieter group follows, with a heading:
-// "How it works" (how an answer was made). Benchmarks and Compare are not listed; they open by address. At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
+// "How it works" (how an answer was made). Benchmarks and Compare are not listed; they open by address. The brand at
+// the top goes home (the Overview). At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
 import { Gavel, LayoutDashboard, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { ProfileMenu } from "@/components/ProfileMenu"
@@ -34,8 +35,11 @@ export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View
   return (
     <Sidebar collapsible="icon" className="app-sidebar">
       <SidebarHeader className="nav-brand">
-        <span className="nav-mark" aria-hidden="true"><Mark size={24} /></span>
-        <span className="nav-name">{PRODUCT}</span>
+        {/* The brand goes home, as on any site: the Overview. */}
+        <a className="nav-home" href="#Overview" aria-label={`${PRODUCT}: home`} onClick={(e) => { e.preventDefault(); go("Overview") }}>
+          <span className="nav-mark" aria-hidden="true"><Mark size={24} /></span>
+          <span className="nav-name">{PRODUCT}</span>
+        </a>
         {isMobile && <button type="button" className="header-btn nav-close" aria-label="Close the menu" onClick={() => setOpenMobile(false)}><X size={18} aria-hidden="true" /></button>}
       </SidebarHeader>
       <SidebarContent>

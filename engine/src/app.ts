@@ -30,6 +30,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./board/agents.ts"
 import { BudgetReached, checkDailyBudget, loadState, lockHolder, OverridesUnreadable, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
+import { boardCap, boardExtras } from "./board/listline.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
@@ -91,24 +92,24 @@ export function createApp(options: AppOptions = {}) {
       .finally(() => active.delete(runId))
   }
 
-  const runCache = new Map<string, { stamp: string; state: ReturnType<typeof loadState>; summary: ReturnType<typeof summarize> }>()
+  const runCache = new Map<string, { stamp: string; state: ReturnType<typeof loadState>; summary: ReturnType<typeof summarize>; cap: ReturnType<typeof boardCap> }>()
   const listRuns = () => {
     const dir = path(config, "runs")
     if (!existsSync(dir)) return []
     return readdirSync(dir).filter((d) => isSafeId(d) && existsSync(`${dir}/${d}/run.json`)).sort().reverse().flatMap((id) => {
-      // Both files are read again only when one of them changed: this list is built for every /api/runs, search and chat request.
-      const stamp = [`${dir}/${id}/run.json`, `${dir}/${id}/events.jsonl`].map((f) => { const st = statSync(f, { throwIfNoEntry: false }); return st ? `${st.mtimeMs}:${st.size}` : "-" }).join("|")
+      // The files are read again only when one of them changed: this list is built for every /api/runs, search and chat request.
+      const stamp = [`${dir}/${id}/run.json`, `${dir}/${id}/events.jsonl`, `${dir}/${id}/overrides.json`].map((f) => { const st = statSync(f, { throwIfNoEntry: false }); return st ? `${st.mtimeMs}:${st.size}` : "-" }).join("|")
       let read = runCache.get(id)
       if (read?.stamp !== stamp) {
         let s: ReturnType<typeof loadState>
         try { s = loadState(config, id) } catch { runCache.delete(id); return [] } // an unreadable run.json hides that run, not the list
-        read = { stamp, state: s, summary: summarize(`${dir}/${id}`, s) }
+        read = { stamp, state: s, summary: summarize(`${dir}/${id}`, s), cap: boardCap(config, id) }
         runCache.set(id, read)
       }
       const s = read.state
       // "running" also when another process (the CLI) holds the run's lock, so it is not resumed twice.
       const status = s.finished ? "done" : active.has(id) || lockHolder(`${dir}/${id}`) !== undefined ? "running" : s.failed ? "failed" : "paused"
-      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...read.summary }]
+      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...read.summary, ...boardExtras(s), ...read.cap }]
     })
   }
 

@@ -6,7 +6,7 @@
 //   GET  /api/research/:id/events                    SSE: replay, then tail. `Last-Event-ID` or ?after=<seq> resumes
 //   GET  /api/research/:id                           the whole record
 //   GET  /api/research?thread=<id>                   the thread's answers, oldest first (no thread: the newest 50)
-//   GET  /api/research?all=1                         every answer, one short line each (id, question, status, mode, times, usd)
+//   GET  /api/research?all=1                         every answer, one short line each (store.ts shortLine: no answer or source text)
 //   GET  /api/research/threads                       one line per thread, newest first
 //   GET  /api/research/:id/artifacts[/:name]         the registered result files; one of them as a download
 //
@@ -39,7 +39,7 @@ import { FirstPass } from "../board/triage.ts"
 import { demoBrain, pacedDemoBrain } from "./demo.ts"
 import { type Database, Interrupted, modelNames, type PipelineDeps, realBrain, runAnswer } from "./pipeline.ts"
 import { type Match, matchSpecialists } from "../specialists.ts"
-import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThreadId, listArtifacts, listRecords, loadRecord, newAnswerId, newThreadId, readArtifact, ResearchLog, saveRecord, threadLines, threadRecords } from "./store.ts"
+import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThreadId, listArtifacts, listRecords, loadRecord, newAnswerId, newThreadId, readArtifact, ResearchLog, saveRecord, shortLine, threadLines, threadRecords } from "./store.ts"
 import { plainBlock, scrub } from "./text.ts"
 import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts"
 import { exampleEntries } from "../examples.ts"
@@ -449,7 +449,7 @@ export function createResearch(deps: ResearchDeps) {
       if (parts.length === 2 && req.method === "GET") {
         const thread = url.searchParams.get("thread")
         // ?all=1: one short line for every answer, for totals (the Overview). Without it: the newest 50, whole.
-        if (thread === null && url.searchParams.get("all") === "1") return json(res, 200, { items: listRecords(config, now()).map((r) => ({ id: r.id, thread: r.thread, question: r.question.slice(0, 200), status: r.status, mode: r.mode, startedAt: r.startedAt, finishedAt: r.finishedAt, usd: r.usd })) })
+        if (thread === null && url.searchParams.get("all") === "1") return json(res, 200, { items: listRecords(config, now()).map(shortLine) })
         if (thread === null) return json(res, 200, { items: listRecords(config, now()).slice(0, 50).map(withFiles) })
         if (!isThreadId(thread)) throw new Refusal(400, "thread", "thread must be the id of a thread this engine gave out")
         const items = threadRecords(config, thread, now())
