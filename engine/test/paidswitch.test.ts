@@ -12,6 +12,7 @@ import { after, afterEach, test } from "node:test"
 import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai"
 
 process.env.NO_PAID_CALLS = "1"
+delete process.env.DRUG_BOARD_MOCK // CI sets it; this file tests the switch between scripted and real, with fakes
 for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "OPENROUTER_API_KEY"]) process.env[key] = "fake-key-for-tests"
 const outbound: string[] = []
 const realFetch = globalThis.fetch
