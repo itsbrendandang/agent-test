@@ -161,6 +161,7 @@ describe("the home page: metrics from recorded data only", () => {
     })
     await waitFor(() => expect(tile("Spent today").textContent).toContain("$3.46"))
     expect(tile("Spent today").textContent).toContain("of a $20.00 daily limit")
+    expect(tile("Spent today").textContent).toContain("A running team review or answer counts at its full limit until it ends.")
     expect(tile("Last 7 days").textContent).toContain("$3.00") // 0.5 + 1.5 + 1: the answer from a month ago is not in it
     expect(tile("Limit per team review").textContent).toContain("$5.00")
     expect(tile("Limit per team review").textContent).toContain("Web search (Exa): $0.04 of a $40.00 ceiling, all time")
