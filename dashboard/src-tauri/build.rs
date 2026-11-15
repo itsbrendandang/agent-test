@@ -4,6 +4,7 @@
 const COMMANDS: &[&str] = &["system_usage", "keys_status", "key_save", "key_delete", "key_test"];
 
 fn main() {
+  println!("cargo:rerun-if-env-changed=ASB_BUNDLED_ENGINE");
   tauri_build::try_build(
     tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
   )

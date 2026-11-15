@@ -15,6 +15,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "AI Scientist Bot",
         "width": 1440,
         "height": 900,

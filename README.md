@@ -55,7 +55,45 @@ The app is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). A 
 is interrupted, for example by a crash or a restart, continues where it stopped and does not
 repeat finished work. We tested this by stopping a practice run in the middle.
 
-## Try it
+## Download the app (Mac)
+
+No terminal and nothing to install. For Macs with Apple Silicon (M1 or newer), macOS 11 or later.
+
+1. Open the [latest desktop release](https://github.com/itsbrendandang/agent-test/releases/tag/desktop-v0.2.0)
+   and download `AI-Scientist-Bot-macOS-Apple-Silicon.dmg` (54 MB). The repository is private, so you
+   must be signed in to GitHub with an account that has access.
+2. Double-click the downloaded file. Drag **AI Scientist Bot** onto **Applications**.
+3. Open **Applications** and double-click **AI Scientist Bot**. The first time, macOS refuses to open it,
+   because the app is not signed with a paid Apple developer account. This is expected. Click **Done**.
+4. Open **System Settings**, then **Privacy & Security**, and scroll down to **Security**. Next to
+   *"AI Scientist Bot" was blocked to protect your Mac*, click **Open Anyway** and confirm. You do this once.
+5. The app opens after a second or two. It starts everything it needs by itself.
+
+If macOS says the app is "damaged", open **Terminal** and run this once, then open the app again:
+
+```
+xattr -dr com.apple.quarantine "/Applications/AI Scientist Bot.app"
+```
+
+What to expect:
+
+- **It does practice runs only.** Answers are fixed examples, not research. There is no key inside the
+  app and no way to turn real runs on in it yet.
+- **Board reviews, the chat, the run list and the graph work.** Swarm runs and the benchmark do not: they
+  need Docker and Python, which are not in the app.
+- **Your runs are kept** in `~/Library/Application Support/com.brendandang.aiscientistbot/`. Delete that
+  folder to remove them. To remove the app, drag it to the Bin.
+- **Quit with Cmd-Q.** Nothing keeps running afterwards.
+
+To check the download: its SHA-256 is
+`7ae98f8d57a1a6ee6464a03d4b28dc119f6eefe2bf28a9657e0ab36e3c1bb1e7`
+(`shasum -a 256 AI-Scientist-Bot-macOS-Apple-Silicon.dmg`).
+
+Not tested: an Intel Mac, a second Mac, and the first-open steps on a freshly downloaded copy. Windows
+and Linux have no app; use [Try it from the source](#try-it-from-the-source). How it is built:
+[docs/proposals/desktop-app.md](docs/proposals/desktop-app.md).
+
+## Try it from the source
 
 This needs a terminal and a few minutes. You need [Node.js](https://nodejs.org) 24 or newer. For the
 swarm you also need [uv](https://docs.astral.sh/uv/) and Docker (running).
@@ -83,10 +121,6 @@ docker compose up --build   # everything in containers; wait for "glhf tracker r
 - The Docker path was tested on a new clone on macOS. Linux and Windows are not tested; Windows
   needs WSL2. Steps: [CONTRIBUTING.md](CONTRIBUTING.md#quick-start-with-docker-only).
 - Run the engine in Docker or on your machine, not both at the same time.
-- A desktop app for macOS (Apple Silicon) exists as a
-  [prerelease](https://github.com/itsbrendandang/agent-test/releases). It is an older build under
-  the old name "Drug Board", it is not signed, and it only shows the window: the engine must be
-  started separately. A build that starts its own engine is in progress.
 
 ## What is in the app
 

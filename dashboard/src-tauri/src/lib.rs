@@ -1,7 +1,9 @@
+mod engine;
 mod keys;
 
 use std::sync::Mutex;
 use sysinfo::System;
+use tauri::Manager;
 
 #[derive(serde::Serialize)]
 struct Usage {
@@ -61,9 +63,20 @@ fn context<R: tauri::Runtime>() -> tauri::Context<R> {
   tauri::generate_context!()
 }
 
+// The main window is declared in tauri.conf.json with `create: false` and opened here, after the engine answers.
+fn open_window(app: &tauri::App, engine: Option<&engine::Engine>) -> tauri::Result<()> {
+  let config = app.config().app.windows.first().expect("no window in tauri.conf.json").clone();
+  let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+  if let Some(engine) = engine {
+    builder = builder.initialization_script(engine.init_script());
+  }
+  builder.build()?;
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+  let app = tauri::Builder::default()
     .manage(Mutex::new(System::new()))
     .invoke_handler(commands())
     .setup(|app| {
@@ -74,10 +87,35 @@ pub fn run() {
             .build(),
         )?;
       }
+      if engine::expected(app.handle()) {
+        match engine::Engine::start(app.handle()) {
+          Ok(engine) => {
+            open_window(app, Some(&engine))?;
+            app.manage(engine);
+          }
+          Err(engine::Failure::AlreadyRunning) => {
+            eprintln!("AI Scientist Bot is already running; leaving the first copy to answer.");
+            std::process::exit(0);
+          }
+          Err(engine::Failure::Broken(message)) => {
+            engine::tell(&message);
+            std::process::exit(1);
+          }
+        }
+      } else {
+        open_window(app, None)?; // no engine inside: the window expects one on 127.0.0.1:8787
+      }
       Ok(())
     })
-    .run(context())
+    .build(context())
     .expect("error while building tauri application");
+  app.run(|handle, event| {
+    if let tauri::RunEvent::Exit = event {
+      if let Some(engine) = handle.try_state::<engine::Engine>() {
+        engine.stop();
+      }
+    }
+  });
 }
 
 #[cfg(test)]
