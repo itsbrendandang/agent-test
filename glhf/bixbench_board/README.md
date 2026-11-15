@@ -122,3 +122,11 @@ every sandbox at once.
 Compare like with like. The single-agent baseline ran its cells on a machine, with network.
 Run both solvers with the same `--sandbox` before you compare them.
 
+## Following runs while they go (for the dashboard)
+
+Each run's `transcript.jsonl` is written line by line. It names the run (`run_start.run`), the
+board's members and where the code runs, and every turn, tool call and code cell names its member.
+`.venv/bin/python transcript_selftest.py` checks these fields. What a reader can rely on, and how
+to show several runs at once, is in
+[docs/proposals/concurrent-board-runs-ui.md](../../docs/proposals/concurrent-board-runs-ui.md).
+

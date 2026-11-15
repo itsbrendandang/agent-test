@@ -143,6 +143,12 @@ class Sandbox:
             *cmd,
         ]
 
+    def settings(self) -> dict:
+        """Where this run's code runs, for run_start and result.json (ModalSandbox has the
+        same method)."""
+        guard = "bubblewrap" if self.use_bwrap else "sandbox-exec" if self.use_sandbox_exec else None
+        return {"sandbox": "local", "read_only_guard": guard}
+
     def run_code(
         self, code: str, timeout_s: int = DEFAULT_TIMEOUT_S, language: str = "python"
     ) -> ExecResult:
@@ -198,3 +204,9 @@ class Sandbox:
 
     def read_file(self, path: str, offset: int = 0, limit: int = 200) -> str:
         return cellrun.read_text(self.resolve_in_scope(path), path, offset, limit)
+
+
+def settings_of(sandbox) -> dict:
+    """Where a run's code runs ({"sandbox": "local"|"modal", ...}), for any sandbox object."""
+    get = getattr(sandbox, "settings", None)
+    return dict(get()) if callable(get) else {"sandbox": "unknown"}

@@ -99,7 +99,8 @@ def run_one(study, repeat_idx, args, run_root: Path, session=None) -> dict:
                                name=f"{study.study_id}/rep{repeat_idx}",
                                seconds=args.budget_seconds)
     try:
-        result = solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox)
+        result = solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox,
+                       run_id=f"{study.study_id}/rep{repeat_idx}")
     finally:
         sandbox_line = sandbox.close() if sandbox is not None else None
 

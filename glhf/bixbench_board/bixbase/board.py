@@ -39,7 +39,7 @@ from .budget import Budget, BudgetExhausted
 from .llm import LLMClient
 from .loader import Study
 from .logger import RunLogger
-from .sandbox import Sandbox
+from .sandbox import Sandbox, settings_of
 
 AGENTS_DIR = Path(
     os.environ.get("BOARD_AGENTS_DIR")
@@ -257,11 +257,11 @@ class _Board:
             results, done = [], None
             for tc in resp.tool_calls:
                 self.budget.record_tool_call()
-                self.logger.log_tool_call(tc.name, tc.id, tc.input)
+                self.logger.log_tool_call(tc.name, tc.id, tc.input, member="experimenter")
                 text, found = self._run_tool(tc)
                 if found is not None:
                     done = found
-                self.logger.log_tool_result(tc.id, tc.name, text)
+                self.logger.log_tool_result(tc.id, tc.name, text, member="experimenter")
                 results.append({"type": "tool_result", "tool_use_id": tc.id,
                                 "content": text})
             messages.append({"role": "user", "content": results})
@@ -280,6 +280,8 @@ class _Board:
                 res = self.sandbox.run_code(code, language=lang)
                 self.logger.log_code_cell(
                     code if lang == "python" else _r_as_comment(code), res)
+                self.logger.log_cell("experimenter", tc.id, res, lang,
+                                     settings_of(self.sandbox).get("sandbox", "unknown"))
                 text = res.tool_result_text()
                 self.work_log.append(
                     f"[{lang}]\n{code[:1200]}\n--> {text[:1500]}")
@@ -358,8 +360,10 @@ def solve(
     llm: LLMClient,
     run_dir: Path,
     sandbox: Sandbox | None = None,
+    run_id: str | None = None,
 ) -> SolveResult:
-    """Run the 5-member board on one study under one shared Budget."""
+    """Run the 5-member board on one study under one shared Budget. `run_id` (for example
+    "bix-1/rep0") names the run in its transcript; several runs of one study can run at once."""
     run_dir = Path(run_dir)
     sandbox = sandbox or Sandbox(study.data_dir, run_dir / "work")
     logger = RunLogger(run_dir)
@@ -368,7 +372,8 @@ def solve(
     logger.log_run_start(study_id=study.study_id, model=llm.model,
                          provider=llm.provider, seed=llm.seed, questions=qids,
                          solver="board", members=MEMBERS,
-                         agents_dir=str(AGENTS_DIR), prompt_sha256=prompt_hashes())
+                         agents_dir=str(AGENTS_DIR), prompt_sha256=prompt_hashes(),
+                         run=run_id or study.study_id, sandbox=settings_of(sandbox))
     phases: list[str] = []
     answers: dict[str, str] = {}
     draft: dict[str, str] = {}
@@ -396,7 +401,7 @@ def solve(
             f"Mode: Full\n\n{b.task}\n\n{overview}\n\nProposer's plan:\n{plan}"
             "\n\nRun the analysis. When every question has an answer, call "
             "record_draft.")}]
-        b.log("member_input", member="experimenter",
+        b.log("member_input", member="experimenter", mode="full",
               content=exp_msgs[0]["content"])
         if b.exhausted_reason is None:
             phases.append("experimenter:full")
@@ -444,6 +449,8 @@ def solve(
                     f"{m} report:\n{t}" for m, t in reviews.items())
                 + "\n\nFix what is flagged (run code if needed). Then call "
                 "record_draft with the full, updated answer set.")})
+            b.log("member_input", member="experimenter", mode="revise",
+                  content=exp_msgs[-1]["content"])
             found = b.experimenter_loop(exp_msgs, stop_share=REVISE_PHASE_SHARE,
                                         final_tool=RECORD_DRAFT_SCHEMA)
             if found[0] is not None:
