@@ -264,8 +264,14 @@ export const LabMap = memo(function LabMap({ layout = WIDE, active = "" }: { lay
       <defs><clipPath id="lab-room-clip"><rect width={ROOM.width} height={ROOM.height} rx="18" /></clipPath></defs>
       <rect width={layout.width} height={layout.height} fill="var(--lab-ground)" />
       {/* the corridor: a pale strip with a dashed guide line */}
-      <rect x={layout.corridorX - 26} y="6" width="52" height={layout.height - 12} rx="18" fill={P.corridor} />
-      <path d={`M${layout.corridorX} 22V${layout.height - 22}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" />
+      {[...new Set(ROOMS.map((r) => layout.corridorY === undefined ? layout.corridorX : layout.at[r.id].x + ROOM.width + 30))].map((x) => <g key={x}>
+        <rect x={x - 26} y="6" width="52" height={layout.height - 12} rx="18" fill={P.corridor} />
+        <path d={`M${x} 22V${layout.height - 22}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" />
+      </g>)}
+      {layout.corridorY !== undefined && <g>
+        <rect x="6" y={layout.corridorY - 26} width={layout.width - 12} height="52" rx="18" fill={P.corridor} />
+        <path d={`M22 ${layout.corridorY}H${layout.width - 22}`} stroke="rgba(27,26,23,.10)" strokeWidth="2" strokeDasharray="8 10" />
+      </g>}
       {ROOMS.map((r) => { const at = layout.at[r.id]; return <g key={r.id} className="lab-room" data-room={r.id} data-active={on.has(r.id) || undefined} transform={`translate(${at.x} ${at.y})`}>{room(r.id, at.door, on.has(r.id), "lab-room-clip")}</g> })}
     </svg>
   )
