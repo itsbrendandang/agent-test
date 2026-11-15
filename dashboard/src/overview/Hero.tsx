@@ -46,7 +46,8 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
     const question = asked.trim()
     if (!question) { box.current?.focus(); return }
     const level = catalog ? effortInEffect(catalog, effort) : effort
-    if (onAsk) { setText(""); void onAsk(question.slice(0, MAX), level === "quick" ? "quick" : "standard"); return }
+    // Deep is a team review (Research makes its plan); Quick and Standard are direct answers, started on the page.
+    if (onAsk && (level === "quick" || level === "standard")) { void onAsk(question.slice(0, MAX), level); return }
     setAsk(question.slice(0, MAX), { send: true, effort: level })
     onOpen("Home")
   }
