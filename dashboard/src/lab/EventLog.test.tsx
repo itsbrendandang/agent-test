@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
+import { choose, chooseMenuItem, openMenu } from "@/test/menus"
 import { EventLog } from "./EventLog"
 import type { EventRow } from "./logRows"
 
@@ -17,14 +18,16 @@ it("filters by agent and kind, uses accessible links and downloads the shown row
   render(<EventLog rows={rows} run={run} connection="ended" />)
   expect(screen.getByRole("link", { name: "Evidence" })).toHaveAttribute("href", "https://example.org")
   expect(screen.getByText("run total")).toBeInTheDocument()
-  fireEvent.change(screen.getByRole("combobox", { name: "Agent" }), { target: { value: "s" } })
-  fireEvent.change(screen.getByRole("combobox", { name: "Kind of step" }), { target: { value: "write" } })
+  expect(screen.getByRole("button", { name: "Clear filters" })).toBeDisabled()
+  choose(screen.getByRole("combobox", { name: "Agent" }), /Safety scientist/)
+  expect(screen.getByRole("combobox", { name: "Agent" })).toHaveTextContent("Safety scientist")
+  choose(screen.getByRole("combobox", { name: "Kind of step" }), /Write/)
   expect(screen.getByRole("status")).toHaveTextContent("1 of 2 events shown")
-  fireEvent.click(screen.getByRole("button", { name: "Download JSON" }))
+  chooseMenuItem(screen.getByRole("button", { name: "Download" }), /Download JSON/)
   expect(blob).toHaveBeenCalledWith(expect.any(Blob))
   expect(click).toHaveBeenCalledOnce()
   expect(click.mock.instances[0]).toHaveAttribute("download", "agent-log-a-demo.json")
-  fireEvent.click(screen.getByRole("button", { name: "Download CSV" }))
+  chooseMenuItem(screen.getByRole("button", { name: "Download" }), /Download CSV/)
   expect(click.mock.instances[1]).toHaveAttribute("download", "agent-log-a-demo.csv")
   act(() => vi.advanceTimersByTime(1000))
   expect(revoke).toHaveBeenCalledTimes(2)
@@ -44,7 +47,7 @@ it("handles loading, empty, unsupported streams, errors and appended events", ()
   rerender(<EventLog rows={rows} run={run} connection="live" />)
   expect(screen.getByRole("status")).toHaveTextContent("2 of 2 events shown")
   vi.spyOn(URL, "createObjectURL").mockImplementation(() => { throw new Error("blocked") })
-  fireEvent.click(screen.getByRole("button", { name: "Download JSON" }))
+  chooseMenuItem(screen.getByRole("button", { name: "Download" }), /Download JSON/)
   expect(screen.getByRole("alert")).toHaveTextContent("could not be downloaded")
 })
 
@@ -62,23 +65,26 @@ it("shows agent turns as grouped chat bubbles with faces, thinking behind a togg
   expect(items.map((li) => li.className.includes("chat-note") ? "note" : "msg")).toEqual(["msg", "msg", "note", "note", "msg"])
   // One picture and one name per run of messages from the same agent.
   expect(items[0].querySelector("svg[data-agent='planner']")).not.toBeNull()
-  expect(items[1].querySelector("svg")).toBeNull()
+  expect(items[1].querySelector(".chat-face svg")).toBeNull()
   expect(items[0]).toHaveAttribute("data-first")
   expect(items[1]).toHaveAttribute("data-last")
   expect(within(items[1]).getByText("Planner:")).toHaveClass("sr-only")
   expect(items[4].querySelector("svg[data-agent='critic']")).not.toBeNull()
   // The short line shows; the reasoning is behind "Show thinking".
   expect(within(items[1]).getByText("Registering a shape check first.")).toBeVisible()
-  const thinking = within(items[1]).getByText("Show thinking").closest("details")!
-  expect(thinking.open).toBe(false)
-  fireEvent.click(within(items[1]).getByText("Show thinking"))
-  expect(thinking.open).toBe(true)
+  const thinking = within(items[1]).getByRole("button", { name: "Show thinking" })
+  expect(thinking).toHaveAttribute("aria-expanded", "false")
+  expect(within(items[1]).queryByText(/A pilot on a subsample/)).toBeNull()
+  fireEvent.click(thinking)
+  expect(thinking).toHaveAttribute("aria-expanded", "true")
+  expect(thinking).toHaveTextContent("Hide thinking")
+  expect(within(items[1]).getByText(/A pilot on a subsample/)).toBeVisible()
   expect(within(items[0]).queryByText("Show thinking")).toBeNull()
   // Other long text, such as a list of resolved notes, is not called thinking.
-  expect(within(items[4]).getByText("Show more")).toBeInTheDocument()
+  expect(within(items[4]).getByRole("button", { name: "Show more" })).toHaveAttribute("aria-expanded", "false")
   expect(within(items[4]).queryByText("Show thinking")).toBeNull()
   // Notes have no picture, keep their agent and their links.
-  expect(items[3].querySelector("svg")).toBeNull()
+  expect(items[3].querySelector("svg[data-agent]")).toBeNull()
   expect(within(items[3]).getByText("Scout")).toBeInTheDocument()
   expect(within(items[3]).getByRole("link", { name: "Trial" })).toHaveAttribute("href", "https://example.org/t")
   expect(items[0].querySelector("time")).toHaveAttribute("dateTime", new Date(1000).toISOString())
@@ -97,9 +103,9 @@ it("follows the newest message while live, and offers a jump back after the read
   height = 1200
   rerender(<EventLog rows={chat.slice(0, 4)} run={run} connection="live" />)
   expect(scroller.scrollTop).toBe(100)
-  fireEvent.click(screen.getByRole("button", { name: "New messages ↓" }))
+  fireEvent.click(screen.getByRole("button", { name: "New messages" }))
   expect(scroller.scrollTop).toBe(1200)
-  expect(screen.queryByRole("button", { name: "New messages ↓" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "New messages" })).toBeNull()
   // A finished run is read from the start: nothing moves it.
   scroller.scrollTop = 0
   rerender(<EventLog rows={chat} run={run} connection="ended" />)
@@ -108,7 +114,7 @@ it("follows the newest message while live, and offers a jump back after the read
 
 it("follows the newest message again after the reader changes the filters", () => {
   const { container } = render(<EventLog rows={chat} run={run} connection="live" />)
-  fireEvent.change(screen.getByRole("combobox", { name: "Agent" }), { target: { value: "planner" } })
+  choose(screen.getByRole("combobox", { name: "Agent" }), /Planner/)
   const scroller = container.querySelector(".chat-scroll") as HTMLDivElement
   let height = 400
   Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height })
@@ -118,6 +124,64 @@ it("follows the newest message again after the reader changes the filters", () =
   height = 1500
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
   expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown")
-  expect(screen.queryByRole("button", { name: "New messages ↓" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "New messages" })).toBeNull()
   expect(scroller.scrollTop).toBe(1500)
+})
+
+const longChat: EventRow[] = [
+  { id: "t1", agent: "Planner", agentId: "planner", kind: "test", text: "First plan.\nThe first reasoning, long enough to sit behind the toggle.", sources: [], thought: true },
+  { id: "t2", agent: "Critic", agentId: "critic", kind: "review", text: "Second plan.\nThe second reasoning, also behind its own toggle.", sources: [], thought: true },
+  { id: "t3", agent: "Reporter", agentId: "reporter", kind: "write", text: "A list.\nItem one. Item two.", sources: [] },
+  { id: "t4", agent: "Writer", agentId: "writer", kind: "write", text: "Another list.\nItem three. Item four.", sources: [] },
+]
+
+it("opens only the bubble that was clicked: every Show thinking and Show more keeps its own state", () => {
+  const { rerender } = render(<EventLog rows={longChat} run={run} connection="ended" />)
+  const thinking = screen.getAllByRole("button", { name: "Show thinking" })
+  const more = screen.getAllByRole("button", { name: "Show more" })
+  expect(thinking).toHaveLength(2)
+  expect(more).toHaveLength(2)
+  fireEvent.click(thinking[1])
+  expect(thinking[1]).toHaveAttribute("aria-expanded", "true")
+  expect(thinking[0]).toHaveAttribute("aria-expanded", "false")
+  expect(more.map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "false"])
+  expect(screen.queryByText(/The first reasoning/)).toBeNull()
+  fireEvent.click(more[0])
+  expect(more.map((b) => b.getAttribute("aria-expanded"))).toEqual(["true", "false"])
+  expect(screen.getByText(/Item one/)).toBeVisible()
+  expect(screen.queryByText(/Item three/)).toBeNull()
+  // A new event arriving keeps what the reader opened, on the same bubbles.
+  rerender(<EventLog rows={[{ ...longChat[0], id: "t0", text: "Earlier." }, ...longChat]} run={run} connection="ended" />)
+  expect(screen.getAllByRole("button", { name: /thinking/ }).map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "true"])
+})
+
+it("groups the agent menu and clears the filters", () => {
+  render(<EventLog rows={chat} run={run} connection="ended" />)
+  openMenu(screen.getByRole("combobox", { name: "Agent" }))
+  const options = screen.getAllByRole("option").map((o) => o.textContent)
+  expect(options).toEqual(["All agents", "Critic1", "Planner2", "Scout1", "Engine1"])
+  expect(screen.getByText("Team")).toBeInTheDocument()
+  expect(screen.getByText("System")).toBeInTheDocument()
+  fireEvent.click(screen.getByRole("option", { name: /^Planner/ }))
+  expect(screen.getByRole("status")).toHaveTextContent("2 of 5 events shown")
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search log" }), { target: { value: "pilot" } })
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 5 events shown")
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+  expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown")
+  expect(screen.getByRole("combobox", { name: "Agent" })).toHaveTextContent("All agents")
+})
+
+it("keeps two agents with the same name as two choices with different labels, each showing only its own events", () => {
+  const twins: EventRow[] = [
+    { id: "w1", agent: "Second check", agentId: "checker:a", kind: "check", text: "Checked claim one.", sources: [] },
+    { id: "w2", agent: "Second check", agentId: "checker:b", kind: "check", text: "Checked claim two.", sources: [] },
+    { id: "w3", agent: "Planner", agentId: "planner", kind: "prepare", text: "Planned.", sources: [] },
+  ]
+  render(<EventLog rows={twins} run={run} connection="ended" />)
+  openMenu(screen.getByRole("combobox", { name: "Agent" }))
+  expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["All agents", "Planner1", "Second check1", "Second check #21"])
+  fireEvent.click(screen.getByRole("option", { name: /^Second check #2/ }))
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 3 events shown")
+  expect(screen.getByText("Checked claim two.")).toBeInTheDocument()
+  expect(screen.queryByText("Checked claim one.")).toBeNull()
 })

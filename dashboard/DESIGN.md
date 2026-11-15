@@ -80,7 +80,7 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 | Calls to the engine | `src/swarm/api.ts`, `src/board/api.ts`, `src/home/api.ts` |
 | Characters (Momo, Ember, Fuji, Sage) | `src/crew/store.ts` (who they are, the "Show characters" setting), `src/components/Buddy.tsx` (the drawings), `src/components/SideCrew.tsx` (the foot of the navigation). On by default; Settings turns them off |
 | The faces of the agents that did the work (not the characters above) | `src/lab/identity.ts`, `src/lab/AgentAvatar.tsx` |
-| AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
+| AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader, Reasoning) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
 | Tests and their stand-in engine | `src/**/*.test.ts(x)`, `src/test/` |
 
 ## One of each
@@ -111,7 +111,8 @@ Brought back from git history (commit `e071754^`), by the owner's decision: the 
 (`Splash.tsx`), and AI Elements with the shadcn pieces it needs. `message.tsx` differs from history in one way:
 its Markdown renderer moved to `ai-elements/message-response.tsx`, which nothing imports, so its code-highlight,
 maths and diagram plugins (about 740 kB) stay out of the first load. `sources.tsx`, `loader.tsx` and
-`ui/collapsible.tsx` were added from the public registries with the shadcn CLI.
+`ui/collapsible.tsx` were added from the public registries with the shadcn CLI. `reasoning.tsx` (the Agent Log's
+"Show thinking") was copied from AI Elements with three changes, listed at the top of the file.
 
 ## The characters
 

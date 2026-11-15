@@ -1,9 +1,13 @@
-// Agents: the team as member cards in one grid, with a search box and a group filter, and under it one card that
-// shows a run step by step along its own clock. Everything on a card is something the engine or the role list
+// Agents: the team as member cards, grouped (the team of nine in step order, then the team review with its lead first,
+// then the specialists A to Z), with a search box and a group filter, and under it one card that
+// shows a run step by step along its own clock. A card's details open in a side panel, one member at a time, so
+// opening one never makes the other cards in its row grow. Everything on a card is something the engine or the role list
 // says: no invented field. Each agent's picture comes from the one shared mapping (lab/identity.ts), so it is the
 // same here, in a team review and in the Agent Lab. Which roles ran in a given run is on Compare, not on the cards.
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Provenance } from "@/components/Provenance"
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { ChatRefused, getCatalog, type Catalog, type CatalogAgent } from "@/home/api"
 import { agentText, skillText } from "@/home/chat"
@@ -20,6 +24,12 @@ import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
 type Group = "nine" | "review" | "specialist"
 const GROUP_WORD: Record<Group, string> = { nine: "Team of nine", review: "Team review", specialist: "Specialist" }
 const FILTERS: readonly ["all" | Group, string][] = [["all", "All"], ["nine", "Team of nine"], ["review", "Team review"], ["specialist", "Specialists"]]
+/** The groups in the order the page shows them, each with its heading and a line on what it is. */
+const SECTIONS: readonly { group: Group; title: string; about: string }[] = [
+  { group: "nine", title: "Team of nine", about: "Works on benchmark tasks, one step after another." },
+  { group: "review", title: "Team review", about: "The lead and the members of a team review." },
+  { group: "specialist", title: "Specialists", about: "Called into a team review when the question fits." },
+]
 /** What the roster calls a tool, in plain words. A name this page does not know is shown as it is. */
 const TOOL_WORD: Record<string, string> = { exa_search: "web search", literature_search: "literature search", database_search: "database look-up", converse: "leads the discussion", write_memo: "writes the decision", python: "code" }
 const toolWords = (tools: string[]) => (tools.length ? tools.map((t) => TOOL_WORD[t] ?? t).join(", ") : "none")
@@ -38,6 +48,12 @@ interface Member {
   details?: ReactNode
 }
 
+/** Review agents first, the lead before the members (in the team's own order); then the specialists A to Z. */
+const memberOrder = (a: CatalogAgent, b: CatalogAgent) => {
+  const rank = (x: CatalogAgent) => (x.source === "board" ? (x.role === "lead" ? 0 : 1) : 2)
+  return rank(a) - rank(b) || (rank(a) === 2 ? a.title.localeCompare(b.title) : 0)
+}
+
 const latestDoneTeamRun = (runs: GlhfRun[]) => runs.find((r) => r.solver === "glhf" && r.phase === "done")?.id
 
 export function AgentsView() {
@@ -48,6 +64,10 @@ export function AgentsView() {
   const [roles, setRoles] = useState<RoleCatalog>()
   const [rolesProblem, setRolesProblem] = useState<Problem>()
   const [retry, setRetry] = useState(0)
+  /** The member whose details are open in the side panel: one at a time, by its stable key. */
+  const [opened, setOpened] = useState<string>()
+  const [lastOpened, setLastOpened] = useState<string>()
+  const opener = useRef<HTMLButtonElement>(undefined)
   useEffect(() => {
     let stale = false
     getCatalog().then((c) => { if (!stale) setCatalog(c) },
@@ -69,7 +89,7 @@ export function AgentsView() {
         details: spec && <><dl className="team-facts"><dt>Budget</dt><dd>{spec.budget}</dd></dl><pre>{spec.instructions}</pre></>,
       }
     }),
-    ...(catalog?.agents ?? []).map((a: CatalogAgent): Member => {
+    ...[...(catalog?.agents ?? [])].sort(memberOrder).map((a: CatalogAgent): Member => {
       const review = a.source === "board"
       return {
         key: `${a.source}:${a.name}`, group: review ? "review" : "specialist", agent: a.name, name: a.title,
@@ -101,24 +121,42 @@ export function AgentsView() {
         {catalogProblem?.said && <EngineOffline needs="The review agents and specialists come from the engine." said={catalogProblem.said} />}
         {rolesProblem && !roles && <EngineOffline needs="Each role's budget, model group and instructions come from the engine." said={rolesProblem.said} onRetry={() => setRetry((n) => n + 1)} />}
         {shown.length === 0 && <p className="empty-note">No agent matches{filter.trim() ? <> “{filter.trim()}”</> : null}{group !== "all" ? ` in ${GROUP_WORD[group]}` : ""}. Every word has to appear in the name, job or tools. Try fewer words.</p>}
-        <ul className="members" aria-label="Agents">
-          {shown.map((m) => (
-            <li key={m.key} className="member-card card-surface" data-group={m.group}>
-              <div className="member-top">
-                <AgentAvatar name={m.agent} size={40} />
-                <span className="pill" data-kind="outline">{GROUP_WORD[m.group]}</span>
-              </div>
-              <h3>{m.name}</h3>
-              <p className="member-job">{m.job}</p>
-              <dl className="member-fields">
-                <div><dt>Works on</dt><dd>{m.worksOn}</dd></div>
-                <div><dt>Takes part</dt><dd>{m.part}</dd></div>
-              </dl>
-              <p className="member-foot">{m.foot}</p>
-              {m.details && <details className="team-prompt"><summary aria-label={`Details of ${m.name}`}>Details</summary>{m.details}</details>}
-            </li>
-          ))}
-        </ul>
+        {SECTIONS.map(({ group: g, title, about }) => {
+          const list = shown.filter((m) => m.group === g)
+          if (!list.length) return null
+          return (
+            <section key={g} className="members-group" aria-labelledby={`members-${g}`}>
+              <header className="members-group-head">
+                <h3 id={`members-${g}`}>{title} <span className="members-count">{list.length}</span></h3>
+                <p>{about}</p>
+              </header>
+              <ul className="members" aria-label={title}>
+                {list.map((m) => (
+                  <li key={m.key} className="member-card card-surface" data-group={m.group} data-selected={opened === m.key || undefined}>
+                    <div className="member-top">
+                      <AgentAvatar name={m.agent} size={40} />
+                      <span className="pill" data-kind="outline">{GROUP_WORD[m.group]}</span>
+                    </div>
+                    <h4>{m.name}</h4>
+                    <p className="member-job">{m.job}</p>
+                    <dl className="member-fields">
+                      <div><dt>Works on</dt><dd>{m.worksOn}</dd></div>
+                      <div><dt>Takes part</dt><dd>{m.part}</dd></div>
+                    </dl>
+                    <div className="member-end">
+                      <p className="member-foot">{m.foot}</p>
+                      {m.details && (
+                        <Button type="button" variant="outline" size="sm" className="member-details" aria-label={`Details of ${m.name}`} aria-haspopup="dialog" aria-expanded={opened === m.key}
+                          onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key); setLastOpened(m.key) }}>Details</Button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })}
+        <MemberPanel open={opened !== undefined} member={members.find((m) => m.key === lastOpened)} onClose={() => setOpened(undefined)} returnFocus={() => opener.current?.focus()} />
         {roles && (group === "all" || group === "nine") && !filter.trim() && (
           <details className="team-prompt team-shared card-surface">
             <summary>Rules every role of the team of nine follows</summary>
@@ -138,6 +176,32 @@ export function AgentsView() {
       </section>
       <RunTimeline />
     </div>
+  )
+}
+/** One member's details, in a side panel over the page. */
+function MemberPanel({ open, member, onClose, returnFocus }: { open: boolean; member?: Member; onClose: () => void; returnFocus: () => void }) {
+  return (
+    <Sheet open={open} onOpenChange={(open) => { if (!open) onClose() }}>
+      <SheetContent side="right" className="member-panel" onCloseAutoFocus={(e) => { e.preventDefault(); returnFocus() }}>
+        {member && (
+          <>
+            <SheetHeader className="member-panel-head">
+              <AgentAvatar name={member.agent} size={40} />
+              <SheetTitle>{member.name}</SheetTitle>
+              <SheetDescription>{GROUP_WORD[member.group]} · {member.job}</SheetDescription>
+            </SheetHeader>
+            <div className="member-panel-body">
+              <dl className="member-fields">
+                <div><dt>Works on</dt><dd>{member.worksOn}</dd></div>
+                <div><dt>Takes part</dt><dd>{member.part}</dd></div>
+              </dl>
+              <p className="member-foot">{member.foot}</p>
+              <div className="team-prompt">{member.details}</div>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   )
 }
 const cap = (text: string) => (text ? text[0].toUpperCase() + text.slice(1) : text)
