@@ -15,29 +15,36 @@ import { foldAnswer, type ResearchEvent } from "./model"
 const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
 function Shown({ events, first }: { events: ResearchEvent[]; first?: InspectorTab }) {
   const [tab, setTab] = useState(first)
-  return <Inspector id="a-1" state={foldAnswer(events)} events={events} tab={tab} onTab={setTab} />
+  return <Inspector id="a-1" state={foldAnswer(events)} tab={tab} onTab={setTab} />
 }
 beforeEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
 
 describe("tabs", () => {
   it("exist only when they have content", () => {
-    expect(tabsOf(undefined, [])).toEqual([])
+    expect(tabsOf(undefined)).toEqual([])
     const real = lines(S_REAL)
-    expect(tabsOf(foldAnswer(real), real)).toEqual(["evidence", "results", "activity", "lab"])
+    expect(tabsOf(foldAnswer(real))).toEqual(["evidence", "results", "activity"])
     const early = real.slice(0, 3) // started and preparing: no sources, no files yet
-    expect(tabsOf(foldAnswer(early), early)).not.toContain("results")
-    expect(tabsOf(foldAnswer(early), early)).not.toContain("evidence")
+    expect(tabsOf(foldAnswer(early))).not.toContain("results")
+    expect(tabsOf(foldAnswer(early))).not.toContain("evidence")
   })
   it("are a tab list that the arrow keys move through", async () => {
     const user = userEvent.setup()
     render(<Shown events={lines(S_REAL)} />)
     const tabs = within(screen.getByRole("tablist", { name: "Inspector" })).getAllByRole("tab")
-    expect(tabs.map((t) => t.textContent)).toEqual(["Evidence", "Results", "Activity", "Agent Lab"])
+    expect(tabs.map((t) => t.textContent)).toEqual(["Evidence", "Results", "Activity"])
     expect(tabs[0]).toHaveAttribute("aria-selected", "true")
     tabs[0].focus(); await user.keyboard("{ArrowRight}")
     expect(screen.getByRole("tab", { name: "Results" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByRole("tab", { name: "Results" })).toHaveFocus()
     expect(screen.getByRole("tabpanel", { name: "Results" })).toBeInTheDocument()
+  })
+  it("has no Agent Lab tab, even with events and steps, and an unknown remembered tab falls back to the first", () => {
+    const events = lines(S_REAL)
+    expect(foldAnswer(events).steps.length).toBeGreaterThan(0)
+    render(<Shown events={events} first={"lab" as string as InspectorTab} />)
+    expect(screen.queryByRole("tab", { name: /Agent Lab/i })).toBeNull()
+    expect(screen.getByRole("tab", { name: "Evidence" })).toHaveAttribute("aria-selected", "true")
   })
 })
 

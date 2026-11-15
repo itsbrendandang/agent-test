@@ -10,6 +10,15 @@ export class ResearchRefused extends Error {
   status: number; field?: string
   constructor(message: string, status: number, field?: string) { super(message); this.status = status; this.field = field }
 }
+export const DIRECT_ANSWERS_OFF = "Direct answers are switched off on this engine. In Real mode they need the engine started with RESEARCH_PREVIEW=1. Until then, a question here gets a plan for a team review instead of an answer."
+/**
+ * Real mode, and the engine was not started with RESEARCH_PREVIEW=1: no direct answer, the caller uses the team-review
+ * plan instead. Status 404 and no field, like an engine without the route, so every caller falls back as before; the
+ * Research screen also says why.
+ */
+export class DirectAnswersOff extends ResearchRefused {
+  constructor() { super(DIRECT_ANSWERS_OFF, 404) }
+}
 export interface Started { id: string; thread: string; mode?: "real" | "demo" }
 
 /** Plain words for the refusals a person can act on. The engine's own text is kept as the detail. */
@@ -28,8 +37,8 @@ export async function startResearch(question: string, effort: "quick" | "standar
   catch { throw new ResearchRefused("The app's engine isn't running. Start it with: npm start. Then send your question again.", 0) }
   const body = (await r.json().catch(() => undefined)) as { id?: unknown; thread?: unknown; mode?: unknown; error?: unknown; field?: unknown } | undefined
   if (r.ok && typeof body?.id === "string" && typeof body.thread === "string") return { id: body.id, thread: body.thread, mode: body.mode === "demo" ? "demo" : body.mode === "real" ? "real" : undefined }
-  // Real mode before the owner has switched direct answers on: not an error. The caller uses the team-review plan instead.
-  if (r.status === 503 && (body as { preview?: unknown } | undefined)?.preview === false) throw new ResearchRefused("Direct answers are not switched on yet.", 404)
+  // Real mode before the owner has switched direct answers on: not an error. The caller uses the team-review plan instead, and says why.
+  if (r.status === 503 && (body as { preview?: unknown } | undefined)?.preview === false) throw new DirectAnswersOff()
   const field = typeof body?.field === "string" ? body.field : undefined
   const said = typeof body?.error === "string" ? body.error.slice(0, 400) : `The engine answered ${r.status}.`
   throw new ResearchRefused((field && WHY[field]) ?? said, r.status, field)

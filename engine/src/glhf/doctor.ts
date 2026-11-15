@@ -3,6 +3,7 @@ import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { paidCallsOff, paidState, paidSwitchLocked } from "../paid/paid.ts"
+import { analysisStatus, BIXBENCH_V1 } from "./modal.ts"
 import { LIMITS, modelsFor } from "./types.ts"
 
 export interface Check { name: string; ok: boolean; need: "local" | "cloud" | "optional"; found: string; fix: string }
@@ -35,8 +36,13 @@ export async function statusBody() {
     limits: LIMITS,
     /** Model ids the New-run form should offer: "mock", then those whose key is set. */
     models: modelsFor(),
+    /** Where local runs' analyses run (ANALYSIS_BACKEND): "local" (Docker here) or "modal", the per-run Modal cap, or why the setting is refused. */
+    analysis: analysisStatus(),
   }
 }
+
+/** A Modal login on this machine: `modal token new` writes ~/.modal.toml; MODAL_TOKEN_ID works too. Never read, only looked for. */
+const modalLogin = () => Boolean(process.env.MODAL_TOKEN_ID) || existsSync(`${homedir()}/.modal.toml`)
 
 export async function doctor(cellrangerDir?: string): Promise<Check[]> {
   const t = await tools()
@@ -52,6 +58,12 @@ export async function doctor(cellrangerDir?: string): Promise<Check[]> {
     { name: "ANTHROPIC_API_KEY", ok: Boolean(process.env.ANTHROPIC_API_KEY), need: "optional", found: key("ANTHROPIC_API_KEY"), fix: "Add ANTHROPIC_API_KEY to .env to run Claude models (as the agents, or as one role)." },
     { name: "Hugging Face access", ok: hfToken(), need: "cloud", found: hfToken() ? "token found" : "no token", fix: "Request access to the gated dataset EdisonScientific/BixBench3 on huggingface.co, then add HF_TOKEN to .env (or run: hf auth login)." },
   ]
+  const analysis = analysisStatus()
+  if (analysis.backend !== "local") {
+    const ready = analysis.backend === "modal" && modalLogin() && existsSync(`${BIXBENCH_V1}/.venv`)
+    const found = analysis.error ?? `ANALYSIS_BACKEND=modal; ${modalLogin() ? "Modal login found" : "no Modal login"}; glhf/bixbench_v1 ${existsSync(`${BIXBENCH_V1}/.venv`) ? "installed" : "not installed"}`
+    checks.push({ name: "Analyses on Modal", ok: ready, need: "optional", found, fix: analysis.error ? 'Set ANALYSIS_BACKEND to "local" or "modal" in .env.' : "In glhf/bixbench_v1: uv sync --group modal --python 3.12, then modal token new (once). Or set ANALYSIS_BACKEND=local to run the analyses on this machine." })
+  }
   if (cellrangerDir !== undefined) {
     for (const file of ["cellranger-6.0.2.tar.gz", "cellranger-arc-2.0.2.tar.gz"]) {
       const ok = existsSync(`${cellrangerDir}/${file}`)

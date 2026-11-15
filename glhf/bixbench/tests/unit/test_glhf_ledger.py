@@ -714,6 +714,8 @@ def test_the_ledger_json_has_exactly_these_fields() -> None:
         "p_value",
         "contradicts",
         "detail",
+        "backend",  # where it ran: "docker" or "modal" (ANALYSIS_BACKEND)
+        "sandbox_id",
     }
     assert set(claim["tests"][0]) == {
         "name",

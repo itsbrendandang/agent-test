@@ -8,6 +8,7 @@ import { RecordList, type RecordItem } from "@/components/RecordRow"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { problemOf, readEngine, tracked, type Problem } from "@/lib/engine"
 import { fmtScore, runTitle } from "@/lib/format"
+import { graphLink, logLink } from "@/lib/links"
 import { setOpenAnswer, viewOfKind } from "@/lib/open"
 import { provenanceOf, type ProvenanceKind } from "@/lib/provenance"
 import { Provenance } from "@/components/Provenance"
@@ -101,6 +102,11 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
         </>
       ),
       onOpen: () => open(h),
+      // The same record in the Agent Log, and a review or benchmark run as a graph.
+      links: [
+        { label: "Agent Log", href: logLink({ kind: h.kind, id: h.id }), title: "Every event of this run, agent by agent" },
+        ...(h.kind !== "answer" ? [{ label: "Graph", href: graphLink(h.kind, h.id), title: "Who said what in this run, and how it was checked" }] : []),
+      ],
     }
   }
   // The same brief, made the same way: the engine's own title for the record (a review's brief file, a task with its
@@ -136,7 +142,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
           <h2><button type="button" className="link-btn" onClick={() => open(h)}>{h.title}</button></h2>
           <p>{h.kind === "board" ? "Team review" : "Research answer"} · {h.status === "cancelled" ? "Stopped before completion" : h.status === "failed" ? "Failed" : "Finished"}</p>
           <p className="muted small">Scripted demonstration, not scientific evidence. Read-only; nothing will be run.</p>
-          <div className="example-actions"><a href={`#Lab/${h.kind}/${h.id}`}>Agent Log</a><a href={`#Overview/example/${h.kind}/${h.id}`}>View in Overview Lab</a></div>
+          <div className="example-actions"><a href={logLink({ kind: h.kind, id: h.id })}>Agent Log</a><a href={`#Overview/example/${h.kind}/${h.id}`}>View in Overview Lab</a></div>
         </article>)}
       </section> : items.length > 0 && <RecordList items={items} label="Saved research" initial={FIRST} noun="row" emphasis={mark} />}
       {hits && shown.length === 0 && !error && (query.trim()

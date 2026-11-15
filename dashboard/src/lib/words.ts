@@ -16,6 +16,15 @@ export const ONE_AGENT = "One agent"
 export const solverWord = (solver: unknown): string => (/single/i.test(String(solver)) ? ONE_AGENT : TEAM_OF_NINE)
 /** What a benchmark run worked on: "the demo task", or "benchmark task <id>". */
 export const taskWord = (task: string): string => (task === "demo" ? "the demo task" : `benchmark task ${task}`)
+/**
+ * Where one analysis ran (a registered test, in the run's ledger): its event's `backend` ("docker" or "modal", see
+ * ANALYSIS_BACKEND) and `sandbox_id`, in plain words. undefined when the event does not say (older runs).
+ */
+export function sandboxWords(backend: unknown, sandboxId?: unknown): string | undefined {
+  if (backend === "modal") return `a Modal sandbox${typeof sandboxId === "string" && sandboxId ? ` (${sandboxId})` : ""}`
+  if (backend === "docker") return "a Docker sandbox"
+  return typeof backend === "string" && backend && backend !== "unknown" ? `a ${backend} sandbox` : undefined
+}
 /** One pattern for every benchmark run's title: "Team of nine on the demo task", "One agent on benchmark task bix-12". */
 export const benchmarkTitle = (solver: unknown, task: string): string => `${solverWord(solver)} on ${taskWord(task)}`
 /** The limit on how much text the models may read and write. */
@@ -112,6 +121,7 @@ export function splitReply(text: string): { short: string; rest: string; marked:
 export const BOARD_JOB: Record<string, string> = {
   "lead-scientist": "runs the discussion; does not do the research or decide what is true",
   scout: "looks at the data before any research begins",
+  "evidence-verifier": "rechecks every source the scout found, and searches for what it missed",
   proposer: "plans the research and names the claims to test",
   pilot: "tries the analysis on a small part of the data first",
   experimenter: "runs the full analysis and produces the results",

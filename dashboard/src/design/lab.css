@@ -223,11 +223,18 @@
 
 /* ── The Lab view: one compact toolbar, then the scene and the panel filling the window ── */
 .lab-page { gap: 8px; }
-.lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; font-size: 13px; }
-.lab-picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 260px; }
-.lab-picker select { font: inherit; font-size: 13px; font-weight: 600; padding: 5px 8px; border: 1px solid var(--lab-wall); border-radius: var(--radius-control, 8px); background: var(--surface, #fff); color: var(--lab-ink); min-width: 0; width: 100%; max-width: 560px; min-height: 32px; text-overflow: ellipsis; }
+.lab-page .event-log-heading h2 { font-size: 20px; font-weight: 650; } /* the same page title size and weight as Team review and Compare */
+.lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.lab-picker { flex: 1 1 260px; min-width: 0; max-width: 560px; font-weight: 600; background: var(--surface, #fff); }
+.lab-picker [data-slot="select-value"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-run-menu { max-width: min(560px, calc(100vw - 24px)); }
+.lab-run-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lab-run-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-run-text small { color: var(--lab-muted); font-size: 12px; }
+.lab-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; }
+@media (max-width: 767px) { .lab-bar button { min-height: 44px; } .lab-picker { flex-basis: 100%; max-width: none; } }
 .lab-kind { border: 1px solid var(--lab-wall); border-radius: 20px; padding: 1px 9px; font-size: 12px; color: var(--lab-muted); white-space: nowrap; }
-.lab-bar .lab-when { color: var(--lab-muted); font-size: 12px; white-space: nowrap; }
+.lab-when { color: var(--lab-muted); font-size: 12px; white-space: nowrap; }
 .lab-note { font-size: 13px; color: var(--lab-muted); overflow-wrap: anywhere; margin: 0; }
 .lab-note[data-tone="bad"] { color: var(--lab-fail); }
 @media (min-width: 1001px) and (min-height: 560px) {

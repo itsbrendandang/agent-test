@@ -1,7 +1,7 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
-// Five places carry the everyday work (the Agent Lab sits right under Research); the advanced ones sit under "More",
-// quieter. At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
-import { FlaskConical, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
+// Three places carry the everyday loop (ask, read, find again). One quieter group follows, with a heading:
+// "How it works" (how an answer was made). Benchmarks and Compare are not listed; they open by address. At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
+import { Gavel, LayoutDashboard, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { ProfileMenu } from "@/components/ProfileMenu"
 import { SideCrew } from "@/components/SideCrew"
@@ -10,16 +10,16 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar"
 import type { PaidState } from "@/lib/paid"
-import { ABOUT, LABEL, MORE, PRIMARY, PRODUCT, type View } from "@/nav"
+import { ABOUT, LABEL, MORE, MORE_LABEL, PRIMARY, PRODUCT, type Listed, type View } from "@/nav"
 
-const ICON: Record<View, typeof Settings> = {
-  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Benchmarks: Trophy, Board: FlaskConical, Agents: Users, Graph: Share2, Lab: ScrollText, Settings,
+const ICON: Record<Listed, typeof Settings> = {
+  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Board: Gavel, Agents: Users, Graph: Share2, Lab: ScrollText,
 }
 
 export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View) => void; /** The mode of the next run, for the profile row. */ paid: PaidState }) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const go = (next: View) => { onGo(next); if (isMobile) setOpenMobile(false) } // choosing a place closes the drawer
-  const item = (v: View, quiet?: boolean) => {
+  const item = (v: Listed, quiet?: boolean) => {
     const Icon = ICON[v]
     return (
       <SidebarMenuItem key={v}>
@@ -44,8 +44,8 @@ export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View
             <SidebarGroupContent><SidebarMenu>{PRIMARY.map((v) => item(v))}</SidebarMenu></SidebarGroupContent>
           </SidebarGroup>
           <SidebarGroup>
-            <SidebarGroupLabel id="nav-more">More</SidebarGroupLabel>
-            <SidebarGroupContent><SidebarMenu aria-labelledby="nav-more">{MORE.map((v) => item(v, true))}</SidebarMenu></SidebarGroupContent>
+            <SidebarGroupLabel id="nav-how">{MORE_LABEL}</SidebarGroupLabel>
+            <SidebarGroupContent><SidebarMenu aria-labelledby="nav-how">{MORE.map((v) => item(v, true))}</SidebarMenu></SidebarGroupContent>
           </SidebarGroup>
         </nav>
       </SidebarContent>

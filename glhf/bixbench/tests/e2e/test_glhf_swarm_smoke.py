@@ -92,6 +92,7 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
         assert entry["relevance"]["relevant"] is True and entry["relevance"]["score"] == 1.0
         run = entry["run"]
         assert (run["status"], run["exit_code"], run["command"]) == ("ok", 0, ["python3", "-"])
+        assert run["backend"] == "docker"  # where it ran: the local Docker sandbox
         assert run["sha256_at_run"] == entry["script_sha256"]
         assert (
             run["output_tail"].rstrip().endswith(f"contradicts={str(test['contradicts']).lower()}")
@@ -111,6 +112,12 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
         ("test.relevance", "C1"),
         ("test.executed", "C1"),
     ]
+    # Each executed test, and the run's settings, say where the analyses ran.
+    assert {e.get("backend") for e in ledger["events"] if e["kind"] == "test.executed"} == {
+        "docker"
+    }
+    [settings] = [e for e in ledger["events"] if e["kind"] == "settings"]
+    assert settings["analysis_backend"] == {"backend": "docker"}
 
     findings = (outputs / "glhf" / "FINDINGS.md").read_text()
     assert "Supported findings (1)" in findings and "Rejected claims (1)" in findings
@@ -345,6 +352,7 @@ def test_run_settings_are_recorded_for_disclosure(tmp_path: Path) -> None:
         "memory_source": None,  # the memory folder was empty when the run started
         "seed": 3,
         "swarm_only_tools": ["check_outputs", "read_ledger", "ledger tools", "memory"],
+        "sandbox": "docker",  # the analyses ran in Docker on this machine
     }
     ledger = json.loads((tmp_path / "outputs" / "glhf" / "ledger.json").read_text())
     kinds = [e["kind"] for e in ledger["events"]]

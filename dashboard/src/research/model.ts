@@ -4,7 +4,7 @@
 //  - a statement's mark comes only from a statement.checked event (the final stage when there is one);
 //  - a search that did not run is never shown as done: its reason is shown instead.
 import type { Verdict } from "@/board/api"
-import { PROVIDERS } from "./providers"
+import { PROVIDERS, searchPlace } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
 export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[]; /** A picture of the page (https), as the search returned it. Absent in answers recorded before pictures. */ image?: string }
@@ -241,9 +241,9 @@ export function progressLine(s: AnswerState): string {
   if (s.sources.length) return `Kept ${s.sources.length} source${s.sources.length === 1 ? "" : "s"}. Writing…`
   const last = s.searches.at(-1)
   if (!last) return "Started. Waiting for the first step…"
-  if (last.ran === undefined) return `Searching ${providerPlace(last.provider)}…`
-  if (!last.ran) return `The search of ${providerPlace(last.provider)} did not run${last.reason ? `: ${last.reason}` : "."}`
-  return `Found ${last.found ?? 0} in ${providerPlace(last.provider)}, kept ${last.kept ?? 0}.`
+  if (last.ran === undefined) return `Searching ${searchPlace(last.provider)}…`
+  if (!last.ran) return `The search of ${searchPlace(last.provider)} did not run${last.reason ? `: ${last.reason}` : "."}`
+  return `Found ${last.found ?? 0} in ${searchPlace(last.provider)}, kept ${last.kept ?? 0}.`
 }
 
 /** Markdown read as plain text: emphasis marks, code ticks and "[n]" citation markers left out. `at[i]` is where plain character i sits in the Markdown. */
@@ -350,7 +350,8 @@ export const noteOutcome = (n: Note): { word: string; kind: "success" | "warning
  * (the copied text and the saved file keep them). Only used for an answer the engine itself labelled demo.
  */
 export function oncePractice(text: string): string {
-  const cut = text.replace(/^\s*\*\*Demo answer\.[^*]*\*\*\s*/i, "").replace(/^\s*Demo hypothesis:\s*/i, "")
+  // While the text is still streaming, the bold sentence may not be closed yet: it is left out as well, so it does not show and then vanish.
+  const cut = text.replace(/^\s*\*\*Demo answer\.[^*]*\*\*\s*/i, "").replace(/^\s*\*\*Demo answer\.[^*]*$/i, "").replace(/^\s*Demo hypothesis:\s*/i, "")
   return cut ? cut[0].toUpperCase() + cut.slice(1) : cut
 }
 

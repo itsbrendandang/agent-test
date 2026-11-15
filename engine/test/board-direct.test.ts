@@ -2,6 +2,7 @@
 // the Exa caps, and the spend caps. Every test uses fakes: fetch is a spy that fails, models are faux providers, and
 // the Exa ledger lives in a temp folder. NO_PAID_CALLS stays 1 for the whole file; a test that needs paid logic sets
 // it to 0 inside itself and restores it (and uses fake keys), as AGENTS.md asks.
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"

@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { EngineOffline } from "@/components/Shared"
 import { Provenance } from "@/components/Provenance"
 import { readEngine, problemOf, type Problem } from "@/lib/engine"
+import { graphLink, hasGraph, logLink, logOfHash, replaceAddress, runLink } from "@/lib/links"
+import { setOpenAnswer } from "@/lib/open"
 import { plainWhen } from "@/lib/format"
-import { provenanceOf, PROVENANCE_WORD } from "@/lib/provenance"
+import { provenanceOf } from "@/lib/provenance"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { answerLab, answerOrder, boardLab, boardOrder, swarmLab, type LabEvent } from "@/lab/adapter"
 import { EventLog } from "@/lab/EventLog"
+import { RunPicker } from "@/lab/RunPicker"
 import { eventRows, swarmLogEvents } from "@/lab/logRows"
 import { KIND_WORD, type LabModel, type RunKind } from "@/lab/model"
-import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
+import { answerRuns, boardRuns, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
 import { claimsLab } from "@/lab/claims"
 import { useClaimsRun, useLabEvents, useSwarmRun, type Connection } from "@/lab/useLabModel"
 import "@/design/lab.css"
@@ -41,7 +44,19 @@ function useLabRuns() {
   return { runs, problem, retry: () => setAgain((n) => n + 1) }
 }
 
-function RunLog({ run, picker }: { run: RunRef; picker: ReactNode }) {
+/** The same run in the other views: its own page (Research, Team review, Compare) and its graph. */
+function RunLinks({ run }: { run: RunRef }) {
+  return (
+    <nav className="lab-run-links" aria-label="This run elsewhere">
+      {run.kind === "answer"
+        ? <a href="#Home" onClick={() => setOpenAnswer(run.id, run.title)}>Open in Research</a>
+        : <a href={runLink(run.kind, run.id)}>{run.kind === "board" ? "Open the team review" : "Open in Compare"}</a>}
+      {hasGraph(run.kind) && <a href={graphLink(run.kind, run.id)}>See it as a graph</a>}
+    </nav>
+  )
+}
+
+function RunLog({ run, picker, agent, onAgent }: { run: RunRef; picker: ReactNode; agent?: string; onAgent: (name: string | undefined) => void }) {
   const stream = useLabEvents(run.kind === "swarm" ? undefined : run.kind, run.id)
   const swarm = useSwarmRun(run.kind === "swarm" ? run.id : undefined)
   const claims = useClaimsRun(run.kind === "swarm" ? run.id : undefined, run.kind === "swarm" && swarm.connection !== "ended")
@@ -56,18 +71,19 @@ function RunLog({ run, picker }: { run: RunRef; picker: ReactNode }) {
   const provenance = full.provenance ?? run.provenance
   return (
     <>
-      <div className="lab-bar">
-        {picker}
-        <span className="lab-kind">{KIND_WORD[run.kind]}</span>
-        <Provenance kind={provenance} />
-        {(run.startedAt || full.startedAt) ? <span className="lab-when">Started {plainWhen(run.startedAt || full.startedAt)}</span> : null}
-      </div>
+      {picker}
       <header className="event-log-heading">
+        <div className="lab-run-meta">
+          <span className="lab-kind">{KIND_WORD[run.kind]}</span>
+          <Provenance kind={provenance} />
+          {(run.startedAt || full.startedAt) ? <span className="lab-when">Started {plainWhen(run.startedAt || full.startedAt)}</span> : null}
+        </div>
         <h2>{full.title ?? run.title}</h2>
+        <RunLinks run={run} />
         <p>{provenance === "practice" ? "Practice run · scripted example, not real research. " : ""}Every recorded event, oldest first. {run.live && connection !== "ended" ? "New events appear as the team works." : "Stored events from this run."}</p>
       </header>
       {full.note && <p className="lab-note" role={full.status === "failed" ? "alert" : undefined}>{full.note}</p>}
-      <EventLog rows={rows} run={{ id: run.id, kind: run.kind, provenance }} connection={connection} />
+      <EventLog rows={rows} run={{ id: run.id, kind: run.kind, provenance }} connection={connection} agent={agent} onAgent={onAgent} />
     </>
   )
 }
@@ -75,11 +91,14 @@ function RunLog({ run, picker }: { run: RunRef; picker: ReactNode }) {
 export function LabView() {
   const { runs, problem, retry } = useLabRuns()
   const [chosen, setChosen] = useState<{ kind: RunKind; id: string } | undefined>(() => runOfLabHash(window.location.hash))
+  // The address may also name an agent (the log opens filtered to it) and a kind of run without its id (the newest run of that kind).
+  const [address, setAddress] = useState(() => logOfHash(window.location.hash))
   useEffect(() => {
-    const sync = () => { const named = runOfLabHash(window.location.hash); if (named) setChosen(named) }
+    const sync = () => { const named = runOfLabHash(window.location.hash); if (named) setChosen(named); const a = logOfHash(window.location.hash); if (a) setAddress(a) }
     window.addEventListener("hashchange", sync)
     return () => window.removeEventListener("hashchange", sync)
   }, [])
+  const agent = address?.agent
   const listed = useMemo(() => (runs ?? []).slice(0, 40), [runs])
   // A team review says whether it was a practice run in its first event, not in the list: read it for the newest few
   // and for the one that is shown.
@@ -96,37 +115,31 @@ export function LabView() {
   if (liveKey && liveKey !== watched) setWatched(liveKey)
   const auto = live ?? known.find((r) => `${r.kind}/${r.id}` === watched) ?? pickRun(known)
   const target = chosen ? known.find((r) => r.kind === chosen.kind && r.id === chosen.id) ?? (runs ? { ...chosen, title: chosen.id, startedAt: 0, live: false, status: "" } : undefined) : auto
+  // "#Lab/<kind>": the newest run of that kind, chosen once the runs are known.
+  const wantKind = !chosen && address?.kind && !address.id ? address.kind : undefined
+  const newestOfKind = wantKind ? known.find((r) => r.kind === wantKind) : undefined
+  if (wantKind && runs && newestOfKind) { setChosen({ kind: newestOfKind.kind, id: newestOfKind.id }); setAddress({ ...address, id: newestOfKind.id }) }
+  useEffect(() => { if (chosen && window.location.hash.startsWith("#Lab")) replaceAddress(logLink(chosen, agent)) }, [chosen, agent])
   const pick = (value: string) => {
     const [kind, ...rest] = value.split("/")
     const next = value ? { kind: kind as RunKind, id: rest.join("/") } : undefined
     setChosen(next)
-    if (window.location.hash.startsWith("#Lab")) window.history.replaceState(null, "", next ? labHash(next.kind, next.id) : "#Lab")
+    setAddress(next) // another run: the agent filter of this one is not carried over
+    if (window.location.hash.startsWith("#Lab")) replaceAddress(next ? logLink(next) : "#Lab")
   }
-  const key = target && `${target.kind}/${target.id}`
+  const onAgent = (name: string | undefined) => {
+    setAddress((a) => ({ ...a, agent: name }))
+    if (target && window.location.hash.startsWith("#Lab")) replaceAddress(logLink(chosen ?? undefined, name))
+  }
 
-  const picker = known.length > 0 && (
-    <>
-      <label className="lab-picker">
-        <span className="sr-only">Run shown in the Agent Log</span>
-        <select value={key ?? ""} onChange={(e) => pick(e.target.value)} title="Show the full event log for this run.">
-          {target && !known.some((r) => `${r.kind}/${r.id}` === key) && <option value={key}>{target.title}</option>}
-          {known.map((r) => (
-            <option key={`${r.kind}/${r.id}`} value={`${r.kind}/${r.id}`}>
-              {r.title.length > 80 ? `${r.title.slice(0, 79)}…` : r.title} · {KIND_WORD[r.kind]} · {plainWhen(r.startedAt)}{r.provenance ? ` · ${PROVENANCE_WORD[r.provenance]}` : ""}{r.status ? ` · ${r.status}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="button" className="btn" aria-pressed={!chosen} onClick={() => pick(chosen ? "" : key ?? "")} title="Follow: always show the run in progress, else the newest run. Press again to stay on this run.">Follow newest</button>
-    </>
-  )
+  const picker = known.length > 0 && <RunPicker runs={known} target={target} following={!chosen} onPick={pick} />
 
   return (
-    <div className="page lab-page" data-wide>
-      <h1>Agent Log</h1>
+    <div className="page lab-page">
+      <h1 className="sr-only">Agent Log</h1>
       {problem && !runs ? <EngineOffline needs="The log reads its runs from the engine." said={problem.said} onRetry={retry} />
         : !runs ? <p className="muted" role="status">Looking for runs…</p>
-          : target ? <RunLog key={`${target.kind}/${target.id}`} run={target} picker={picker} />
+          : target ? <RunLog key={`${target.kind}/${target.id}`} run={target} picker={picker} agent={agent} onAgent={onAgent} />
             : <p className="lab-note">No run yet. Ask a question on Research or start a team review to see its full event log.</p>}
     </div>
   )

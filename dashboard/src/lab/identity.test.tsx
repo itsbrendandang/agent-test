@@ -33,6 +33,12 @@ describe("agentIdentity", () => {
     expect(got.every((i) => i.kind === "agent")).toBe(true)
   })
 
+  it("gives the evidence verifier the Librarian's face and its own title, a face no other team member has", () => {
+    const i = agentIdentity("evidence-verifier", { title: "Evidence Verifier (Second Check on the Scout)" })
+    expect(i).toMatchObject({ character: "librarian", short: "Evidence Verifier", kind: "agent" })
+    expect(ROSTER.some(([name, title]) => face(name, title) === face("evidence-verifier"))).toBe(false)
+  })
+
   it("gives every specialist the catalog can add a face of its own, different from the team's, and its title as the label", () => {
     expect(CATALOG.map(([name]) => name)).toEqual([...SPECIALISTS]) // the list in identity.ts is the catalog's
     const got = CATALOG.map(([name, title]) => agentIdentity(name, { title }))

@@ -17,15 +17,47 @@ const show = async (over: { paidLocked?: boolean; catalog?: object; paidCalls?: 
   const sent = routes({
     "GET /api/glhf/status": () => ({ status: 200, body: { paidCalls: paidCalls(), paidLocked: over.paidLocked ?? false, tools: { docker: true, uv: false }, keys: { ANTHROPIC_API_KEY: true, EXA_API_KEY: false } } }),
     "GET /api/status": { status: 200, body: { keys: { OPENAI_API_KEY: true } } }, "GET /api/chat/catalog": { status: 200, body: over.catalog ?? CATALOG },
+    "GET /api/paid": { status: 200, body: PAID },
     ...over.table,
   })
   const view = render(<SettingsView />)
   await screen.findByText("Web search (Exa)")
+  await screen.findByRole("heading", { name: "Usage and limits" })
   await screen.findByRole("list", { name: "Tools and keys the engine found" })
   await waitFor(() => expect(screen.getByRole("radio", { name: paidCalls() ? "Real" : "Demo" })).toBeChecked())
   return { ...view, sent }
 }
 const count = (text: string, pattern: RegExp) => (text.match(pattern) ?? []).length
+
+describe("Usage and limits (moved here from the Overview)", () => {
+  it("shows the engine's own spend and limits, and says what it cannot know", async () => {
+    await show({ table: { "GET /api/paid": { status: 200, body: { paid: true, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 3.456, exaUsedUsd: 0.035, exaCeilingUsd: 40 } } } } })
+    const usage = screen.getByRole("region", { name: "Usage and limits" })
+    expect(usage.textContent).toContain("Real mode is on. Runs stay inside these limits.")
+    expect(usage.textContent).toContain("$3.46Spent todayof a $20.00 daily limit")
+    expect(usage.textContent).toContain("$5.00Limit per run")
+    expect(usage.textContent).toContain("$0.04Exa searchof a $40.00 ceiling, all time")
+    expect(usage.textContent).toContain("Not knownAccount balances")
+  })
+  it("says nothing can be spent in Demo mode, and Not known for a number the engine did not give", async () => {
+    await show({ table: { "GET /api/paid": { status: 200, body: { paid: false, caps: { dailyUsd: 20 } } } } })
+    const usage = screen.getByRole("region", { name: "Usage and limits" })
+    expect(usage.textContent).toContain("Demo mode: nothing can be spent.")
+    expect(usage.textContent).toContain("Not knownSpent today")
+  })
+  it("reads the engine again after the Demo / Real switch, so the line matches the new mode", async () => {
+    keepToken("t".repeat(48))
+    let on = false
+    await show({ paidCalls: () => on, table: { "GET /api/paid": () => ({ status: 200, body: { ...PAID, paid: on } }), "POST /api/paid": () => { on = true; return { status: 200, body: { ...PAID, paid: true, source: "switch", board: "real" } } } } })
+    const usage = screen.getByRole("region", { name: "Usage and limits" })
+    expect(usage.textContent).toContain("Demo mode: nothing can be spent.")
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("radio", { name: "Real" }))
+    await user.click(await screen.findByRole("checkbox", { name: "I understand this costs money" }))
+    await user.click(screen.getByRole("button", { name: "Switch to Real" }))
+    await waitFor(() => expect(screen.getByRole("region", { name: "Usage and limits" }).textContent).toContain("Real mode is on. Runs stay inside these limits."))
+  })
+})
 
 describe("structure", () => {
   it("offers Light, Dark and Match system, applying and remembering the selection", async () => {
@@ -44,12 +76,12 @@ describe("structure", () => {
     act(() => setAppearance("light")); stop()
     expect(document.documentElement).not.toHaveClass("dark")
   })
-  it("has Your profile, Run mode, Session token, Appearance, Help, then Technical, each with the same heading level", async () => {
+  it("has Your profile, Run mode, Usage and limits, Session token, Appearance, Help, then Technical, each with the same heading level", async () => {
     const { container } = await show()
     const sections = [...container.querySelectorAll(".page > .set-section")]
-    expect(sections.map((s) => s.querySelector("h2")!.textContent)).toEqual(["Your profile", "Run mode", "Session token", "Appearance", "Help", "Technical"])
-    expect(sections.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "SECTION", "SECTION", "SECTION", "DETAILS"])
-    expect([...container.querySelectorAll("h2")].filter((h) => !h.closest("dialog"))).toHaveLength(6) // one heading style: every section title is an h2, nothing else on the page is
+    expect(sections.map((s) => s.querySelector("h2")!.textContent)).toEqual(["Your profile", "Run mode", "Usage and limits", "Session token", "Appearance", "Help", "Technical"])
+    expect(sections.map((s) => s.tagName)).toEqual(["SECTION", "SECTION", "SECTION", "SECTION", "SECTION", "SECTION", "DETAILS"])
+    expect([...container.querySelectorAll("h2")].filter((h) => !h.closest("dialog"))).toHaveLength(7) // one heading style: every section title is an h2, nothing else on the page is
     expect(screen.queryByText("Next run: Demo or Real")).toBeNull(); expect(screen.queryByText("How the next run is made")).toBeNull()
     expect(screen.getByText("Choose how runs are made and see what the app is connected to.")).toBeInTheDocument()
   })

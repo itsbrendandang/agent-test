@@ -10,7 +10,8 @@
 // Exit code: 0 when every part passed, 1 otherwise.
 
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync, mkdtempSync, readdirSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -20,8 +21,10 @@ const FAST = args.has("--fast"), ALL = args.has("--all")
 const FILE_SECONDS = Number(process.env.CHECK_FILE_SECONDS ?? 180)
 const PARALLEL = Number(process.env.CHECK_PARALLEL ?? 4)
 
-// Paid calls stay off and the in-app switch stays locked, whatever the shell or .env says.
-const env = { ...process.env, NO_PAID_CALLS: "1", PAID_SWITCH_LOCKED: "1" }
+// Paid calls stay off and the in-app switch stays locked, whatever the shell or .env says. The analyses run on this
+// machine (ANALYSIS_BACKEND=local): a person's ANALYSIS_BACKEND=modal in .env must not change what the tests expect.
+// GLHF_RUNS_DIR is an empty temporary folder, so the person's own glhf/runs (Modal spend) never enters a spend total.
+const env = { ...process.env, NO_PAID_CALLS: "1", PAID_SWITCH_LOCKED: "1", ANALYSIS_BACKEND: "local", GLHF_RUNS_DIR: mkdtempSync(join(tmpdir(), "check-glhf-runs-")) }
 
 /** Run a command; resolve with its exit code and output. Kills the whole process group at the time limit. */
 function run(cmd, argv, cwd, seconds) {

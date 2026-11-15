@@ -15,12 +15,13 @@ import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
 import { OverviewView } from "@/views/OverviewView"
 import { Activity } from "./Activity"
+import { searchPlace } from "./providers"
 import { ResearchAnswer } from "./Answer"
 import { AskBox } from "./AskBox"
 import { identifierOf, markOf } from "./marks"
 import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
-import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
+import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, providerPlace, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
@@ -74,7 +75,7 @@ describe("what the events add up to", () => {
     expect(progressLine(foldAnswer([]))).toBe("Starting…")
     expect(at(1)).toBe("Searching the web…")
     expect(at(2)).toBe("Found 10 in the web, kept 2.")
-    expect(at(3)).toBe("Searching PubMed and preprints…")
+    expect(at(3)).toBe("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)…")
     expect(at(5)).toBe("Kept 4 sources. Writing…")
     expect(at(8)).toBe("Writing…")
     expect(at(10)).toBe("Two reviewers are checking the answer…")
@@ -143,7 +144,7 @@ describe("the answer on the page", () => {
   })
   it("while it works: an honest progress line, and a draft is not shown as checked", async () => {
     const { container } = await show(REAL.filter((e) => (e.seq ?? 0) <= 3))
-    expect(screen.getByRole("status")).toHaveTextContent("Searching PubMed and preprints…")
+    expect(screen.getByRole("status")).toHaveTextContent("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)…")
     await feed(REAL.filter((e) => (e.seq ?? 0) > 3 && (e.seq ?? 0) <= 7))
     expect(screen.getByRole("status")).toHaveTextContent("Writing…")
     expect(container).toHaveTextContent("Still being written. It has not been checked yet.")
@@ -443,6 +444,8 @@ describe("the adapter, contract v2", () => {
     expect(await screen.findByRole("region", { name: PLAN.briefTitle })).toBeInTheDocument()
     expect(screen.queryByRole("alert")).toBeNull(); expect(screen.queryByRole("dialog")).toBeNull()
     expect(to(sent, "POST", "/api/chat")).toHaveLength(1)
+    // ...but it says why, so the plan is not mistaken for an answer
+    expect(screen.getByText(/Direct answers are switched off on this engine\. In Real mode they need the engine started with RESEARCH_PREVIEW=1\./)).toHaveAttribute("role", "status")
   })
 })
 
@@ -474,7 +477,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   const STEPS = foldAnswer(EVENTS).steps
   it("is one quiet line until asked: the step count and the engine's total, then the rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} totalSeconds={41} />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} totalSeconds={41} />)
     expect(screen.getByText(new RegExp(`^${STEPS.length} steps · 41s$`))).toBeInTheDocument()
     expect(screen.queryByRole("list", { name: "Activity" })).toBeNull()
     await user.click(screen.getByRole("button", { name: "View activity" }))
@@ -491,10 +494,11 @@ describe("activity, selection and sources (checkpoint B)", () => {
       { step: "write", kind: "write", label: "Writing the answer", status: "running" as const },
       { step: "check", kind: "check", label: "Checking 6 statements", status: "running" as const, done: 2, total: 6 },
     ]
-    render(<Activity steps={steps} working defaultOpen />)
+    render(<Activity steps={steps} working place={searchPlace} defaultOpen />)
     const [failed, empty, writing, checking] = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
     expect(failed).toHaveTextContent("✕"); expect(failed).toHaveTextContent("failed"); expect(failed).toHaveTextContent("0.1s") // never shown as done
     expect(empty).toHaveTextContent("○"); expect(empty).toHaveTextContent("found nothing"); expect(empty).toHaveTextContent("0.8s")
+    expect(empty).toHaveTextContent("the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)") // one literature step asks all six sources
     expect(writing).toHaveTextContent("…"); expect(checking).toHaveTextContent("2/6") // a count only where the engine has one
     expect(screen.queryByText("Expand all")).toBeNull() // fewer than six rows
     await user.click(within(failed).getByRole("button", { name: /Searching the web/ }))
@@ -506,7 +510,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   })
   it("offers Expand all from six rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} defaultOpen />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} defaultOpen />)
     expect(STEPS.length).toBeGreaterThanOrEqual(6)
     await user.click(screen.getByRole("button", { name: "Expand all" }))
     expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(STEPS.length)
@@ -654,6 +658,13 @@ describe("a team review as the same activity (Deep)", () => {
     expect(broke.steps.at(-1)).toMatchObject({ status: "failed", error: "The provider refused the model." }); expect(broke.failed).toBe("The provider refused the model.")
     expect(reviewActivity([])).toEqual({ steps: [], working: false, seconds: undefined, failed: undefined })
   })
+  it("a team review's literature search asked Europe PMC only, so its activity row says so", () => {
+    const review = reviewActivity([ev(1000, { type: "run.started", runId: "r", brief: "b", title: "T", mock: false }), ev(1600, { type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "europepmc", items: [] })])
+    render(<Activity steps={review.steps} working={false} place={providerPlace} defaultOpen />)
+    const row = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")[0]
+    expect(row).toHaveTextContent("PubMed and preprints")
+    expect(row).not.toHaveTextContent("OpenAlex")
+  })
 })
 
 describe("where a source was found", () => {
@@ -674,6 +685,11 @@ describe("where a source was found", () => {
     expect(a.container).toHaveTextContent(/^Example source \(practice run\)$/); expect(a.container.querySelector("a")).toBeNull()
     expect(render(<ProviderCredit provider="somewhere-new" />).container).toHaveTextContent("Found in somewhere-new")
     expect(render(<ProviderCredit provider="" />).container).toBeEmptyDOMElement()
+  })
+  it("a lab protocol is credited as a protocol, with no single site linked, and its search step names where it looked", () => {
+    const { container } = render(<ProviderCredit provider="protocols" />)
+    expect(container).toHaveTextContent(/^Lab protocol \(protocol journals and protocols\.io\)$/); expect(container.querySelector("a")).toBeNull()
+    expect(searchPlace("protocols")).toBe("published lab protocols (protocol journals and protocols.io)")
   })
   it("the generated real stream credits each source to the search that found it", async () => {
     await show(lines(S_REAL))

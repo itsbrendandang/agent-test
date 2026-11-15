@@ -11,8 +11,8 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 > **Status.** The board runs from brief to memo on scripted models (no keys). With `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `NO_PAID_CALLS=0` in `.env` it calls those two providers directly. This repository holds no record of a finished run with real models, and none of the model ids, the structured-output format or the cost per run has been tried with a paid call, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
-brief.md ──▶ Lead Scientist ──converse──▶ 6 board members (the scout first, then the others in parallel; each its own durable conversation)
-                 ▲                            │ only the scout searches (exa_search, then literature_search, then database_search)
+brief.md ──▶ Lead Scientist ──converse──▶ 7 board members (the scout first, then the evidence verifier, then the others in parallel; each its own durable conversation)
+                 ▲                            │ the scout gathers the sources (exa_search, then literature_search, then database_search); the evidence verifier rechecks them
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: cheap first pass ─(unsettled)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
@@ -60,13 +60,14 @@ Claude Code (the checker for computed claims) uses your existing `claude` login.
 
 The board runs our own swarm. It will compete with the BixBench swarm, which is the baseline, at equal
 compute. **Status: prompts only, scripted runs only.** The nine roles of the plan are covered by **six
-model agents and three code checks**. Fewer agents means fewer model calls: every member is called every
+model agents and three code checks**, plus a seventh agent, the Evidence Verifier, that backs up the Scout. Fewer agents means fewer model calls: every member is called every
 round, and each call resends its whole conversation.
 
 | Role | Done by | Task | Model tier |
 |---|---|---|---|
 | Lead Scientist | agent `lead-scientist` | Frames the question, gives each member its task and mode, writes the memo | lead (Opus) |
-| Scout | agent `scout`, and code | The only member that searches. It opens every review with a search on the brief's main question and reports the sources the others can cite. It is first in `board:` and must stay: a test fails if the roster has no member with a search tool. The brief check before anything runs is code (`loadBrief`, `brief.required_sections`). There is no dataset to inspect yet. | cheap |
+| Scout | agent `scout`, and code | The only member with the web search. It opens every review with a search on the brief's main question and reports the sources the others can cite. It is first in `board:` and must stay: a test fails if the roster has no member with a search tool. The brief check before anything runs is code (`loadBrief`, `brief.required_sections`). There is no dataset to inspect yet. | cheap |
+| Evidence Verifier | agent `evidence-verifier`, and code | Backs up the Scout in **every round**, right after it. It is given the Scout's reply of the round and a code check of each source the Scout cited (did a search in this review return that URL, and what text was kept). It marks each Scout source confirmed, wrong or not checkable (the source exists, says what the Scout says, is current and not retracted, a record is not a finding), then makes its own free searches (`literature_search`, `database_search`; no web search) for evidence the Scout missed or that goes against it, and ends with Confirmed / Wrong / Missing lists. It never replies "No task." The lead is told after each round to read its report before deciding. `checkConfig` refuses a `board:` list without it, and a plan's `overrides.json` cannot take it off the team (`applyOverrides`). Its searches count against the same per-run caps; tests: `engine/test/board-verifier.test.ts`. | cheap |
 | Proposer (triage) | agent `proposer` | 3 to 8 claims, each with a priority and a share of the budget | strong |
 | Pilot | agent `experimenter`, mode `pilot` | Subsample test; claims that fail early are dropped | strong |
 | Experimenter | agent `experimenter`, mode `full` | The analysis per claim, highest priority first | strong |
@@ -87,10 +88,10 @@ remembers what the Pilot did. Limit: one mode per member per round.
 
 Other limits:
 
-- Every member gets every round. The scout replies first; the others then reply **at the same time**. The
+- Every member gets every round. The scout replies first, then the evidence verifier (with the scout's reply of that round); the others then reply **at the same time**. The
   engine does not run the other roles in order. The lead follows a round plan in its prompt, and a member
   with no task replies "No task."
-- Only the scout has tools, and only search tools. No member can run code or read files. Results that were
+- Only the scout and the evidence verifier have tools, and only search tools (the web search is the scout's alone). No member can run code or read files. Results that were
   not run are marked "not run". (The rule "no open web search" in `AGENTS.md` is about the benchmark swarm
   under `glhf/`; a board review is not a benchmark run.)
 - The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
@@ -109,9 +110,17 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
    - Reasoning is switched off for these calls where the model allows it, and their output is capped.
 3. **Only unsettled claims go to a second checker**: literature claims go to a model from the other vendor than the claim's author (OpenAI for Claude members, the strong-tier Claude model for the OpenAI critic; with no such model the claim stays `unchecked`). Computed claims are **not sent to Claude Code at all** while it runs `--restricted` (it cannot run code): they are recorded `unchecked` with the reason "computed claim not re-executed". At most `meeting.max_escalations` second checks per run, each with a time limit (`checkers.timeout_seconds`). A check that fails or times out records the claim as unsupported.
    A claim that the same member repeats from the same source in a later round is not checked again: the earlier ruling is copied into the new round's ledger row.
-4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). It counts models, the first-pass checker, the second checkers and Exa. A round is not started when the last round's cost would take the run past `max_usd`, and no first-pass check, escalation or search is started once the cap is reached (the claim is recorded `unchecked`). Worst-case overshoot: the round in progress when the cap is crossed (every member's turns, up to `member_turns` each), plus the one final-positions round. `meeting.daily_usd` limits all runs started on one day; past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
+4. **One budget per run** (`meeting.max_usd`, `max_minutes`, `max_rounds`). It counts models, the first-pass checker, the second checkers and Exa. A round is not started when the last round's cost would take the run past `max_usd`, and no first-pass check, escalation or search is started once the cap is reached (the claim is recorded `unchecked`). Worst-case overshoot: the round in progress when the cap is crossed (every member's turns, up to `member_turns` each), plus the one final-positions round. `meeting.daily_usd` limits all runs started on one day (swarm runs on Modal count too, see [configuration.md](configuration.md#drug-board-boardconfigyaml)); past it, starts and resumes are refused. If a model reports tokens but no cost, the price `meeting.fallback_usd_per_mtok` is used.
 
 Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
+
+What a run records about its cost and its code, in `run.json`: `usd` (the total the caps count), `firstPassUsd`,
+`checkerUsd`, `costEstimated`, and `usage`: per model (`provider/id`), the tokens of the harness models (the lead and
+the members) as the harness counts them (input, output, cache reads, cache writes, total, and the cost of each part).
+The first-pass checker and the escalation checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`), with no
+token counts, so `usage` does not add up to `usd`. `usage` is written with each update of the total. `manifest` is written when the run is created: the commit (`commit`, `dirty`), hashes of `board/config.yaml`,
+the agent files and the research prompts, and the versions of Node, pi-ai and pi-durable (`engine/src/manifest.ts`).
+Runs created before these fields have neither.
 
 ## Memory
 
@@ -131,11 +140,11 @@ Paid calls start off. The dashboard's switch (`POST /api/paid`) turns them on **
 
 ## How the evidence reaches the members
 
-The scout (the only member with a search tool) replies first in each round; the other members then get its screened sources in their prompt (title, study type, URL and the text kept, up to 12 sources, marked as data). A `[literature]` claim is checked against the text kept for the source it cites, so cite a source by its exact URL. Highlights from the search are what is kept, so a claim whose numbers are not in them goes to the second checker and may end `unsupported`: this is honest, and it makes `verified` rarer. If it proves too rare in a real run, ask Exa for longer highlights with `meeting.exa_highlight_chars` (the price of that was not verified). Each member's reply may open with `In short: ...`; the engine parses that line into `summary` on the `member.replied` event.
+The scout replies first in each round. The evidence verifier replies next: it gets the scout's reply of the round, a code check of each source the scout cited, and the pool, and its own free searches add to the pool. The other members then get its screened sources in their prompt (title, study type, URL and the text kept, up to 12 sources, marked as data). A `[literature]` claim is checked against the text kept for the source it cites, so cite a source by its exact URL. Highlights from the search are what is kept, so a claim whose numbers are not in them goes to the second checker and may end `unsupported`: this is honest, and it makes `verified` rarer. If it proves too rare in a real run, ask Exa for longer highlights with `meeting.exa_highlight_chars` (the price of that was not verified). Each member's reply may open with `In short: ...`; the engine parses that line into `summary` on the `member.replied` event.
 
 ## What a real run checks, and what was lost
 
-- **Evidence.** Only the scout has `exa_search`; the other members have no tool. What the scout finds is screened by the cheap model and enters the evidence pool; a claim can be verified only against a source in that pool (or the brief). A `[literature]` claim that cites anything else (a URL from a model's memory, or a source another member read) is recorded `unsupported` ("source is not in the screened evidence pool"), without a model call. Search is capped at 20 per run, counted in `max_usd`, and limited by a $40 lifetime ceiling (`board/runs/.exa-ledger.jsonl`).
+- **Evidence.** Only the scout has `exa_search`; the evidence verifier has the free `literature_search` and `database_search`; the other members have no tool. What the scout finds is screened by the cheap model and enters the evidence pool; a claim can be verified only against a source in that pool (or the brief). A `[literature]` claim that cites anything else (a URL from a model's memory, or a source another member read) is recorded `unsupported` ("source is not in the screened evidence pool"), without a model call. Search is capped at 20 per run, counted in `max_usd`, and limited by a $40 lifetime ceiling (`board/runs/.exa-ledger.jsonl`).
 - **Not calibrated any more.** The old checker (Jev) returned calibrated probabilities. A language model's own confidence is not calibrated, so there are no probability thresholds. In their place is a check that code can do: the quote must be in the source. Its weakness: a real quote does not prove that the passage supports the claim, and a web page can contain text written to be quoted. Treat `verified` as "a model from another vendor found a real passage that matches, with the same numbers".
 
 ## Durable over time (Pi Durable)
@@ -204,7 +213,7 @@ instructions) and `engine/src/chat/plan.ts` (choosing).
 | Step | What happens | Code |
 |---|---|---|
 | Choosing | The question's words are compared with each method's notes and each profile's trigger. A word of a method's name or of a trigger counts 2, another shared word 1; 2 points on one method (or on the profile) are needed. A few question words are read through a short list (`ALIASES`: "hERG" is read as "safety"); the plan's reason shows it. With a model (AI mode) the model may name specialists; every name is checked against the catalog and unknown ones are dropped. | `matchSpecialists`, `planFrom` |
-| Places | A specialist takes a place **inside** the level's member limit (Quick: 3 members; Standard and Deep: the size of the roster). The lead, the scout and the proposer always stay; the Critic stays at Standard and Deep. Specialists get at most half of the places that are left, rounded up. No limit and no spend cap is raised. | `agentsFor`, `memberLimit` |
+| Places | A specialist takes a place **inside** the level's member limit (Quick: 4 members; Standard and Deep: the size of the roster). The lead, the scout, the evidence verifier and the proposer always stay; the Critic stays at Standard and Deep. Specialists get at most half of the places that are left, rounded up. No limit and no spend cap is raised. | `agentsFor`, `memberLimit` |
 | Running | The start writes the chosen specialists into the run's `overrides.json`. `board.ts` adds them to the roster for that run only (`runSpecialists` checks every name and method again, and adds no more than the free places). Each is a normal member: its own durable conversation, the shared context, "In short:", the CLAIMS section, a blind first round, and its claims are checked like anyone's. It has **no tools** and runs on the `strong` tier. | `runSpecialists`, `runLocked` |
 | Instructions | First a fixed frame: it cannot run code or install anything; it says which analysis would settle the question, the pitfalls, and what the brief's data can and cannot support; it challenges other members by name; it reports no result that is not in the brief or in the sources the board found; decision support only, no synthesis route for a hazardous compound. Then its role, then the notes of the matched methods. **Caps:** at most 4 methods, 1,200 characters per method, 8,000 characters for the specialist's whole own prompt (the deliverable, CLAIMS format, shared context and brief come after, as for every member). | `specialistPrompt` |
 | Events | Every run writes one `run.roster` event (key `roster`): the lead and the members, each with `source` (`board` or `specialist`), and for a specialist a plain title, one line of why it was chosen and its methods. `GET /api/chat/roster?run=<id>` returns the same with tier and tools. | `rosterEntries`, `chat/roster.ts` |

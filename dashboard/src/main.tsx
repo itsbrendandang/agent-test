@@ -4,6 +4,7 @@ import './design/fonts'
 import './design/index.css'
 import './design/theme.css'
 import './design/display.css'
+import './design/links.css'
 import { startAppearance } from './lib/appearance'
 import Dashboard from './Dashboard'
 

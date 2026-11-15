@@ -12,7 +12,7 @@
   --shadow-sticker: 3px 3px 0 var(--edge-strong);
 }
 
-:is(.ov-lab, .lab-page) {
+.ov-lab {
   --font-heading: var(--ui-font-sans);
   --radius-control: 8px;
   --radius-card: 12px;
@@ -20,7 +20,7 @@
   --ui-radius: 0.5rem;
   --radius: 0.625rem;
 }
-:is(h1, h2, h3, h4, h5, h6):where(:not(.ov-lab *, .lab-page *)) { font-family: var(--font-heading); }
+:is(h1, h2, h3, h4, h5, h6):where(:not(.ov-lab *)) { font-family: var(--font-heading); }
 .ov-page .ov-lab .lab-both { max-height: none; }
 .search-composer textarea::placeholder { font-family: var(--font-display); font-weight: 500; opacity: 1; }
 .ov-hero { color: var(--text); }
@@ -28,17 +28,16 @@
 .ov-hero .search-composer [data-slot="input-group"] { background: var(--surface); color: var(--text); }
 .ov-hero .search-composer textarea { color: var(--text); }
 .ov-hero .search-composer textarea::placeholder { color: var(--text-muted); }
-.btn:where(:not(.ov-lab *, .lab-page *)) { border-radius: var(--radius-control); padding-block: 9px; }
-.btn-primary:where(:not(.ov-lab *, .lab-page *)), [role="tab"]:where(:not(.ov-lab *, .lab-page *)) { letter-spacing: .07em; text-transform: uppercase; font-size: 11px; }
-.btn-primary:where(:not(.ov-lab *, .lab-page *)) { box-shadow: var(--shadow-sticker); }
-.btn-primary:where(:not(.ov-lab *, .lab-page *)):active:not(:disabled) { box-shadow: 1px 1px 0 var(--edge-strong); }
-.ov-card:where(:not(.ov-lab, .ov-lab *, .lab-page *)), .card-surface:where(:not(.ov-lab *, .lab-page *)) { box-shadow: var(--shadow); }
-.ov-card:where(:not(.ov-lab, .ov-lab *, .lab-page *)) { box-shadow: var(--shadow-sticker); padding-block: 22px; }
+.btn:where(:not(.ov-lab *)) { border-radius: var(--radius-control); padding-block: 9px; }
+.btn-primary:where(:not(.ov-lab *)), [role="tab"]:where(:not(.ov-lab *)) { letter-spacing: .07em; text-transform: uppercase; font-size: 11px; }
+.btn-primary:where(:not(.ov-lab *)) { box-shadow: var(--shadow-sticker); }
+.btn-primary:where(:not(.ov-lab *)):active:not(:disabled) { box-shadow: 1px 1px 0 var(--edge-strong); }
+.ov-card:where(:not(.ov-lab, .ov-lab *)), .card-surface:where(:not(.ov-lab *)) { box-shadow: var(--shadow); }
+.ov-card:where(:not(.ov-lab, .ov-lab *)) { padding-block: 22px; } /* the same soft card shadow as .card-surface */
 .ov-starters button { padding-block: 14px; border-radius: var(--radius-card); background: var(--neutral-bg); color: var(--text); box-shadow: var(--shadow-sticker); }
 .set-section { padding-block: 28px; }
 .search-composer [data-slot="input-group"] { border-radius: var(--radius-composer); box-shadow: var(--shadow-sticker); }
-[role="tablist"]:where(:not(.ov-lab *, .lab-page *)), [role="tab"]:where(:not(.ov-lab *, .lab-page *)) { border-radius: var(--radius-pill); }
-.inspector-tabs [role="tab"] { border-radius: var(--radius-pill); letter-spacing: .07em; text-transform: uppercase; font-size: 11px; }
+[role="tablist"]:where(:not(.ov-lab *)), [role="tab"]:where(:not(.ov-lab *)) { border-radius: var(--radius-pill); }
 .effort-segments, .effort-segments label { border-radius: var(--radius-pill); }
 .effort-segments label { border-right: 0; }
 .home-budget progress { height: 8px; border-radius: var(--radius-pill); }
@@ -46,7 +45,7 @@
 .home-budget progress::-moz-progress-bar { border-radius: var(--radius-pill); }
 .swarm-progress { height: 10px; border-radius: var(--radius-pill); }
 .swarm-progress span { border-radius: var(--radius-pill); }
-.mode-badge:where(:not(.ov-lab *, .lab-page *)), .thread-count:where(:not(.ov-lab *, .lab-page *)) { border-radius: 45% 55% 48% 52% / 52% 48% 55% 45%; padding-inline: 9px; }
+.mode-badge:where(:not(.ov-lab *)), .thread-count:where(:not(.ov-lab *)) { border-radius: 45% 55% 48% 52% / 52% 48% 55% 45%; padding-inline: 9px; }
 .exp-spinner, [data-slot="spinner"] { animation: thinking-breathe 1.8s ease-in-out infinite; }
 @keyframes thinking-breathe { 0%, 100% { opacity: .6; transform: scale(.85) rotate(-15deg); } 50% { opacity: 1; transform: scale(1.1) rotate(15deg); } }
 @media (prefers-reduced-motion: reduce) { .exp-spinner, [data-slot="spinner"] { animation: none; } }

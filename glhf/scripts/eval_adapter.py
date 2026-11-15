@@ -33,6 +33,8 @@ from pathlib import Path
 # Make bixbench_v1 importable without installing it (src layout).
 SRC = Path(__file__).resolve().parents[1] / "bixbench_v1" / "src"
 sys.path.insert(0, str(SRC))
+# bixbench_v1.paid uses the shared switch in bixbench3.paid.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bixbench" / "src"))
 
 from bixbench_v1.dataset import (  # noqa: E402
     KeyEntry,
@@ -134,13 +136,140 @@ def swarm_answers(public: list[PublicQuestion]) -> dict[str, str]:
     )
 
 
-def get_answers(name: str, public: list[PublicQuestion], key: dict[str, KeyEntry]) -> dict[str, str]:
+def _load_dotenv() -> None:
+    """Load KEY=value lines from a .env at the repo root, if present (does not overwrite)."""
+    import os
+
+    env = Path(__file__).resolve().parents[2] / ".env"
+    if not env.exists():
+        return
+    for line in env.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+def answer_claude(public: list[PublicQuestion], model: str) -> dict[str, str]:
+    """Answer each MCQ with Claude directly (one letter per question). Needs ANTHROPIC_API_KEY.
+
+    This is the lightweight "test with our model" path: a single Claude call per question,
+    not the full Docker/Modal swarm. Uses the Anthropic REST API over urllib (no SDK).
+    """
+    from bixbench_v1.paid import _paid
+
+    # Paid call: refused unless NO_PAID_CALLS=0 (AGENTS.md). Check before any key or client.
+    _paid.refuse_paid(f"the claude answerer ({model})")
+    import json
+    import os
+    import re
+    import urllib.request
+
+    _load_dotenv()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise SystemExit(
+            "ANTHROPIC_API_KEY not set. Put it in a .env file at the repo root:\n"
+            "  ANTHROPIC_API_KEY=sk-ant-...\n"
+            "or run: export ANTHROPIC_API_KEY=sk-ant-..."
+        )
+    answers: dict[str, str] = {}
+    for i, q in enumerate(public, 1):
+        opts = "\n".join(f"{chr(65 + j)}. {o}" for j, o in enumerate(q.options or []))
+        prompt = (
+            f"Answer this multiple-choice science question. Reply with ONLY the letter.\n\n"
+            f"{q.question}\n\n{opts}\n\nAnswer (one letter):"
+        )
+        body = json.dumps({
+            "model": model,
+            "max_tokens": 8,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages", data=body,
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                out = json.loads(resp.read())
+            text = "".join(b.get("text", "") for b in out.get("content", []))
+            m = re.search(r"[A-Z]", text.upper())
+            answers[q.question_id] = m.group(0) if m else ""
+        except Exception as e:
+            print(f"  q{i}: call failed ({e}); left blank")
+            answers[q.question_id] = ""
+        print(f"  {i}/{len(public)} answered", end="\r")
+    print()
+    return answers
+
+
+def answer_openai(public: list[PublicQuestion], model: str) -> dict[str, str]:
+    """Answer each MCQ with an OpenAI model (one letter per question). Needs OPENAI_API_KEY."""
+    from bixbench_v1.paid import _paid
+
+    # Paid call: refused unless NO_PAID_CALLS=0 (AGENTS.md). Check before any key or client.
+    _paid.refuse_paid(f"the openai answerer ({model})")
+    import json
+    import os
+    import re
+    import urllib.request
+
+    _load_dotenv()
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise SystemExit(
+            "OPENAI_API_KEY not set. Put it in a .env file at the repo root:\n"
+            "  OPENAI_API_KEY=sk-...\n"
+            "or run: export OPENAI_API_KEY=sk-..."
+        )
+    answers: dict[str, str] = {}
+    for i, q in enumerate(public, 1):
+        opts = "\n".join(f"{chr(65 + j)}. {o}" for j, o in enumerate(q.options or []))
+        prompt = (
+            f"Answer this multiple-choice science question. Reply with ONLY the letter.\n\n"
+            f"{q.question}\n\n{opts}\n\nAnswer (one letter):"
+        )
+        body = json.dumps({
+            "model": model,
+            "max_tokens": 8,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions", data=body,
+            headers={"authorization": f"Bearer {api_key}", "content-type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                out = json.loads(resp.read())
+            text = out["choices"][0]["message"]["content"]
+            m = re.search(r"[A-Z]", text.upper())
+            answers[q.question_id] = m.group(0) if m else ""
+        except Exception as e:
+            print(f"  q{i}: call failed ({e}); left blank")
+            answers[q.question_id] = ""
+        print(f"  {i}/{len(public)} answered", end="\r")
+    print()
+    return answers
+
+
+# Default model per provider when --model is not given.
+DEFAULT_MODELS = {"claude": "claude-3-5-sonnet-20241022", "openai": "gpt-4o-mini"}
+
+
+def get_answers(name: str, public: list[PublicQuestion], key: dict[str, KeyEntry],
+                model: str) -> dict[str, str]:
     if name == "oracle":
         return answer_oracle(public, key)
     if name == "always-a":
         return answer_always_a(public)
     if name == "random":
         return answer_random(public)
+    if name == "claude":
+        return answer_claude(public, model or DEFAULT_MODELS["claude"])
+    if name == "openai":
+        return answer_openai(public, model or DEFAULT_MODELS["openai"])
     if name == "swarm":
         return swarm_answers(public)
     raise SystemExit(f"unknown answerer {name!r}")
@@ -170,7 +299,7 @@ async def main_async(args: argparse.Namespace) -> None:
     # Same split the real runner uses. MCQ options are shuffled with a host-only salt.
     public, key = public_view(questions, answer_mode="mcq", seed=0, salt=new_shuffle_salt())
 
-    answers = get_answers(args.answerer, public, key)
+    answers = get_answers(args.answerer, public, key, args.model)
 
     # No judge needed: mcq grading is a deterministic letter match.
     grades = await grade_answers(key, answers, answer_mode="mcq", judge=None, profile="per-mode")
@@ -194,8 +323,10 @@ def main() -> None:
     p.add_argument("dataset", choices=sorted(MAPPERS), help="which downloaded dataset")
     p.add_argument("--limit", type=int, default=20, help="max questions (0 = all)")
     p.add_argument("--answerer", default="oracle",
-                   choices=["oracle", "always-a", "random", "swarm"],
-                   help="oracle/always-a/random test the pipeline; swarm is your real solver")
+                   choices=["oracle", "always-a", "random", "claude", "openai", "swarm"],
+                   help="oracle/always-a/random test the pipeline; claude/openai=your model; swarm=full solver")
+    p.add_argument("--model", default="",
+                   help="model id (default: claude-3-5-sonnet for claude, gpt-4o-mini for openai)")
     p.add_argument("--show", type=int, default=3, help="print this many graded examples")
     asyncio.run(main_async(p.parse_args()))
 

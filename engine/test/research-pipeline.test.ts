@@ -1,6 +1,7 @@
 // The research answer's pipeline, end to end, with fakes only (test/fixtures/research/harness.ts): fake models under
 // the real ids, a fake fetch for Exa and Europe PMC, fake keys, a temp runs folder. NO_PAID_CALLS is 1 for the file;
 // a test that needs paid-allowed logic runs inside paidAllowed(), which sets it to 0 for that test only.
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"

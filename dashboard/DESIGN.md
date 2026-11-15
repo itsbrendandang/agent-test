@@ -17,8 +17,11 @@ With Docker only: `docker compose up`, then open http://localhost:5317.
 Every view has the same three parts (`src/App.tsx`).
 
 - **The navigation** (`src/components/AppSidebar.tsx`, on the shadcn sidebar in `src/components/ui/sidebar.tsx`).
-  - Three places carry the everyday work: Research, Saved research, Compare.
-  - The advanced places sit under "More", quieter: Team review, Agents, Graph, Lab.
+  - Three places carry the everyday work: Overview, Research, Saved research (ask, read, find again).
+  - One quieter group follows, with a heading: "How it works" (Agent Log, Team review, Graph, Agents). `PRIMARY` and
+    `MORE` in `src/nav.ts`.
+  - Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`, `#Compare`,
+    `#Compare/<id>`).
   - Settings is at the foot, once. The characters sit above it on a wide window.
   - On a wide window the sidebar folds to icons. The choice is remembered (`shell.sidebar`).
   - Under 768 px it is a drawer. The menu button in the header opens it. Choosing a place closes it.
@@ -26,7 +29,11 @@ Every view has the same three parts (`src/App.tsx`).
   slots a view may fill: a title and actions (`src/components/HeaderSlot.tsx`). Research puts the question and
   "New search" there. Nothing else is in the header. There is no status strip and no Demo or Real control in it.
 - **The view**, inside one `<main>`. The view scrolls inside it. The header never lies over content.
-  Content is at most 1100 px wide. Graph uses the full width (`data-wide` on the view's root element).
+  Content is at most 1100 px wide, with the same left edge on every view (the Overview's lab and the Agent Log too).
+  Graph and Research use a wider column, up to 1480 px (`data-wide` on the view's root element): Graph for its
+  picture, Research for its inspector. With the inspector open, Research has no cap and the inspector reaches the
+  right edge of the window. Every other view shares the 1100 px column. The Overview and Research start
+  screens share one 800 px column for the question box.
 
 Under 480 px the header drops the view's title, so the place name and the actions stay inside the window.
 
@@ -35,7 +42,7 @@ Under 480 px the header drops the view's title, so the place name and the action
 | Research | `Home` | `src/views/HomeView.tsx`, `src/home/`, `src/research/` | Ask a research question. Read the answer with its sources, or a plan to confirm |
 | Saved research | `Runs` | `src/views/ExperimentsView.tsx` | Every saved answer, team review and task run, with keyword search |
 | Compare | `Compare` | `src/views/SwarmView.tsx`, `src/swarm/` | One agent alone against a team of nine on the same task. New run and Cancel |
-| Team review | `Board` | `src/views/BoardView.tsx`, `src/board/` | One team review: the decision, the discussion, the checks, the sources |
+| Team review | `Board` | `src/views/BoardView.tsx`, `src/board/` | One team review: the decision, the checks, the sources, and the discussion drawn by the Agent Log (`src/lab/EventLog.tsx`) |
 | Agents | `Agents` | `src/views/AgentsView.tsx` | Who does the work: roles, team members, specialists and methods |
 | Graph | `Graph` | `src/views/WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and how it was checked |
 | Lab | `Lab` | `src/views/LabView.tsx`, `src/lab/` | Watch the team at work in a run. Characters move only on engine events |
@@ -80,7 +87,7 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 | Calls to the engine | `src/swarm/api.ts`, `src/board/api.ts`, `src/home/api.ts` |
 | Characters (Momo, Ember, Fuji, Sage) | `src/crew/store.ts` (who they are, the "Show characters" setting), `src/components/Buddy.tsx` (the drawings), `src/components/SideCrew.tsx` (the foot of the navigation). On by default; Settings turns them off |
 | The faces of the agents that did the work (not the characters above) | `src/lab/identity.ts`, `src/lab/AgentAvatar.tsx` |
-| AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
+| AI Elements (Conversation, Message, PromptInput, Suggestion, Sources, Loader, Reasoning) and the shadcn pieces under them | `src/components/ai-elements/`, `src/components/ui/`, `src/lib/utils.ts`; their colours are set at the end of `src/index.css` |
 | Tests and their stand-in engine | `src/**/*.test.ts(x)`, `src/test/` |
 
 ## One of each
@@ -95,8 +102,10 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 - **One place for each input**: questions are asked on Research; keyword search is on Saved research; Agents has a filter box.
 - **One loading look**: `<Loading>text</Loading>` from `src/components/Crew.tsx`. The text is the status; the
   characters beside it are decoration.
-- **One conversation look**: the Research chat, the Team review discussion and "What each role did" on Compare all use the
-  AI Elements `Conversation` and `Message` through `src/components/Thread.tsx`.
+- **One conversation look**: the Research chat and "What each role did" on Compare use the AI Elements
+  `Conversation` and `Message` through `src/components/Thread.tsx`.
+- **One log**: a run's events, in order, are drawn only by the Agent Log's group chat (`src/lab/EventLog.tsx`). The
+  Team review's discussion is that same component for the review on screen, with a link "Open in Agent Log".
 - **One design system**: AI Elements reads the app's own colours (the token block at the end of `src/index.css`),
   and its visible buttons carry the app's `.btn` classes. Do not add a second theme or button style.
 
@@ -111,7 +120,8 @@ Brought back from git history (commit `e071754^`), by the owner's decision: the 
 (`Splash.tsx`), and AI Elements with the shadcn pieces it needs. `message.tsx` differs from history in one way:
 its Markdown renderer moved to `ai-elements/message-response.tsx`, which nothing imports, so its code-highlight,
 maths and diagram plugins (about 740 kB) stay out of the first load. `sources.tsx`, `loader.tsx` and
-`ui/collapsible.tsx` were added from the public registries with the shadcn CLI.
+`ui/collapsible.tsx` were added from the public registries with the shadcn CLI. `reasoning.tsx` (the Agent Log's
+"Show thinking") was copied from AI Elements with three changes, listed at the top of the file.
 
 ## The characters
 
@@ -156,7 +166,8 @@ run)"), `plainWhen` ("today at 4:51 pm"). Scores keep three decimals.
 
 ## The conversation
 
-The discussion is the centre of Board and Compare: `TeamMessage` in `src/components/Thread.tsx`.
+The discussion is the centre of Compare: `TeamMessage` in `src/components/Thread.tsx`. Board's discussion is the
+Agent Log's group chat (`src/lab/EventLog.tsx`); see "One log" above.
 
 - Who speaks and their job in one plain line (`BOARD_JOB` in `words.ts`, written from `board/agents/*.md`; the
   swarm's from `src/swarm/roles.ts`). Do not invent what a role does.
@@ -175,9 +186,10 @@ A practice run's score or recommendation is never the headline without the words
 
 A first-time visitor gets from opening the app to a finished result, and understands it, without help.
 
-- **First visit**: Research says what this is in one sentence, offers one "Try asking" row of questions that send in one
-  click (see README, "Try asking"), and says once when the app is in Demo mode.
-- **Fewest clicks**: example (1), "Start practice run" (2), "See what they found" (3). A practice plan starts in
+- **First visit**: Research says what this is in one sentence, offers one "Try asking" row of questions (see README, "Try asking"), and says once when the app is in Demo mode.
+- **Examples fill, Send sends**: an example question only fills the box. Send sends it, so one click on an
+  example never starts a run.
+- **Fewest clicks**: example (1), Send (2), "Start practice run" (3), "See what they found" (4). A practice plan starts in
   one click only while the engine is in Demo mode and the plan is not paid (`quick` in `src/home/PlanCard.tsx`).
   Everything else keeps the confirm step, the cost and the tick box. Never weaken that.
 - **Always a next step**: a progress line while a run works, one clear button when it ends, and a "What next?"

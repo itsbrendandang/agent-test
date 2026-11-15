@@ -13,7 +13,7 @@ import { buildIndex, keywordAnswer, parseReply, renderIndex } from "../search/as
 import { BudgetReached, checkDailyBudget, OverridesUnreadable, RunBusy, runDir } from "../board/board.ts"
 import { BriefRejected } from "../brief.ts"
 import { writeWhole } from "../fsx.ts"
-import type { BoardConfig } from "../config.ts"
+import { type BoardConfig, VERIFIER } from "../config.ts"
 import { access, allowedOrigin, HttpError, isSafeId, readJson, tokenNeeded } from "../http.ts"
 import { PaidCallsOff, paidCallsOff } from "../paid/paid.ts"
 import { type BoardRun, search } from "../search/search.ts"
@@ -182,8 +182,8 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
     if (!Array.isArray(body.agents) || body.agents.some((a) => typeof a !== "string")) throw bad("agents", "agents must be a list of agent names from the plan")
     const unknown = (body.agents as string[]).filter((a) => !agents.some((p) => p.name === a))
     if (unknown.length) throw bad("agents", `not in this plan at the ${effort.id} level: ${unknown.slice(0, 5).join(", ")}`)
-    agents = agents.filter((a) => a.name === lead.name || (body.agents as string[]).includes(a.name)) // the lead always stays
-    if (agents.filter((a) => a.source !== "specialist").length < 2) throw bad("agents", "keep at least one board member besides the lead")
+    agents = agents.filter((a) => a.name === lead.name || a.name === VERIFIER || (body.agents as string[]).includes(a.name)) // the lead and the verifier always stay
+    if (agents.filter((a) => a.source !== "specialist" && a.name !== VERIFIER).length < 2) throw bad("agents", "keep at least one board member besides the lead and the evidence verifier")
   }
   const limits: Limits = { ...effort.limits }
   if (body.limits !== undefined) {

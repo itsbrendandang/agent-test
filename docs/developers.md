@@ -10,14 +10,15 @@ tests and the known limits. To set up your machine, read
 1. **GLHF swarm.** A solver with nine roles for Edison's BixBench3 benchmark. The nine roles are
    nine phases with their own instructions. Only the solver is ours. The sandbox, time limit,
    grader and judge are the benchmark's own code.
-2. **Board review.** A lead scientist agent and six members discuss a written brief in rounds
-   and the lead writes a memo. The members are the scout, proposer, experimenter (one agent with
-   three modes: Pilot, full run, Reviser), methods auditor, critic and reporter. They are prompts
-   only and run no code. One member, the scout, can search: the web (Exa, paid) and the literature
-   (PubMed and preprints through Europe PMC, free). It replies first, so the others see its
-   sources. Each statement a member makes is checked by a model from a different vendor, which
-   must quote the source. The team is the `board:` list in `board/config.yaml`; **keep the scout
-   on it**, or a review gathers no sources. See
+2. **Board review.** A lead scientist agent and seven members discuss a written brief in rounds
+   and the lead writes a memo. The members are the scout, evidence verifier, proposer, experimenter
+   (one agent with three modes: Pilot, full run, Reviser), methods auditor, critic and reporter. They
+   are prompts only and run no code. The scout gathers the sources: the web (Exa, paid) and the
+   literature (PubMed and preprints through Europe PMC, free). It replies first, so the others see its
+   sources. The evidence verifier replies next, in every round: it rechecks the scout's sources with
+   its own free searches. Each statement a member makes is checked by a model from a different vendor,
+   which must quote the source. The team is the `board:` list in `board/config.yaml`; **keep the
+   scout and the evidence verifier on it** (the engine refuses a list without them). See
    [docs/drug-board.md](drug-board.md).
 
 Both are tracked by one engine (`engine/`, port 8787) and shown in one app (`dashboard/`, port 5317).
@@ -286,6 +287,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
 | `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
 | `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
+| `engine/src/db/supabase.ts`, `backfill.ts` | The optional copy of the records in Supabase, written in the background, and `npm run db:backfill` ([database.md](database.md)). |
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
 | `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |

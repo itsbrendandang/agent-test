@@ -126,7 +126,10 @@ test("selection: three example questions at each effort level", () => {
   }
   for (const [key, question] of Object.entries(QUESTIONS) as [keyof typeof QUESTIONS, string][]) {
     const quick = template(config, question, "quick"), standard = template(config, question, "standard"), deep = template(config, question, "deep")
-    assert.deepEqual(names(quick.agents), ["lead-scientist", "scout", "proposer", expected[key].first], `${key} quick: the lead, the member that searches, a claim maker and the best-matched specialist`)
+    // Quick has four places. This roster has no evidence verifier, so two are free: the best-matched specialist and the best-ranked other member.
+    assert.deepEqual(names(quick.agents).slice(0, 3), ["lead-scientist", "scout", "proposer"], `${key} quick: the lead, the member that searches, a claim maker`)
+    assert.equal(quick.agents.length - 1, 4, `${key} quick: four places`)
+    assert.deepEqual(names(guests(quick)), [expected[key].first], `${key} quick: one place for the best-matched specialist`)
     for (const plan of [standard, deep]) {
       assert.deepEqual(names(plan.agents).slice(0, 4), ["lead-scientist", "scout", "proposer", "critic"], `${key} ${plan.effort}: the Critic stays`)
       assert.deepEqual(names(guests(plan)), [expected[key].first, expected[key].second], `${key} ${plan.effort}`)

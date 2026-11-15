@@ -246,7 +246,9 @@ test("a practice run: the scout searches the web first, then the literature, the
     ["scout", "fixture", "KRAS G12C Scout (Data and Evidence) evidence"],
     ["scout", "fixture", "KRAS G12C covalent inhibitor resistance"],
     ["scout", "fixture", "KRAS G12C non-small cell lung cancer"],
-  ], "three searches, in the board's order, each labelled as example sources")
+    ["evidence-verifier", "fixture", "KRAS G12C covalent inhibitor resistance"],
+    ["evidence-verifier", "fixture", "KRAS G12C non-small cell lung cancer"],
+  ], "the scout's three searches, in the board's order, then the evidence verifier's two free ones, each labelled as example sources")
   assert.ok(events.findIndex((e) => e.type === "evidence.triaged") < events.findIndex((e) => e.type === "member.replied"), "the searches come before any reply")
   // The saved record: run.json's pool, and every event's items.
   const state = loadState(config, id)
@@ -259,7 +261,7 @@ test("a practice run: the scout searches the web first, then the literature, the
   const onDisk = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as { evidence: Record<string, EvidenceItem>; databases?: unknown; literature?: unknown; searched?: unknown }
   assert.ok(Object.values(onDisk.evidence).every((i) => i.provider === "fixture" && typeof i.query === "string" && i.query.length > 0))
   assert.deepEqual([onDisk.databases, onDisk.literature, onDisk.searched], [undefined, undefined, undefined], "a practice run counts and stores no search")
-  assert.deepEqual(summarize(dir, state).search, { searches: 3, provider: "fixture" })
+  assert.deepEqual(summarize(dir, state).search, { searches: 5, provider: "fixture" })
   assert.equal(state.usd, 0)
 })
 
@@ -275,7 +277,7 @@ test("the three search tools are wired the same way: each puts its results into 
 test("the catalog and the preflight list the databases as free, with no key, and never call them", async () => {
   const config = loadConfig()
   assert.deepEqual(buildCatalog(config, {}).search.databases, { providers: ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"], free: true, keyNeeded: false, available: true })
-  assert.equal(buildCatalog({ ...config, board: config.board.filter((n) => n !== "scout") }, {}).search.databases.available, false)
+  assert.equal(buildCatalog({ ...config, board: config.board.filter((n) => n !== "scout" && n !== "evidence-verifier") }, {}).search.databases.available, false)
   const lines: string[] = [], asked: string[] = []
   await runPreflight({ env: { ANTHROPIC_API_KEY: "fake-a", OPENAI_API_KEY: "fake-o", EXA_API_KEY: "fake-e" }, config, log: (line) => { lines.push(line) },
     fetch: (async (url: string) => { asked.push(String(url)); return new Response(JSON.stringify({ data: [] })) }) as unknown as typeof fetch })

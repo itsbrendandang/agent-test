@@ -5,13 +5,16 @@
 import type { BoardConfig } from "../config.ts"
 import type { SpecialistRoom } from "../specialists.ts"
 import type { Verdict } from "../events.ts"
+import type { Manifest } from "../manifest.ts"
 
 export type Effort = "quick" | "standard"
 export const EFFORTS: Effort[] = ["quick", "standard"]
 export const isEffort = (value: unknown): value is Effort => value === "quick" || value === "standard"
 
-/** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/. */
-export type Provider = "exa" | "europepmc" | "fixture" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
+/** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/.
+ * "openalex", "semanticscholar", "arxiv", "crossref" and "biorxiv" are papers the literature search (search "europepmc", scholarly.ts) found there.
+ * "protocols": a published lab protocol the protocol search (search/protocols.ts) found. */
+export type Provider = "exa" | "europepmc" | "openalex" | "semanticscholar" | "arxiv" | "crossref" | "biorxiv" | "protocols" | "fixture" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
 
 export interface Level {
   /** Dollars one answer may cost. Checked before every paid step, against that step's worst case. */
@@ -280,6 +283,8 @@ export interface ResearchRecord {
   models: ModelNames
   /** The one sentence that says what will be done. */
   opening?: string
+  /** True when a plain factual question took the short path: one search, a short answer, one round of statement checks (pipeline.ts `shortPath`). */
+  short?: boolean
   /** The hypotheses this answer tests (Standard level; empty when none were needed), each with its mark once checked. */
   hypotheses?: Hypothesis[]
   /** Why no hypotheses were set, or which were set aside because the level's limits do not fit them. */
@@ -297,6 +302,8 @@ export interface ResearchRecord {
   /** The cited sentences of the final text, each with the verdict code gave it. */
   statements: Statement[]
   review: { checker: string; critic: string; revised: boolean; notes: ReviewNote[] }
+  /** What produced the answer: the commit, prompt and config hashes, library versions (manifest.ts). Absent in older records. */
+  manifest?: Manifest
   recommendations: Recommendation[]
   /**
    * "What is missing": plain sentences built by code from what did not run, what found nothing and what did not pass
@@ -320,6 +327,8 @@ export type ResearchEvent =
   | { type: "research.resumed"; afterSeq: number }
   | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
   | { type: "opening"; text: string }
+  /** A plain factual question takes the short path; `skipped` names what it leaves out. */
+  | { type: "short.path"; note: string; skipped: string[] }
   | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin" | "agent">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
   | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "thin" | "note" | "agent" | "testedBy">)
   | { type: "specialists"; items: AnswerSpecialist[] }

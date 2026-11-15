@@ -38,6 +38,7 @@ export interface AgentIdentity {
 const CHARACTER_OF: Record<string, CharacterId> = {
   "lead-scientist": "navigator", lead: "navigator", engine: "navigator",
   scout: "scout",
+  "evidence-verifier": "librarian", // rechecks the scout with the literature and the databases: the Librarian's face
   proposer: "proposer", propose: "proposer", planner: "proposer",
   pilot: "pilot",
   experimenter: "experimenter", experiment: "experimenter", workup: "experimenter",
