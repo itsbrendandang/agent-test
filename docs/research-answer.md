@@ -121,7 +121,8 @@ answer and the app say so.
    Exa first, then its literature search (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref,
    bioRxiv/medRxiv), and a database lookup when it planned one and the
    level has room), the screening of what they find (against the hypothesis itself), and then the draft of its
-   own section. It is given only its own hypothesis and the sources its own searches found. Every step in the
+   own section. It is given only its own hypothesis and the sources its own searches found, plus the lab
+   protocols found, when the plan has protocol searches: those run beside the hypotheses and serve every one. Every step in the
    event log names who did it (`agent`: `planner`, `investigator-1`, `writer`, `checker`, `critic`). **No limit is raised for this.** Each hypothesis uses one
    web search and one literature query of the level, so with today's limits (3 and 3) at most 3 are tested. A
    proposal that does not fit is set aside and named under "What is missing". The numbered sources (12) are
