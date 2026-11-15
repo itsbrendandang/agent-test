@@ -67,6 +67,16 @@ describe("full event log", () => {
     expect(rows.every((r) => !r.note || r.job === undefined)).toBe(true)
     expect(eventRows([{ key: "a", type: "member.replied", member: "critic", round: 1, text: "x" }], "answer")[0].job).toBeUndefined()
   })
+  it("credits Exa for an old real review's search that recorded no provider, and nobody for a practice one", () => {
+    const search = { key: "s", type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0 }
+    const real = eventRows([{ key: "start", type: "run.started", mock: false }, search], "board").find((r) => r.kind === "search")!
+    expect(real.provider).toBe("exa")
+    expect(real.text).toBe("Searched the web for “q”: kept 1, dropped 0.")
+    const practice = eventRows([{ key: "start", type: "run.started", mock: true }, search], "board").find((r) => r.kind === "search")!
+    expect(practice.provider).toBeUndefined()
+    expect(practice.text).toBe("Searched sources for “q”: kept 1, dropped 0.")
+    expect(eventRows([{ key: "start", type: "run.started", mock: false }, { ...search, provider: "europepmc" }], "board").find((r) => r.kind === "search")!.provider).toBe("europepmc")
+  })
   it("combines agent, kind and word search filters including sources", () => {
     const rows = eventRows(events, "answer")
     expect(filterRows(rows, { agent: "specialist:toxicologist", kind: "write", query: "SAFETY note" })).toHaveLength(1)

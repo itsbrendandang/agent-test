@@ -73,6 +73,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
   const sources = new Map<number, LogSource[]>()
   const specialists = new Set<string>()
   const wrong = new Map<string, number>()
+  const real = run === "board" && ordered.some((e) => e.type === "run.started" && e.mock === false)
+  const searchedWith = (e: LabEvent) => str(e.provider) ?? (real ? "exa" : undefined)
   for (const e of ordered) {
     if (e.type === "run.roster" || e.type === "specialists") {
       for (const item of objects(e.members ?? e.items)) {
@@ -126,7 +128,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       }
       case "evidence.triaged": {
         kind = "search"
-        const provider = str(e.provider), place = provider === "fixture" ? "practice example sources" : provider && PROVIDERS[provider] ? PROVIDERS[provider].place : provider ?? "sources"
+        const provider = searchedWith(e), place = provider === "fixture" ? "practice example sources" : provider && PROVIDERS[provider] ? PROVIDERS[provider].place : provider ?? "sources"
         text = `Searched ${place}${query ? ` for “${query}”` : ""}: kept ${num(e.kept) ?? "not recorded"}, dropped ${num(e.dropped) ?? "not recorded"}.`
         break
       }
@@ -195,7 +197,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const job = run === "board" && !note ? (specialists.has(agentId) ? SPECIALIST_JOB : BOARD_JOB[agentId] ?? title?.toLowerCase()) : undefined
     const contradicted = type === "member.replied" ? wrong.get(`${agentId}|${num(e.round)}`) : undefined
     const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(e.final === true ? { final: true } : {}) } : undefined
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && str(e.provider) ? { provider: str(e.provider) } : {}) }]
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && searchedWith(e) ? { provider: searchedWith(e) } : {}) }]
   })
 }
 
