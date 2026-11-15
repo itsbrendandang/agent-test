@@ -15,7 +15,7 @@ import { ResearchRefused, startResearch } from "@/research/api"
 
 const MAX = 2000
 
-export function QuickAsk({ onOpen, onStarted }: { onOpen: (view: View) => void; /** An answer was started (before Research opens). */ onStarted?: (id: string) => void }) {
+export function QuickAsk({ onOpen }: { onOpen: (view: View) => void }) {
   const [text, setText] = useState("")
   const [busy, setBusy] = useState(false)
   const [refused, setRefused] = useState<string>()
@@ -36,7 +36,6 @@ export function QuickAsk({ onOpen, onStarted }: { onOpen: (view: View) => void; 
     try {
       const started = await startResearch(question, level)
       startConversation(question, started) // Research shows this answer as its conversation, and a follow-up there continues its thread
-      onStarted?.(started.id)
       setText("")
       onOpen("Home")
     } catch (error) {
