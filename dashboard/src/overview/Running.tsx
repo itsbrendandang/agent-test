@@ -26,21 +26,18 @@ export interface RunningProps {
   works: Work[]
   models: Record<string, LabModel | undefined>
   now: number
-  /** The engine's limit per run: a team review's cap (an answer records its own). */
-  perRun?: number
   watched?: string
   onWatch: (key: string) => void
   onOpenRun: (work: Work) => void
 }
 
-export function Running({ works, models, now, perRun, watched, onWatch, onOpenRun }: RunningProps) {
+export function Running({ works, models, now, watched, onWatch, onOpenRun }: RunningProps) {
   if (!works.length) return <p className="ov-empty">Nothing is running now. A question you ask above, a team review or a benchmark run shows here while it works.</p>
   return (
     <ul className="ov-running" aria-label="Research in progress">
       {works.map((work) => {
         const key = `${work.kind}/${work.id}`
         const seen = seenOf(work, models[key])
-        const cap = work.maxUsd ?? (work.kind === "board" ? perRun : undefined)
         const elapsed = work.status === "waiting" ? undefined : elapsedOf(work, now)
         return (
           <li key={key} className="ov-run" data-watched={watched === key || undefined}>
@@ -60,7 +57,7 @@ export function Running({ works, models, now, perRun, watched, onWatch, onOpenRu
             </div>
             <dl className="ov-run-nums">
               <div><dt>Time</dt><dd>{elapsed === undefined ? "Waiting" : plainDuration(elapsed)}</dd></div>
-              <div><dt>Spent so far</dt><dd>{work.kind === "swarm" ? "Not recorded" : work.provenance === "practice" ? "$0 (practice)" : usdText(work.usd)}{cap !== undefined && work.provenance !== "practice" ? <small> of {usdText(cap)}</small> : null}</dd></div>
+              <div><dt>Spent so far</dt><dd>{work.kind === "swarm" ? "Not recorded" : work.provenance === "practice" ? "$0 (practice)" : usdText(work.usd)}{work.maxUsd !== undefined && work.provenance !== "practice" ? <small> of {usdText(work.maxUsd)}</small> : null}</dd></div>
             </dl>
             <div className="ov-run-actions">
               <Button size="sm" variant="outline" onClick={() => onOpenRun(work)}>{work.kind === "answer" ? "Open in Research" : work.kind === "board" ? "Open review" : "Open in Compare"}</Button>

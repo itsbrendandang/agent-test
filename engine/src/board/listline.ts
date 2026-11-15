@@ -1,6 +1,7 @@
 // What GET /api/runs adds to each team review's line for the Overview: the dollars the run has recorded, who takes
 // part, and its checked claims counted by the verdict code gave them. Only what run.json holds; nothing is estimated.
-import type { RunState } from "./board.ts"
+import type { BoardConfig } from "../config.ts"
+import { applyOverrides, OverridesUnreadable, type RunState } from "./board.ts"
 
 export interface BoardExtras {
   /** The run's own running total (models and checkers). Absent in runs recorded before the field. */
@@ -20,5 +21,16 @@ export function boardExtras(state: Pick<RunState, "usd" | "mock" | "members" | "
     ...(typeof state.mock === "boolean" ? { mock: state.mock } : {}),
     members: state.members && typeof state.members === "object" ? Object.keys(state.members).slice(0, 30) : [],
     checks,
+  }
+}
+
+/** The run's own dollar cap: the config's, lowered by the run's overrides.json. Absent when that file cannot be read. */
+export function boardCap(config: BoardConfig, runId: string): { maxUsd?: number } {
+  try {
+    const maxUsd = applyOverrides(config, runId).meeting.max_usd
+    return typeof maxUsd === "number" && Number.isFinite(maxUsd) ? { maxUsd } : {}
+  } catch (error) {
+    if (error instanceof OverridesUnreadable) return {}
+    throw error
   }
 }

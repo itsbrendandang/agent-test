@@ -47,7 +47,7 @@ describe("the home page: research in progress", () => {
         { id: "a-run", thread: "t-1", question: "Is hERG a risk for KRAS G12C inhibitors?", status: "running", mode: "real", startedAt: NOW - 3 * MIN, workStartedAt: NOW - 2 * MIN, usd: 0.42, maxUsd: 2, step: { label: "Writing the draft from 3 sources", agent: "writer" }, agents: ["planner", "searcher", "writer"] },
         { id: "a-done", question: "Done one", status: "done", mode: "real", startedAt: NOW - HOUR, finishedAt: NOW - HOUR + 90_000, seconds: 90, usd: 0.3 },
       ] },
-      board: [{ id: "b-live", brief: "kras.md", status: "running", startedAt: NOW - 10 * MIN, usd: 1.5, mock: false, members: ["lead-scientist", "scout"] }],
+      board: [{ id: "b-live", brief: "kras.md", status: "running", startedAt: NOW - 10 * MIN, usd: 1.5, maxUsd: 1, mock: false, members: ["lead-scientist", "scout"] }],
       swarm: [{ id: "s1", solver: "glhf", task: "demo", phase: "running", detail: "critic: reviewing the analysis", model: "mock", modelClass: "scripted", startedAt: NOW - 5 * MIN }],
     })
     const list = await screen.findByRole("list", { name: "Research in progress" })
@@ -64,7 +64,7 @@ describe("the home page: research in progress", () => {
     expect(answer.textContent).toContain("$0.42 of $2.00")
     expect(rows[1].textContent).toContain("critic: reviewing the analysis")
     expect(rows[1].textContent).toContain("Not recorded") // a benchmark run records no dollars: none are shown
-    expect(rows[0].textContent).toContain("$1.50 of $5.00") // a team review's cap is the engine's limit per run
+    expect(rows[0].textContent).toContain("$1.50 of $1.00") // the review's own cap from its line, not the engine's $5 limit per run
     // A team review shows the question it asked (its first event), not its brief's file name.
     await waitFor(() => expect(rows[0].querySelector(".ov-run-title")?.textContent).toBe("Is KRAS G12C druggable in the lung?"))
     // Each running run follows its own events.

@@ -134,7 +134,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
           <h2 id="ov-running-title">In progress</h2>
           <small role="status">{!works ? "Reading the runs…" : going.length ? `${going.length} running now` : "Nothing running"}</small>
         </header>
-        {works ? <Running works={going} models={models} perRun={paid?.perRun} now={now} watched={watched} onWatch={setPicked} onOpenRun={openRun} /> : <Skeleton className="ov-skeleton" />}
+        {works ? <Running works={going} models={models} now={now} watched={watched} onWatch={setPicked} onOpenRun={openRun} /> : <Skeleton className="ov-skeleton" />}
       </section>
 
       <section className="ov-section" aria-labelledby="ov-metrics-title">

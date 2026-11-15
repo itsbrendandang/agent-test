@@ -12,7 +12,7 @@ export interface Checks { verified: number; contradicted: number; unsupported: n
 export interface Work extends RunRef {
   /** Dollars the run has recorded so far (answers and team reviews). Undefined: the list does not say (benchmark runs). */
   usd?: number
-  /** The run's own dollar cap (answers). */
+  /** The run's own dollar cap (answers and team reviews). */
   maxUsd?: number
   /** When the work itself began (an answer that waited in a queue starts later than it was asked). */
   workStartedAt?: number
