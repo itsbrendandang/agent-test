@@ -5,7 +5,7 @@
 /* With the lab open beside it, the column is wider: the conversation keeps its reading width, the lab gets the rest. */
 .search-main:has(> .research-live[data-lab="open"]) { max-width: 1320px; }
 
-.research-live { container-type: inline-size; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.research-live { container: research-live / inline-size; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .research-live-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
 .research-live:not([data-lab]) .research-live-grid { grid-template-rows: minmax(0, 1fr); }
 .research-live-chat { display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; width: 100%; max-width: 800px; margin: 0 auto; }
@@ -29,7 +29,7 @@
 @media (min-width: 1001px) { .research-live[data-lab="open"] .research-lab-body { max-height: min(46vh, 460px); } }
 
 /* Room for both: the conversation on the left at its reading width, the lab on the right, each scrolling on its own. */
-@container (min-width: 1040px) {
+@container research-live (min-width: 1040px) {
   .research-live[data-lab="open"] .research-live-grid { grid-template-columns: minmax(0, 1fr) clamp(340px, 38%, 500px); grid-template-rows: minmax(0, 1fr); gap: 20px; }
   .research-live[data-lab="open"] .research-live-chat { grid-column: 1; grid-row: 1; }
   .research-live[data-lab="open"] .research-lab { grid-column: 2; grid-row: 1; align-self: start; max-height: 100%; max-width: none; margin: 0; }
@@ -39,7 +39,7 @@
 
 /* The lab above the conversation: a narrow scene (data-tags, set by LabScene's compact map) has no room for the names
    on the plates, so each plate keeps only its dot. Beside the conversation the names always show. */
-@container (width < 1040px) {
+@container research-live (width < 1040px) {
   .research-lab-body .lab-scene[data-tags="hidden"] .lab-plate { padding: 1px 5px; gap: 0; }
   .research-lab-body .lab-scene[data-tags="hidden"] .lab-plate-name { display: none; }
 }
