@@ -278,6 +278,8 @@ export interface ResearchRecord {
   models: ModelNames
   /** The one sentence that says what will be done. */
   opening?: string
+  /** True when a plain factual question took the short path: one search, a short answer, one round of statement checks (pipeline.ts `shortPath`). */
+  short?: boolean
   /** The hypotheses this answer tests (Standard level; empty when none were needed), each with its mark once checked. */
   hypotheses?: Hypothesis[]
   /** Why no hypotheses were set, or which were set aside because the level's limits do not fit them. */
@@ -318,6 +320,8 @@ export type ResearchEvent =
   | { type: "research.resumed"; afterSeq: number }
   | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
   | { type: "opening"; text: string }
+  /** A plain factual question takes the short path; `skipped` names what it leaves out. */
+  | { type: "short.path"; note: string; skipped: string[] }
   | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin" | "agent">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
   | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note" | "agent" | "testedBy">)
   | { type: "specialists"; items: AnswerSpecialist[] }

@@ -58,6 +58,32 @@ screen and the Overview show the pictures in a strip under the answer text. Each
 shows its number and site. A picture that does not load is left out. An answer with no picture, also one saved before
 this field, shows no strip. Europe PMC and the databases give no pictures.
 
+## The short path for a plain factual question
+
+A plain factual question, such as "What is a cell?" or "What is the powerhouse of the cell?", does not need the
+whole flow. The planner says so in the prepare step (`"simple": true` in its reply; the same call, so it costs
+nothing more). Code then takes the **short path** only when all of these hold (`shortPath` in
+`engine/src/research/pipeline.ts`):
+
+- the planner's reply was read (not the fallback plan) and says `simple`;
+- the question is not about health (a medical answer always gets the full review);
+- the question is at most 200 characters and asks one thing (at most one `?`).
+
+On the short path, at both levels:
+
+| Step | Short path |
+|---|---|
+| Hypotheses, method specialists | Not run. |
+| Searches | One web search. PubMed is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
+| Number | At most 3 sources. |
+| Write | At most 120 words and 1,000 output tokens, with the least thinking the model allows. |
+| Statement checker | Runs once on every cited sentence, as in the full flow. |
+| Critic, revision, second look | Not run. A sentence that failed its check keeps its mark and is listed under "What is missing". |
+
+The run says it took the short path: a `short.path` event (with `skipped`: what was left out), the prepare step's
+summary, the opening sentence, `short: true` and a sentence in `note` in the record. Any other question takes the
+flow above, unchanged.
+
 ## What code decides, never a model
 
 - Which sources exist and their numbers.

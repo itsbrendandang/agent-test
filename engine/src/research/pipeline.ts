@@ -11,6 +11,9 @@
 //   revise    ONE revision by the writer; every cited sentence it changed or added is checked again
 //   save      the record and the result files (answer.md, sources.json, sources.csv) are written and registered
 //
+// A plain factual question ("What is a cell?") takes the SHORT PATH (`shortPath`): one search, a short draft with the
+// least thinking, one round of statement checks; no hypotheses, specialists, critic or revision.
+//
 // Every stage is a STEP in the event log: step.started, then step.finished with a status and the measured time. A step
 // that failed or could not run is still written, with a plain error and what it means for the reader.
 //
@@ -64,6 +67,8 @@ export interface Plan {
   opening: string
   /** True when the planner's reply could not be used and the queries were made from the question's own words. */
   fallback: boolean
+  /** The planner judged it a plain factual question with one settled answer ("What is a cell?"). Code decides whether the short path is taken (`shortPath`). */
+  simple: boolean
 }
 
 export const DEFAULT_OBJECTIVE = "Reports of original research and official sources that answer the question rank first; leave out marketing pages and news without data. Pull the reported findings with their numbers and units."
@@ -82,7 +87,8 @@ export interface Brain {
   specialistModel: string
   worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
-  write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<Reply>
+  /** `short`: the short path for a plain factual question (`SHORT`): fewer output tokens and the least thinking the model has. */
+  write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void, short?: boolean): Promise<Reply>
   critique(system: string, user: string, signal: AbortSignal): Promise<Reply>
   revise(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** The critic again, after the revision: does the revised text resolve each of its notes. */
@@ -256,7 +262,7 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
       }
     },
     plan: (system, user, signal) => ask(planner, "the query planner", system, user, PLAN_TOKENS, "quiet", signal),
-    write: (system, user, signal, onDelta) => ask(writer, "the writer", system, user, level.maxOutputTokens, "low", signal, onDelta),
+    write: (system, user, signal, onDelta, short) => ask(writer, "the writer", system, user, short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens, short ? "quiet" : "low", signal, onDelta),
     critique: (system, user, signal) => ask(critic.model, "the critic", system, user, CRITIC_TOKENS, "low", signal),
     revise: (system, user, signal) => ask(writer, "the writer (revision)", system, user, level.maxOutputTokens, "low", signal),
     rejudge: (system, user, signal) => ask(critic.model, "the critic (second look)", system, user, REJUDGE_TOKENS, "low", signal),
@@ -274,7 +280,25 @@ const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typ
 /** The plan when the planner's reply cannot be used: the question itself for the web search, its main words for the literature. */
 export function fallbackPlan(question: string): Plan {
   const keywords = keywordsOf(question)
-  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], databases: [], opening: openingFallback(false), fallback: true }
+  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], databases: [], opening: openingFallback(false), fallback: true, simple: false }
+}
+
+/**
+ * The short path for a plain factual question ("What is a cell?"): one search, a short answer written with the least
+ * thinking, one round of statement checks. No hypotheses, no method specialists, no further searches, no critic, no
+ * revision. Harder questions are not touched.
+ */
+export const SHORT = { words: 120, outputTokens: 1_000, sourcesKept: 3, questionChars: 200 } as const
+export const SHORT_OPENING = "This is a plain factual question, so I'll keep it short: one search, a short answer from what it finds, and a check of each statement against its source."
+
+/**
+ * Whether an answer takes the short path. The planner's word that the question is simple is needed, and code adds its
+ * own limits: the plan was read (not the fallback), the question is short and asks one thing, and it is not about
+ * health (a medical answer always gets the full review). Not in a demo answer.
+ */
+export function shortPath(plan: Plan, question: string, medical: boolean): boolean {
+  const text = question.trim()
+  return plan.simple && !plan.fallback && !medical && text.length <= SHORT.questionChars && (text.match(/\?/g) ?? []).length <= 1
 }
 
 export const MAX_OPENING_CHARS = 240
@@ -325,6 +349,7 @@ export function readPlan(text: string, question: string, level: Level): Plan {
     keyQuestion: line(body.key_question, 600) || base.keyQuestion,
     medical: body.medical === true || base.medical,
     web: web.length ? web : base.web, literature: literature.length ? literature : base.literature, databases, fallback: false,
+    simple: body.simple === true,
   }
 }
 
@@ -725,7 +750,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
 
   // What an earlier invocation worked out is worked out again from the stored steps, so the record starts clean.
   Object.assign(record, { status: "running", steps: [], searches: [], sources: [], statements: [], recommendations: [], review: { ...record.review, revised: false, notes: [] } })
-  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds"] as const) delete record[field]
+  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short"] as const) delete record[field]
   record.workStartedAt ??= now()
 
   // Time is counted while the answer is worked on, not while the engine was down.
@@ -860,6 +885,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   let cut: { text: string; reason: string }[] = []
   let proposed: string[] = []
   let medical = looksMedical(record.question)
+  /** The short path for a plain factual question (`shortPath`). Decided once the plan is read. */
+  let short = false
+  const sourcesKept = () => (short ? Math.min(level.sourcesKept, SHORT.sourcesKept) : level.sourcesKept)
+  const levelName = () => (short ? `${record.effort} (short path)` : record.effort)
   /** Cited sentences of the shown text that no check reached are recorded as not checked: a missing check is said, never left blank. */
   const markUnchecked = (why: StopReason) => {
     if (record.statements.length || !sources.length || !record.answer) return
@@ -897,20 +926,28 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         // The planner failing is not a reason to fail the answer: the question's own words are searched.
       }
       if (demo) plan = { ...plan, opening: "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked." }
+      medical = medical || plan.medical
+      short = !demo && shortPath(plan, record.question, medical)
+      if (short) plan = { ...plan, opening: SHORT_OPENING }
       if (plan.fallback && !demo) {
         notes.push("The query planner's reply could not be used, so the question's own words were searched.")
         end("prepare", "failed", { error: "The query planner's reply could not be used.", consequence: "The question's own words are searched instead." })
-      } else end("prepare", "completed", { summary: demo ? "Example sources only." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
-      medical = medical || plan.medical
+      } else end("prepare", "completed", { summary: demo ? "Example sources only." : short ? "A plain factual question: the short path is taken (one search, a short answer, one round of checks)." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
       record.opening = plan.opening
       emit("opening", { type: "opening", text: plan.opening })
+      if (short) {
+        const skipped = [...(level.hypotheses > 0 ? ["hypotheses"] : []), ...(level.specialists > 0 ? ["method specialists"] : []), "further searches", "the critic's review", "the revision"]
+        record.short = true
+        notes.push(`A plain factual question, so the short path was taken: one search, a short answer and one round of statement checks; no ${skipped.join(", ")}.`)
+        emit("short", { type: "short.path", note: "The planner judged this a plain factual question with one settled answer, so the answer takes the short path.", skipped })
+      }
       save()
     }
 
     // ── method specialists: chosen by code from the question, before anything is searched ─────────
     // The matcher compares the question's words with the method notes (specialists.ts). No model chooses. The chosen
     // ones are named now, so a person sees who joined; each works once the searches have given it sources.
-    const invited = (level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
+    const invited = (!short && level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
     const notesOf = new Map(invited.map((m) => [m.specialist.name, answerNotes(m.specialist, m.methods)]))
     const team: AnswerSpecialist[] = invited.map((m) => ({
       room: specialistRoom(m.specialist), name: m.specialist.name, title: m.specialist.title, agent: specialistAgent(m.specialist.name),
@@ -921,7 +958,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     // ── hypotheses (Standard level): what to test, written before anything is searched ─────────────
     // Each hypothesis needs one web search and one literature query of the level, so the level's own limits say how
     // many can be tested. No limit is raised for them; what does not fit is set aside and said.
-    if (level.hypotheses > 0) {
+    if (level.hypotheses > 0 && short) record.hypothesesNote = "A plain factual question: no hypotheses were needed."
+    else if (level.hypotheses > 0) {
       const fit = Math.min(level.hypotheses, level.exaSearches, level.queries, Math.floor(level.sourcesKept / 2))
       const system = hypothesesSystem({ max: MAX_HYPOTHESES, databases: databasesOn }), user = hypothesesUser(record.question, thread)
       begin({ step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test", agent: "planner", input: { model: brain.names.planner, atMost: fit } })
@@ -1069,7 +1107,12 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
     if (tested.length) await together(tested.map((h, at) => chainOf(h, at))) // every hypothesis at the same time, each opened by its web search
     else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
-    else {
+    else if (short) {
+      // One web search. PubMed is searched only when the web gave no source, so a short answer still has one to cite.
+      await web(plan.web[0], new Set())
+      const q = plan.literature[0]
+      if (!pool.length && q) await search("europepmc", q, { maxResults: 8, text: "abstracts" }, keysOf(), () => deps.literature(q))
+    } else {
       // The web search opens every answer. What it cannot do is said, and the other searches still run, all at once.
       const [first, ...moreWeb] = plan.web.slice(0, level.exaSearches)
       await web(first, new Set())
@@ -1101,17 +1144,17 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
 
     // ── sources and the selection ────────────────────────────────────────────────────────────────
-    sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
+    sources = numberSources(pool, sourcesKept(), tested.map((h) => h.id))
     const numbered = new Set(sources.map((s) => urlKey(s.url)))
     const seen = new Set<string>()
     for (const c of [...pool].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
       const key = urlKey(c.item.url)
       if (numbered.has(key) || seen.has(key)) continue
       seen.add(key)
-      notSelected.push({ title: c.item.title, url: c.item.url, provider: c.provider, order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${level.sourcesKept} sources are numbered at the ${record.effort} level and more relevant ones came first.` })
+      notSelected.push({ title: c.item.title, url: c.item.url, provider: c.provider, order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${sourcesKept()} sources are numbered at the ${levelName()} level and more relevant ones came first.` })
     }
     record.sources = sources
-    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), level.sourcesKept, record.effort, lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)
+    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), sourcesKept(), levelName(), lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)
     emit("sources", { type: "sources", items: record.sources.map(({ text: _t, studyType: _s, relevance: _r, ...s }) => s) })
     emit("selection", { type: "selection", ...record.selection })
     save()
@@ -1198,8 +1241,9 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (failures.length) throw failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
         specialistText = drafted.map((r) => (r as PromiseFulfilledResult<string>).value).filter(Boolean).join("\n\n")
       }
-      const system = testing.length ? leadSystem(level.words) : writerSystem(level.words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
-      begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
+      const words = short ? Math.min(level.words, SHORT.words) : level.words, maxOutputTokens = short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens
+      const system = testing.length ? leadSystem(words) : writerSystem(words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
+      begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens, words, ...(short ? { shortPath: true } : {}) } })
       const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
@@ -1213,7 +1257,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (upTo > sent) { emit(`answer.delta:${piece++}`, { type: "answer.delta", text: all.slice(sent, upTo) }); sent = upTo; last = performance.now() }
       }
       let reply: { text: string; truncated: boolean }
-      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 500) flush(false) })) } catch (error) {
+      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 500) flush(false) }, short)) } catch (error) {
         const stop = error instanceof StepFailed ? undefined : asStop(error)
         if (stop) endFor("write", stop.reason, "No answer was written. The sources that were found are listed.")
         else if (!(error instanceof Interrupted)) end("write", "failed", { error: `The writer did not answer (${message(error)}).`, consequence: "No answer was written." })
@@ -1318,7 +1362,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           throw error
         }
       }
-      const reviewed = await Promise.allSettled([checkAll("check", "draft", cited.map((sentence, index) => ({ index, sentence }))), critique()])
+      // The short path checks every cited sentence once; the critic, the revision and the second look are left out.
+      const reviewed = await Promise.allSettled([checkAll("check", "draft", cited.map((sentence, index) => ({ index, sentence }))), short ? Promise.resolve([] as ReviewNote[]) : critique()])
       const broken = reviewed.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason as unknown)
       if (broken.some((b) => b instanceof Interrupted)) throw new Interrupted()
       const draftStatements = reviewed[0].status === "fulfilled" ? reviewed[0].value : []
@@ -1335,7 +1380,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       // notes. A sentence whose check did not run is not rewritten for that; it stays, shown as not checked.
       const failed = draftStatements.filter((s) => s.verdict === "contradicted" || s.verdict === "unsupported")
       const notPassed = draftStatements.filter((s) => s.verdict !== "verified")
-      if (failed.length || reviewNotes.length) {
+      if (!short && (failed.length || reviewNotes.length)) {
         const rSystem = reviserSystem(level.words, testing.length > 0)
         const rUser = reviserUser({ question: record.question, thread, searches: record.searches, sources, draft, statements: draftStatements, notes: reviewNotes, hypotheses: testing })
         const unrevised = "The first draft is shown, with the marks of its review."
@@ -1470,7 +1515,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       for (const step of [...running.keys()]) end(step, "cancelled")
       closeLeftOpen("cancelled")
       if (!record.sources.length && pool.length) { // cancelled during the searches: what was found by then is kept
-        sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
+        sources = numberSources(pool, sourcesKept(), tested.map((h) => h.id))
         record.sources = sources
         emit("sources", { type: "sources", items: sources.map(({ text: _t, studyType: _s, relevance: _r, ...rest }) => rest) })
       }
