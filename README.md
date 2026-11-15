@@ -132,6 +132,12 @@ company than the writer, the specialist uses the writer's model instead. This ke
 statement checker independent. A question with no match gets none. See
 [docs/research-answer.md](docs/research-answer.md#method-specialists).
 
+A **plain factual question**, such as "What is the powerhouse of the cell?", takes a short path
+at both levels. The planner marks it simple; health questions never take it. The short path
+uses one search, at most 3 sources and a short answer written with little thinking. Each cited
+statement is still checked once. It has no hypotheses, specialists, critic or revision. See
+[docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
+
 **Try asking** shows biology questions under the question box on Overview and Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
