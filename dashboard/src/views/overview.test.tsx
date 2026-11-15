@@ -91,6 +91,15 @@ describe("the home page: research in progress", () => {
     expect(within(answer).getByRole("link", { name: "Agent Log" }).getAttribute("href")).toBe("#Lab/answer/a-run")
   })
 
+  it("a row past the followed few does not claim its run is only starting", async () => {
+    show({ board: Array.from({ length: 5 }, (_, i) => ({ id: `b-${i}`, brief: "kras.md", status: "running", startedAt: NOW - (10 - i) * MIN, mock: true, members: [] })) })
+    const list = await screen.findByRole("list", { name: "Research in progress" })
+    const rows = within(list).getAllByRole("listitem").filter((li) => li.classList.contains("ov-run"))
+    expect(rows).toHaveLength(5)
+    expect(within(rows[4]).getByLabelText("Now").textContent).toBe("Step not shown here. Open the Agent Log to follow it.")
+    expect(streams.some((s) => s.url.endsWith("/api/runs/b-4/events"))).toBe(false)
+  })
+
   it("says plainly when nothing is running", async () => {
     show({ answers: { items: [{ id: "a1", question: "Old", status: "done", mode: "demo", startedAt: NOW - HOUR }] } })
     expect(await within(section("In progress")).findByText(/Nothing is running now/)).toBeTruthy()
@@ -124,16 +133,20 @@ describe("the home page: research in progress", () => {
 })
 
 describe("the home page: metrics from recorded data only", () => {
-  it("counts done, running and failed runs (examples never), and research apart from practice", async () => {
+  it("counts done, running and failed runs of the chosen scope only (examples never)", async () => {
     show({
       board: [{ id: "b-live", brief: "kras.md", status: "done", startedAt: NOW - 2 * HOUR }, { id: "b-practice", brief: "kras.md", status: "done", startedAt: NOW - 3 * HOUR }, { id: "ex", brief: "x.md", status: "done", startedAt: NOW, example: true }],
       answers: { items: [{ id: "a1", question: "Does it work?", status: "done", mode: "real", startedAt: NOW - HOUR }, { id: "a2", question: "A practice one", status: "running", mode: "demo", startedAt: NOW }] },
       swarm: [{ id: "s1", solver: "glhf", task: "demo", phase: "done", model: "mock", modelClass: "scripted", startedAt: NOW - 4 * HOUR }, { id: "s2", solver: "single", task: "demo", phase: "failed", model: "mock", modelClass: "scripted", startedAt: NOW - 5 * HOUR }],
     })
     // The older team reviews say how they were made in their first event: wait for both to be read.
-    await waitFor(() => expect(tile("Runs").textContent).toContain("2 research, 4 practice"))
-    expect(tile("Runs").textContent).toContain("6 runs")
-    expect(tile("Runs").textContent).toContain("4 done1 running1 failed")
+    // Research: b-live (real models, said in its first event) and a1.
+    await waitFor(() => expect(tile("Runs").textContent).toContain("2 runs"))
+    expect(tile("Runs").textContent).toContain("2 done0 running0 failed")
+    // Practice: b-practice, the Demo answer and the two scripted benchmark runs.
+    await userEvent.click(screen.getByRole("button", { name: "Practice runs" }))
+    expect(tile("Runs").textContent).toContain("4 runs")
+    expect(tile("Runs").textContent).toContain("2 done1 running1 failed")
   })
 
   it("shows today's spend against the engine's daily limit, and the recorded spend of the last 7 days", async () => {
@@ -149,8 +162,8 @@ describe("the home page: metrics from recorded data only", () => {
     await waitFor(() => expect(tile("Spent today").textContent).toContain("$3.46"))
     expect(tile("Spent today").textContent).toContain("of a $20.00 daily limit")
     expect(tile("Last 7 days").textContent).toContain("$3.00") // 0.5 + 1.5 + 1: the answer from a month ago is not in it
-    expect(tile("Limit per run").textContent).toContain("$5.00")
-    expect(tile("Limit per run").textContent).toContain("Web search (Exa): $0.04 of a $40.00 ceiling, all time")
+    expect(tile("Limit per team review").textContent).toContain("$5.00")
+    expect(tile("Limit per team review").textContent).toContain("Web search (Exa): $0.04 of a $40.00 ceiling, all time")
     // Averages over the three finished research answers, from their own records.
     expect(tile("Average time per answer").textContent).toContain("1 minute") // (60 + 120 + 30) / 3 = 70 s
     expect(tile("Average cost per answer").textContent).toContain("$3.67")
@@ -177,7 +190,7 @@ describe("the home page: metrics from recorded data only", () => {
     show({ paid: { paid: false, caps: {} } })
     await waitFor(() => expect(tile("Runs").textContent).toContain("0 runs"))
     expect(tile("Spent today").textContent).toContain("Not recorded")
-    expect(tile("Limit per run").textContent).toContain("Not recorded")
+    expect(tile("Limit per team review").textContent).toContain("Not recorded")
     expect(tile("Last 7 days").textContent).toContain("Nothing recorded")
     expect(tile("Average time per answer").textContent).toContain("No data")
     expect(tile("Average cost per answer").textContent).toContain("No data")
@@ -236,6 +249,9 @@ describe("the home page: the question box", () => {
     const { onOpen, sent } = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
     const box = await screen.findByLabelText("Ask a research question")
     expect(box.getAttribute("rows")).toBe("1") // one line
+    // The welcome heading stays above the box and names its section.
+    expect(screen.getByRole("heading", { level: 2, name: "Let's research together!" })).toBeTruthy()
+    expect(screen.getByRole("region", { name: "Let's research together!" }).contains(box)).toBe(true)
     await userEvent.type(box, "Is hERG a risk for KRAS G12C inhibitors?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home"))

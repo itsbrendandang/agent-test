@@ -1,5 +1,4 @@
-// The home page's numbers, from what the engine recorded and nothing else. Counts take every run (example runs are
-// never counted); spend today and the limits are the engine's own figures (GET /api/paid); the rest is counted from
+// The home page's numbers, from what the engine recorded and nothing else. Example runs are never counted; spend today and the limits are the engine's own figures (GET /api/paid); the rest is counted from
 // the run lists for research runs or for practice runs, never the two mixed. A number with nothing behind it says so.
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -20,7 +19,7 @@ function Tile({ label, value, children, empty }: { label: string; value: string;
 }
 
 export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: Paid | null | undefined; scope: Scope; onScope: (scope: Scope) => void }) {
-  const counts = countsOf(works)
+  const counts = countsOf(works, scope)
   const week = recentSpend(works, 7)
   const answer = perAnswer(works, scope)
   const sources = sourcesOf(works, scope)
@@ -28,10 +27,17 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
   const which = scope === "research" ? "research" : "practice"
   return (
     <div className="ov-metrics">
+      <div className="ov-scope">
+        <h3 id="ov-scope-title">Which runs are counted</h3>
+        <ButtonGroup aria-labelledby="ov-scope-title">
+          <Button size="sm" variant={scope === "research" ? "secondary" : "outline"} aria-pressed={scope === "research"} onClick={() => onScope("research")}>Research runs</Button>
+          <Button size="sm" variant={scope === "practice" ? "secondary" : "outline"} aria-pressed={scope === "practice"} onClick={() => onScope("practice")}>Practice runs</Button>
+        </ButtonGroup>
+      </div>
       <div className="ov-tiles">
         <Tile label="Runs" value={many(counts.done + counts.running + counts.failed + counts.stopped, "run")}>
           <small className="ov-split"><span><b>{counts.done}</b> done</span><span><b>{counts.running}</b> running</span><span data-tone={counts.failed ? "bad" : undefined}><b>{counts.failed}</b> failed</span>{counts.stopped > 0 && <span><b>{counts.stopped}</b> stopped</span>}</small>
-          <small>{counts.research} research, {counts.practice} practice</small>
+          <small>{scope === "research" ? "Research runs only: practice runs are counted apart." : "Practice runs only: scripted models, $0."}</small>
         </Tile>
         <Tile label="Spent today" value={paid ? usdText(paid.spentToday) : "Not known"} empty={!paid || paid.spentToday === undefined}>
           {paid ? <>
@@ -42,8 +48,8 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
         <Tile label="Last 7 days" value={week ? usdText(week.usd) : "Nothing recorded"} empty={!week}>
           <small>{week ? `Recorded by ${many(week.runs, "answer or review", "answers and reviews")} started in the last 7 days.` : "No answer or team review in the last 7 days recorded a cost."} Benchmark runs do not record dollars.</small>
         </Tile>
-        <Tile label="Limit per run" value={paid ? usdText(paid.perRun) : "Not known"} empty={!paid || paid.perRun === undefined}>
-          <small>A run stops when it reaches it.</small>
+        <Tile label="Limit per team review" value={paid ? usdText(paid.perRun) : "Not known"} empty={!paid || paid.perRun === undefined}>
+          <small>A team review stops when it reaches it. Each answer stops at its own level's cap.</small>
           {paid && paid.exaCeiling !== undefined && <>
             <small>Web search (Exa): {usdText(paid.exaUsed)} of a {usdText(paid.exaCeiling)} ceiling, all time</small>
             <div className="ov-track" role="img" aria-label={`${Math.round(share(paid.exaUsed, paid.exaCeiling))}% of the web search ceiling`}><i data-made="research" style={{ width: `${share(paid.exaUsed, paid.exaCeiling)}%` }} /></div>
@@ -51,13 +57,6 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
         </Tile>
       </div>
 
-      <div className="ov-scope">
-        <h3 id="ov-scope-title">Answers and checks</h3>
-        <ButtonGroup aria-labelledby="ov-scope-title">
-          <Button size="sm" variant={scope === "research" ? "secondary" : "outline"} aria-pressed={scope === "research"} onClick={() => onScope("research")}>Research runs</Button>
-          <Button size="sm" variant={scope === "practice" ? "secondary" : "outline"} aria-pressed={scope === "practice"} onClick={() => onScope("practice")}>Practice runs</Button>
-        </ButtonGroup>
-      </div>
       <div className="ov-tiles">
         <Tile label="Average time per answer" value={answer.seconds === undefined ? "No data" : plainDuration(answer.seconds * 1000)} empty={answer.seconds === undefined}>
           <small>{answer.timed ? `Over ${many(answer.timed, `finished ${which} answer`)}.` : `No finished ${which} answer recorded its time yet.`}</small>

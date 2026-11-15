@@ -53,8 +53,9 @@ describe("the figures", () => {
     ] },
     [],
   )
-  it("counts runs by how they ended, and research apart from practice", () => {
-    expect(countsOf(works)).toEqual({ done: 3, running: 0, failed: 1, stopped: 1, research: 4, practice: 1 })
+  it("counts runs of one scope by how they ended, never research and practice together", () => {
+    expect(countsOf(works, "research")).toEqual({ done: 2, running: 0, failed: 1, stopped: 1 }) // a1, a2; b1 failed; a4 cancelled
+    expect(countsOf(works, "practice")).toEqual({ done: 1, running: 0, failed: 0, stopped: 0 }) // the Demo answer a3
   })
   it("adds the dollars research runs started in the last 7 days recorded, never practice; none recorded is not $0", () => {
     expect(recentSpend(works, 7, NOW)).toEqual({ usd: 2.6, runs: 3 }) // b1, a1, a4: the practice a3 is not counted

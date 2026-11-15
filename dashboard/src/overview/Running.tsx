@@ -47,7 +47,7 @@ export function Running({ works, models, now, watched, onWatch, onOpenRun }: Run
                 <Provenance kind={work.provenance} compact />
               </div>
               <p className="ov-run-title">{work.title}</p>
-              <p className="ov-run-step" aria-label="Now">{seen.doing ?? "Starting. The first step has not been reported yet."}</p>
+              <p className="ov-run-step" aria-label="Now">{seen.doing ?? (models[key] ? "Starting. The first step has not been reported yet." : "Step not shown here. Open the Agent Log to follow it.")}</p>
               {seen.agents.length > 0 && (
                 <ul className="ov-run-agents" aria-label="Agents taking part">
                   {seen.agents.slice(0, 8).map((a) => <li key={a.name} title={a.label}><AgentAvatar name={a.name} size={24} /><span>{a.label}</span></li>)}

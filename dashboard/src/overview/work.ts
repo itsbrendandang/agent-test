@@ -95,17 +95,15 @@ export const elapsedOf = (w: Pick<Work, "startedAt" | "workStartedAt" | "finishe
 }
 
 // ---- The numbers ---------------------------------------------------------------------------------------------------
-export interface Counts { done: number; running: number; failed: number; stopped: number; research: number; practice: number }
-export function countsOf(works: readonly Work[]): Counts {
-  const c: Counts = { done: 0, running: 0, failed: 0, stopped: 0, research: 0, practice: 0 }
-  for (const w of counted(works)) {
+export interface Counts { done: number; running: number; failed: number; stopped: number }
+/** Runs of one scope by how they ended (or that they still run). */
+export function countsOf(works: readonly Work[], scope: Scope): Counts {
+  const c: Counts = { done: 0, running: 0, failed: 0, stopped: 0 }
+  for (const w of inScope(works, scope)) {
     if (w.live) c.running++
     else if (w.status === "failed") c.failed++
     else if (w.status === "cancelled" || w.status === "paused") c.stopped++
     else c.done++
-    const made = madeOf(w)
-    if (made === "research") c.research++
-    else if (made === "practice") c.practice++
   }
   return c
 }

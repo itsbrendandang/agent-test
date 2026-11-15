@@ -47,7 +47,8 @@ export function QuickAsk({ onOpen, onStarted }: { onOpen: (view: View) => void; 
   }
   const limit = answerLimitLine(catalog, level)
   return (
-    <section className="ov-ask" aria-label="New research">
+    <section className="ov-ask" aria-labelledby="ov-ask-title">
+      <h2 id="ov-ask-title" className="ov-ask-title">Let's research together!</h2>
       <AskBox id="ov-ask-box" rows={1} value={text} onChange={setText} onSubmit={(typed) => void ask(typed)} busy={busy} placeholder="Ask a new research question…"
         efforts={catalog?.efforts ?? []} effort={level} onEffort={setEffort} name="overview-effort" sendLabel="Start research" sendTitle="Start the answer and open it in Research">
         {refused ? <p className="newrun-error" role="alert">{refused}</p> : limit ? <p className="ov-note">{limit} It opens in Research.</p> : null}
