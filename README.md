@@ -105,7 +105,7 @@ lifetime limit** in the engine's search record. These are limits, not price quot
 
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. Totals and charts separate practice from research. |
+| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. It is also the conversation in Research, so a follow-up there continues it. Totals and charts separate practice from research. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | A team of nine agents against one agent alone, on the same task. |

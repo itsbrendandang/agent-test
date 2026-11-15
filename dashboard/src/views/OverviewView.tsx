@@ -1,6 +1,6 @@
 // The Overview: the question box, and under it the Agent Lab. The team is idle at its desks until a question is sent
 // from this page; then the lab follows that answer's own events (nothing moves without one) and the answer is
-// written below it. One line keeps the counts: a practice run is counted apart and is never added to research.
+// written below it. That answer is also Research's conversation, so Research shows it and continues it. One line keeps the counts: a practice run is counted apart and is never added to research.
 import { useEffect, useMemo, useState } from "react"
 import { EngineOffline } from "@/components/Shared"
 import { answerLab, boardLab, emptyLab, Lab, type LabEvent } from "@/lab"
@@ -11,6 +11,7 @@ import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { setAsk, setOpenAnswer } from "@/lib/open"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
+import { startConversation } from "@/home/chat"
 import { Credits } from "@/overview/Credits"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
@@ -73,6 +74,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
     try {
       const started = await startResearch(question, effort)
       setAsked({ id: started.id, question })
+      startConversation(question, started) // the same answer is Research's conversation: opening Research shows it, and a follow-up there continues its thread
       return true
     } catch (error) {
       // An engine without direct answers (or with them switched off): Research makes its team-review plan for the question, as before.

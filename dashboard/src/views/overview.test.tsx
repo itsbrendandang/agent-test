@@ -81,6 +81,11 @@ describe("the Agent Lab under the question box", () => {
     expect(sessionStorage.getItem("open.ask")).toBeNull()
     expect(screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })).toBeTruthy()
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
+    // The same answer is Research's conversation, with its thread, so Research shows it and continues it.
+    expect(JSON.parse(sessionStorage.getItem("home.chat") ?? "null")).toEqual([
+      { id: 1, role: "user", content: "Is hERG a risk for KRAS G12C inhibitors?" },
+      { id: 2, role: "assistant", content: "", research: { id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", thread: "t-1" } },
+    ])
     // The answer's own events move the lab: a specialist the engine added joins as a visitor, then works.
     const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
     const feed = (events: object[]) => act(() => { for (const stream of streams.filter((x) => /\/api\/research\//.test(x.url))) for (const e of events) stream.onmessage?.({ data: JSON.stringify(e) }) })
@@ -115,6 +120,7 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     expect((await screen.findByRole("alert")).textContent).toContain("Too many questions in a short time.")
+    expect(sessionStorage.getItem("home.chat")).toBeNull() // nothing started, so Research's conversation is left as it is
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("Does it work?") // kept, to send again
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
   })
