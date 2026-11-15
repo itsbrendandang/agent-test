@@ -131,9 +131,10 @@ statement checker independent. A question with no match gets none. See
 
 **Try asking** shows biology questions under the question box on Overview and Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
-hour). A word rule keeps the biology and health searches; no model is called. When none is about
-biology, or the feed cannot be read, curated biology questions are shown. On Overview a click
-fills the box; on Research it sends the question.
+hour). A word rule keeps the biology and health searches; no model is called. A question names
+only the biology word, never a person in the search. When none is about biology, or the feed
+cannot be read, curated biology questions are shown. On Overview a click fills the box; on
+Research it sends the question. If the engine cannot be reached, the older example questions stay.
 
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font

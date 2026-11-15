@@ -54,12 +54,28 @@ const BIO_WORDS = [
   "cdc", "nih", "clinical trial", "genes", "genetic", "genome", "dna", "rna", "mrna", "crispr", "protein", "stem cell", "stem cells", "microbiome",
   "enzyme", "mutation", "biology", "neuroscience", "brain", "species", "fossil", "dinosaur", "disease", "syndrome", "symptoms", "medicine",
 ]
+// Words that are biology in a search but often something else in a news headline ("a two-stroke lead", "fossil fuels",
+// "protein bars"). They count in the search's own words only, never from its news alone.
+const AMBIGUOUS = new Set(["stroke", "fossil", "protein", "brain", "outbreak", "heart attack", "species", "dinosaur"])
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-const BIO = new RegExp(`(?:^|[^\\p{L}\\p{N}])(${[...BIO_WORDS].sort((a, b) => b.length - a.length).map(escape).join("|")})(?=$|[^\\p{L}\\p{N}])`, "iu")
+const wordsRe = (words: string[], flags: string) =>
+  new RegExp(`(?:^|[^\\p{L}\\p{N}])(${[...words].sort((a, b) => b.length - a.length).map(escape).join("|")})(?=$|[^\\p{L}\\p{N}])`, flags)
+const BIO = wordsRe(BIO_WORDS, "iu")
+const BIO_NEWS = wordsRe(BIO_WORDS.filter((w) => !AMBIGUOUS.has(w)), "iu")
+const BIO_ALL = wordsRe(BIO_WORDS, "giu")
+/** Small words that may sit between biology words ("bird flu and covid") without making the search about something else. */
+const LINKS = new Set(["and", "or", "vs", "the", "of", "in", "a", "an", "for", "new", "symptoms", "cases", "&", "-", "+", "/"])
 
-/** The biology word in a text, lower case; undefined when there is none. */
+/** The biology word in a search, lower case; undefined when there is none. */
 export function bioWord(text: string): string | undefined {
   return BIO.exec(text)?.[1]?.toLowerCase()
+}
+/** The biology word in a news headline, lower case. Ambiguous words do not count here. */
+export const newsBioWord = (text: string): string | undefined => BIO_NEWS.exec(text)?.[1]?.toLowerCase()
+/** True when a search has nothing but biology words (and small linking words): it names no person or other thing. */
+export function onlyBio(text: string): boolean {
+  const rest = text.toLowerCase().replace(BIO_ALL, " ").split(/\s+/).filter((w) => w && !LINKS.has(w))
+  return rest.length === 0
 }
 
 /** XML text with its entities decoded and its spaces folded. */
@@ -89,9 +105,10 @@ export function parseTrends(xml: string): Trend[] {
 const tidy = (term: string) => { const t = term.replace(/[<>{}[\]\\`]/g, "").trim(); return t.length > MAX_TERM ? `${t.slice(0, MAX_TERM - 1).trim()}…` : t }
 
 /**
- * The questions the trending searches give. A search whose own words are about biology is asked about by name. A
- * search that is not, but whose news is, gives a question about the biology word in the news, never about the
- * search (often a person's name).
+ * The questions the trending searches give. A search that is nothing but biology words ("measles outbreak") is asked
+ * about as typed. A search that mixes biology with other words ("<a name> cancer") gives a question about its
+ * biology word only. A search with no biology word, whose news has one, gives a question about that word. So a
+ * person's name never appears in a question or its label.
  */
 export function trendQuestions(trends: Trend[]): TryQuestion[] {
   const out: TryQuestion[] = []
@@ -100,13 +117,13 @@ export function trendQuestions(trends: Trend[]): TryQuestion[] {
     const label = tidy(term)
     if (!label) continue
     let subject: string | undefined
-    if (bioWord(term)) subject = label
-    else subject = news.map(bioWord).find((w) => w !== undefined)
+    if (bioWord(term)) subject = onlyBio(term) ? label : bioWord(term)
+    else subject = news.map(newsBioWord).find((w) => w !== undefined)
     if (!subject) continue
     const question = `What does the latest science say about ${subject}?`
     if (seen.has(question.toLowerCase())) continue
     seen.add(question.toLowerCase())
-    out.push({ question, topic: `Trending: ${label}`, trending: true })
+    out.push({ question, topic: `Trending: ${subject}`, trending: true })
   }
   return out
 }
@@ -115,6 +132,22 @@ export function trendQuestions(trends: Trend[]): TryQuestion[] {
 export function tryAsking(trending: TryQuestion[], fetchedAt: number): TryAsking {
   const items = [...trending.slice(0, TRENDING_COUNT), ...CURATED].slice(0, TRENDING_COUNT)
   return { source: trending.length ? "google-trends" : "curated", fetchedAt, items }
+}
+
+/** A reply's text, reading no more than `max` bytes: a bigger feed is cut, not held in memory whole. */
+async function readCapped(r: Response, max: number): Promise<string> {
+  if (!r.body) return ""
+  const reader = r.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (size < max) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    size += value.byteLength
+  }
+  if (size >= max) await reader.cancel().catch(() => {})
+  return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, max))
 }
 
 export interface TrendingOptions {
@@ -139,7 +172,7 @@ export function createTrending(options: TrendingOptions = {}) {
     try {
       const r = await doFetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { accept: "application/rss+xml, application/xml, text/xml" } })
       if (!r.ok) throw new Error(`the trends feed answered ${r.status}`)
-      const xml = (await r.text()).slice(0, MAX_FEED_BYTES)
+      const xml = await readCapped(r, MAX_FEED_BYTES)
       const value = tryAsking(trendQuestions(parseTrends(xml)), at)
       cached = { value, until: at + TRENDING_TTL_MS }
       return value

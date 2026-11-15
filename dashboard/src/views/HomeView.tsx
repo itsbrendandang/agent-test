@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import "@/design/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { HeaderSlot } from "@/components/HeaderSlot"
 import { Provenance } from "@/components/Provenance"
@@ -347,10 +346,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
           {empty && (
             <div className="search-start">
-              <TryAsking onPick={(question) => void send(question)} disabled={sending !== undefined} />
-              <Suggestions className="search-examples" role="group" aria-label="Example questions">
-                {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
-              </Suggestions>
+              {/* One row: biology questions trending on Google (or curated) from the engine, else the fixed examples. */}
+              <TryAsking onPick={(question) => void send(question)} disabled={sending !== undefined} fallback={EXAMPLES} />
               {catalog === null && (
                 <p className="search-demo" role="alert">
                   {whyNone

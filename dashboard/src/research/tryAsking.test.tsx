@@ -43,6 +43,23 @@ describe("Try asking", () => {
     expect(container.textContent).toBe("")
   })
 
+  it("one row: the engine's questions replace the fixed examples, which show only when the engine sends none", async () => {
+    const examples = ["Fixed example one?", "Fixed example two?"]
+    routes({ "GET /api/trending": { status: 200, body: TRENDING } })
+    const first = render(<TryAsking onPick={() => {}} fallback={examples} />)
+    expect(screen.getByRole("group", { name: "Example questions" })).toBeTruthy() // before the reply arrives
+    await screen.findByRole("button", { name: TRENDING.items[0].question })
+    expect(screen.queryByRole("button", { name: examples[0] })).toBeNull()
+    expect(screen.getAllByRole("group")).toHaveLength(1)
+    first.unmount()
+
+    const sent = routes({})
+    render(<TryAsking onPick={() => {}} fallback={examples} />)
+    await waitFor(() => expect(sent.length).toBe(1))
+    expect(screen.getByRole("button", { name: examples[0] })).toBeTruthy()
+    expect(screen.getAllByRole("group")).toHaveLength(1)
+  })
+
   it("on the Overview a trending question fills the box (nothing is sent); without the engine the fixed starters stay", async () => {
     routes({ "GET /api/trending": { status: 200, body: TRENDING }, "GET /api/chat/catalog": { status: 503, body: {} } })
     const first = render(<Hero onOpen={() => {}} />)
