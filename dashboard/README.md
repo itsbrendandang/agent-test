@@ -36,6 +36,11 @@ npm run lint     # oxlint
 One file each in `src/views/`. The name in the address (the URL hash) is the view's key and never changes; what
 a person reads is the label (`src/nav.ts`). An address can name a run (`#Board/<id>`, `#Compare/<id>`), and older
 addresses still work (`#Experiments`, `#Swarm`, `#Worlds`, and the on-screen words `#Research`, `#Saved`, `#Review`).
+The views link to each other through the addresses in `src/lib/links.ts`: the Agent Log of a run and one agent
+(`#Lab/<kind>/<id>?agent=<name>`, or `#Lab/<kind>?agent=<name>` for the newest run of a kind), the graph of a run
+and one node (`#Graph/<kind>/<id>?node=<node id>`), and one agent's card (`#Agents/<name>?from=<kind>`). A choice
+made inside a view (a filter, a node, a card) replaces the address without a new history entry; a link to another
+view adds one. See "How the screens connect" in the main README.
 
 | Label (navigation) | Key (address) | File | What it shows |
 |---|---|---|---|

@@ -19,6 +19,7 @@ Keep changes to the look here. Screens and run logic stay outside this folder.
 | `lab.css` | The Lab scene, agents, speech bubbles and activity panel. |
 | `eventLog.css` | Agent Log rows, filters and downloads. |
 | `graph.css` | Graph controls, panels and the text list. |
+| `links.css` | The quiet links between views: a run in the Agent Log or the graph, an agent's messages, a source in the inspector. |
 | `graph.ts` | Graph colors, shapes, sizes and line lengths. Reads theme tokens. |
 | `lab-map.ts` | Room art colors, glass, books and lab equipment colors. |
 | `buddy.ts` | Decorative character ink and face positions. |

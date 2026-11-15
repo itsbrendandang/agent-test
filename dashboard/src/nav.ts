@@ -30,9 +30,9 @@ export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Benchmarks"]
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }
 
-/** A hash is "#View" or "#View/<run id>": the address of a view, and of one run in it. */
+/** A hash is "#View" or "#View/<run id>": the address of a view, and of one run in it. What follows "?" is the view's own (lib/links.ts). */
 const parts = (hash: string): [string, string | undefined] => {
-  let label = hash.replace(/^#/, "")
+  let label = hash.replace(/^#/, "").replace(/\?.*$/, "")
   try { label = decodeURIComponent(label) } catch { /* a broken escape names no view */ }
   const cut = label.indexOf("/")
   return cut < 0 ? [label, undefined] : [label.slice(0, cut), label.slice(cut + 1) || undefined]

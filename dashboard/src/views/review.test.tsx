@@ -88,7 +88,8 @@ describe("one picture per agent, left of its label", () => {
     for (const [i, name] of ["scout", "critic", "medicinal-chemist"].entries()) {
       const face = members[i].querySelector("svg[data-agent]")!
       expect(face).toHaveAttribute("data-agent", name)
-      expect(members[i].firstElementChild).toBe(face) // the picture is first: left of the label
+      expect(members[i].firstElementChild!.firstElementChild).toBe(face) // the picture is first: left of the label
+      expect(members[i].firstElementChild).toHaveAttribute("href", expect.stringMatching(new RegExp(`^#Lab/board/[\\w.-]+\\?agent=${name}$`))) // and opens its messages in the Agent Log
       const who = agentIdentity(name)
       expect(face).toHaveAttribute("data-face", `${who.shape}:${who.colour}`)
       expect(face).toHaveAttribute("aria-hidden", "true") // decoration: the label is the text beside it

@@ -1,6 +1,8 @@
 // Team review (the board). By default a plain summary: is the team working, what did it decide, and what did the
 // checks find. "See how each statement was checked" opens the counts, the written decision and the team.
-import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
+import { lastRun, linkTo, showing, takeOpen } from "@/lib/open"
+import { agentLink, graphLink, logLink } from "@/lib/links"
+import { claimNodeId, sourceNodeId } from "@/graph/model"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { DATABASES, get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
@@ -189,7 +191,7 @@ export function BoardView() {
   }
   const sources = [...new Map(evidence.flatMap((e) => e.items.map((i) => [i.url, { ...i, provider: i.provider ?? providerOf(e) }] as const))).values()]
   const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
-  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
+  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c), graph: runId ? graphLink("board", runId, claimNodeId(c.member, c.claim)) : undefined }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
   const question = startedEvent?.title ? mendTitle(startedEvent.title) : runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : ""
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
@@ -284,7 +286,8 @@ export function BoardView() {
             // From the run's own events: a member who never replied did not take part, also when the roster lists them.
             const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
             const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
-            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><AgentAvatar name={m.name} size={24} /><span className="board-who"><span>{agentIdentity(m.name, { title: m.title }).short}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></span></li>
+            // Each member opens its own messages of this review in the Agent Log.
+            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><a className="board-member-link" href={logLink({ kind: "board", id: runId }, m.name)} aria-label={`${agentIdentity(m.name, { title: m.title }).short}: messages in the Agent Log`}><AgentAvatar name={m.name} size={24} /><span className="board-who"><span>{agentIdentity(m.name, { title: m.title }).short}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></span></a></li>
           })}
         </ol>
       )}
@@ -325,6 +328,7 @@ export function BoardView() {
               return (
                 <li key={src.url}>
                   <span className="source-title">{url ? <a href={url} target="_blank" rel="noreferrer noopener">{src.title || url}</a> : src.title || src.url}</span>
+                  <a className="source-graph small" href={graphLink("board", runId, sourceNodeId(src.url))}>In the graph</a>
                   {/\[preprint\]\s*$/i.test(src.title ?? "") && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   <span className="muted small">
                     {[url ? (new URL(url).hostname === "api.fda.gov" ? "openFDA query" : new URL(url).hostname.replace(/^www\./, "")) : "not a web address", src.studyType && `kind of study: ${src.studyType}`].filter(Boolean).join(" · ")}
@@ -337,6 +341,7 @@ export function BoardView() {
                         <li key={c.key}>
                           <MarkChip verdict={c.verdict} /> <span>{c.claim}</span>
                           {c.quoteFound !== undefined && <span className="muted small" data-found={c.quoteFound}>{c.quoteFound ? "The quoted passage was found in this source." : "The quoted passage was not found in the source."}</span>}
+                          {" "}<a className="small source-graph" href={graphLink("board", runId, claimNodeId(c.member, c.claim))} aria-label={`Show in the graph: ${c.claim}`}>In the graph</a>
                         </li>
                       ))}
                     </ul>
@@ -354,7 +359,8 @@ export function BoardView() {
           <p className="story-eyebrow">{finished ? "What next?" : "While you wait"}</p>
           <a className="btn btn-primary" href="#Home">Ask a follow-up</a>
           <button type="button" className="btn" aria-pressed={details} onClick={() => setDetails(!details)}>{details ? "Hide the checks, sources and written decision" : "See how each statement was checked"}</button>
-          <a className="btn" href="#Graph" onClick={() => setOpen("board", runId)}>See this run as a graph</a>
+          <a className="btn" href={graphLink("board", runId)}>See this run as a graph</a>
+          <a className="btn" href={logLink({ kind: "board", id: runId })}>Open in the Agent Log</a>
           <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(linkTo("board", runId)).then(() => setCopied(true), () => setCopied(false)) }}>{copied ? "Link copied" : "Copy a link to this review"}</button>
         </nav>
       )}
@@ -378,7 +384,7 @@ export function BoardView() {
             {roster.map((m) => (
               <div key={m.name} className="member" title={m.deliverable}>
                 <div>
-                  <strong>{m.title}</strong>
+                  <strong><a href={agentLink(m.name, "board")} title={`About ${m.title}, in Agents`}>{m.title}</a></strong>
                   <span>{BOARD_JOB[m.name] ?? m.deliverable}</span>
                   <code title={scripted ? `A real run would use ${m.modelId}` : m.modelId}>{scripted ? "practice: no model" : m.modelId}</code>
                 </div>
