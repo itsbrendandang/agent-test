@@ -13,6 +13,9 @@ and engines on port 8788:
 
 The shared tree changes while others work. Where something is only in the working tree it says so.
 
+> **Later change.** The `board:` list now also has `evidence-verifier`, a seventh member. It rechecks the Scout's sources in
+> every round (see `docs/drug-board.md`). The member counts and estimates in this report predate it.
+
 > **Update (branch `fm/engine-review-cost`).** The team-review roster changed after both passes. The `board:` list in
 > `board/config.yaml` has six members: scout, proposer, experimenter, methods-auditor, critic, reporter. The scout searches
 > (`exa_search`, `literature_search`, `database_search` in `board/agents/scout.md`). The lead has `converse` and
