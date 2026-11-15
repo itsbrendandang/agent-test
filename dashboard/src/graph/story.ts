@@ -24,7 +24,7 @@ export function headline(model: Pick<GraphModel, "kind" | "single" | "status" | 
   }
   const nothing = partial || model.status === "running" || model.status === "queued"
   const who = model.kind === "board" ? plural(s.members, "team member") : plural(s.members, "role")
-  if (s.members === 0 && s.claims === 0) return nothing ? "Nothing has been recorded for this run yet." : model.kind === "board" ? "No team member spoke in this run." : "No role left a record in this run."
+  if (s.members === 0 && s.claims === 0) return nothing ? "Nothing has been recorded for this run yet." : NOTHING_RECORDED
   const when = model.kind === "board" && s.rounds > 0 ? `over ${plural(s.rounds, "round")}` : ""
   const cap = (t: string) => t.replace(/^./, (c) => c.toUpperCase())
   const pre = partial ? `So far, ${when ? `${when}, ` : ""}` : when ? `${cap(when)}, ` : ""
@@ -41,6 +41,9 @@ function problemsLine(s: Stats): string {
   const open = s.problems - s.problemsFixed
   return ` The reviewers found ${plural(s.problems, "problem")}: ${s.problemsFixed} fixed${open > 0 ? `, ${open} still open` : ""}.`
 }
+
+/** The one quiet line for a run that left no record. */
+export const NOTHING_RECORDED = "Nothing was recorded in this run, so there is little to show."
 
 /** Replay speed: about 30 seconds for a whole run, never faster than 3 steps a second or slower than 1. */
 export const stepMs = (max: number) => Math.max(280, Math.min(900, Math.round(30_000 / Math.min(100, Math.max(1, max)))))

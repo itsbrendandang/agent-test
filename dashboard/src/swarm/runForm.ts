@@ -69,8 +69,8 @@ export function plan(v: FormValues, status: GlhfStatus | undefined): Plan {
   const m = whole(v.minutes, "The time limit", minuteRange(status))
   if (typeof m === "string") errors.minutes = m
   let budget: number | undefined
-  if (v.tokens.trim()) { const t = whole(v.tokens, "The token budget", limits?.maxTokens); if (typeof t === "string") errors.tokens = t; else budget = t }
-  else if (real) errors.tokens = "A run with a real model needs a token budget. It is the limit on what the run can spend."
+  if (v.tokens.trim()) { const t = whole(v.tokens, "The token limit", limits?.maxTokens); if (typeof t === "string") errors.tokens = t; else budget = t }
+  else if (real) errors.tokens = "A run with a real model needs a token limit. It is the most the run can spend."
   let rounds: number | undefined
   if (swarm) { const x = whole(v.rounds, "Review rounds", limits?.reviewRounds); if (typeof x === "string") errors.rounds = x; else rounds = x }
   let seed: number | undefined

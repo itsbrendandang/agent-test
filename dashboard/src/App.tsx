@@ -18,9 +18,11 @@ import { setOpen } from "./lib/open"
 import { HELP, useShell } from "./lib/shell"
 import { initialView, LABEL, rememberView, runOfHash, viewOfHash, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
+import { BenchmarksView } from "./views/BenchmarksView"
 import { BoardView } from "./views/BoardView"
 import { ExperimentsView } from "./views/ExperimentsView"
 import { HomeView } from "./views/HomeView"
+import { OverviewView } from "./views/OverviewView"
 import { LabView } from "./views/LabView"
 import { SettingsView } from "./views/SettingsView"
 import { SwarmView } from "./views/SwarmView"
@@ -93,9 +95,11 @@ export default function App() {
             <HeaderProvider value={targets}>
               <EngineNotice shell={shell} />
               <ViewBoundary view={LABEL[view]}>
+                {view === "Overview" && <OverviewView onOpen={go} />}
                 {view === "Home" && <HomeView onOpen={go} />}
                 {view === "Runs" && <ExperimentsView onOpen={go} />}
                 {view === "Compare" && <SwarmView key={linked} />}
+                {view === "Benchmarks" && <BenchmarksView />}
                 {view === "Board" && <BoardView key={linked} />}
                 {view === "Agents" && <AgentsView />}
                 {view === "Graph" && <Suspense fallback={<div className="page"><Loading className="loading-block">Loading the graph…</Loading></div>}><WorldsView /></Suspense>}

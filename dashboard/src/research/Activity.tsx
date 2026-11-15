@@ -25,7 +25,8 @@ function useStay() {
   return (el: HTMLElement) => { pending.current = { el, top: el.getBoundingClientRect().top } }
 }
 
-export function Activity({ steps, working, totalSeconds, defaultOpen = false }: { steps: Step[]; working: boolean; totalSeconds?: number; defaultOpen?: boolean }) {
+/** `preparedMs`: the measured preparation step, said at the start of the one timing line. */
+export function Activity({ steps, working, totalSeconds, preparedMs, defaultOpen = false }: { steps: Step[]; working: boolean; totalSeconds?: number; preparedMs?: number; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   const [rows, setRows] = useState<Set<string>>(new Set())
   const [raw, setRaw] = useState<Set<string>>(new Set())
@@ -37,7 +38,7 @@ export function Activity({ steps, working, totalSeconds, defaultOpen = false }: 
   return (
     <div className="activity">
       <p className="activity-line">
-        <span className="mono">{steps.length} step{steps.length === 1 ? "" : "s"}{!working && totalSeconds !== undefined && ` · ${seconds(totalSeconds * 1000)}`}{failed > 0 && ` · ${failed} failed`}</span>
+        <span className="mono">{preparedMs !== undefined && `Prepared in ${seconds(preparedMs)} · `}{steps.length} step{steps.length === 1 ? "" : "s"}{!working && totalSeconds !== undefined && ` · ${seconds(totalSeconds * 1000)}`}{failed > 0 && ` · ${failed} failed`}</span>
         <button type="button" className="link-btn" aria-expanded={open} onClick={(e) => { stay(e.currentTarget); setOpen(!open) }}>{open ? "Hide activity" : "View activity"}</button>
         {open && steps.length >= 6 && <button type="button" className="link-btn" onClick={(e) => { stay(e.currentTarget); setRows(allOpen ? new Set() : new Set(steps.map((x) => x.step))) }}>{allOpen ? "Collapse all" : "Expand all"}</button>}
       </p>

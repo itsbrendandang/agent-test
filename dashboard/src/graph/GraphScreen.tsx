@@ -19,6 +19,12 @@ import { GROUP_WORD, KIND_WHAT, kindLabel, LINK_VERB } from "./words"
 import "./graph.css"
 
 const GraphCanvas = lazy(() => import("./GraphCanvas").then((m) => ({ default: m.GraphCanvas })))
+/** A run whose first picture (team members and statements) has fewer nodes than this opens as a list: a handful of dots says less than a short list does. */
+const SMALL_RUN = 15
+const MODE_KEY = "graph.mode"
+const storedMode = (): "graph" | "list" | null => { try { const v = localStorage.getItem(MODE_KEY); return v === "graph" || v === "list" ? v : null } catch { return null } }
+const when = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+
 const ABOUT = "Who said what in one run, and what each check found. Contradicted statements are the easiest to find."
 
 const toggle = <T,>(set: ReadonlySet<T>, v: T): Set<T> => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n }
@@ -60,7 +66,9 @@ export function GraphScreen() {
   const [playing, setPlaying] = useState(false)
   const [emphasis, setEmphasis] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
-  const [mode, setMode] = useState<"graph" | "list">("graph")
+  // The person's own choice (kept for next time) wins. Until they choose, a small run opens as a list.
+  const [chosenMode, setChosenMode] = useState<"graph" | "list" | null>(storedMode)
+  const chooseMode = (m: "graph" | "list") => { setChosenMode(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* private mode: not kept */ } }
   const [unavailable, setUnavailable] = useState<string>()
   const [focus, setFocus] = useState<{ id: string; n: number }>()
   const [query, setQuery] = useState("")
@@ -78,6 +86,8 @@ export function GraphScreen() {
   // The layout works on everything that passes the filters; the replay only reveals it, so nodes keep their places.
   const layout = useMemo(() => (full ? layoutView(full, state) : { nodes: [], links: [], connections: [] }), [full, state])
   const revealed = useMemo(() => reveal(layout, step), [layout, step])
+  // How many nodes the calm first picture has: it decides whether the run opens as a list, whatever detail is chosen later.
+  const firstPicture = useMemo(() => (full ? applyView(full, { ...state, hiddenKinds: new Set(DETAIL[0].hidden), step: null }).nodes.length : 0), [full, state])
   const shown = useMemo(() => (full ? applyView(full, state) : { nodes: [], links: [], connections: [] }), [full, state])
   const selectedNode = shown.nodes.find((n) => n.id === selected) ?? null
   const order = useMemo(() => (emphasis ? [...shown.nodes].sort(byAttention) : [...shown.nodes].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))), [shown.nodes, emphasis])
@@ -122,6 +132,7 @@ export function GraphScreen() {
     if (step === null || step >= full.maxOrder) setStep(1)
     setPlaying(true)
   }
+  const mode = chosenMode ?? (full && firstPicture < SMALL_RUN ? "list" : "graph")
   const useList = mode === "list" || unavailable !== undefined
 
   // ── States before there is a graph ──
@@ -139,11 +150,21 @@ export function GraphScreen() {
   const kindsPresent = new Set((full?.nodes ?? []).map((n) => n.kind))
   const kindsShown = new Set(shown.nodes.map((n) => n.kind))
   const noun = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`
-  const runName = (r: Pick<RunRef, "kind" | "solver">) => (r.kind === "board" ? "Review" : r.solver === "single" ? "Single agent" : "Swarm run")
+  const runName = (r: Pick<RunRef, "kind" | "solver">) => (r.kind === "board" ? "Review" : r.solver === "single" ? "Single agent" : "Team of nine")
+  const optionText = (r: RunRef) => `${runName(r)} · ${r.title} · ${when(r.startedAt)} · ${r.state}`
+  const bigRun = firstPicture >= SMALL_RUN
+  const hasStatements = (full?.totals.claims ?? 0) > 0
   const detail = DETAIL.find((d) => sameSet(hiddenKinds, new Set(d.hidden)))?.key
   const who = full?.kind === "swarm" ? "Roles" : "Team members"
   const summaryText = full ? `${noun(shown.nodes.length, "node")}, ${noun(shown.links.length, "line")} shown` : ""
   const caption = step !== null && full ? narration(full, step) : ""
+  const searchForm = (
+    <form className="graph-search" role="search" onSubmit={(e) => { e.preventDefault(); find() }}>
+      <input type="search" aria-label="Search the graph" placeholder="Search statements, team members, sources…" value={query} onChange={(e) => { setQuery(e.target.value); setHitAt(0) }} />
+      <button type="submit" className="btn" disabled={!query || matches.length === 0}>Find</button>
+      {query && <span className="muted small" role="status">{matches.length === 0 ? "No match" : `${matches.length} match${matches.length === 1 ? "" : "es"}; Enter for the next`}</span>}
+    </form>
+  )
 
   return (
     <div className="page graph-page" data-wide>
@@ -153,17 +174,19 @@ export function GraphScreen() {
         <div className="graph-row">
           <label className="graph-field"><span>Run</span>
             <select value={`${current.kind}:${current.id}`} onChange={(e) => { const [kind, ...rest] = e.target.value.split(":"); setPicked({ kind: kind as RunRef["kind"], id: rest.join(":") }) }}>
-              {!list.runs.some((r) => r.kind === current.kind && r.id === current.id) && <option value={`${current.kind}:${current.id}`}>{runName(current)} · {current.id}</option>}
-              {list.runs.map((r) => <option key={`${r.kind}:${r.id}`} value={`${r.kind}:${r.id}`}>{runName(r)} · {r.id} · {r.state}</option>)}
+              {!list.runs.some((r) => r.kind === current.kind && r.id === current.id) && <option value={`${current.kind}:${current.id}`} title={current.id}>{runName(current)}</option>}
+              {list.runs.map((r) => <option key={`${r.kind}:${r.id}`} value={`${r.kind}:${r.id}`} title={r.id}>{optionText(r)}</option>)}
             </select>
           </label>
-          {full && <span data-testid="scripted-label"><ModeLabel scripted={full.scripted} demo={full.demo} /></span>}
+          {/* A practice run is stated once, by the banner over the picture. A live run, a demo task and an unknown mode get a small label. */}
+          {full && <span data-testid="scripted-label"><ModeLabel scripted={full.scripted === true ? undefined : full.scripted} demo={full.demo} /></span>}
           {full && full.scripted === undefined && !full.demo && <span className="pill" data-kind="warning" data-testid="scripted-label">how it was made: not recorded</span>}
           {status && status !== "done" && <span className="pill" data-kind={status === "failed" ? "danger" : "info"}>{status === "running" ? "running: the picture grows as events arrive" : status}</span>}
         </div>
-        {full && <p className="graph-headline" role="status" data-testid="headline">{said}</p>}
+        {full && <h2 className="graph-title" title={full.runId}>{full.title}</h2>}
+        {full && <p className={hasStatements ? "graph-headline" : "graph-quiet"} role="status" data-testid="headline">{said}</p>}
         {full && full.hidden > 0 && <p className="muted small">This run is large: the {full.nodes.length} most important of {full.nodes.length + full.hidden} nodes are drawn (limit {MAX_NODES}), contradicted statements first. The headline above still counts the whole run.</p>}
-        {full && full.maxOrder > 0 && (
+        {full && full.maxOrder > 0 && hasStatements && (
           <div className="graph-row graph-play">
             <button type="button" className="btn btn-primary graph-playbtn" onClick={play} aria-pressed={playing}>
               {playing ? "❚❚ Pause" : step === null ? (reduced ? "Step through how this unfolded" : "▶ Watch how this unfolded") : "▶ Continue"}
@@ -181,24 +204,23 @@ export function GraphScreen() {
             <button type="button" className="btn" aria-pressed={detail === "checked"} onClick={() => setChosenKinds(new Set(DETAIL[1].hidden))}>Show how each was checked</button>
             <button type="button" className="btn" aria-pressed={detail === "all"} onClick={() => setChosenKinds(new Set(DETAIL[2].hidden))}>Everything</button>
           </div>
-          <form className="graph-search" role="search" onSubmit={(e) => { e.preventDefault(); find() }}>
-            <input type="search" aria-label="Search the graph" placeholder="Search statements, team members, sources…" value={query} onChange={(e) => { setQuery(e.target.value); setHitAt(0) }} />
-            <button type="submit" className="btn" disabled={!query || matches.length === 0}>Find</button>
-            {query && <span className="muted small" role="status">{matches.length === 0 ? "No match" : `${matches.length} match${matches.length === 1 ? "" : "es"}; Enter for the next`}</span>}
-          </form>
-          <button type="button" className="btn" onClick={jumpRefuted} disabled={refuted.length === 0}>
-            <span aria-hidden="true">{GLYPH.fails}</span> Next contradicted one ({refuted.length})
-          </button>
+          {bigRun && searchForm}
+          {refuted.length > 0 && (
+            <button type="button" className="btn" onClick={jumpRefuted}>
+              <span aria-hidden="true">{GLYPH.fails}</span> Next contradicted one ({refuted.length})
+            </button>
+          )}
           <div className="graph-seg" role="group" aria-label="Show as">
-            <button type="button" className="btn" aria-pressed={!useList} disabled={unavailable !== undefined} onClick={() => setMode("graph")}>3D graph</button>
-            <button type="button" className="btn" aria-pressed={useList} onClick={() => setMode("list")}>List</button>
+            <button type="button" className="btn" aria-pressed={!useList} disabled={unavailable !== undefined} onClick={() => chooseMode("graph")}>3D graph</button>
+            <button type="button" className="btn" aria-pressed={useList} onClick={() => chooseMode("list")}>List</button>
           </div>
         </div>
         <details className="graph-more">
           <summary>More filters and options{summaryText ? <span className="muted"> · {summaryText}</span> : null}</summary>
+          {!bigRun && <div className="graph-row">{searchForm}</div>}
           <div className="graph-row">
             <label className="graph-check"><input type="checkbox" checked={emphasis} onChange={(e) => setEmphasis(e.target.checked)} /><span>Contradicted first</span></label>
-            <fieldset className="graph-filter"><legend>Verdict</legend>
+            <fieldset className="graph-filter"><legend>Mark</legend>
               {VERDICT_CLASSES.map((v) => (
                 <label key={v} className="graph-check"><input type="checkbox" checked={!hiddenVerdicts.has(v)} onChange={() => setHiddenVerdicts((s) => toggle(s, v))} /><span><span aria-hidden="true">{GLYPH[v]}</span> {GROUP_WORD[v]}</span></label>
               ))}
@@ -219,13 +241,12 @@ export function GraphScreen() {
         </details>
       </section>
 
-      {list.failed.length === 1 && <p className="pill" data-kind="warning" role="status">The {list.failed[0] === "board" ? "board" : "swarm"} run list could not be loaded, so only the other kind is listed.</p>}
+      {list.failed.length === 1 && <p className="pill" data-kind="warning" role="status">The list of {list.failed[0] === "board" ? "reviews" : "team-of-nine runs"} could not be loaded, so only the other kind is listed.</p>}
       {source.error && <div className="engine-offline card-surface" role="alert"><h2>This run could not be loaded</h2><p className="muted">The engine did not answer for {current.id}.</p><button type="button" className="btn" onClick={source.reload}>Try again</button></div>}
       {source.loading && <Loading className="loading-block">Loading the graph…</Loading>}
 
       {full && (
         <>
-          {full.nodes.length <= 1 && <p className="graph-empty card-surface">{full.notes.find((n) => /single agent|no ledger/i.test(n)) ?? (status === "running" ? "Nothing has been recorded yet. The graph grows as events arrive." : "This run has no recorded statements, sources or tests to draw.")}</p>}
           <div className="graph-main">
             <div className="graph-view" data-scripted={full.scripted === true || undefined}>
               {full.scripted === true && <div className="graph-badge" data-testid="scripted-banner">{PRACTICE}. Nothing in this picture is a research result.</div>}
@@ -235,7 +256,7 @@ export function GraphScreen() {
                   <Suspense fallback={<Loading className="loading-block">Loading the 3D view…</Loading>}>
                     <GraphCanvas nodes={layout.nodes} links={layout.links} revealed={revealed} runKind={full.kind} style={style} fitKey={`${key}|${[...hiddenKinds]}|${[...hiddenVerdicts]}|${[...hiddenLinks]}`} focus={focus} paused={!visibleTab}
                       onSelect={select} onStep={stepBy} onUnavailable={(r) => setUnavailable(r)}
-                      summary={`3D graph of ${current.kind === "swarm" ? "swarm" : "board"} run ${current.id}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
+                      summary={`3D graph of a ${current.kind === "swarm" ? "team-of-nine run" : "review"}: ${noun(shown.nodes.length, "node")} and ${noun(shown.links.length, "line")}. ${counts.fails} contradicted statements. The list view has the same content.`} />
                   </Suspense>
                 )}
                 {useList && <GraphList runKind={full.kind} nodes={shown.nodes} links={shown.connections} selected={selectedNode?.id ?? null} onSelect={select} order={order} />}
@@ -246,9 +267,10 @@ export function GraphScreen() {
             {selectedNode
               ? <NodePanel node={selectedNode} nodes={shown.nodes} links={shown.connections} model={full} onSelect={select} onOpenRun={openRun} onClose={() => select(null)} />
               : <aside className="graph-panel" aria-label="About this graph">
-                  <h2>{full.title}</h2>
-                  <p className="muted small">{full.kind === "board" ? "Review" : "Swarm run"} <code>{full.runId}</code>. Select a node to see its details and to light up what it is connected to.</p>
+                  <h2>About this picture</h2>
+                  <p className="muted small">Select a node to see its details and to light up what it is connected to.</p>
                   <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? "Compare" : "Board"}</button>
+                  <details><summary>Run details</summary><p className="muted small">{full.kind === "board" ? "Review" : "Team-of-nine run"} <code>{full.runId}</code></p></details>
                   <details><summary>What this graph cannot show</summary><ul className="graph-notes">{full.notes.map((n) => <li key={n}>{n}</li>)}</ul></details>
                 </aside>}
           </div>

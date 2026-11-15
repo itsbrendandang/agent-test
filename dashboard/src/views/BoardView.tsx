@@ -13,10 +13,10 @@ import { TeamMessage, type Checked } from "@/components/Thread"
 import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
+import { stamp } from "@/lib/records"
 import { PROVIDERS } from "@/research/providers"
 import { uncheckedReasons } from "@/lib/verdict"
-import { BOARD_JOB, checkedOf, leadSentence, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
-import { boardScriptedWhy } from "@/home/chat"
+import { BOARD_JOB, checkedOf, clip, leadSentence, MARK_WORD, markOf, mendTitle, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
 import { plainCost, plainDuration, plainTitle, plainWhen } from "@/lib/format"
@@ -37,7 +37,7 @@ function sections(md: string): Record<string, string> {
 const bullets = (s = "") => s.split("\n").map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim()).filter(Boolean)
 const plain = (s = "") => s.replace(/[*_`]+/g, "").trim()
 const SHORT_REASONING = 600 // characters: reasoning up to this length is open on arrival
-const ABOUT = "A team of AI agents discusses a research brief. A separate check tests their statements against sources, and the lead writes the decision."
+const ABOUT = "AI agents discuss a brief. A separate check tests what they say against sources."
 
 // The cheap model's ruling settled the claim ("jev" is the same thing in runs made before the checker changed).
 const firstPass = (c: { checker?: string }) => c.checker === "first-pass" || c.checker === "jev"
@@ -130,7 +130,8 @@ export function BoardView() {
   const specialist = (name: string) => ran.find((m) => m.name === name)?.source === "specialist"
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const scripted = startedAs ?? status?.mock ?? false
-  const nextWhy = `${boardScriptedWhy(status) ?? "The engine is in practice mode: board reviews are practice runs only"}.`
+  // One short line. Why (Demo, or a key the engine lacks) is in Settings, under Technical.
+  const nextMode = status?.paidCalls === false ? "New reviews are practice runs in Demo mode." : "New reviews are practice runs: the engine cannot use real models now (see Settings)."
   const resume = async () => {
     if (!runId) return
     setError("")
@@ -148,11 +149,9 @@ export function BoardView() {
   )
 
   // One plain sentence about where the run is, and when it is over, what happened in it.
-  const spoke = new Set(events.flatMap((e) => (e.type === "member.replied" ? [e.member] : []))).size
   const marks = { supported: count("verified"), contradicted: count("contradicted"), insufficient: count("unsupported"), unchecked: count("unchecked") }
   const checked = claims.length - marks.unchecked
   // Never a bare total: how many statements there were, and how many of them a check actually ruled on.
-  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}${claims.length ? `; ${checked} of them ${checked === 1 ? "was" : "were"} checked` : ""}.`
   const whyNot = uncheckedReasons(claims)
   const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
@@ -160,7 +159,7 @@ export function BoardView() {
     : !runId ? "No reviews yet. Pick a brief and press Start a review. With Demo chosen it is a practice run: fixed example answers, free."
     : runs.length > 0 && !known && events.length === 0 ? "That review could not be found. It may have been deleted. Pick another one from the list above."
     : failed ? "The run stopped with an error."
-    : done ? `The team has decided. ${said}`
+    : done ? (memoText ? "" : "The team has decided.") // the recommendation itself says it, once it is on screen
     : memoWritten ? "Writing the decision…"
     : current ? `The team is discussing: round ${rounds.at(-1)![0]} of ${Math.max(maxRounds, rounds.at(-1)![0])} · ${current.replies.length} of ${members.length} have replied.`
     : "Starting the review…"
@@ -192,7 +191,7 @@ export function BoardView() {
   const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
   const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
-  const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
+  const question = startedEvent?.title ? mendTitle(startedEvent.title) : runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : ""
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
   const wrong = count("contradicted")
   const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: specialist(member) ? "method specialist: reads method notes, has no tools and runs nothing" : BOARD_JOB[member] ?? t.job?.toLowerCase() } }
@@ -206,7 +205,7 @@ export function BoardView() {
           <select aria-label="Review to show" value={runId ?? ""} title={runId} onChange={(e) => setRunId(e.target.value || undefined)}>
             {runs.length === 0 && <option value="">No reviews yet</option>}
             {runId && !known && runs.length > 0 && <option value={runId}>{plainTitle(runId)}</option>}
-            {runs.map((r) => <option key={r.id} value={r.id}>{plainTitle(r.brief)} · {plainWhen(r.startedAt)} · {runState(r.status)}</option>)}
+            {runs.map((r) => <option key={r.id} value={r.id}>{clip(plainTitle(r.brief), 44)} · {stamp(r.startedAt)}{r.status === "done" ? "" : ` · ${runState(r.status)}`}</option>)}
           </select>
         </label>
         {(runRow?.status === "paused" || runRow?.status === "failed") && <button type="button" className="btn" onClick={() => void resume()}>Resume</button>}
@@ -217,7 +216,7 @@ export function BoardView() {
           <button type="button" className="btn btn-primary" onClick={start} disabled={!brief || live}>{live ? "Review in progress" : "Start a review"}</button>
         </span>
       </div>
-      {status?.mock && <p className="muted small" data-testid="next-mode">A new review would be a practice run. {nextWhy}</p>}
+      {status?.mock && <p className="muted small" data-testid="next-mode">{nextMode}</p>}
       {error && <p role="alert" className="pill" data-kind="danger">{error}</p>}
 
       <section className="story" aria-label="What happened">
@@ -239,7 +238,24 @@ export function BoardView() {
             </p>
           </>
         )}
-        <p className="story-headline" role="status">{headline}</p>
+        {memoText && (
+          <div className="story-decision" role="group" aria-label="Decision">
+            <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
+            {(() => {
+              // The recommendation is one sentence to scan; what the memo adds to it follows in body text.
+              const [lead, rest] = leadSentence(plain(bullets(memo["decision"])[0]))
+              return <><p className="decision-text">{lead || "See the written decision below."}</p>{rest && <p className="decision-rest">{rest}</p>}</>
+            })()}
+            {memo["rationale"] && (
+              // The memo's reasoning is Markdown (lists, tables): it is drawn as such, never flattened into one paragraph.
+              <details className="decision-why" open={memo["rationale"].length <= SHORT_REASONING || undefined}>
+                <summary>Why the team recommends this</summary>
+                <SafeMarkdown className="decision-whyb">{memo["rationale"]}</SafeMarkdown>
+              </details>
+            )}
+          </div>
+        )}
+        {headline && <p className="story-headline" role="status">{headline}</p>}
         {claims.length > 0 && (
           <div className="check-summary" role="group" aria-label="What the checks found">
             <p className="check-line">
@@ -260,23 +276,6 @@ export function BoardView() {
         {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was contradicted." : `${wrong} statements were contradicted.`} Look for the marked messages below.</p>}
         {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. If it names a model or a key, check them in Settings (or ask the person who runs the engine). After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
-        {memoText && (
-          <div className="story-decision" role="group" aria-label="Decision">
-            <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
-            {(() => {
-              // The recommendation is one sentence to scan; what the memo adds to it follows in body text.
-              const [lead, rest] = leadSentence(plain(bullets(memo["decision"])[0]))
-              return <><p className="decision-text">{lead || "See the written decision below."}</p>{rest && <p className="decision-rest">{rest}</p>}</>
-            })()}
-            {memo["rationale"] && (
-              // The memo's reasoning is Markdown (lists, tables): it is drawn as such, never flattened into one paragraph.
-              <details className="decision-why" open={memo["rationale"].length <= SHORT_REASONING || undefined}>
-                <summary>Why the team recommends this</summary>
-                <SafeMarkdown className="decision-whyb">{memo["rationale"]}</SafeMarkdown>
-              </details>
-            )}
-          </div>
-        )}
       </section>
 
       {runId && took.length > 0 && (

@@ -133,7 +133,7 @@ describe("copy", () => {
     await show()
     const look = screen.getByRole("region", { name: "Appearance" })
     expect(look).toHaveTextContent("Momo, Ember, Fuji and Sage are decoration, not the agents that do the work.")
-    expect(within(look).getByRole("checkbox", { name: "Show characters" })).toBeChecked()
+    expect(within(look).getByRole("checkbox", { name: "Show characters" })).not.toBeChecked() // off until asked for
   })
   it("Help is unchanged and opens How this works", async () => {
     const asked = vi.fn(); window.addEventListener("app.help", asked)

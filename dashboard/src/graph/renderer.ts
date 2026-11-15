@@ -120,7 +120,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
       const d = Math.hypot(camera.position.x - (s.x ?? 0), camera.position.y - (s.y ?? 0), camera.position.z - (s.z ?? 0))
       const limit = FADE_IN[s.node.kind] ?? 200
       const fade = near ? 1 : Math.max(0, Math.min(1, (limit - d) / (limit * 0.4)))
-      t.material.opacity = (lit(s.id) ? 1 : 0.15) * fade
+      t.material.opacity = (lit(s.id) ? 1 : 0.15) * fade * (s.node.muted ? 0.6 : 1)
     }
     s.holder.add(t); s.label = t
     return t
@@ -133,7 +133,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
     const size = sizeOf(n, style.emphasis, degree.get(s.id) ?? 0) * (pulsed ? 1.5 : hot ? 1.2 : 1)
     s.body.scale.setScalar(size)
     const m = s.body.material as MeshLambertMaterial
-    m.opacity = on ? 1 : dimLevel()
+    m.opacity = on ? (n.muted ? 0.4 : 1) : dimLevel()
     m.emissiveIntensity = hot || pulsed ? 0.7 : 0.18
     const refuted = style.emphasis && n.attention === 2
     const halo = on && (hot || pulsed || refuted)
@@ -148,9 +148,11 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
     }
     if (priority(s) || hot || pulsed || (style.selected !== null && lit(s.id))) {
       const t = ensureLabel(s)
-      if (t) t.position.y = size + 4.5
+      // Labels sit clear of their node, above or below it by turns, so neighbours' labels rarely land on each other.
+      if (t) t.position.y = (flipped(s.id) ? -1 : 1) * (size * 1.6 + (t as unknown as { textHeight: number }).textHeight * 0.9 + 2.5)
     }
   }
+  const flipped = (id: string) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return (h & 1) === 1 }
   const paintAll = () => { for (const s of sims.values()) paint(s) }
 
   const disposeLabel = (s: Sim) => {
@@ -246,14 +248,14 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
     graph.pauseAnimation(); asleep = true
     clearInterval(sweepTimer); sweepTimer = undefined
   }
+  // A small graph is not zoomed in until its labels overlap: the fewer the nodes, the more room around them.
+  const fitNow = (ms: number) => graph.zoomToFit(ms, sims.size < 12 ? 110 : sims.size < 30 ? 50 : 24)
+  let earlyFit: ReturnType<typeof setTimeout> | undefined
+  const scheduleEarlyFit = () => { clearTimeout(earlyFit); if (fitOnSettle) earlyFit = setTimeout(() => { if (!destroyed && fitOnSettle) fitNow(0) }, 400) }
   const settle = () => {
     settled = true
     clearTimeout(settleTimer)
-    if (fitOnSettle) {
-      fitOnSettle = false
-      // A small graph is not zoomed in until its labels overlap: the fewer the nodes, the more room around them.
-      graph.zoomToFit(o.reducedMotion ? 0 : 600, sims.size < 12 ? 110 : sims.size < 30 ? 50 : 24)
-    }
+    if (fitOnSettle) { fitOnSettle = false; fitNow(o.reducedMotion ? 0 : 600) }
     wake()
   }
   graph.onEngineStop(settle)
@@ -282,6 +284,8 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
       const l: SimLink[] = links.map((x) => ({ source: x.source, target: x.target, link: x }))
       settled = false
       clearTimeout(settleTimer)
+      // The camera starts at a default distance, far from a small graph. Fit once the first ticks have placed the nodes, without waiting for the layout to settle.
+      scheduleEarlyFit()
       settleTimer = setTimeout(settle, 8000) // in case the layout engine never reports that it stopped
       wake()
       graph.graphData({ nodes: list, links: l as never })
@@ -307,7 +311,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
       if (len < 1) graph.cameraPosition({ x, y, z: z + distance }, { x, y, z }, ms)
       else graph.cameraPosition({ x: x * (1 + distance / len), y: y * (1 + distance / len), z: z * (1 + distance / len) }, { x, y, z }, ms)
     },
-    fit() { fitOnSettle = true; if (settled) settle(); else wake() },
+    fit() { fitOnSettle = true; if (settled) settle(); else { scheduleEarlyFit(); wake() } },
     setPaused(paused) {
       forced = paused
       if (paused) { clearTimeout(sleepTimer); clearTimeout(driftTimer); sleep() } else wake()
@@ -316,7 +320,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
     destroy() {
       if (destroyed) return
       destroyed = true
-      clearTimeout(sleepTimer); clearTimeout(settleTimer); clearTimeout(driftTimer); clearInterval(sweepTimer); sweepTimer = undefined
+      clearTimeout(sleepTimer); clearTimeout(settleTimer); clearTimeout(driftTimer); clearTimeout(earlyFit); clearInterval(sweepTimer); sweepTimer = undefined
       for (const e of events) el.removeEventListener(e, wake)
       gl.domElement.removeEventListener("webglcontextlost", onLost)
       graph.pauseAnimation()

@@ -90,7 +90,7 @@ describe("paid calls on", () => {
   })
   it("refuses a real model without a token budget", () => {
     const p = plan(form({ choice: "anthropic/claude-sonnet-5-5" }), PAID_ON)
-    expect(p.errors.tokens).toMatch(/needs a token budget/)
+    expect(p.errors.tokens).toMatch(/needs a token limit/)
     expect(plan(form({ choice: "anthropic/claude-sonnet-5-5", tokens: "500000" }), PAID_ON).errors).toEqual({})
   })
   it("refuses an empty model id and one with spaces", () => {
@@ -119,7 +119,7 @@ describe("validation against the engine's limits", () => {
     expect(plan(form({ [input]: text }), PAID_OFF).errors).toEqual({})
   })
   it("names the range in the message", () => {
-    expect(plan(form({ tokens: "5" }), PAID_OFF).errors.tokens).toBe("The token budget must be a whole number from 1,000 to 500,000,000.")
+    expect(plan(form({ tokens: "5" }), PAID_OFF).errors.tokens).toBe("The token limit must be a whole number from 1,000 to 500,000,000.")
     expect(plan(form({ minutes: "0" }), PAID_OFF).errors.minutes).toBe("The time limit must be a whole number from 1 to 1,440.")
   })
   it("does not check review rounds for a single agent, which has none", () => {

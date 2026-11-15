@@ -54,6 +54,8 @@ export interface GraphNode {
   url?: string
   /** Round, when recorded. */
   round?: number
+  /** A step that did not run: drawn faded, and its panel says why. Its label stays the plain name. */
+  muted?: boolean
 }
 
 export interface GraphLink {

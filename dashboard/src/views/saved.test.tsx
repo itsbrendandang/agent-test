@@ -43,7 +43,7 @@ function show(paidCalls: boolean, extra: Parameters<typeof routes>[0] = {}) {
   render(<Page />)
   return { sent, onOpen }
 }
-const rowOf = async (id: string) => (await screen.findByText(id)).closest("li")!
+const rowOf = async (id: string) => await waitFor(() => { const row = document.querySelector<HTMLElement>(`li[data-record$=":${id}"]`); expect(row).not.toBeNull(); return row! })
 const badge = (row: HTMLElement) => row.querySelector(":scope > .record-main > .record-meta [data-provenance]")
 
 describe("provenance is the record's, not the mode's", () => {
@@ -88,7 +88,7 @@ describe("runs of the same brief are one row", () => {
     expect([...practice.querySelectorAll("li")].map((li) => li.getAttribute("data-record"))).toEqual(["board:b-p2", "board:b-p1"])
     expect((await rowOf("b-live")).querySelector("details")).toBeNull() // the one live run of the same brief stands alone
     for (const alone of ["b-other", "b-chat-1", "b-chat-2"]) expect((await rowOf(alone)).querySelector("details")).toBeNull()
-    expect(screen.getByRole("status")).toHaveTextContent("11 records in 8 rows (runs of the same brief are together)") // nothing is lost
+    expect(screen.getByRole("status")).toHaveTextContent("11 records in 8 rows (repeat runs of a brief are grouped)") // nothing is lost
   })
   it("the same question asked twice is one row; a failed attempt in its history still says failed", async () => {
     show(false)
@@ -106,8 +106,29 @@ describe("a row", () => {
     await waitFor(() => expect(live).toHaveTextContent("204 statements in 3 rounds")) // the list does not know how many were checked, so it does not say "checked"
     expect(live).toHaveTextContent("Team review"); expect(live).toHaveTextContent("14 Nov 21:08")
     const swarm = await rowOf("s-mock")
-    expect(swarm).toHaveTextContent("Task run, team of nine"); expect(swarm).toHaveTextContent("Score 1.000 out of 1"); expect(swarm).toHaveTextContent("Demo task")
+    expect(swarm).toHaveTextContent("Team of nine on the demo task"); expect(swarm).toHaveTextContent("Benchmark run"); expect(swarm).toHaveTextContent("Score 1.000 out of 1"); expect(swarm).toHaveTextContent("Demo task")
     expect((await rowOf("a-live")).querySelector(".record-result")).toBeNull()
+  })
+  it("keeps run ids out of the reading flow, and names benchmark runs in one pattern", async () => {
+    routes({
+      "GET /api/search": (r) => ({ status: 200, body: [
+        { kind: "swarm", id: "202611142330-demo-glhf", title: "Task demo · swarm · mock", status: "done", startedAt: T, score: 1, matches: /q=2330/.test(r.query) ? [{ where: "run", text: "202611142330-demo-glhf task demo" }] : [] },
+        { kind: "swarm", id: "202611142330-demo-single", title: "Task demo · single agent · mock", status: "done", startedAt: T - MIN, score: 1, matches: [] },
+        { kind: "answer", id: "a-20261114233412-c49", title: "Is hERG a risk?", status: "done", startedAt: T - 2 * MIN, mode: "demo", matches: [] },
+      ] }),
+      "GET /api/glhf/runs": { status: 200, body: [{ id: "202611142330-demo-glhf", task: "demo", model: "mock", solver: "glhf", phase: "done" }, { id: "202611142330-demo-single", task: "demo", model: "mock", solver: "single", phase: "done" }] },
+    })
+    render(<ExperimentsView onOpen={() => {}} />)
+    const team = await rowOf("202611142330-demo-glhf"), one = await rowOf("202611142330-demo-single")
+    expect(team.querySelector(".record-titletext")).toHaveTextContent(/^Team of nine on the demo task$/)
+    expect(one.querySelector(".record-titletext")).toHaveTextContent(/^One agent on the demo task$/) // the same pattern, never "Task demo · single agent · mock"
+    await waitFor(() => expect([...one.querySelectorAll(".record-meta .pill, .record-meta [data-provenance]")].map((b) => b.textContent)).toEqual(["Practice", "Demo task"])) // one badge per fact
+    const list = screen.getByRole("list", { name: "Saved research" })
+    expect(list.textContent).not.toMatch(/2026\d{6,}|a-2026|mock|swarm|single agent|Task run/i) // no raw id and no internal word in the text
+    expect(within(team).getByText("Benchmark run")).toHaveAttribute("title", "Run id: 202611142330-demo-glhf") // the id is a tooltip
+    // an id is shown only when it is what the search found
+    await userEvent.setup().type(screen.getByRole("searchbox", { name: "Search saved research by word" }), "2330")
+    await waitFor(async () => expect(await rowOf("202611142330-demo-glhf")).toHaveTextContent("run id: 202611142330-demo-glhf"))
   })
   it("Open goes to the right place for each kind", async () => {
     const t = show(false)
@@ -132,7 +153,7 @@ describe("a row", () => {
   it("filters by kind with plain names", async () => {
     show(false)
     await rowOf("a-live")
-    expect(within(screen.getByRole("group", { name: "Kind of record" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["All", "Answers", "Team reviews", "Task runs"])
+    expect(within(screen.getByRole("group", { name: "Kind of record" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["All", "Answers", "Team reviews", "Benchmark runs"])
     await userEvent.setup().click(screen.getByRole("button", { name: "Answers" }))
     await waitFor(() => expect([...document.querySelectorAll('ul[aria-label="Saved research"] > li')].map((li) => li.getAttribute("data-record"))).toEqual(["answer:a-live", "answer:a-demo"]))
   })

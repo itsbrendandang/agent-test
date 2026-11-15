@@ -93,7 +93,7 @@ describe("LabView", () => {
     expect(document.querySelector('[data-provenance="practice"]')).toHaveTextContent("Practice") // mode demo, from the record
     expect(screen.getByText("Research answer")).toBeInTheDocument()
     // a run that was over in milliseconds is played one event at a time, and the view says so
-    expect(screen.getByText(/One event at a time, 0\.7 seconds apart\. The run itself took less than a second\./)).toBeInTheDocument()
+    expect(screen.getByText("Replay, slowed down so you can follow it.")).toBeInTheDocument()
     expect(within(replay).getByRole("button", { name: "Step by step" })).toHaveAttribute("aria-pressed", "true")
     expect(within(replay).getByText("Event 1 of 41")).toBeInTheDocument()
     expect(agent("Navigator")).toHaveAttribute("data-state", "idle") // the replay starts before anyone worked
@@ -113,13 +113,13 @@ describe("LabView", () => {
     await tick(0)
     await emit(FakeSource.to("/api/runs/r-long/events")[0], ...REVIEW_WITH_VISITOR)
     const replay = screen.getByRole("group", { name: "Replay" })
-    expect(screen.getByText(/At its real timing\. The run took 2 minutes 1 second\./)).toBeInTheDocument()
+    expect(screen.getByText("Replay at its real speed (the run took 2 minutes 1 second).")).toBeInTheDocument()
     expect(within(replay).getByRole("button", { name: "1×" })).toHaveAttribute("aria-pressed", "true")
     expect(within(replay).getByText("Event 1 of 25")).toBeInTheDocument()
     await tick(4200) // round 1 starts 4 seconds in
     expect(within(replay).getByText("Event 3 of 25")).toBeInTheDocument()
     fireEvent.click(within(replay).getByRole("button", { name: "4×" })) // starts again, four times as fast
-    expect(screen.getByText(/At 4 times its real timing/)).toBeInTheDocument()
+    expect(screen.getByText(/^Replay at 4 times its real speed/)).toBeInTheDocument()
     await tick(2400) // 9.6 seconds of the run: the web search at 9 s has happened
     expect(within(replay).getByText("Event 4 of 25")).toBeInTheDocument()
     fireEvent.click(within(replay).getByRole("button", { name: "Pause replay" }))

@@ -318,7 +318,7 @@ describe("confirm step", () => {
     const card = await toConfirm(t)
     const step = within(card.getByRole("group", { name: "Confirm before starting" }))
     expect(step.getByText(/This may spend money/).closest("p")).toHaveTextContent("estimated: about $1.80")
-    expect(step.getByText(/A board review with 2 agents: Critic \(Scientific Reviewer\), Experimenter \(Data Scientist\)/)).toBeInTheDocument()
+    expect(step.getByText(/A team review with 2 agents: Critic \(Scientific Reviewer\), Experimenter \(Data Scientist\)/)).toBeInTheDocument()
     expect(step.getByLabelText("Most it may cost (US dollars)")).toHaveValue(5)
     expect(step.getByLabelText("Most time it may take (minutes)")).toHaveValue(15)
     expect(step.getByLabelText("Most rounds of discussion")).toHaveValue(4)
@@ -495,7 +495,7 @@ describe("confirm step", () => {
   })
   it("409 without a run: says it was already started", async () => {
     const { card } = await refusedWith({ status: 409, body: { error: "this plan was already started" } })
-    expect(await card.findByRole("alert")).toHaveTextContent("this plan was already started This plan was already started. Look for its run in the Board view.")
+    expect(await card.findByRole("alert")).toHaveTextContent("this plan was already started This plan was already started. Look for it under Team review.")
   })
   it("401 needsToken: asks for the token, then starts with it", async () => {
     const t = home(CATALOG_ON, start([{ status: 401, body: { error: "starting a paid plan needs the session token", field: "token", needsToken: true } }, { status: 201, body: { kind: "board", id: "run-1" } }]))
@@ -604,7 +604,7 @@ describe("Connections (the setup panel, in Settings under Technical)", () => {
   })
   it("says plainly when board runs can only be scripted, and why", () => {
     const { panel } = setup(CATALOG_ON, { mock: true, paidCalls: true, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: false }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } })
-    expect(panel.getByRole("note")).toHaveTextContent("OpenAI key missing: board reviews are practice runs only.")
+    expect(panel.getByRole("note")).toHaveTextContent("OpenAI key missing: team reviews are practice runs only.")
   })
   it("says nothing of the kind when the board can use real models", () => {
     const { panel } = setup(CATALOG_ON, { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } })

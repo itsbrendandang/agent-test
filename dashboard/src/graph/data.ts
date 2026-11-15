@@ -5,17 +5,23 @@ import { ENGINE, get, type BoardEvent, type RosterMember, type RunSummary } from
 import { settled, type GlhfRun, type RunDetail } from "@/swarm/api"
 import type { RunKind } from "./types"
 
-export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string; /** A swarm run, or one agent working alone. */ solver?: "glhf" | "single" }
+export interface RunRef { kind: RunKind; id: string; startedAt: number; state: string; /** What the run is about, for the picker: a board run's brief, a team-of-nine run's task. */ title: string; /** A team-of-nine run, or one agent working alone. */ solver?: "glhf" | "single" }
 
 const subscribeVisible = (cb: () => void) => { document.addEventListener("visibilitychange", cb); return () => document.removeEventListener("visibilitychange", cb) }
 /** false while the tab is in the background. */
 export const useVisible = () => useSyncExternalStore(subscribeVisible, () => document.visibilityState !== "hidden", () => true)
 
-/** Board and swarm runs in one list, newest first. */
+/** A brief's file name as a title: "kras-g12c-hit-to-lead.md" is "kras g12c hit to lead". A chat question's file loses its prefix and hash. */
+export const briefTitle = (brief: string): string => {
+  const t = brief.replace(/\.md$/, "").replace(/^chat-/, "").replace(/-[0-9a-f]{8}$/, "").replace(/-/g, " ").trim()
+  return t.length > 48 ? `${t.slice(0, 47).trimEnd()}…` : t
+}
+
+/** Board and team-of-nine runs in one list, newest first. */
 export function mergeRuns(board: RunSummary[] | undefined, swarm: GlhfRun[] | undefined): RunRef[] {
   return [
-    ...(board ?? []).map((r): RunRef => ({ kind: "board", id: r.id, startedAt: r.startedAt, state: r.status })),
-    ...(swarm ?? []).map((r): RunRef => ({ kind: "swarm", id: r.id, startedAt: r.startedAt, state: r.phase, solver: r.solver })),
+    ...(board ?? []).map((r): RunRef => ({ kind: "board", id: r.id, startedAt: r.startedAt, state: r.status, title: briefTitle(r.brief) })),
+    ...(swarm ?? []).map((r): RunRef => ({ kind: "swarm", id: r.id, startedAt: r.startedAt, state: r.phase, title: r.task, solver: r.solver })),
   ].sort((a, b) => b.startedAt - a.startedAt || a.id.localeCompare(b.id))
 }
 

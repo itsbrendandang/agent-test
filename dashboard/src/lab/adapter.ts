@@ -90,7 +90,7 @@ export class Build {
 // ── Where things come from ───────────────────────────────────────────────────────────────────────
 
 const PLACE: Record<string, string> = {
-  exa: "the web (Exa)", europepmc: "PubMed and preprints (Europe PMC)", fixture: "the example sources (practice)",
+  exa: "the web (Exa)", europepmc: "PubMed and preprints (Europe PMC)", fixture: "the example sources",
   chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem",
 }
 const NOUN: Record<string, string> = { exa: "result", europepmc: "paper", fixture: "example source" }
@@ -98,6 +98,8 @@ const NOUN: Record<string, string> = { exa: "result", europepmc: "paper", fixtur
 const TAG: Record<string, string> = { exa: "Exa", europepmc: "PubMed", fixture: "examples", chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem" }
 const tagOf = (n: number, provider: string | undefined) => `${plural(n, nounOf(provider))}${provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
 const placeOf = (provider: string | undefined) => (provider ? PLACE[provider] ?? provider : "a search")
+/** "8 papers from PubMed and preprints (Europe PMC)". A practice run's example sources say what they are once: "4 example sources". */
+const fromPlace = (n: number, provider: string | undefined) => (provider === "fixture" ? plural(n, nounOf(provider)) : `${plural(n, nounOf(provider))} from ${placeOf(provider)}`)
 const nounOf = (provider: string | undefined) => (provider ? NOUN[provider] ?? "record" : "result")
 /** Who makes a search: the Scout for the web (and for a practice run's example sources), the Librarian for the literature and the databases. */
 const searcherOf = (provider: string | undefined): CharacterId => (provider === undefined || provider === "exa" || provider === "fixture" ? "scout" : "librarian")
@@ -237,12 +239,12 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
       case "evidence.triaged": {
         const provider = str(e.provider), who: CharacterId = "scout" // every search of a review is the scout's: one agent, one face
         const kept = num(e.kept) ?? 0, dropped = num(e.dropped) ?? 0
-        const noun = nounOf(provider), place = placeOf(provider), query = str(e.query)
-        const label = kept > 0 ? `${plural(kept, noun)} from ${place}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`
+        const place = placeOf(provider), query = str(e.query)
+        const label = kept > 0 ? `${fromPlace(kept, provider)}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`
         b.trip(who, { id: `fetch:${str(e.key) ?? `${at}:${query ?? ""}`}`, kind: "fetch", room: "discovery", label, short: kept > 0 ? tagOf(kept, provider) : "nothing", at: at ?? 0, back: at ?? 0, outcome: kept > 0 ? "carried" : "empty", ...(provider && { provider }) })
         b.searched(provider)
         const asked = query ? ` for “${clip(query, 90)}”` : ""
-        const brought = kept > 0 ? `Searched ${place}${asked} and brought back ${label}.` : `Searched ${place}${asked}: ${label}.`
+        const brought = provider === "fixture" ? (kept > 0 ? `Brought back ${label}.` : `Looked at ${place}: ${label}.`) : kept > 0 ? `Searched ${place}${asked} and brought back ${label}.` : `Searched ${place}${asked}: ${label}.`
         if (b.who(who).state === "working") b.set(who, "working", `Round ${round}: ${brought.charAt(0).toLowerCase()}${brought.slice(1)} It still has its reply to write.`, at)
         else b.set(who, "done", brought, at)
         b.log(at, `${b.name(who)} ${brought.charAt(0).toLowerCase()}${brought.slice(1)}`, b.name(who))
@@ -452,13 +454,13 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const s = steps.get(str(e.step) ?? ""); if (!s?.running) break
         s.running = false
         const status = e.status === "empty" || e.status === "failed" || e.status === "cancelled" ? e.status : "completed"
-        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider), noun = nounOf(s.provider)
+        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider)
         const error = str(e.error), consequence = str(e.consequence), summary = str(e.summary)
         let line: string, label = s.label, short = "", outcome: Trip["outcome"] = "carried"
         if (status === "failed") { line = `${s.label}: did not work.${error ? ` ${clip(error, 200)}` : ""}${consequence ? ` ${clip(consequence, 200)}` : ""}`; label = `nothing: ${s.label.charAt(0).toLowerCase()}${s.label.slice(1)} failed`; short = "failed"; outcome = "failed" }
         else if (status === "cancelled") { line = `${s.label}: stopped.`; label = "nothing (stopped)"; short = "stopped"; outcome = "empty" }
         else if (status === "empty") { line = `${s.label}: found nothing.`; label = `nothing from ${place}`; short = "nothing"; outcome = "empty" }
-        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = `${plural(found ?? 0, noun)} from ${place}`; short = tagOf(found ?? 0, s.provider); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
+        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider); short = tagOf(found ?? 0, s.provider); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
         else if (s.kind === "evaluate") { line = `${s.label}: kept ${kept ?? 0}${found !== undefined ? ` of ${found}` : ""}.`; label = `${plural(kept ?? 0, "source")} kept${found !== undefined ? ` of ${found}` : ""}`; short = `${kept ?? 0} kept`; outcome = (kept ?? 1) > 0 ? "carried" : "empty" }
         else line = `${s.label}: done.${summary ? ` ${clip(summary, 160)}` : ""}`
         if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: "discovery", label, short, at: s.at, back: at ?? s.at, outcome, ...(s.kind !== "evaluate" && s.provider && { provider: s.provider }) })

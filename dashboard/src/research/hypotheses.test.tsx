@@ -37,7 +37,7 @@ describe("the hypotheses map", () => {
   it("shows the question and one card per hypothesis as soon as they are set, with no mark and no result", () => {
     render(<Hypotheses state={foldAnswer(START())} />)
     const map = screen.getByRole("region", { name: "Hypotheses" })
-    expect(map).toHaveTextContent("The questionDoes drug A protect the heart?")
+    expect(map).not.toHaveTextContent("Does drug A protect the heart?") // the question is in the header and the bubble: not a third time here
     expect(cards()).toHaveLength(2)
     expect(cards()[0]).toHaveTextContent("Hypothesis 1Drug A lowers heart attacks in people without diabetes.Not tested yet.")
     expect(cards()[1]).toHaveTextContent("Hypothesis 2 · as you stated it")
@@ -62,12 +62,13 @@ describe("the hypotheses map", () => {
     render(<Hypotheses state={foldAnswer([...START(), SOURCES, ...CHECKED, DONE])} onSource={onSource} />)
     const [one, two] = cards()
     expect(one).toHaveAttribute("data-mark", "supported")
-    expect(one).toHaveTextContent("✓ Supported"); expect(one).toHaveTextContent("2 sources for, 0 against")
-    expect(one).toHaveTextContent("2 checked statements for it from 2 sources; none against.")
+    expect(one).toHaveTextContent("✓ Supported"); expect(one).not.toHaveTextContent("2 sources for, 0 against") // the count is the For / Against row, once
+    expect(within(one).getByText("Why").closest("details")).toHaveTextContent("2 checked statements for it from 2 sources; none against.") // the engine's sentence, one press away
+    expect(within(one).getByText("Why").closest("details")).not.toHaveAttribute("open")
     expect(within(one).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Source 1, for", "Source 2, for"])
     expect(one).toHaveTextContent("Againstnone")
     expect(two).toHaveAttribute("data-mark", "insufficient")
-    expect(two).toHaveTextContent("? Insufficient evidence: the sources disagree"); expect(two).toHaveTextContent("1 source for, 1 against")
+    expect(two).toHaveTextContent("? Insufficient evidence: the sources disagree")
     await userEvent.setup().click(within(two).getByRole("button", { name: "Source 2, against" }))
     expect(onSource).toHaveBeenCalledWith(2)
   })
@@ -82,11 +83,14 @@ describe("the hypotheses map", () => {
     const odd = foldAnswer([...START(), ev("hypothesis.checked", { id: "h1", verdict: "proven", for: [1], against: [] })])
     expect(odd.hypotheses[0].result).toBeUndefined()
   })
-  it("in a practice run the results are examples: labelled, and without a check glyph or a coloured card", () => {
+  it("in a practice run a result is marked as not real by its outline and its name, without a check glyph or a coloured card", () => {
     render(<Hypotheses state={foldAnswer([...START("demo"), SOURCES, ...CHECKED, DONE])} />)
     const map = screen.getByRole("region", { name: "Hypotheses" })
-    expect(map).toHaveTextContent("examples of a practice run")
-    expect(cards()[0]).toHaveTextContent("Example result: Supported"); expect(cards()[0]).not.toHaveAttribute("data-mark")
+    expect(map).not.toHaveTextContent(/practice|example|demo/i) // said once, beside the answer's badge
+    const mark = cards()[0].querySelector(".answer-markword")!
+    expect(mark).toHaveTextContent(/^Supported$/); expect(mark).toHaveAttribute("data-demo") // dashed, no colour, no glyph: not mistaken for a real result
+    expect(mark).toHaveAccessibleName("Supported (practice: not a real result)")
+    expect(cards()[0]).not.toHaveAttribute("data-mark")
     expect(map).not.toHaveTextContent(/✓|✕/)
   })
   it("a source number the answer does not list is shown as text, not as something to press", () => {
@@ -144,9 +148,9 @@ describe("the engine's hypothesis streams", () => {
     expect(s.hypotheses.map((h) => h.id)).toEqual(["h1", "h2", "h3"]); expect(s.hypothesesCut).toHaveLength(1)
     render(<Hypotheses state={s} onSource={() => {}} />)
     const [one, two, three] = cards()
-    expect(one).toHaveTextContent("✓ Supported"); expect(one).toHaveTextContent("2 sources for, 0 against")
+    expect(one).toHaveTextContent("✓ Supported")
     expect(within(one).getAllByRole("button").map((b) => b.textContent)).toEqual(["1", "4"])
-    expect(two).toHaveTextContent("? Insufficient evidence: the sources disagree"); expect(two).toHaveTextContent("1 source for, 1 against")
+    expect(two).toHaveTextContent("? Insufficient evidence: the sources disagree")
     expect(three).toHaveTextContent("? Insufficient evidence"); expect(three).not.toHaveTextContent("disagree"); expect(three).toHaveTextContent("No checked statement for or against it.")
     expect(three).toHaveTextContent("FornoneAgainstnone")
     expect(screen.getByRole("region", { name: "Hypotheses" })).toHaveTextContent("1 more hypothesis was proposed but not tested")
@@ -176,7 +180,8 @@ describe("the engine's hypothesis streams", () => {
     const s = foldAnswer(demo)
     render(<Hypotheses state={s} />)
     expect(cards()).toHaveLength(2)
-    expect(cards()[0]).toHaveTextContent("Example result: Supported"); expect(cards()[1]).toHaveTextContent("Example result: Contradicted")
+    expect(cards().map((c) => c.querySelector(".answer-markword")!.getAttribute("aria-label"))).toEqual(["Supported (practice: not a real result)", "Contradicted (practice: not a real result)"])
+    expect(cards()[0]).not.toHaveTextContent("Demo hypothesis:") // the engine's prefix is not repeated on every card
     expect(screen.getByRole("region", { name: "Hypotheses" })).not.toHaveTextContent(/✓|✕/)
   })
   it("the sources know which hypotheses found them, and the tagged statements their side", () => {
@@ -196,15 +201,15 @@ describe("the investigators", () => {
     expect([agentName("planner"), agentName("investigator-2"), agentName("checker"), agentName("critic"), agentName("writer"), agentName("searcher"), agentName("someone-new"), agentName(undefined)])
       .toEqual(["Planner", "Investigator 2", "Checker", "Critic", "Writer", "Searcher", "someone-new", undefined])
   })
-  it("each card names its investigator and what it has finished, from the steps tagged with that hypothesis only", () => {
+  it("what an investigator has finished is counted from the steps tagged with its hypothesis only; the card says only what it is doing now", () => {
     const events = [...base(), ...step("search:exa:1", "search", "h1", "investigator-1", { found: 8 }), ...step("search:europepmc:1", "search", "h1", "investigator-1", { found: 5 }),
       ...step("evaluate:exa:1", "evaluate", "h1", "investigator-1", { found: 8, kept: 3 }), ...step("write:h1", "write", "h1", "investigator-1"), ...step("search:exa:2", "search", "h2", "investigator-2")]
     const s = foldAnswer(events)
     expect(hypothesisWork(s, "h1")).toBe("2 searches, 3 results kept after screening"); expect(hypothesisDoing(s, "h1")).toBe("Drafting its section")
     expect(hypothesisWork(s, "h2")).toBe(""); expect(hypothesisDoing(s, "h2")).toBe("Searching")
     render(<Hypotheses state={s} />)
-    expect(cards()[0]).toHaveTextContent("Investigator 1: 2 searches, 3 results kept after screening"); expect(cards()[0]).toHaveTextContent("Drafting its section…")
-    expect(cards()[1]).toHaveTextContent("Investigator 2: not started"); expect(cards()[1]).toHaveTextContent("Searching…")
+    expect(cards()[0]).toHaveTextContent("Drafting its section…"); expect(cards()[1]).toHaveTextContent("Searching…")
+    expect(cards()[0]).not.toHaveTextContent("Investigator") // who did what is in the activity view and the inspector's table
   })
   it("says what a hypothesis was tested with, and shows a kind it does not know as text instead of failing", () => {
     expect(testedWith({ kind: "sources" })).toBe("Tested against published sources")
@@ -219,12 +224,13 @@ describe("the investigators", () => {
 
 describe("the engine's investigators, as streamed", () => {
   const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
-  it("every card names its own investigator and that investigator's finished work; the steps name who did them", () => {
+  it("the inspector's table names each hypothesis's investigator and its finished work; the steps name who did them", () => {
     const s = foldAnswer(lines(F_REAL))
     expect(s.hypotheses.map((h) => h.agent)).toEqual(["investigator-1", "investigator-2", "investigator-3"])
     render(<Hypotheses state={s} />)
-    cards().forEach((card, i) => expect(card).toHaveTextContent(new RegExp(`Investigator ${i + 1}: \\d+ search`)))
-    expect(cards()[0]).toHaveTextContent("section drafted")
+    render(<HypothesesTable state={s} />)
+    within(screen.getByRole("table")).getAllByRole("row").slice(1).forEach((row, i) => expect(row).toHaveTextContent(new RegExp(`Investigator ${i + 1}\\d+ search`)))
+    expect(hypothesisWork(s, "h1")).toContain("section drafted")
     for (const st of s.steps.filter((x) => x.hypothesis)) expect(st.agent).toBe(`investigator-${st.hypothesis!.slice(1)}`) // a hypothesis's steps are its own investigator's
     expect(new Set(s.steps.map((x) => agentName(x.agent)))).toEqual(new Set(["Planner", "Investigator 1", "Investigator 2", "Investigator 3", "Writer", "Checker", "Critic", undefined]))
     expect(s.hypotheses.every((h) => h.result?.testedBy?.kind === "sources")).toBe(true)

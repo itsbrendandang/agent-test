@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { HowItWorks } from "@/components/HowItWorks"
 import { lastRun, linkTo, showing } from "@/lib/open"
 import { forgetScripted } from "@/lib/scripted"
-import { initialView, rememberView, runOfHash, viewOfHash } from "@/nav"
+import { DEFAULT_VIEW, initialView, rememberView, runOfHash, viewOfHash } from "@/nav"
 import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON } from "@/test/home"
 import { BoardView } from "./BoardView"
@@ -48,11 +48,11 @@ describe("first visit", () => {
     // nothing technical in the open; the one model list sits inside the closed "Research options"
     expect(screen.queryAllByText(/key present|key missing|Not connected|claude-|gpt-|ANTHROPIC|\.env/i).filter((e) => !e.closest("details:not([open])"))).toEqual([])
   })
-  it("explains Demo mode once, in the owner's words", async () => {
+  it("explains Demo mode once, in one line", async () => {
     home(CATALOG_OFF)
-    const note = await screen.findByRole("note")
-    expect(note).toHaveTextContent("Demo mode. AI answers and web search are unavailable. You can search saved research.")
-    expect(screen.getAllByText(/AI answers and web search are unavailable/)).toHaveLength(1)
+    expect(await screen.findByText("Demo mode: answers are example text. Switch to Real for AI answers and web search.")).toBeInTheDocument()
+    expect(screen.getAllByText(/^Demo mode\b/)).toHaveLength(1) // one line, not two that disagree
+    expect(screen.queryByText(/In Demo it is example text|AI answers and web search are unavailable/)).toBeNull()
   })
   it("does not say Demo when the engine can use real models", async () => {
     home(CATALOG_ON)
@@ -73,12 +73,12 @@ describe("first visit", () => {
 
 describe("where you were", () => {
   it("reopening returns to the last view; an address that names a view wins", () => {
-    expect(initialView("")).toBe("Home")
+    expect(initialView("")).toBe(DEFAULT_VIEW)
     rememberView("Board")
     expect(initialView("")).toBe("Board")
     expect(initialView("#Runs")).toBe("Runs")
     localStorage.setItem("app.view", "Nowhere")
-    expect(initialView("")).toBe("Home")
+    expect(initialView("")).toBe(DEFAULT_VIEW)
   })
   it("an address can name a run, and only something shaped like a run id", () => {
     expect(viewOfHash("#Board/202611150024-kras-1060e203")).toBe("Board")

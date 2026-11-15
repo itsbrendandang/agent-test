@@ -51,9 +51,10 @@ async function open() {
 describe("counts that are honest about what was not checked", () => {
   it("says how many of the statements were checked, never a bare total, and never that all were", async () => {
     await open()
-    expect(screen.getByRole("status")).toHaveTextContent("The team has decided. 2 team members made 9 statements; 3 of them were checked.")
     const found = within(screen.getByRole("group", { name: "What the checks found" }))
     expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 9 statements checked.")
+    // the count is said once: in the row with the marks, not in a headline above it as well
+    expect((screen.getByRole("region", { name: "What happened" }).textContent!.match(/statements checked|of them were checked/g) ?? [])).toHaveLength(1)
     expect(found.getByText("2 supported")).toBeInTheDocument(); expect(found.getByText("0 contradicted")).toBeInTheDocument()
     expect(found.getByText("1 insufficient evidence")).toBeInTheDocument(); expect(found.getByText("6 not checked")).toBeInTheDocument()
     expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/every statement|all (of the )?statements|(?<!of )9 statements checked/i)
@@ -109,6 +110,43 @@ describe("one picture per agent, left of its label", () => {
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getByTestId("screened")).toHaveTextContent(/^Relevant$/)
     expect(screen.getByRole("region", { name: "Sources" })).not.toHaveTextContent(/relevance \d|0 to 1/)
+  })
+})
+
+describe("the page leads with the recommendation, then the counts", () => {
+  it("shows what the team recommends first, the count once in the row with the marks, and no second headline", async () => {
+    const MEMO = "# Memo\n\n## Decision\n- Go with conditions: advance CMP-0423. Park CMP-0517.\n\n## Rationale\nThe hERG margin is thin.\n"
+    routes({
+      "GET /api/status": { status: 200, body: { mock: true, paidCalls: false, keys: {}, meeting: { max_minutes: 15, max_usd: 5, max_rounds: 4 } } },
+      "GET /api/roster": { status: 200, body: ROSTER }, "GET /api/briefs": { status: 200, body: ["kras.md"] },
+      "GET /api/runs": { status: 200, body: [{ id: "run-1", brief: "chat-should-we-take-a-kras-g12c-inhibitor-candidat-1c582a84.md", rounds: 1, startedAt: new Date("2026-11-14T21:32:00").getTime(), status: "done", claims: 2 }] },
+    })
+    const plain = globalThis.fetch // the memo is Markdown text, not JSON
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (/\/api\/runs\/run-1\/memo$/.test(String(url)) ? Promise.resolve(new Response(MEMO, { status: 200 })) : plain(url, init))))
+    render(<BoardView />)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    await emit({ type: "run.started", runId: "run-1", brief: "chat", title: "Should we take a KRAS G12C inhibitor candidate with a hERG signal forw", mock: true })
+    await emit({ type: "round.started", round: 1, message: "Round 1.", final: false })
+    await emit({ type: "member.replied", round: 1, member: "scout", text: "In short: thin margin." })
+    await emit({ type: "claim.checked", round: 1, member: "scout", claim: "a", kind: "brief", verdict: "verified", checker: "first-pass", source: "brief" })
+    await emit({ type: "claim.checked", round: 1, member: "scout", claim: "b", kind: "brief", verdict: "unsupported", checker: "first-pass", source: "brief" })
+    await emit({ type: "memo.written", path: "memo.md", decision: "Go with conditions" })
+    await emit({ type: "run.finished", usd: 0, minutes: 0.1 })
+    const story = screen.getByRole("region", { name: "What happened" })
+    const card = await within(story).findByRole("group", { name: "Decision" })
+    expect(card).toHaveTextContent("Go with conditions: advance CMP-0423.")
+    const counts = within(story).getByRole("group", { name: "What the checks found" })
+    expect(card.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // recommendation, then counts
+    expect(within(story).queryByRole("status")).toBeNull() // no "The team has decided…" above it
+    expect(story).not.toHaveTextContent(/The team has decided|of them were checked/)
+    expect((story.textContent!.match(/2 of 2 statements checked/g) ?? [])).toHaveLength(1)
+    // a title the engine cut inside a word is shown up to its last whole word, with an ellipsis
+    expect(within(story).getByRole("heading", { level: 2 })).toHaveTextContent(/^Should we take a KRAS G12C inhibitor candidate with a hERG signal…$/)
+    // the picker: a title cut at a word, the date and time, and no state for a run that is simply done
+    expect(within(screen.getByRole("combobox", { name: "Review to show" })).getByRole("option", { selected: true })).toHaveTextContent(/^Should we take a kras g12c inhibitor… · 14 Nov 21:32$/)
+    // what a new review would be: one short line, no key names
+    expect(screen.getByTestId("next-mode")).toHaveTextContent(/^New reviews are practice runs in Demo mode\.$/)
+    expect(document.body).not.toHaveTextContent(/key missing|board reviews/i)
   })
 })
 

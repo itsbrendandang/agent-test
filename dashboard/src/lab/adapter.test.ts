@@ -38,7 +38,7 @@ describe("a team review (boardLab)", () => {
 
   it("sends the Scout to fetch when a search result is reported, with what it carried back", () => {
     const m = boardLab(PRACTICE_REVIEW.slice(0, 4))
-    expect(trips(m, "scout")).toEqual([expect.objectContaining({ kind: "fetch", room: "discovery", label: "3 example sources from the example sources (practice) (1 more screened out)", short: "3 example sources", outcome: "carried" })])
+    expect(trips(m, "scout")).toEqual([expect.objectContaining({ kind: "fetch", room: "discovery", label: "3 example sources (1 more screened out)", short: "3 example sources", outcome: "carried" })])
     expect(m.characters.scout.lastFetched?.label).toMatch(/^3 example sources/)
     expect(m.characters.scout.state).toBe("working") // it still has its reply to write
   })
@@ -304,7 +304,7 @@ describe("a research answer (answerLab)", () => {
     const m = answerLab(PRACTICE_ANSWER)
     expect(m.provenance).toBe("practice")
     expect(m.status).toBe("done")
-    expect(trips(m, "scout").find((t) => t.kind === "fetch")).toMatchObject({ label: "4 example sources from the example sources (practice)" })
+    expect(trips(m, "scout").find((t) => t.kind === "fetch")).toMatchObject({ label: "4 example sources" })
     expect(m.characters.librarian).toMatchObject({ inRun: true, state: "idle", doing: "Was not needed in this answer." })
     expect(m.log[0].text).toBe("The answer started (practice: fixed example text, nothing is searched).")
   })

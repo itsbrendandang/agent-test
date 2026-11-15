@@ -17,6 +17,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 describe("loading screen", () => {
   const splash = () => screen.queryByRole("status", { name: "Loading AI Scientist Bot" })
   it("carries the product's name, and no old one", () => {
+    localStorage.setItem("app.characters", "1") // the person turned the characters on
     const { container } = render(<Splash ready={false} />)
     expect(splash()).toHaveTextContent("AI Scientist Bot")
     expect(container.textContent).not.toMatch(/Sim Lab|Drug Board/)
@@ -68,6 +69,7 @@ describe("loading screen", () => {
   })
   it("draws the characters still when the person asked for less motion", () => {
     reduceMotion(true)
+    localStorage.setItem("app.characters", "1")
     const { container } = render(<Splash ready={false} />)
     expect(splash()).toHaveAttribute("data-still", "true") // the style sheet stops every animation under [data-still]
     expect(container.querySelectorAll(".splash-crew svg.buddy")).toHaveLength(5) // still drawn
@@ -80,8 +82,17 @@ describe("loading screen", () => {
 })
 
 describe("characters", () => {
-  it("are shown by default, as decoration hidden from screen readers", () => {
-    expect(charactersShown()).toBe(true)
+  it("are off until a person turns them on, and a stored choice always wins", () => {
+    expect(charactersShown()).toBe(false) // nothing stored: hidden, because they look like the agents of the Lab
+    const off = render(<><Mascots /><SideCrew /></>)
+    expect(off.container.querySelector(".mascots")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Momo" })).toBeNull()
+    off.unmount()
+    localStorage.setItem("app.characters", "1"); expect(charactersShown()).toBe(true)
+    localStorage.setItem("app.characters", "0"); expect(charactersShown()).toBe(false)
+  })
+  it("when shown they are decoration, hidden from screen readers", () => {
+    act(() => setCharactersShown(true))
     const { container } = render(<Mascots />)
     const row = container.querySelector(".mascots")!
     expect(row).toHaveAttribute("aria-hidden", "true")
@@ -89,6 +100,7 @@ describe("characters", () => {
     expect(container.textContent).toBe("") // they say nothing: no role, no claim to be an agent
   })
   it("the waiting state always has its status in text, with or without characters", () => {
+    act(() => setCharactersShown(true))
     const view = render(<Loading>The team is discussing: round 2 of 4</Loading>)
     expect(screen.getByRole("status")).toHaveTextContent("The team is discussing: round 2 of 4")
     expect(view.container.querySelector(".mascots")).toHaveAttribute("data-mood", "working")
@@ -98,24 +110,26 @@ describe("characters", () => {
   })
   it("are drawn still under reduced motion", () => {
     reduceMotion(true)
+    act(() => setCharactersShown(true))
     const { container } = render(<Loading>Loading…</Loading>)
     expect(container.querySelector(".mascots")).toHaveAttribute("data-still", "true")
   })
-  it("the Settings toggle hides them everywhere, and is remembered", async () => {
+  it("the Settings toggle shows and hides them everywhere, and is remembered", async () => {
     const user = userEvent.setup()
     const rail = render(<SideCrew />)
-    expect(screen.getByRole("button", { name: "Momo" })).toBeInTheDocument() // a name, not a job: they are not agents
+    expect(rail.container).toBeEmptyDOMElement() // off by default: no box in the sidebar
     render(<SettingsView />)
     const toggle = screen.getByRole("checkbox", { name: "Show characters" })
-    expect(toggle).toBeChecked()
-    await user.click(toggle)
     expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    expect(toggle).toBeChecked()
+    expect(screen.getByRole("button", { name: "Momo" })).toBeInTheDocument() // a name, not a job: they are not agents
+    expect(localStorage.getItem("app.characters")).toBe("1")
+    await user.click(toggle)
     expect(screen.queryByRole("button", { name: "Momo" })).toBeNull()
     expect(rail.container).toBeEmptyDOMElement()
     expect(localStorage.getItem("app.characters")).toBe("0")
     expect(charactersShown()).toBe(false)
-    await user.click(toggle)
-    expect(screen.getByRole("button", { name: "Momo" })).toBeInTheDocument()
   })
   it("the loading screen has no characters when they are off, and still says what it is", () => {
     setCharactersShown(false)

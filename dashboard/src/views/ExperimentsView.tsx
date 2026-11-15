@@ -1,5 +1,5 @@
 // Saved research: everything that was researched, newest first, with keyword search. Answers, team reviews and
-// task runs are one list of the same compact row (components/RecordRow.tsx). Runs of the same brief made the same
+// benchmark runs are one list of the same compact row (components/RecordRow.tsx). Runs of the same brief made the same
 // way are one row with their history folded under it; a similar name alone never groups two records. Each row's
 // badge (Practice or Live research) comes from the record itself, never from the "Next run" selector.
 import { useEffect, useMemo, useState } from "react"
@@ -10,6 +10,7 @@ import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { fmtScore, runTitle } from "@/lib/format"
 import { setOpenAnswer, viewOfKind } from "@/lib/open"
 import { provenanceOf, type ProvenanceKind } from "@/lib/provenance"
+import { mendTitle } from "@/lib/words"
 import { groupRecords } from "@/lib/records"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
@@ -21,7 +22,7 @@ interface Hit {
   matches: { where: string; text: string }[]
 }
 type Kind = "all" | "answer" | "swarm" | "board"
-const KIND_WORD: Record<Kind, string> = { all: "All", answer: "Answers", board: "Team reviews", swarm: "Task runs" }
+const KIND_WORD: Record<Kind, string> = { all: "All", answer: "Answers", board: "Team reviews", swarm: "Benchmark runs" }
 /** How many rows before "View all N". */
 const FIRST = 10
 
@@ -84,15 +85,16 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
     const result = h.kind === "swarm" ? (h.score !== undefined ? <span title="From the scoring program, out of 1">Score <span className="mono">{fmtScore(h.score)}</span> out of 1</span> : undefined)
       : h.kind === "board" && review && state === "done" ? <><span className="mono">{review.claims}</span> statement{review.claims === 1 ? "" : "s"} in <span className="mono">{review.rounds}</span> round{review.rounds === 1 ? "" : "s"}</> : undefined
     return {
-      key: `${h.kind}:${h.id}`,
-      title: h.kind === "answer" ? h.title : h.kind === "board" ? questions[h.id] ?? runTitle(h.title) : runTitle(h.title),
-      type: h.kind === "answer" ? "Answer" : h.kind === "board" ? "Team review" : run?.solver === "single" || / · single/.test(h.title) ? "Task run, one agent" : "Task run, team of nine",
+      key: `${h.kind}:${h.id}`, id: h.id,
+      title: h.kind === "answer" ? h.title : h.kind === "board" ? (questions[h.id] ? mendTitle(questions[h.id]!) : runTitle(h.title)) : runTitle(h.title),
+      type: h.kind === "answer" ? "Answer" : h.kind === "board" ? "Team review" : "Benchmark run",
       when: h.startedAt, provenance: madeBy(h), status: state, result,
       extra: h.kind === "swarm" && run?.task === "demo" ? <span className="pill" data-kind="outline" title="The demo task is a small made-up dataset, used to test that everything works. Its result is not a research result.">Demo task</span> : undefined,
       detail: (
         <>
           {h.matches.filter((m) => m.where !== "run").map((m, i) => <p key={i} className="record-match"><i>{m.where}:</i> {mark(m.text)}</p>)}
-          <p className="record-match"><span className="mono run-id" title={`Run id: ${h.id}`}>{mark(h.id)}</span></p>
+          {/* The id is not part of the reading flow. It shows only when it is what the search found. */}
+          {words.some((w) => h.id.toLowerCase().includes(w)) && <p className="record-match"><i>run id:</i> <span className="mono">{mark(h.id)}</span></p>}
         </>
       ),
       onOpen: () => open(h),
@@ -105,7 +107,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
 
   return (
     <div className="page">
-      <PageHead title="Saved research" about="Everything that was researched, newest first. Type a word to find it in a question, a result or anything that was said." />
+      <PageHead title="Saved research" about="Newest first. Search finds a word in a question, a result or anything that was said." />
       <div className="exp-bar">
         <input type="search" name="experiment-search" aria-label="Search saved research by word" autoComplete="off" value={query}
           placeholder="Type a word, for example: hERG" onChange={(e) => setQuery(e.currentTarget.value)} />
@@ -120,7 +122,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
       {hits && (
         <p className="muted small" role="status">
           <span className="mono">{shown.length}</span> {shown.length === 1 ? "record" : "records"}{query.trim() ? ` with “${query.trim()}”` : ""}
-          {items.length < shown.length && <> in <span className="mono">{items.length}</span> rows (runs of the same brief are together)</>}
+          {items.length < shown.length && <> in <span className="mono">{items.length}</span> rows (repeat runs of a brief are grouped)</>}
           {query.trim() && shown.length > 0 && <> · keyword matches, newest first</>}
         </p>
       )}

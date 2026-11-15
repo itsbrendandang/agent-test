@@ -331,6 +331,19 @@ export const noteOutcome = (n: Note): { word: string; kind: "success" | "warning
       : n.by === "writer" ? { word: "reported addressed by the writer, not re-checked", kind: "neutral" }
         : { word: n.by === "reviewer" ? "dealt with, confirmed by the critic" : "dealt with", kind: "success" }
 
+/**
+ * A practice answer says what it is once, beside its badge. The engine's fixed text also opens with a bold
+ * "Demo answer. …" sentence and names each hypothesis "Demo hypothesis: …": on screen those repeats are left out
+ * (the copied text and the saved file keep them). Only used for an answer the engine itself labelled demo.
+ */
+export function oncePractice(text: string): string {
+  const cut = text.replace(/^\s*\*\*Demo answer\.[^*]*\*\*\s*/i, "").replace(/^\s*Demo hypothesis:\s*/i, "")
+  return cut ? cut[0].toUpperCase() + cut.slice(1) : cut
+}
+
+/** A hypothesis section's "For:", "Against:" and "Not found:" lines each start their own paragraph (the engine separates them by one line break, which Markdown would run together). */
+export const ownLines = (markdown: string): string => markdown.replace(/([^\n])\n(?=\*\*(?:For|Against|Not found):\*\*)/g, "$1\n\n")
+
 /** A title as text: a database title can carry markup ("<i>KRAS</i>"), which is never rendered and reads badly as text. */
 export function plainTitle(title: string): string { return title.replace(/<\/?(?:i|b|em|strong|sub|sup|u)>/gi, "").replace(/\s+/g, " ").trim() }
 

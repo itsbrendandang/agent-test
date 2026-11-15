@@ -35,7 +35,7 @@ describe("Board view", () => {
     expect(mode.queryByText(/[Pp]ractice|scripted/)).toBeNull()
     expect(screen.getByTestId("run-mode").querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "live")
     // what a NEW review would use is said separately, and is about new reviews only
-    expect(screen.getByTestId("next-mode")).toHaveTextContent("Demo mode: reviews are practice runs only.")
+    expect(screen.getByTestId("next-mode")).toHaveTextContent(/^New reviews are practice runs in Demo mode\.$/) // one short line; the key detail is in Settings
   })
   it("a practice review shown while the next run would be Real still says Practice", async () => {
     board(true)
@@ -77,7 +77,7 @@ describe("Runs list", () => {
     }))
     render(<ExperimentsView onOpen={() => {}} />)
   }
-  const card = async (id: string) => (await screen.findByText(id)).closest("li")!
+  const card = async (id: string) => await waitFor(() => { const row = document.querySelector<HTMLElement>(`li[data-record$=":${id}"]`); expect(row).not.toBeNull(); return row! })
 
   it.each([[false, "paid calls off"], [true, "paid calls on"]])("labels each run from the run itself (%s: %s)", async (paidCalls) => {
     list(paidCalls)

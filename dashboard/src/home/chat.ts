@@ -29,7 +29,7 @@ export function sourcesWords(mode: string): { heading: string; about: string; la
 export const EXAMPLES = [
   "Should we advance a KRAS G12C hit with a hERG risk?",
   "What did past reviews decide about hERG risk?",
-  "Which statements were proven wrong, and why?",
+  "Which statements were contradicted, and why?",
 ]
 
 // The engine's own limits (engine/src/chat/routes.ts): a question of at most 2,000 characters, at most 20 messages.
@@ -191,9 +191,9 @@ export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; 
   providers: { id: string; keyPresent: boolean }[] = []): string | undefined {
   const needed = new Set(Object.values(status?.models ?? {}).flatMap((id) => (typeof id === "string" ? [keyOfModel(id)] : [])).filter((k): k is string => !!k))
   const missing = [...needed].filter((key) => status?.keys?.[key] === false || providers.some((p) => KEY_FOR[p.id] === key && !p.keyPresent))
-  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: board reviews are practice runs only`
+  if (missing.length) return `${missing.map((k) => KEY_NAME[k] ?? k).join(" and ")} key missing: team reviews are practice runs only`
   if (status?.paidCalls === false) return "Demo mode: reviews are practice runs only"
-  if (status?.mock === true) return "The engine is in practice mode: board reviews are practice runs only"
+  if (status?.mock === true) return "The engine is in practice mode: team reviews are practice runs only"
   return undefined
 }
 

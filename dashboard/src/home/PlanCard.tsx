@@ -79,7 +79,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
       const control = no.status === 400 ? controlOf(no.field) : undefined
       if (control) { setErrors({ [control]: no.message }); window.setTimeout(() => document.getElementById(`${uid}-${control}`)?.focus(), 0) }
       else setRefused(no.status === 403 ? `${no.message}${/NO_PAID_CALLS/.test(no.message) ? "" : ` ${HOW_TO_TURN_ON}`}`
-        : no.status === 409 ? `${no.message} This plan was already started. Look for its run in the Board view.` : no.message)
+        : no.status === 409 ? `${no.message} This plan was already started. Look for it under Team review.` : no.message)
     }
   }
 
@@ -101,7 +101,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
         {plan.paid ? <span className="pill" data-kind="warning">Costs money: uses paid models or paid search</span>
           : <><Provenance kind="practice" /><span className="muted small">Fixed text, not real research</span></>}
       </header>
-      <h2 id={`${uid}-title`}>{plan.briefTitle || "Board review"}</h2>
+      <h2 id={`${uid}-title`}>{plan.briefTitle || "Team review"}</h2>
       {plan.question.trim() !== (plan.briefTitle || "").trim() && <p className="home-plan-question">“{plan.question}”</p>}
 
       {state.state === "open" && step !== "confirm" && (quick ? (
@@ -178,7 +178,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
           </p>
           <dl className="home-facts">
             {level && <><dt>Effort</dt><dd>{level.label}</dd></>}
-            <dt>What runs</dt><dd>A board review with {chosen.length} agent{chosen.length === 1 ? "" : "s"}: {chosen.map((a) => a.title).join(", ") || "none"}</dd>
+            <dt>What runs</dt><dd>A team review with {chosen.length} agent{chosen.length === 1 ? "" : "s"}: {chosen.map((a) => a.title).join(", ") || "none"}</dd>
             <dt>Models</dt><dd>lead <code>{plan.models.lead}</code> · members <code>{plan.models.members}</code> · checker <code>{plan.models.checker}</code></dd>
             <dt>Exa search</dt><dd>{plan.search.exa ? "used (a paid service)" : "not used"}</dd>
             {literature && <><dt>Research papers (Europe PMC)</dt><dd>{plan.paid ? "used when the Scout searches (free)" : "not searched in a practice run"}</dd></>}

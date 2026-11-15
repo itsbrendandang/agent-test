@@ -113,9 +113,7 @@ function RunLab({ run, picker }: { run: RunRef; picker: ReactNode }) {
 
   const model = replaying && !ready ? { ...emptyLab(), kind: run.kind, runId: run.id, status: "waiting" as const } : shown
   const connection = run.kind === "swarm" ? swarm.connection : stream.connection
-  const how = pace === "even"
-    ? `One event at a time, ${(EVEN_GAP_MS / 1000).toFixed(1)} seconds apart. The run itself took ${plainDuration(timeline.realMs)}.`
-    : `At ${speed === 4 ? "4 times " : ""}its real timing. The run took ${plainDuration(timeline.realMs)}.`
+  const how = pace === "even" ? "Replay, slowed down so you can follow it." : speed === 4 ? `Replay at 4 times its real speed (the run took ${plainDuration(timeline.realMs)}).` : `Replay at its real speed (the run took ${plainDuration(timeline.realMs)}).`
   // The bar under the scene, like a video player's.
   const player = replaying ? (
     <div className="lab-player" role="group" aria-label="Replay">
@@ -154,7 +152,7 @@ function RunLab({ run, picker }: { run: RunRef; picker: ReactNode }) {
       {(model.note || (replaying && ready)) && (
         <p className="lab-note" data-tone={model.status === "failed" ? "bad" : undefined}>
           {model.note && <>{model.status === "failed" ? "✕ " : ""}{model.note} </>}
-          {replaying && ready && <span>{how}{full.roughTimes && " Times are estimates: a swarm's notes record time only when a step ends."}</span>}
+          {replaying && ready && <span>{how}{full.roughTimes && pace === "real" && " Its times are estimates."}</span>}
         </p>
       )}
       <Lab model={model} clock={clock} speed={on && pace === "real" ? speed : 1} settleKey={`${replaying}:${jumps}`} footer={player} />

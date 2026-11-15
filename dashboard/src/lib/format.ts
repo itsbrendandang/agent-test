@@ -1,3 +1,4 @@
+import { benchmarkTitle } from "./words"
 export const fmtMetric = (v: number | undefined) =>
   v === undefined ? "—" : Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
 
@@ -58,18 +59,26 @@ export function plainWhen(at: number | string | undefined, now: Date = new Date(
     : `${d.getDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]}${d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`}`
   return `${date} at ${time}`
 }
-/** A file name or an id as a title a person can read: "kras-g12c-hit-to-lead.md" -> "Kras g12c hit to lead". */
+/**
+ * A file name or an id as a title a person can read: "kras-g12c-hit-to-lead.md" -> "Kras g12c hit to lead". The
+ * engine cuts the name of a brief made from a question at 40 characters, often inside a word; such a title drops
+ * the broken word and ends with "…", so it never reads as if it were whole.
+ */
 export const plainTitle = (name: string): string => {
-  const t = name.replace(/\.md$/, "").replace(/^\d{8,}-/, "").replace(/-[0-9a-f]{8}$/, "").replace(/^chat-/, "").replace(/[-_]+/g, " ").trim()
+  const bare = name.replace(/\.md$/, "").replace(/^\d{8,}-/, "")
+  const cutByEngine = /^chat-[a-z0-9-]{40}-[0-9a-f]{8}$/.test(bare)
+  let t = bare.replace(/-[0-9a-f]{8}$/, "").replace(/^chat-/, "").replace(/[-_]+/g, " ").trim()
+  if (cutByEngine && t.includes(" ")) t = `${t.slice(0, t.lastIndexOf(" "))}…`
   return t ? t[0].toUpperCase() + t.slice(1) : name
 }
 
 /**
- * A run's title as a person would say it. The engine titles a review "Drug board · <brief>" and a task run
- * "Task <task> · <swarm|single> · <model>"; this says the same without the internal words.
+ * A run's title as a person would say it. The engine titles a review "Drug board · <brief>" and a benchmark run
+ * "Task <task> · <swarm|single agent> · <model>"; this says the same without the internal words, in one pattern:
+ * "Team of nine on the demo task", "One agent on the demo task".
  */
 export function runTitle(title: string): string {
-  const task = /^Task (.+?) · (swarm|glhf|single)(?: · (.+))?$/i.exec(title)
-  if (task) return `${/single/i.test(task[2]) ? "One agent alone" : "Team of nine"} on ${task[1] === "demo" ? "the demo task" : `task ${task[1]}`}${task[3] && task[3] !== "mock" ? ` (${task[3]})` : ""}`
+  const task = /^Task (.+?) · (swarm|glhf|single(?: agent)?)(?: · (.+))?$/i.exec(title)
+  if (task) return `${benchmarkTitle(task[2], task[1])}${task[3] && task[3] !== "mock" ? ` (${task[3]})` : ""}`
   return plainTitle(title.replace(/^Drug board · /i, ""))
 }

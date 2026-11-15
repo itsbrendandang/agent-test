@@ -150,8 +150,16 @@ describe("the answer on the page", () => {
     expect(container).toHaveTextContent("Example text and example sources. Nothing was searched and no AI model was asked.")
     expect(screen.getAllByRole("button", { name: /^Example check: Supported\./ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull() // no mark is offered as a real check
-    expect(screen.getByRole("status")).toHaveTextContent("Example checks, not real ones:")
-    expect(container).toHaveTextContent("Example source (practice run)")
+    // "practice" is said once in words, beside the badge: not again in the tally, the opening or the text
+    expect(container.querySelector(".answer-kind")).toHaveTextContent("PracticeExample text and example sources. Nothing was searched and no AI model was asked.")
+    expect(screen.getByRole("status")).not.toHaveTextContent(/example|practice|demo/i)
+    expect(container.querySelector(".answer-opening")).toBeNull()
+    expect(container.querySelector(".answer-text")).not.toHaveTextContent(/^Demo answer\./)
+    // every source row of a practice answer says it is an example, once
+    for (const row of within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")) {
+      expect(row.textContent!.match(/example source/gi)).toHaveLength(1)
+      expect(row).not.toHaveTextContent(/\(mock\)|scripted/i)
+    }
     expect(screen.queryByRole("link", { name: "Exa" })).toBeNull(); expect(container).not.toHaveTextContent("powered by Exa")
     expect(container).toHaveTextContent("Practice: nothing was spent.")
     await userEvent.setup().click(screen.getAllByRole("button", { name: /^Example check/ })[0])
@@ -286,7 +294,7 @@ describe("asking on Search", () => {
   it("Demo mode uses the same screen, and the answer is labelled a demo", async () => {
     const t = home(CATALOG_OFF, { "POST /api/research": { status: 202, body: { id: "a-9", thread: "t-9", mode: "demo" } } })
     await screen.findByRole("radio", { name: "Standard" })
-    expect(screen.getByText(/Standard answers on this page, with sources\. In Demo it is example text\./)).toBeInTheDocument()
+    expect(screen.getByText("Demo mode: answers are example text. Switch to Real for AI answers and web search.")).toBeInTheDocument()
     await t.ask("Is hERG a risk?")
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await feed(DEMO)
@@ -412,7 +420,8 @@ describe("the adapter, contract v2", () => {
     expect(await screen.findByText("Stopped. Nothing more will be spent on it.")).toBeInTheDocument()
     await feed(DONE.filter((e) => e.seq! > 5))
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
-    expect(container).toHaveTextContent("Prepared in 2s · Completed in 12s")
+    expect(container.querySelector(".activity-line")).toHaveTextContent(/^Prepared in 2s · \d+ steps · 12s/) // timing is said once
+    expect(container.querySelector(".answer-prep")).toBeNull()
     expect(screen.getByRole("region", { name: "Sources" })).toHaveTextContent("Searching the web: did not work. The Exa key was refused. No web search was used.")
     expect(within(screen.getByRole("region", { name: "Sources" })).getByText("Page B").closest("li")).toHaveTextContent("Selected, but not cited in the answer")
     expect(within(screen.getByRole("region", { name: "What to do next" })).getByText("Confirm the dose in the trial report.")).toBeInTheDocument()
@@ -449,7 +458,7 @@ describe("a demo answer exactly as the engine streams it today (contract v2)", (
     expect(screen.getByText("Practice")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull() // no mark is offered as a real check
     expect(container).not.toHaveTextContent("powered by Exa")
-    expect(container.querySelector(".answer-prep")).toHaveTextContent(/^Prepared in .+ · Completed in /)
+    expect(container.querySelector(".activity-line")).toHaveTextContent(/^Prepared in .+ · \d+ steps · /)
   })
 })
 

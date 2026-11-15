@@ -111,9 +111,11 @@ describe("board graph", () => {
   })
   it("reads the scripted flag from the run's own run.started event", () => {
     expect(g.scripted).toBe(true)
-    expect(find(g, "run").facts.find((f) => f.label === "Made with")?.value).toMatch(/^Practice: fixed example answers/)
+    expect(find(g, "run").facts.find((f) => f.label === "Made with")).toBeUndefined() // a practice run is stated once, by the banner
     const real = BOARD_EVENTS.map((e) => (e.type === "run.started" ? { ...e, mock: false } : e))
-    expect(buildBoardGraph({ runId: "r1", events: real }).scripted).toBe(false)
+    const liveRun = buildBoardGraph({ runId: "r1", events: real })
+    expect(liveRun.scripted).toBe(false)
+    expect(find(liveRun, "run").facts.find((f) => f.label === "Made with")?.value).toMatch(/Live research/)
     const none = buildBoardGraph({ runId: "r1", events: BOARD_EVENTS.filter((e) => e.type !== "run.started") })
     expect(none.scripted).toBeUndefined()
     expect(none.notes.join(" ")).toMatch(/does not say whether/)
@@ -215,7 +217,10 @@ describe("swarm graph", () => {
     expect(find(g, "agent:planner").order).toBe(3)
     expect(find(g, "artifact:gene_counts").order).toBeGreaterThanOrEqual(find(g, "claim:C1").order)
     expect(g.marks.map((m) => m.label)).toEqual(["Proposer", "Pilot (did not run)", "Critic · review round 1", "Reviser · review round 1"])
-    expect(find(g, "phase:pilot").label).toBe("Pilot (did not run)")
+    expect(find(g, "phase:pilot").label).toBe("Pilot") // the label stays the plain name
+    expect(find(g, "phase:pilot").muted).toBe(true)
+    expect(find(g, "phase:pilot").facts).toContainEqual({ label: "Did it run?", value: "no (plan)" })
+    expect(find(g, "phase:propose").muted).toBeUndefined()
     expect(g.steps).toHaveLength(g.maxOrder)
   })
   it("labels scripted and demo runs from the run's own fields", () => {

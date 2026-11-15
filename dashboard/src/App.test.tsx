@@ -10,7 +10,9 @@ import { routes } from "@/test/engine"
 import App from "./App"
 
 vi.mock("./views/HomeView", () => ({ HomeView: () => <div className="page">research view<HeaderSlot area="title"><span className="header-title">Is hERG a risk?</span></HeaderSlot><HeaderSlot area="actions"><button type="button">Inspector</button></HeaderSlot></div> }))
+vi.mock("./views/OverviewView", () => ({ OverviewView: () => <div className="page">overview view</div> }))
 vi.mock("./views/ExperimentsView", () => ({ ExperimentsView: () => <div className="page">saved view</div> }))
+vi.mock("./views/BenchmarksView", () => ({ BenchmarksView: () => <div className="page">benchmarks view</div> }))
 vi.mock("./views/SwarmView", () => ({ SwarmView: () => <div className="page">compare view</div> }))
 vi.mock("./views/BoardView", () => ({ BoardView: () => <div className="page">review view <EngineOffline needs="Reviews run in the engine." /></div> }))
 vi.mock("./views/AgentsView", () => ({ AgentsView: () => <div className="page">agents view</div> }))
@@ -63,9 +65,9 @@ describe("the navigation", () => {
     await show("#Home")
     const nav = within(screen.getByRole("navigation", { name: "Places" }))
     const names = nav.getAllByRole("button").map((b) => b.textContent)
-    expect(names).toEqual(["Research", "Saved research", "Compare", "Team review", "Agents", "Graph", "Lab"])
+    expect(names).toEqual(["Overview", "Research", "Saved research", "Compare", "Team review", "Agents", "Graph", "Lab", "Benchmarks"])
     const more = within(nav.getByRole("list", { name: "More" })).getAllByRole("button")
-    expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Lab"])
+    expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Lab", "Benchmarks"])
     for (const b of more) expect(b).toHaveAttribute("data-quiet")
     expect(nav.getByRole("button", { name: "Research" })).not.toHaveAttribute("data-quiet")
     expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1)
@@ -85,7 +87,7 @@ describe("the navigation", () => {
     expect(screen.getByRole("main")).toHaveTextContent("settings view")
   })
   it.each([["#Experiments", "Saved research", "saved view"], ["#Swarm", "Compare", "compare view"], ["#Worlds", "Graph", "graph view"], ["#Runs", "Saved research", "saved view"],
-    ["#Board", "Team review", "review view"], ["#Lab/board/r-1", "Lab", "lab view"], ["#Research", "Research", "research view"]])("the address %s still opens %s", async (hash, place, text) => {
+    ["#Board", "Team review", "review view"], ["#Lab/board/r-1", "Lab", "lab view"], ["#Research", "Research", "research view"], ["#Home", "Research", "research view"], ["#Overview", "Overview", "overview view"], ["#Benchmarks", "Benchmarks", "benchmarks view"], ["", "Overview", "overview view"]])("the address %s still opens %s", async (hash, place, text) => {
     await show(hash)
     expect(screen.getByTestId("place")).toHaveTextContent(place)
     expect(await within(screen.getByRole("main")).findByText(new RegExp(text))).toBeInTheDocument()

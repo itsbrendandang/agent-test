@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PRACTICE } from "@/lib/words"
 /** The shared badge (components/Provenance.tsx): the word alone. */
-const BADGE = /^Practice$/
 import { routes } from "@/test/engine"
 import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
@@ -54,11 +53,14 @@ const CONTRADICTED = /^claim:scout:/
 /** The id of the contradicted claim, as the renderer received it (its id ends in a short hash of the claim text). */
 const claimId = () => fake.data.at(-1)!.nodes.map((n) => n.id).find((id) => CONTRADICTED.test(id) && (fake.data.at(-1)!.nodes.find((n) => n.id === id) as { label?: string }).label?.startsWith("Piperazine"))!
 const detail = (name: RegExp | string) => fireEvent.click(screen.getByRole("button", { name }))
+/** The fixture run plus eight more statements: its first picture (members and statements) has more than 15 nodes. */
+const LARGER: BoardEvent[] = [...BOARD_EVENTS, ...Array.from({ length: 8 }, (_, i) => ({ type: "claim.checked", round: 1, member: "critic", claim: `Extra statement ${i}`, kind: "brief", verdict: "verified", checker: "first-pass", key: `x${i}`, at: 1_700_000_000_500 + i }) as BoardEvent)]
 const listMode = () => fireEvent.click(screen.getByRole("button", { name: "List" }))
 
 beforeEach(() => {
   fake.calls = []; fake.throwOnCreate = false; fake.destroyed = 0; fake.data = []; fake.styles = []; fake.reveals = []; fake.paused = []; fake.flown = []; fake.webgl = true
   FakeEventSource.all = []
+  localStorage.setItem("graph.mode", "graph") // most tests are about the 3D graph; the ones about the default remove this
   vi.stubGlobal("EventSource", FakeEventSource)
   location.hash = ""
 })
@@ -79,8 +81,10 @@ describe("Graph view", () => {
     routes(lists)
     const { unmount } = render(<WorldsView />)
     await streamBoard()
-    expect(await screen.findByTestId("scripted-label")).toHaveTextContent(BADGE)
-    expect(screen.getByTestId("scripted-banner")).toHaveTextContent(PRACTICE)
+    // A practice run is stated once: by the banner over the picture. There is no second "Practice" label beside the picker.
+    expect(await screen.findByTestId("scripted-banner")).toHaveTextContent(PRACTICE)
+    expect(screen.getByTestId("scripted-label")).toBeEmptyDOMElement()
+    expect(screen.getAllByText(/Practice/)).toHaveLength(1)
     unmount()
     FakeEventSource.all = []
     routes(lists)
@@ -102,8 +106,9 @@ describe("Graph view", () => {
     sessionStorage.setItem("open.swarm", "s1")
     routes({ ...lists, ...swarmRoutes })
     render(<WorldsView />)
-    expect((await screen.findByTestId("scripted-label")).querySelector("[data-provenance]")).toHaveTextContent(BADGE)
-    expect(screen.getByText("Demo task")).toBeInTheDocument()
+    expect(await screen.findByTestId("scripted-banner")).toHaveTextContent(PRACTICE)
+    expect(screen.getByTestId("scripted-label")).toHaveTextContent("Demo task")
+    expect(screen.getAllByText(/Practice/)).toHaveLength(1)
     expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("swarm:s1")
   })
 
@@ -222,11 +227,13 @@ describe("Graph view", () => {
   })
 
   it("shows everything for a run without claims, since members and claims would be an empty picture", async () => {
+    localStorage.removeItem("graph.mode")
     sessionStorage.setItem("open.swarm", "s2")
     routes({ ...lists, ...swarmRoutes })
     render(<WorldsView />)
     await screen.findByTestId("headline")
-    await waitFor(() => expect(fake.data.at(-1)?.nodes.map((n) => n.id)).toContain("artifact:gene_counts"))
+    const table = await screen.findByRole("table", { name: /nodes of the graph/i }) // two nodes: a small run opens as a list
+    expect(within(table).getByText("Output")).toBeInTheDocument()
   })
 
   it("answers what happened in one sentence from the run's data", async () => {
@@ -248,7 +255,7 @@ describe("Graph view", () => {
     render(<WorldsView />)
     await streamBoard(PRACTICE_EVENTS)
     expect(await screen.findByTestId("headline")).toHaveTextContent("Over 2 rounds, 2 team members made 2 statements: 2 insufficient evidence.")
-    expect(screen.getByTestId("scripted-label")).toHaveTextContent(BADGE)
+    expect(screen.getByTestId("scripted-banner")).toHaveTextContent(PRACTICE)
   })
 
   it("filters by kind and by verdict, in the graph and the list", async () => {
@@ -376,6 +383,92 @@ describe("Graph view", () => {
     expect(fake.data.at(-1)!.nodes.map((n) => n.id).filter((id) => id.startsWith("claim:")).length).toBeGreaterThan(14) // the 14 contradicted ones are among them
   })
 
+  it("opens a small run as a list, and keeps the person's own choice", async () => {
+    localStorage.removeItem("graph.mode")
+    routes(lists)
+    const small = render(<WorldsView />)
+    await streamBoard(PRACTICE_EVENTS) // fewer than 15 nodes
+    expect(await screen.findByRole("table", { name: /nodes of the graph/i })).toBeInTheDocument()
+    expect(fake.calls).not.toContain("create")
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true")
+    fireEvent.click(screen.getByRole("button", { name: "3D graph" })) // the person chooses
+    await waitFor(() => expect(fake.calls).toContain("create"))
+    expect(localStorage.getItem("graph.mode")).toBe("graph")
+    small.unmount()
+    FakeEventSource.all = []; fake.calls = []
+    routes(lists)
+    render(<WorldsView />) // the stored choice wins over the small-run default
+    await streamBoard(PRACTICE_EVENTS)
+    await waitFor(() => expect(fake.calls).toContain("create"))
+    expect(screen.queryByRole("table", { name: /nodes of the graph/i })).toBeNull()
+  })
+
+  it("opens a larger run as the 3D graph", async () => {
+    localStorage.removeItem("graph.mode")
+    routes(lists)
+    render(<WorldsView />)
+    await streamBoard(LARGER)
+    await waitFor(() => expect(fake.calls).toContain("create"))
+    expect(screen.getByRole("button", { name: "3D graph" })).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("shows few controls at first sight: search waits in More filters for a small run, and Next contradicted only appears when there is one", async () => {
+    localStorage.removeItem("graph.mode")
+    routes(lists)
+    const { unmount } = render(<WorldsView />)
+    await streamBoard(PRACTICE_EVENTS) // small, nothing contradicted
+    await screen.findByRole("table", { name: /nodes of the graph/i })
+    expect(screen.getByRole("search").closest("details")).not.toBeNull()
+    expect(screen.queryByRole("button", { name: /Next contradicted one/ })).toBeNull()
+    unmount()
+    FakeEventSource.all = []
+    routes(lists)
+    render(<WorldsView />)
+    await streamBoard(LARGER) // larger, one contradicted statement
+    expect(await screen.findByRole("button", { name: /Next contradicted one \(1\)/ })).toBeInTheDocument()
+    expect(screen.getByRole("search").closest("details")).toBeNull()
+  })
+
+  it("heads a run with the run's title, and says a run with no record quietly, not as an error", async () => {
+    sessionStorage.setItem("open.swarm", "s1")
+    const l = SWARM_DETAIL.ledger!
+    routes({ ...lists, "GET /api/glhf/runs/s1": { status: 200, body: { ...SWARM_DETAIL, run: { ...SWARM_DETAIL.run, artifacts: [] }, ledger: { ...l, claims: [], issues: [], events: [] } } } })
+    render(<WorldsView />)
+    expect(await screen.findByRole("heading", { name: "Team of nine · demo" })).toBeInTheDocument()
+    const line = screen.getByTestId("headline")
+    expect(line).toHaveTextContent("Nothing was recorded in this run, so there is little to show.")
+    expect(line).toHaveClass("graph-quiet")
+    expect(screen.queryByText(/No role left a record/)).toBeNull()
+  })
+
+  it("never says swarm: the picker names the run and keeps its id in a tooltip", async () => {
+    sessionStorage.setItem("open.swarm", "s1")
+    routes({ ...lists, ...swarmRoutes })
+    const { container } = render(<WorldsView />)
+    await screen.findByTestId("headline")
+    expect(container.textContent).not.toMatch(/swarm/i)
+    const option = screen.getByRole("option", { name: /Team of nine · demo ·/ })
+    expect(option).toHaveAttribute("title", "s1")
+    expect(option.textContent).not.toMatch(/s1/)
+    const board = screen.getByRole("option", { name: /^Review · / })
+    expect(board.textContent).toMatch(/^Review · kras · /) // the brief's name, not its id
+    expect(board).toHaveAttribute("title", "r1")
+  })
+
+  it("keeps a step that did not run out of its label, and says so in its panel", async () => {
+    sessionStorage.setItem("open.swarm", "s1")
+    routes({ ...lists, ...swarmRoutes })
+    render(<WorldsView />)
+    await screen.findByTestId("headline")
+    fireEvent.click(screen.getByRole("button", { name: "Everything" }))
+    fireEvent.click(screen.getByRole("button", { name: "List" }))
+    const table = await screen.findByRole("table", { name: /nodes of the graph/i })
+    expect(table.textContent).not.toMatch(/did not run/)
+    fireEvent.click(within(table).getByRole("button", { name: "Pilot" }))
+    expect(await screen.findByTestId("node-panel")).toHaveTextContent("Did it run?")
+    expect(screen.getByTestId("node-panel")).toHaveTextContent("no (plan)")
+  })
+
   it("closes the event stream when the run ends", async () => {
     routes(lists)
     render(<WorldsView />)
@@ -418,7 +511,7 @@ describe("Graph view", () => {
   it("keeps working when only one list fails, and says so", async () => {
     routes({ "GET /api/runs": { status: 500, body: {} }, "GET /api/glhf/runs": { status: 200, body: [swarmRun] }, ...swarmRoutes })
     render(<WorldsView />)
-    expect(await screen.findByText(/board run list could not be loaded/)).toBeInTheDocument()
+    expect(await screen.findByText(/list of reviews could not be loaded/)).toBeInTheDocument()
     expect(await screen.findByTestId("scripted-label")).toBeInTheDocument()
   })
 
@@ -439,7 +532,7 @@ describe("Graph view", () => {
     routes(lists)
     render(<WorldsView />)
     await streamBoard([BOARD_EVENTS[0]])
-    expect(await screen.findByText(/no recorded claims, sources or tests|Nothing has been recorded yet/)).toBeInTheDocument()
+    expect(await screen.findByTestId("headline")).toHaveTextContent("Nothing has been recorded for this run yet.")
   })
 
   it("asks for a key nowhere", async () => {

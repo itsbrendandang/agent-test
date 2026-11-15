@@ -1,6 +1,6 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
-// Three places carry the everyday work; the advanced ones sit under "More", quieter; Settings is once, at the foot.
-import { FlaskConical, GitCompareArrows, ListChecks, MessagesSquare, Microscope, Settings, Share2, Users, X } from "lucide-react"
+// Four places carry the everyday work; the advanced ones sit under "More", quieter; Settings is once, at the foot.
+import { FlaskConical, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, Microscope, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { SideCrew } from "@/components/SideCrew"
 import {
@@ -10,7 +10,7 @@ import {
 import { ABOUT, LABEL, MORE, PRIMARY, PRODUCT, type View } from "@/nav"
 
 const ICON: Record<View, typeof Settings> = {
-  Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Board: FlaskConical, Agents: Users, Graph: Share2, Lab: Microscope, Settings,
+  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Benchmarks: Trophy, Board: FlaskConical, Agents: Users, Graph: Share2, Lab: Microscope, Settings,
 }
 
 export function AppSidebar({ view, onGo }: { view: View; onGo: (view: View) => void }) {

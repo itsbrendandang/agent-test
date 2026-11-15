@@ -13,6 +13,8 @@ import type { RunState } from "@/lib/status"
 export interface RecordItem {
   /** Unique in its list. */
   key: string
+  /** The record's own id. Kept out of the reading flow: it is the tooltip of the type word. */
+  id?: string
   /** The question, the brief or the source's title. Untrusted text: shown as text. */
   title: string
   /** What kind of thing it is, in plain words: "Answer", "Team review", "PubMed", "ClinicalTrials.gov record". */
@@ -57,7 +59,7 @@ export function RecordRow({ item, emphasis = (t) => t, nested }: { item: RecordI
           <span className="record-titletext">{emphasis(item.title)}</span>
         </p>
         <p className="record-meta">
-          <span className="record-type">{item.type}</span>
+          <span className="record-type" title={item.id ? `Run id: ${item.id}` : undefined}>{item.type}</span>
           {item.when !== undefined && <time className="mono" dateTime={isoOf(item.when)}>{stamp(item.when)}</time>}
           {item.identifier && <span className="mono record-id">{item.identifier}</span>}
           <Provenance kind={item.provenance} compact />

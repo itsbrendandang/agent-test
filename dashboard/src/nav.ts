@@ -2,27 +2,30 @@
 export const PRODUCT = "AI Scientist Bot"
 
 // The views of the app. The keys are addresses (the URL hash, stored choices, deep links): they never change.
-// What a person reads is LABEL. Research is first and is what opens when the address names no view.
-export const VIEWS = ["Home", "Runs", "Compare", "Board", "Agents", "Graph", "Lab", "Settings"] as const
+// What a person reads is LABEL. Overview is first and is what opens when the address names no view and no view
+// was used before. "Home" stays the key of Research.
+export const VIEWS = ["Overview", "Home", "Runs", "Compare", "Benchmarks", "Board", "Agents", "Graph", "Lab", "Settings"] as const
 export type View = (typeof VIEWS)[number]
-export const DEFAULT_VIEW: View = "Home"
+export const DEFAULT_VIEW: View = "Overview"
 /** What a person reads in the navigation and in the header. Renames happen here only. */
-export const LABEL: Record<View, string> = { Home: "Research", Runs: "Saved research", Compare: "Compare", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Lab", Settings: "Settings" }
+export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Lab", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
+  Overview: "How much has been run, and how much of it is research.",
   Home: "Ask a research question and read the answer with its sources.",
   Runs: "Everything that was researched, newest first, with keyword search.",
-  Compare: "One agent alone against a team of nine, on the same task.",
-  Board: "One team review: the decision, the discussion and the checks.",
-  Agents: "Who does the work: roles, team members, specialists and methods.",
+  Compare: "One agent against a team of nine, on the same benchmark task.",
+  Benchmarks: "Our results on the benchmarks, beside the record to beat.",
+  Board: "One team review: the recommendation, the checks and the discussion.",
+  Agents: "Who does the work: the nine roles, the review agents, specialists and skills.",
   Graph: "One run as a graph of who said what and how it was checked.",
   Lab: "Watch the team at work in a run.",
-  Settings: "What the engine can use, Demo or Real, and help.",
+  Settings: "Run mode (Demo or Real), the session token, and help.",
 }
-/** The everyday workflow: these three get the weight. */
-export const PRIMARY: readonly View[] = ["Home", "Runs", "Compare"]
+/** The everyday workflow: these get the weight. */
+export const PRIMARY: readonly View[] = ["Overview", "Home", "Runs", "Compare"]
 /** Advanced views: kept, quieter, under "More". */
-export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Lab"]
+export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Lab", "Benchmarks"]
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }
@@ -45,7 +48,7 @@ export const runOfHash = (hash: string): string | undefined => { const id = part
 const LAST = "app.view"
 /** Remember the view a person is on, so reopening the app returns there. */
 export const rememberView = (view: View) => { try { localStorage.setItem(LAST, view) } catch { /* private mode */ } }
-/** The view to show on load: the one the address names, else the last one used, else Research. */
+/** The view to show on load: the one the address names, else the last one used, else Overview. */
 export const initialView = (hash: string): View => {
   let last: string | null = null
   try { last = localStorage.getItem(LAST) } catch { /* private mode */ }

@@ -6,6 +6,39 @@ export const PRACTICE = "Practice: fixed example answers, not real research"
 export const PRACTICE_SHORT = "practice run"
 export const REAL = "Live research: real AI models"
 
+// ---- who does the work, and on what. On screen these are the only words: the mode is Demo or Real, a run's label
+// is Practice or Live research (lib/provenance.ts), the nine-agent solver is the "team of nine", the baseline is
+// "one agent", and what they work on is a "benchmark task". Never "swarm", "glhf", "task run", "mock", "scripted"
+// or "board" on screen.
+export const TEAM_OF_NINE = "Team of nine"
+export const ONE_AGENT = "One agent"
+/** The solver in the record ("glhf", "swarm", "single", "single agent") as the words a person reads. */
+export const solverWord = (solver: unknown): string => (/single/i.test(String(solver)) ? ONE_AGENT : TEAM_OF_NINE)
+/** What a benchmark run worked on: "the demo task", or "benchmark task <id>". */
+export const taskWord = (task: string): string => (task === "demo" ? "the demo task" : `benchmark task ${task}`)
+/** One pattern for every benchmark run's title: "Team of nine on the demo task", "One agent on benchmark task bix-12". */
+export const benchmarkTitle = (solver: unknown, task: string): string => `${solverWord(solver)} on ${taskWord(task)}`
+/** The limit on how much text the models may read and write. */
+export const TOKEN_LIMIT = "token limit"
+
+/** Cut at a word, with "…", when a text is longer than `max`. Never mid-word. */
+export function clip(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim()
+  if (flat.length <= max) return flat
+  const cut = flat.slice(0, max + 1)
+  const at = cut.lastIndexOf(" ")
+  return `${(at > max * 0.5 ? cut.slice(0, at) : flat.slice(0, max)).replace(/[\s,;:.-]+$/, "")}…`
+}
+
+/**
+ * A title the engine may have cut. It cuts a title made from a question at 70 or 80 characters, sometimes inside a
+ * word. A title of exactly that length that ends in a letter or digit is shown up to its last whole word, with "…".
+ */
+export const mendTitle = (title: string): string => {
+  const t = title.trim()
+  return (t.length === 70 || t.length === 80) && /[\p{L}\p{N}]$/u.test(t) && t.includes(" ") ? `${t.slice(0, t.lastIndexOf(" ")).replace(/[\s,;:.-]+$/, "")}…` : t
+}
+
 // ---- the four marks. One vocabulary for what a check found, in every view. A mark is shown only where a check
 // was recorded; the glyph goes with the word, so a mark never rests on colour.
 /** supported: a check found a source (or passed its tests). contradicted: a check went against it. insufficient: a

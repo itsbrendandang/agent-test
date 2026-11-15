@@ -92,7 +92,7 @@ describe("the board's discussion", () => {
   it("says in one sentence what happened", async () => {
     await open()
     await emit({ type: "run.finished", usd: 0, minutes: 0.15 })
-    expect(screen.getByText(/The team has decided\./)).toHaveTextContent("The team has decided. 2 team members made 3 statements; 3 of them were checked.")
+    expect(screen.getByRole("status")).toHaveTextContent(/^The team has decided\.$/) // no memo to show yet: one plain line, and the count is said once, below
     const found = within(screen.getByRole("group", { name: "What the checks found" }))
     expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 3 statements checked.")
     expect(found.getByText("1 supported")).toBeInTheDocument(); expect(found.getByText("1 contradicted")).toBeInTheDocument(); expect(found.getByText("1 insufficient evidence")).toBeInTheDocument()
@@ -248,7 +248,11 @@ describe("pieces", () => {
     expect(plainTitle("202611150024-chat-should-we-advance-a-kras-g12c-hit-1060e203")).toBe("Should we advance a kras g12c hit")
     expect(plainTitle("kras-g12c-hit-to-lead.md")).toBe("Kras g12c hit to lead")
     expect(runTitle("Task demo · swarm · mock")).toBe("Team of nine on the demo task") // no bare "swarm" or "mock"
-    expect(runTitle("Task bix-12 · single · anthropic/claude-sonnet-5-5")).toBe("One agent alone on task bix-12 (anthropic/claude-sonnet-5-5)")
+    expect(runTitle("Task bix-12 · single · anthropic/claude-sonnet-5-5")).toBe("One agent on benchmark task bix-12 (anthropic/claude-sonnet-5-5)")
+    expect(runTitle("Task demo · single agent · mock")).toBe("One agent on the demo task") // the same pattern as the team's run, never the raw title
+    // a brief named from a question is cut by the engine at 40 characters: the broken word goes, and "…" says so
+    expect(plainTitle("202611150118-chat-should-we-advance-a-kras-g12c-hit-that-h-1c582a84")).toBe("Should we advance a kras g12c hit that…")
+    expect(runTitle("Drug board · chat-should-we-advance-a-kras-g12c-hit-that-h-1c582a84")).toBe("Should we advance a kras g12c hit that…")
     expect(runTitle("Drug board · chat should we advance")).toBe("Chat should we advance")
   })
 })

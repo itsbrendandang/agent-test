@@ -288,6 +288,13 @@ export function latestActive(model: LabModel): CharacterId {
   return best
 }
 
+/** A time of day: "4:51 pm". */
+export function shortTime(at: number | undefined): string {
+  if (at === undefined || !Number.isFinite(at)) return ""
+  const d = new Date(at), h = d.getHours()
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`
+}
+
 /** A time of day with seconds: "4:51:07 pm". Engine time, shown in the reader's time zone. */
 export function clockTime(at: number | undefined): string {
   if (at === undefined || !Number.isFinite(at)) return ""

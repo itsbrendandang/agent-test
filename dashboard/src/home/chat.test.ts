@@ -210,13 +210,13 @@ describe("can a board review use real models?", () => {
     expect(keyOfModel("ollama/qwen2.5:14b")).toBeUndefined()
   })
   it("a missing key comes before the paid switch: turning paid calls on would not be enough", () => {
-    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: board reviews are practice runs only")
+    expect(boardScriptedWhy({ ...live, keys: { ANTHROPIC_API_KEY: false, OPENAI_API_KEY: true } })).toBe("Anthropic key missing: team reviews are practice runs only")
   })
   it("says paid calls are off when every key is there", () => {
     expect(boardScriptedWhy(live, [{ id: "anthropic", keyPresent: true }, { id: "openai", keyPresent: true }])).toBe("Demo mode: reviews are practice runs only")
   })
   it("says nothing when the board can use real models", () => {
     expect(boardScriptedWhy({ ...live, mock: false, paidCalls: true })).toBeUndefined()
-    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in practice mode: board reviews are practice runs only")
+    expect(boardScriptedWhy({ mock: true, paidCalls: true, keys: {}, models: {} })).toBe("The engine is in practice mode: team reviews are practice runs only")
   })
 })

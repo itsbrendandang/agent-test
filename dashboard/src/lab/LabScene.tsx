@@ -16,7 +16,7 @@ import { agentIdentity } from "./identity"
 import { LabMap } from "./LabMap"
 import { Mascot, type Mood } from "./Mascot"
 import {
-  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, STATE_GLYPH, STATE_WORD, TALL, WIDE, activeRooms, captionOf, describeActivity,
+  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, STATE_GLYPH, STATE_WORD, TALL, WIDE, activeRooms, captionOf, characterOf, describeActivity,
   type Activity, type CharacterId, type LabLayout, type LabModel, type LabState, type RoomId, type Trip,
 } from "./model"
 import { active, advance, claimPlace, createSim, moving, settle, stationPoint, syncTrips, visitorPoint } from "./motion"
@@ -104,6 +104,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   /** The claim cards: every room's tray holds one for each claim, and only the one in the claim's place is shown. */
   const cards = useRef(new Map<string, HTMLElement>())
   const counts = useRef(new Map<RoomId, HTMLElement>())
+  const plates = useRef(new Map<CharacterId, HTMLElement>())
   const frame = useRef(0)
   const previous = useRef<number | null>(null)
   // What the frame loop reads: always the latest props, without restarting the loop.
@@ -115,7 +116,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
     const { model: m, still: stand, paused: held } = live.current
     const s = scale.current || 1, unit = (px: number) => px / s
     const at = sim.layout
-    const taken: (Box & { of?: CharacterId })[] = []
+    const taken: (Box & { of?: CharacterId; /** a caption: never to be covered */ text?: boolean })[] = []
     const chips: { id: CharacterId; text: string; x: number; y: number; away: boolean; cargo: boolean }[] = []
     for (const w of Object.values(sim.walkers)) {
       const n = nodes.current[w.id]
@@ -138,16 +139,22 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       if (n.held) n.held.dataset.kind = holds ? heldOf(stand ? last : w.job ?? last, w.id) : ""
       taken.push({ x1: w.x - ART.left, y1: w.y - ART.up, x2: w.x + ART.right, y2: w.y + ART.down, of: w.id })
       const away = !stand && Math.hypot(w.x - w.home.x, w.y - w.home.y) > 8
-      // At its desk the chip says the state, or what is in the parcel. Away from it, the chip also says who it is
-      // (the name plate stayed at the desk): the name, and what it carries or the mark of its state.
+      // At its place the bubble says the state, or what is in hand. In its own room it says only what it carries
+      // (its name plate is beside it). In another room or the corridor it also says who it is.
       const says = !a.inRun ? "" : holds && tag ? tag : CHIP[a.state]
-      const text = !away ? says : holds && tag ? `${captionOf(a)}: ${tag}` : `${captionOf(a)}${a.inRun && STATE_GLYPH[a.state] ? ` ${STATE_GLYPH[a.state]}` : ""}`
+      const room = at.at[characterOf(w.id).room]
+      const abroad = away && !(w.x >= room.x && w.x <= room.x + ROOM.width && w.y >= room.y && w.y <= room.y + ROOM.height)
+      const text = !away ? says : holds && tag ? (abroad ? `${captionOf(a)}: ${tag}` : tag) : abroad ? `${captionOf(a)}${a.inRun && STATE_GLYPH[a.state] ? ` ${STATE_GLYPH[a.state]}` : ""}` : a.inRun ? STATE_GLYPH[a.state] : ""
       chips.push({ id: w.id, text, x: w.x, y: w.y, away, cargo: holds && !!tag })
     }
-    // The fixed name plates under the teammates' places are never covered.
+    // The fixed name plates: each stays inside its room's card, and no bubble may lie on one.
     for (const c of CHARACTERS) {
-      const home = stationPoint(c, at), half = unit(textWidth(captionOf(m.characters[c.id])) + 10) / 2
-      taken.push({ x1: home.x - half, y1: home.y + PLATE_DY - unit(11), x2: home.x + half, y2: home.y + PLATE_DY + unit(11) })
+      const home = stationPoint(c, at), room = at.at[c.room]
+      const half = unit(textWidth(captionOf(m.characters[c.id])) + 14) / 2
+      const x = Math.max(room.x + 6 + half, Math.min(room.x + ROOM.width - 6 - half, home.x)), y = Math.min(room.y + ROOM.height - unit(13), home.y + PLATE_DY)
+      const plate = plates.current.get(c.id)
+      if (plate) { plate.style.left = `${(x / at.width) * 100}%`; plate.style.top = `${(y / at.height) * 100}%` }
+      taken.push({ x1: x - half, y1: y - unit(11), x2: x + half, y2: y + unit(11), text: true })
     }
     // Chips: a teammate at its desk has its chip above its head (that row is kept free). One that is away tries
     // above, then each side, then below, and takes the first place where nothing else is.
@@ -164,19 +171,21 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
         { x: chip.x, y: above },
         ...(chip.away ? [
           { x: chip.x + side, y: chip.y - 30 }, { x: chip.x - side, y: chip.y - 30 }, // right, left
-          { x: chip.x + w / 2, y: above - h - gap }, { x: chip.x - w / 2, y: above - h - gap }, // higher, to either side
+          { x: chip.x + w / 2, y: above - h - gap }, { x: chip.x - w / 2, y: above - h - gap }, { x: chip.x, y: above - h - gap }, // higher
           { x: chip.x, y: chip.y + ART.down + h / 2 + gap }, // below
           { x: chip.x + side, y: chip.y - 4 }, { x: chip.x - side, y: chip.y - 4 }, // lower corners
+          { x: chip.x + w / 2, y: above - 2 * (h + gap) }, { x: chip.x - w / 2, y: above - 2 * (h + gap) }, // higher still
         ] : []),
       ]
       const box = (p: { x: number; y: number }): Box => ({ x1: p.x - w / 2, y1: p.y - h / 2, x2: p.x + w / 2, y2: p.y + h / 2 })
-      // its own drawing is not in its way; a place that sticks out of the map is the last choice
-      const cost = (p: { x: number; y: number }) => taken.reduce((sum, b) => (b.of === chip.id ? sum : sum + overlap(box(p), b)), 0) + (p.x - w / 2 < 0 || p.x + w / 2 > at.width ? 1e6 : 0)
+      // Lying on a name plate or on another bubble is the worst; lying on a figure is tolerable; its own figure is not
+      // in its way. A place that sticks out of the map is the last choice.
+      const cost = (p: { x: number; y: number }) => taken.reduce((sum, b) => (b.of === chip.id ? sum : sum + overlap(box(p), b) * (b.text ? 40 : 1)), 0) + (p.x - w / 2 < 0 || p.x + w / 2 > at.width || p.y - h / 2 < 0 ? 1e7 : 0)
       const best = spots.reduce((a, b) => (cost(b) < cost(a) ? b : a))
       el.style.left = `${(best.x / at.width) * 100}%`
       el.style.top = `${(best.y / at.height) * 100}%`
       el.style.zIndex = String(2000 + Math.round(best.y))
-      taken.push(box(best))
+      taken.push({ ...box(best), text: true })
     }
     // How many teammates are in each room now (2.0's count beside the room's name).
     for (const r of ROOMS) {
@@ -280,7 +289,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
             const a = model.characters[c.id], home = stationPoint(c, layout)
             const told = describeActivity(captionOf(a), a)
             return (
-              <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + PLATE_DY)}
+              <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + PLATE_DY)} ref={(el) => { if (el) plates.current.set(c.id, el); else plates.current.delete(c.id) }}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
                 aria-pressed={selected === c.id} aria-label={`Inspect ${told}`} title={told} onClick={() => onSelect?.(c.id)}>
                 <i aria-hidden="true" />{captionOf(a)}

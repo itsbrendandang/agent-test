@@ -4,15 +4,19 @@
 // `hypothesis.checked` (computed by the engine's code from checked statements). The page never works out a mark.
 // "Tested" means checked against published sources; nothing here is an experiment, and the map says so.
 import { MARK_GLYPH, MARK_WORD, markOf } from "./marks"
-import { agentName, HYPOTHESES_NOTE, sidesLine, testedWith } from "./hypothesisWords"
-import { hypothesisDoing, hypothesisWork, type AnswerState, type Hypothesis } from "./model"
+import { agentName, HYPOTHESES_NOTE, testedWith } from "./hypothesisWords"
+import { hypothesisDoing, hypothesisWork, oncePractice, type AnswerState, type Hypothesis } from "./model"
 
-/** The mark of a tested hypothesis: glyph and word. In a practice run it is an example and carries no check glyph. */
+/**
+ * The mark of a tested hypothesis: glyph and word. In a practice run it has a dashed outline and no colour, and its
+ * name for a screen reader says it is not a real result (the answer's Practice badge says so once in words).
+ */
 export function HypothesisMark({ hypothesis: h, demo }: { hypothesis: Hypothesis; demo: boolean }) {
   if (!h.result) return null
   const m = markOf(h.result.verdict)
-  if (demo) return <span className="answer-markword" data-mark="unchecked" data-demo="">Example result: {MARK_WORD[m]}</span>
-  return <span className="answer-markword" data-mark={m}><span aria-hidden="true">{MARK_GLYPH[m]}</span> {MARK_WORD[m]}{h.result.mixed && ": the sources disagree"}</span>
+  const word = `${MARK_WORD[m]}${h.result.mixed ? ": the sources disagree" : ""}`
+  if (demo) return <span className="answer-markword" data-mark="unchecked" data-demo="" title="Practice: not a real result" aria-label={`${word} (practice: not a real result)`}>{word}</span>
+  return <span className="answer-markword" data-mark={m}><span aria-hidden="true">{MARK_GLYPH[m]}</span> {word}</span>
 }
 
 function Chips({ label, numbers, known, onSource }: { label: string; numbers: number[]; known: (n: number) => string | undefined; onSource?: (n: number) => void }) {
@@ -30,6 +34,10 @@ function Chips({ label, numbers, known, onSource }: { label: string; numbers: nu
   )
 }
 
+/**
+ * One card per hypothesis: its text, its mark, and the sources for and against. The engine's sentence on how the
+ * mark was reached is one press away ("Why"); who worked on it is in the activity view.
+ */
 export function Hypotheses({ state: s, onSource }: { state: AnswerState; onSource?: (n: number) => void }) {
   if (s.hypotheses.length === 0) return null
   const demo = s.mode === "demo"
@@ -37,30 +45,23 @@ export function Hypotheses({ state: s, onSource }: { state: AnswerState; onSourc
   const known = (n: number) => s.sources.find((x) => x.n === n)?.title
   return (
     <section className="hyp" aria-label="Hypotheses" data-count={s.hypotheses.length}>
-      <h2 className="hyp-title">Hypotheses{demo && <span className="muted small"> · examples of a practice run</span>}</h2>
-      {s.question && <p className="hyp-question"><span className="story-eyebrow">The question</span>{s.question}</p>}
-      {/* the branches from the question to each card: decoration */}
-      <div className="hyp-branches" aria-hidden="true">{s.hypotheses.map((h) => <span key={h.id} />)}</div>
+      <h2 className="hyp-title">Hypotheses</h2>
       <ol className="hyp-cards">
         {s.hypotheses.map((h, i) => {
           const doing = hypothesisDoing(s, h.id)
-          const work = hypothesisWork(s, h.id)
-          const who = agentName(h.agent)
+          const why = [h.result?.note, h.result?.testedBy && h.result.testedBy.kind !== "sources" ? testedWith(h.result.testedBy) : undefined].filter(Boolean).join(" ")
           return (
             <li key={h.id} className="hyp-card" data-mark={h.result && !demo ? markOf(h.result.verdict) : undefined}>
               <span className="story-eyebrow">Hypothesis {i + 1}{h.origin === "user" && " · as you stated it"}</span>
-              <p className="hyp-text">{h.text}</p>
-              {/* who works on it, and what that investigator has finished: from the steps tagged with this hypothesis */}
-              {(who || work) && <p className="muted small hyp-work">{who && <b>{who}</b>}{who && work && ": "}{work}{who && !work && (ended ? ": no step was recorded" : ": not started")}</p>}
+              <p className="hyp-text">{demo ? oncePractice(h.text) : h.text}</p>
               {h.result ? (
                 <>
-                  <p className="hyp-result"><HypothesisMark hypothesis={h} demo={demo} /> <span className="muted small">{sidesLine(h.result)}</span></p>
-                  {h.result.note && <p className="muted small">{h.result.note}</p>}
-                  {h.result.testedBy && h.result.testedBy.kind !== "sources" && <p className="muted small" data-tested={h.result.testedBy.kind}>{testedWith(h.result.testedBy)}</p>}
+                  <p className="hyp-result"><HypothesisMark hypothesis={h} demo={demo} /></p>
                   <div className="hyp-sides">
                     <Chips label="For" numbers={h.result.for} known={known} onSource={onSource} />
                     <Chips label="Against" numbers={h.result.against} known={known} onSource={onSource} />
                   </div>
+                  {why && <details className="hyp-why"><summary>Why</summary><p className="muted small">{why}</p></details>}
                 </>
               ) : (
                 <p className="hyp-result muted small" role="status">
@@ -88,14 +89,14 @@ export function HypothesesTable({ state: s }: { state: AnswerState }) {
   return (
     <section aria-label="Hypotheses">
       <h3>Hypotheses</h3>
-      <p className="muted small">{demo ? "Examples of a practice run, not real results. " : ""}{HYPOTHESES_NOTE}</p>
+      <p className="muted small">{HYPOTHESES_NOTE}</p>
       <div className="hyp-tablewrap" tabIndex={0} role="group" aria-label="Hypotheses table, scrolls sideways">
         <table className="hyp-table">
           <thead><tr><th scope="col">Hypothesis</th><th scope="col">What would support it</th><th scope="col">What would contradict it</th><th scope="col">Result</th><th scope="col">Sources for</th><th scope="col">Sources against</th><th scope="col">Worked on by</th></tr></thead>
           <tbody>
             {s.hypotheses.map((h, i) => (
               <tr key={h.id}>
-                <th scope="row"><span className="muted small">H{i + 1}</span> {h.text}</th>
+                <th scope="row"><span className="muted small">{i + 1}.</span> {demo ? oncePractice(h.text) : h.text}</th>
                 <td>{h.supportIf || "not recorded"}</td>
                 <td>{h.contradictIf || "not recorded"}</td>
                 <td>{h.result ? <><HypothesisMark hypothesis={h} demo={demo} />{h.result.note && <span className="muted small hyp-tablenote">{h.result.note}</span>}</> : <span className="muted small">{hypothesisDoing(s, h.id) ?? "No result recorded"}</span>}</td>

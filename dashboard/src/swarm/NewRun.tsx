@@ -101,14 +101,14 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
             <fieldset className="newrun-field">
               <legend>Who does the work</legend>
               <div className="newrun-choices">
-                {([["glhf", "A team of nine"], ["single", "Single agent"], ["both", "Both, to compare"]] as const).map(([value, label]) => (
+                {([["glhf", "A team of nine"], ["single", "One agent"], ["both", "Both, to compare"]] as const).map(([value, label]) => (
                   <label key={value}><input type="radio" name="who" id={who === value ? `${uid}-who` : undefined} value={value} checked={who === value} onChange={() => set("who", value)} /> {label}</label>
                 ))}
               </div>
               {who === "both" && (
                 <p className="muted small">
-                  Starts a pair with the same model, time limit, token budget and seed, so the scoreboard can compare them. The swarm runs first.
-                  The single agent waits in the queue and starts when the swarm run has ended. The two never run at the same time.
+                  Starts a pair with the same model, time limit, token limit and seed, so the scoreboard can compare them. The team of nine runs first;
+                  the one agent starts when the team's run has ended.
                 </p>
               )}
               {err("who")}
@@ -132,8 +132,8 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
                 </p>
               )}
               {!off && models.length === 1 && <p className="muted small">The engine has no key for an AI model, so only the practice option is listed. The person who runs the app can add one (Settings, Technical).</p>}
-              {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the text limit. You will be asked to confirm.</p>}
-              {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail. Add the key to .env and restart the engine.</p>}
+              {real && model && <p className="newrun-cost" role="note"><b>This run costs money.</b> It calls a paid model with the engine's API key until it finishes or reaches the time limit or the token limit. You will be asked to confirm.</p>}
+              {neededKey && <p className="newrun-error" role="note">The engine has no {neededKey} for this model, so the run would fail. The person who runs the app can add it (Settings, Technical).</p>}
             </div>
 
             <div className="newrun-row">
@@ -144,7 +144,7 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
                 {err("minutes")}
               </div>
               <div className="newrun-field">
-                <label htmlFor={`${uid}-tokens`}>Token budget {real ? "(required)" : "(optional)"}</label>
+                <label htmlFor={`${uid}-tokens`}>Token limit {real ? "(required)" : "(optional)"}</label>
                 <input id={`${uid}-tokens`} type="number" inputMode="numeric" min={limits?.maxTokens[0]} max={limits?.maxTokens[1]} step={1000} value={tokens} title={hint(limits?.maxTokens)}
                   placeholder={real ? "for example 500000" : "no limit"} onChange={(e) => set("tokens", e.currentTarget.value)}
                   aria-invalid={!!errors.tokens} aria-describedby={described("tokens")} />
@@ -175,10 +175,10 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
               </div>
               {err("exa")}{err("memory")}
               {off ? <p className="muted small" id={`${uid}-exa-off`}>Web search (Exa) is a paid service, so it cannot be used in Demo mode.</p>
-                : !hasExaKey && <p className="muted small" id={`${uid}-exa-off`}>Web search is off because the engine has no key for Exa (EXA_API_KEY). Add the key to .env and restart the engine to use it.</p>}
+                : !hasExaKey && <p className="muted small" id={`${uid}-exa-off`}>Web search is off because the engine has no key for Exa (see Settings, Technical).</p>}
               <p className="muted small">
-                {swarm ? "Review rounds, web search and lessons apply to the team only." : "One agent alone has no review rounds, web search or lessons."}
-                {who === "both" && " The single-agent run starts without them. The scoreboard still pairs the two runs and lists these extras next to the swarm."}
+                {swarm ? "Review rounds, web search and lessons apply to the team only." : "One agent has no review rounds, web search or lessons."}
+                {who === "both" && " The scoreboard still pairs the two runs and lists these extras next to the team."}
               </p>
             </fieldset>
           </>
@@ -187,9 +187,9 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
             <p className="newrun-cost"><b>{count === 2 ? "These two runs cost money." : "This run costs money."}</b> Check the settings before you start.</p>
             <dl>
               <dt>Model</dt><dd><code>{model}</code></dd>
-              <dt>Runs</dt><dd>{who === "both" ? "2: a swarm run first, then a single-agent run when the swarm run has ended" : who === "glhf" ? "1 swarm run (9 roles)" : "1 single-agent run"}</dd>
+              <dt>Runs</dt><dd>{who === "both" ? "2: the team of nine first, then one agent when the team's run has ended" : who === "glhf" ? "1, by the team of nine" : "1, by one agent"}</dd>
               <dt>Time limit</dt><dd>{fmtDuration(limitMs)} ({minutes} minutes){count === 2 && " for each run"}</dd>
-              <dt>Text limit (tokens)</dt><dd>{fmtTokens(budget)} tokens{count === 2 && budget !== undefined && ` for each run, ${fmtTokens(budget * 2)} in total`}</dd>
+              <dt>Token limit</dt><dd>{fmtTokens(budget)} tokens{count === 2 && budget !== undefined && ` for each run, ${fmtTokens(budget * 2)} in total`}</dd>
               {swarm && <><dt>Team extras</dt><dd>{[`${rounds} review rounds`, useExa && "Exa search", memory && "memory"].filter(Boolean).join(", ")}</dd></>}
               {seed.trim() && <><dt>Seed</dt><dd>{seed}</dd></>}
             </dl>

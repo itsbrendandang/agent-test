@@ -14,9 +14,9 @@ export const kindLabel = (k: NodeKind, run: RunKind): string => ({
 /** One plain sentence per kind: what the thing is. */
 export const KIND_WHAT: Record<NodeKind, string> = {
   run: "the run itself",
-  agent: "a team member of the board, or a role of the swarm: an AI that took part",
+  agent: "a team member of the board, or a role of the team of nine: an AI that took part",
   checker: "who checked a statement; team members never check their own",
-  phase: "a round of the board, or one step of a swarm role",
+  phase: "a round of the board, or one step of a role in the team of nine",
   claim: "something a team member or role said was true, which is then checked",
   source: "evidence a team member used, or the brief itself",
   test: "a test written down in advance to try to prove a statement wrong",

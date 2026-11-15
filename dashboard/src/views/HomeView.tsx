@@ -203,8 +203,10 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
       <div className="search-under">
         <span className="muted small" id="home-box-help">
-          {effort === "deep" ? <>Deep plans a team review and asks you before anything starts{level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.</>
-            : effort ? <>{effort === "quick" ? "Quick" : "Standard"} answers on this page, with sources{cap ? `: at most $${cap.maxUsd.toFixed(2)} and ${plainDuration(cap.maxSeconds * 1000)}` : ""}.{demo && " In Demo it is example text."}</>
+          {/* One line, true for the mode. In Demo it is said on the empty screen only: an answer carries its own Practice badge. */}
+          {demo ? (empty ? "Demo mode: answers are example text. Switch to Real for AI answers and web search." : "")
+            : effort === "deep" ? <>Deep plans a team review and asks you before anything starts{level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.</>
+            : effort ? <>{effort === "quick" ? "Quick" : "Standard"} answers on this page, with sources{cap ? `: at most $${cap.maxUsd.toFixed(2)} and ${plainDuration(cap.maxSeconds * 1000)}` : ""}.</>
             : "Enter sends. Shift+Enter adds a line."}
         </span>
         <details className="search-options" open={problem?.control === "effort" || problem?.control === "model" || undefined}>
@@ -345,7 +347,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               <Suggestions className="search-examples" role="group" aria-label="Example questions">
                 {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
               </Suggestions>
-              {demo && <p className="search-demo" role="note"><b>Demo mode.</b> AI answers and web search are unavailable. You can search saved research.</p>}
               {catalog === null && (
                 <p className="search-demo" role="alert">
                   {whyNone

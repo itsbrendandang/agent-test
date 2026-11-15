@@ -22,7 +22,7 @@ import type { BoardEvent, RosterMember } from "@/board/api"
 import type { LedgerClaim, LedgerEvent, RunDetail } from "@/swarm/api"
 import { ROLES, roleOf } from "@/swarm/roles"
 import { outcomeOf } from "@/lib/verdict"
-import { markCounts, markOf, PRACTICE, REAL, type Mark as Found } from "@/lib/words"
+import { markCounts, markOf, REAL, type Mark as Found } from "@/lib/words"
 import type { Fact, GraphLink, GraphModel, GraphNode, LinkKind, Mark, NodeKind, Outcome, Stats, Step, Verdict } from "./types"
 import { LINK_VERB } from "./words"
 
@@ -276,7 +276,7 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
     if (n.kind === "phase") n.facts.push({ label: "Replies", value: String(n.count.replies ?? 0) })
     if (n.kind === "source" && n.id !== "source:brief") n.facts.push({ label: "Kept by", value: plural(n.count.retrievals ?? 0, "search", "searches") })
   }
-  run.facts.push(...finishedFact, ...(scripted === undefined ? [] : [{ label: "Made with", value: scripted ? PRACTICE : REAL }]))
+  run.facts.push(...finishedFact, ...(scripted === false ? [{ label: "Made with", value: REAL }] : []))
   for (const c of constraints) run.facts.push({ label: "Wrap-up", value: c })
 
   const notes = [
@@ -308,10 +308,10 @@ export function buildSwarmGraph(detail: RunDetail): GraphModel {
   const scripted = run.model === "mock"
   const demo = run.task === "demo"
   const status: GraphModel["status"] = run.phase === "done" ? "done" : run.phase === "failed" ? "failed" : run.phase === "cancelled" ? "cancelled" : run.phase === "queued" ? "queued" : "running"
-  const runNode = b.node("run", "run", `${run.solver === "glhf" ? "Swarm" : "Single agent"} · ${run.task}`, 0, {
+  const runNode = b.node("run", "run", `${run.solver === "glhf" ? "Team of nine" : "Single agent"} · ${run.task}`, 0, {
     facts: [
-      { label: "Run", value: run.id }, { label: "Task", value: run.task }, { label: "Solver", value: run.solver === "glhf" ? "swarm" : "single agent" },
-      { label: "Model", value: run.model }, { label: "Made with", value: scripted ? PRACTICE : REAL },
+      { label: "Run", value: run.id }, { label: "Task", value: run.task }, { label: "Solver", value: run.solver === "glhf" ? "team of nine" : "single agent" },
+      { label: "Model", value: run.model }, ...(scripted ? [] : [{ label: "Made with", value: REAL }]),
       { label: "State", value: run.phase },
       ...(run.score !== undefined ? [{ label: "Score from the grader", value: fmt(run.score) }] : []),
       ...(run.error ? [{ label: "Error", value: run.error }] : []),
@@ -352,7 +352,7 @@ export function buildSwarmGraph(detail: RunDetail): GraphModel {
       case "phase.started": case "phase.skipped": {
         const title = str(e.phase)
         const p = turn(title, order)
-        if (e.kind === "phase.skipped") { p.facts.push({ label: "Skipped", value: str(e.reason) || "yes" }); p.label = `${turnName(title)} (did not run)` }
+        if (e.kind === "phase.skipped") { p.facts.push({ label: "Did it run?", value: `no (${str(e.reason) || "skipped"})` }); p.muted = true }
         else { current = title; if (num(e.seconds) !== undefined) p.facts.push({ label: "Time allowed", value: `${e.seconds} s` }) }
         if (num(e.tokens_allowed) !== undefined) p.facts.push({ label: "Tokens allowed", value: String(e.tokens_allowed) })
         if (prev === undefined) b.link("next", "run", p.id, order); else if (prev !== title) b.link("next", `phase:${prev}`, p.id, order)

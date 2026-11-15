@@ -43,7 +43,7 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (/\/api\/runs\/b-mock\/events$/.test(String(url))
       ? Promise.resolve(new Response(sse({ type: "run.started", runId: "b-mock", brief: "kras", title: "KRAS", mock: true }), { status: 200 })) : plain(url, init))))
     render(<ExperimentsView onOpen={() => {}} />)
-    for (const id of ["s-mock", "b-mock"]) await waitFor(async () => practice((await screen.findByText(id)).closest("li")!))
+    for (const id of ["s-mock", "b-mock"]) await waitFor(() => practice(document.querySelector<HTMLElement>(`li[data-record$=":${id}"]`)!))
   })
   it("Board: the review on screen", async () => {
     routes({
@@ -65,8 +65,40 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     const story = within(await screen.findByRole("region", { name: "Run" }))
     await waitFor(() => practice(story.getByTestId("run-mode")))
     expect(story.getByTestId("run-mode")).toHaveTextContent("Demo task") // the made-up dataset is said too
-    expect(story.getByRole("status")).toHaveTextContent("The team finished this practice run. Its score, 1.000 out of 1, is not a research result.")
+    expect(story.getByRole("status")).toHaveTextContent(/^The team finished this practice run\. It is not a research result\.$/)
+    const whole = (await screen.findByRole("region", { name: "Run" })).textContent!
+    expect((whole.match(/1\.000/g) ?? []).length).toBe(1) // the score is said once, in the result, not in the headline too
+    expect((whole.match(/not a research result/g) ?? []).length).toBe(1)
+    expect(within(story.getByRole("group", { name: "Result" })).getByText("1.000")).toBeInTheDocument()
     expect(story.getByText(/took 17 seconds · 30-minute limit · cost nothing \(practice run\)/)).toBeInTheDocument()
+  })
+  it("Compare: says once why most roles did not run, hides a row of zeros, and keeps run ids out of the text", async () => {
+    const pair = { ...RUN, id: "202611142330-demo-glhf", pairedWith: "202611142330-demo-single" }
+    const single = { ...RUN, id: "202611142330-demo-single", solver: "single", pairedWith: pair.id, after: pair.id }
+    const ledger = (events: object[], claims: object[] = []) => ({ alpha: 0.1, kappa: 1, issues: [], claims, events })
+    const skippedByPlan = ["scout", "pilot", "audit 1"].map((phase) => ({ kind: "phase.skipped", phase, reason: "plan", mode: "degraded" }))
+    const show = (events: object[]) => {
+      routes({ "GET /api/glhf/status": { status: 200, body: PAID_OFF }, "GET /api/glhf/runs": { status: 200, body: [pair, single] }, "GET /api/glhf/scoreboard": { status: 200, body: [] },
+        [`GET /api/glhf/runs/${pair.id}`]: { status: 200, body: { run: pair, ledger: ledger(events), findings: null, methods: null } } })
+      return render(<SwarmView />)
+    }
+    const first = show([{ kind: "phase.started", phase: "propose" }, { kind: "phase.started", phase: "experiment" }, ...skippedByPlan, { kind: "phase.skipped", phase: "critique 1", reason: "time", seconds: 4 }, { kind: "phase.started", phase: "report" }])
+    const run = await screen.findByRole("region", { name: "Run" })
+    // the reasons are the record's own (phase.skipped), in plain words; roles with no recorded reason are said to have none
+    await waitFor(() => expect(within(run).getByTestId("not-run-why")).toHaveTextContent("Did not run: Scout (left out of this run's plan); Pilot (left out of this run's plan); Auditor (left out of this run's plan); Critic (too little time was left); the record gives no reason for the others."))
+    // no statements: one plain line, not "0 supported, 0 contradicted…"
+    expect(within(run).getByTestId("tested-count")).toHaveTextContent(/^No statements were tested in this run\.$/)
+    expect(run).not.toHaveTextContent(/0 supported|0 contradicted|0 problems/)
+    // the partner is named by what it is; its id is a tooltip, never text
+    const link = within(run).getByRole("button", { name: "the one-agent run" })
+    expect(link).toHaveAttribute("title", "Run id: 202611142330-demo-single")
+    expect(run).toHaveTextContent("Paired with the one-agent run · same task, model, time limit, token limit and seed")
+    expect(run.textContent).not.toMatch(/2026\d{8}-demo|text limit|swarm|glhf|mock/i)
+    expect(within(run).getByRole("combobox", { name: "Run to show" })).toHaveTextContent("Team of nine on the demo task")
+    expect(within(run).getByRole("combobox", { name: "Run to show" })).toHaveTextContent("One agent on the demo task")
+    first.unmount()
+    show([{ kind: "phase.started", phase: "propose" }, { kind: "phase.started", phase: "report" }])
+    await waitFor(() => expect(screen.getByTestId("not-run-why")).toHaveTextContent(/^Only these roles ran in this run\.$/)) // nothing recorded: no invented reason
   })
   it("Compare: the work reads as a conversation, one entry per role, and a failed test marks its step", async () => {
     compare()

@@ -118,3 +118,7 @@
   .graph-sheet-handle { display: block; width: 44px; height: 4px; border-radius: 99px; background: var(--edge); margin: 0 auto 4px; flex-shrink: 0; }
   .graph-caption { font-size: 13px; padding: 8px 12px; }
 }
+
+/* The run's title, and the one quiet line for a run that has little to show. */
+.graph-title { font-size: 15px; font-weight: 650; margin: 0; color: var(--text-muted); letter-spacing: 0; text-transform: none; }
+.graph-quiet { margin: 0; font-size: 13px; color: var(--text-muted); }

@@ -105,6 +105,35 @@ describe("LabScene", () => {
     }
   })
 
+  it("keeps a long name plate inside its room's card", () => {
+    const model = fixtureModel({ experimenter: { inRun: true, label: "A very long caption for the Experimenter" }, guardian: { label: "A very long caption for the Guardian here" } })
+    render(<LabScene model={model} clock={T0 + 3_600_000} />)
+    const plate = (id: CharacterId) => document.querySelector<HTMLElement>(`button[data-agent="${id}"]`)!
+    const half = (text: string) => ((text.length * 7 + 16 + 14) / 2 / WIDE.width) * 100 // the scene's own estimate of a label's width, in % of the map
+    const left = parseFloat(plate("experimenter").style.left), right = parseFloat(plate("guardian").style.left)
+    expect(left - half("A very long caption for the Experimenter")).toBeGreaterThanOrEqual(2) // the Experiment bench starts at 2% of the map
+    expect(right + half("A very long caption for the Guardian here")).toBeLessThanOrEqual(47) // Quality control ends at 47%
+    expect(parseFloat(plate("scout").style.left)).toBeCloseTo(39.2, 1) // a short one stays under its teammate
+  })
+
+  it("never puts a walker's bubble on a name plate when two teammates of a room carry something at once", async () => {
+    const carry = (id: string): Trip => ({ id, kind: "fetch", room: "discovery", label: "4 example sources", short: "4 example sources", at: T0, back: T0, outcome: "carried", provider: "fixture" })
+    const model = fixtureModel({ scout: { state: "fetching", label: "Investigator 1", trips: [carry("a")] }, librarian: { state: "fetching", label: "Investigator 2", trips: [carry("b")] } }, T0)
+    render(<LabScene model={model} clock={T0} />)
+    const rect = (el: HTMLElement, text: string) => { const w = ((text.length * 7 + 16) / WIDE.width) * 100, h = (20 / WIDE.height) * 100, x = parseFloat(el.style.left), y = parseFloat(el.style.top); return { x1: x - w / 2, x2: x + w / 2, y1: y - h / 2, y2: y + h / 2 } }
+    const hit = (a: ReturnType<typeof rect>, b: ReturnType<typeof rect>) => Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.3 && Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) > 0.3
+    for (let i = 0; i < 120; i++) {
+      await frames(4)
+      const plates = CHARACTERS.map((c) => document.querySelector<HTMLElement>(`button[data-agent="${c.id}"]`)!).map((el) => rect(el, el.textContent ?? ""))
+      for (const id of ["scout", "librarian"] as const) {
+        const bubble = chip(id)
+        if (bubble.hidden) continue
+        expect(bubble.textContent).not.toMatch(/^Investigator \d: /) // in its own room the bubble does not repeat the name
+        expect(plates.some((p) => hit(rect(bubble, bubble.textContent ?? ""), p)), `${id} at frame ${i * 4}: ${bubble.textContent}`).toBe(false)
+      }
+    }
+  })
+
   it("walks a teammate to the room for a fetch, waits there, then carries the parcel home", async () => {
     const { rerender } = render(<LabScene model={quiet([out])} clock={T0} />)
     const guardian = walker("guardian"), home = place(guardian)
@@ -113,9 +142,11 @@ describe("LabScene", () => {
     expect(place(guardian)).not.toBe(home)
     expect(guardian).toHaveAttribute("data-moving", "true")
     expect(guardian).toHaveAttribute("data-carrying", "false")
-    expect(chip("guardian")).toHaveTextContent("Guardian ⇄") // away from its desk, the chip says who it is
-    expect(place(document.querySelector<HTMLElement>('button[data-agent="guardian"]')!)).not.toBe(place(guardian)) // the name plate stays at the desk
-    await frames(1500)
+    expect(chip("guardian")).toHaveTextContent(/^⇄$/) // still in its own room, beside its name plate: the mark alone
+    expect(place(document.querySelector<HTMLElement>('button[data-agent="guardian"]')!)).not.toBe(place(guardian)) // the name plate stays at its place
+    await frames(200)
+    expect(chip("guardian")).toHaveTextContent("Guardian ⇄") // out in the corridor, the bubble says who it is
+    await frames(1300)
     // at the pick-up point in Evidence review, waiting: no more frames are asked for
     expect(guardian).toHaveAttribute("data-moving", "false")
     expect(pending.size).toBe(0)
@@ -330,17 +361,32 @@ describe("LabScene", () => {
 })
 
 describe("LabPanel and Lab", () => {
-  it("says who the selected teammate is, what it stands for, what it does, since when and what it last fetched", () => {
+  it("says who the selected teammate is, what it does and what it last fetched; the rest is under About, closed", () => {
     render(<LabPanel model={fixtureModel()} selected="guardian" />)
     const panel = screen.getByRole("complementary", { name: /Selected teammate/ })
     expect(within(panel).getByRole("heading", { name: "Guardian" })).toBeInTheDocument()
     expect(within(panel).getByTestId("lab-status")).toHaveTextContent("Fetching")
-    expect(within(panel).getByText("Quality control")).toBeInTheDocument()
-    expect(within(panel).getByText(/the real agent the guardian stands for/)).toBeInTheDocument()
+    // four things at a glance: name, state, doing now, last fetched (with the hour and minute)
+    expect(within(panel).getAllByRole("term").map((t) => t.textContent)).toEqual(["Doing now", "Last fetched"])
     expect(within(panel).getByText(/Checking 4 statements against their sources: 1 of 4 so far\./)).toBeInTheDocument()
-    expect(within(panel).getByText("Since")).toBeInTheDocument()
     expect(within(panel).getByText(/✓ Supported: “Placeholder statement one\.”/)).toBeInTheDocument()
-    expect(within(panel).getByText(/in Evidence review/)).toBeInTheDocument()
+    expect(within(panel).getByText(/^\(in Evidence review, \d{1,2}:\d\d [ap]m\)$/)).toBeInTheDocument()
+    // which real agent it stands for, its home room and since when: one disclosure, closed until asked for
+    const about = within(panel).getByText("About").closest("details")!
+    expect(about).not.toHaveAttribute("open")
+    expect(about).toHaveTextContent("At home in Quality control.")
+    expect(about).toHaveTextContent(/In this state since \d{1,2}:\d\d:\d\d [ap]m\./)
+    expect(about).toHaveTextContent(/the real agent the guardian stands for/)
+  })
+
+  it("does not list a practice run's example sources as searches", () => {
+    const practice = { ...fixtureModel(), searches: { fixture: 2 } }
+    const { rerender } = render(<LabPanel model={practice} selected="scout" />)
+    expect(screen.queryByText("Searches so far")).not.toBeInTheDocument()
+    rerender(<LabPanel model={{ ...practice, searches: { fixture: 2, exa: 3, europepmc: 5 } }} selected="scout" />)
+    expect(screen.getByText("Searches so far")).toBeInTheDocument()
+    expect(screen.getByText(/Search powered by/)).toBeInTheDocument()
+    expect(document.querySelectorAll(".lab-credits li")).toHaveLength(2)
   })
 
   it("keeps a failed step in the panel and marks a teammate that is not in the run", () => {

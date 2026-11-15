@@ -369,3 +369,15 @@
 .activity-agent { white-space: nowrap; }
 @media (max-width: 560px) { .activity-row .activity-place { display: none; } }
 .hyp-table { min-width: 1000px; }
+
+/* ---- simplified: answer first, then the hypothesis cards; one mark, one row of sources, the reason on request ---- */
+.hyp { margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--edge, #dedbd2); }
+.hyp-cards { margin-top: 2px; }
+.hyp-sides { margin-top: 0; }
+.hyp-why { font-size: 12.5px; margin-top: auto; }
+.hyp-why > summary { color: var(--text-muted, #6b675f); cursor: pointer; }
+.hyp-why p { margin: 4px 0 0; }
+.answer-markword[data-demo] { background: none; border: 1px dashed var(--edge-strong, #a8a396); color: var(--text, #1d1c19); font-weight: 500; }
+/* the last thing in the conversation scrolls clear of the composer */
+.search-thread { padding-bottom: 40px !important; }
+.search-under:empty, .search-under > span:empty { display: none; }

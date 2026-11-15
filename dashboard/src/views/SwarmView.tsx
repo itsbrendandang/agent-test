@@ -10,7 +10,8 @@ import { AgentAvatar } from "@/lab/AgentAvatar"
 import { EngineOffline, MarkChip, PageHead, RunId, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
 import { provenanceOf } from "@/lib/provenance"
-import { MARK_WORD, markCount, markOf } from "@/lib/words"
+import { stamp } from "@/lib/records"
+import { benchmarkTitle, MARK_WORD, markCount, markOf, solverWord, taskWord, TOKEN_LIMIT } from "@/lib/words"
 import { swarmScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
 import { fmtDuration, fmtScore, fmtTokens, plainDuration, plainLimit, plainWhen } from "@/lib/format"
@@ -28,9 +29,8 @@ const round = (phase: string) => phase.match(/\d+/)?.[0]
 const num = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : String(Number(x.toPrecision(3))))
 const score = fmtScore
 const STEP_TEXT = { now: "● working", done: "✓ ran", todo: "○ did not run" } as const
-const ABOUT = "The same task, done two ways: by one AI agent working alone, and by a team of nine that check each other."
-const plainScore = (x: number | undefined) => (x === undefined ? "nothing" : `${fmtScore(x)} out of 1`)
-const solverName = (s: Solver) => (s === "glhf" ? "Team of nine" : "One agent alone")
+const ABOUT = "The same benchmark task, done by one agent and by a team of nine that check each other."
+const solverName = (s: Solver) => solverWord(s)
 const text = (x: unknown) => (typeof x === "string" || typeof x === "number" ? String(x) : "")
 
 function phases(ledger: Ledger | null) {
@@ -71,21 +71,37 @@ function activity(ledger: Ledger) {
   return entries
 }
 
-const TASK_NAME: Record<string, string> = { demo: "The demo task: a small made-up dataset, used to test that everything works" }
-const taskName = (task: string) => TASK_NAME[task] ?? `Task ${task}`
-const runLabel = (r: GlhfRun) => `${solverName(r.solver)} on ${r.task === "demo" ? "the demo task" : r.task} · ${plainWhen(r.startedAt)} · ${runState(r.phase, r.score !== undefined)}`
+const taskName = (task: string) => { const t = taskWord(task); return t[0].toUpperCase() + t.slice(1) }
+/** The picker's line: who, on what, when; the state only when the run is not simply done. */
+const runLabel = (r: GlhfRun) => { const state = runState(r.phase, r.score !== undefined); return `${benchmarkTitle(r.solver, r.task)} · ${stamp(r.startedAt)}${state === "done" ? "" : ` · ${state}`}` }
+/** A run named by what it is, for a link: "the one-agent run", "the team-of-nine run". The id is the link's tooltip. */
+const runNoun = (r: GlhfRun | undefined) => (!r ? "the other run" : r.solver === "single" ? "the one-agent run" : "the team-of-nine run")
+
+/** Why a role did not run, from the run's own record (phase.skipped), in plain words. An unknown reason is shown as recorded. */
+const SKIP_WORDS: Record<string, string> = { plan: "left out of this run's plan", time: "too little time was left", below_floor: "too little time or tokens were left for it to finish" }
+function notRunWhy(ledger: Ledger | null): { role: string; why: string }[] {
+  const out = new Map<string, string>()
+  for (const e of ledger?.events ?? []) {
+    if (e.kind !== "phase.skipped") continue
+    const role = ROLES.find((r) => r.key === roleOf(e.phase))?.name ?? text(e.phase)
+    const reason = text(e.reason)
+    if (role) out.set(role, SKIP_WORDS[reason] ?? (e.unit === "tokens" ? "the token limit left too little for it" : reason ? `skipped (${reason})` : "skipped"))
+  }
+  return [...out].map(([role, why]) => ({ role, why }))
+}
 
 function headline(run: GlhfRun | undefined, current: string | undefined, missing?: string): string {
   if (!run && missing) return "That run could not be found. It may have been deleted. Pick another one from the list above."
-  if (!run) return "Nothing has run yet. Press New run to watch the team work on a small demo task. It is a practice run and costs nothing."
-  const who = run.solver === "glhf" ? "The team" : "The agent working alone"
+  if (!run) return "Nothing has run yet. Press New run to start a practice run on the demo task."
+  const who = run.solver === "glhf" ? "The team" : "The agent"
   if (run.phase === "failed") return "This run stopped with an error."
   if (run.phase === "cancelled") return "This run was cancelled. It has no score."
   if (run.phase === "queued" && run.after) return "Waiting in the queue. This run starts when the run before it has ended."
-  if (run.phase === "done") return run.score === undefined ? `${who} finished, but its results were not scored.` : isDemo(run) ? `${who} finished this ${run.model === "mock" ? "practice run" : "demo task"}. Its score, ${plainScore(run.score)}, is not a research result.` : `${who} finished and scored ${plainScore(run.score)}.`
+  // The score is shown once, in the result below. A practice run or the demo task says once that it is not research.
+  if (run.phase === "done") return run.score === undefined ? `${who} finished, but its results were not scored.` : isDemo(run) ? `${who} finished this ${run.model === "mock" ? "practice run" : "demo task"}. It is not a research result.` : `${who} finished.`
   if (run.phase === "queued" || run.phase === "launching") return "Starting the run…"
   if (run.phase === "completing") return "Collecting the results and scoring them…"
-  if (run.solver === "single") return "One agent is working through the whole analysis alone."
+  if (run.solver === "single") return "One agent is working through the whole analysis."
   const n = current ? round(current) : undefined
   switch (roleOf(current)) {
     case "scout": return "The Scout is inspecting the data and the tools."
@@ -122,8 +138,10 @@ function describe(e: LedgerEvent): string | undefined {
 
 const budget = (row: ScoreRow) => [
   row.timeLimit ? `time limit ${fmtDuration(row.timeLimit * 1000)}` : "benchmark time limit",
-  row.maxTokens ? `${fmtTokens(row.maxTokens)} tokens` : "no token budget",
+  row.maxTokens ? `${TOKEN_LIMIT} ${fmtTokens(row.maxTokens)}` : `no ${TOKEN_LIMIT}`,
 ].join(" · ")
+/** The engine's note on a row uses its internal words; on screen they are the app's. */
+const noteWords = (note: string) => note.replace(/\bswarm\b/gi, "team of nine").replace(/\bsingle(?:[- ]agent)?\b/gi, "one agent").replace(/\bglhf\b/gi, "team of nine")
 
 /** One side of a scoreboard row: the score, a failed mark, the extras this run had, and a way to open it. */
 function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: (id: string) => void }) {
@@ -131,8 +149,8 @@ function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: 
   const state = runState(cell.phase, cell.score !== undefined)
   const what = state === "done" ? `score ${fmtScore(cell.score)}` : state
   return (
-    <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open ${cell.id}`}
-      aria-label={`Open run ${cell.id}: ${[what, ...cell.extras].join(", ")}`}>
+    <button type="button" className="swarm-cell" onClick={() => onOpen(cell.id)} title={`Open this run (id ${cell.id})`}
+      aria-label={`Open this run: ${[what, ...cell.extras].join(", ")}`}>
       <b>{fmtScore(cell.score)}</b>
       {state !== "done" && <StatusPill state={state} />}
       {cell.extras.map((e) => <span key={e} className="pill" data-kind="outline">{e}</span>)}
@@ -195,6 +213,9 @@ export function SwarmView() {
 
   /** Where a role stands in the selected run, in words: this must not rest on the character's mood alone. */
   const step = (key: RoleKey): "now" | "done" | "todo" => (activeRole === key ? "now" : run && seen.has(key) ? "done" : "todo")
+  // Roles that did not run, and why when the run's record says (it logs each role it skips).
+  const idle = run ? ROLES.filter((r) => step(r.key) === "todo") : []
+  const skipped = notRunWhy(ledger).filter((x) => idle.some((r) => r.name === x.role))
 
   return (
     <div className="page swarm" ref={page}>
@@ -223,7 +244,7 @@ export function SwarmView() {
         <div className="story">
           {run && (
             <>
-              <p className="story-eyebrow">{run.solver === "glhf" ? "A team of nine agents worked on" : "One agent, working alone, worked on"}</p>
+              <p className="story-eyebrow">{run.solver === "glhf" ? "A team of nine worked on" : "One agent worked on"}</p>
               <h2 className="story-title">{taskName(run.task)}</h2>
               <p className="story-facts">
                 <StatusPill state={runState(run.phase, run.score !== undefined)} />
@@ -245,29 +266,38 @@ export function SwarmView() {
           <p className="swarm-resulthead"><span className="story-eyebrow">The score</span></p>
           <div className="swarm-score" data-demo={isDemo(run) || undefined}>
             <strong>{score(run.score)}</strong>
-            <span className="muted">{run.score === undefined ? "not scored: the scoring program gave no score for this run" : "out of 1 · from a scoring program that checks the files the run wrote, not from a model"}</span>
+            <span className="muted">{run.score === undefined ? "not scored: the scoring program gave no score for this run" : "out of 1 · given by a scoring program, not by a model"}</span>
           </div>
           {run.artifacts && run.artifacts.length > 0 && (
             <ul className="swarm-artifacts" aria-label="Score per required output">
               {run.artifacts.map((a) => <li key={a.artifact_id}>{a.artifact_id}<b>{score(a.score)}</b></li>)}
             </ul>
           )}
-          {run.solver === "glhf" && ledger && (
+          {/* A row of zeros says nothing: with no statements, one plain line instead. */}
+          {run.solver === "glhf" && ledger && claims.length > 0 && (
             <p className="swarm-counts">
               <MarkChip verdict="supported" count={count.supported} />
               <MarkChip verdict="refuted" count={count.refuted} />
               <MarkChip verdict="insufficient" count={count.insufficient} />
               {count.untested > 0 && <MarkChip verdict="untested" count={count.untested} />}
-              <span className="muted small"><span data-testid="tested-count">{claims.length - count.untested} of {claims.length} statement{claims.length === 1 ? "" : "s"} tested</span> · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
+              <span className="muted small"><span data-testid="tested-count">{claims.length - count.untested} of {claims.length} statement{claims.length === 1 ? "" : "s"} tested</span>{count.fixed > 0 && <> · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</>}</span>
             </p>
           )}
-          {run.solver === "single" && <p className="swarm-note">One agent alone has no reviewer, so it has no tested statements.</p>}
+          {run.solver === "glhf" && ledger && claims.length === 0 && <p className="swarm-note" data-testid="tested-count">No statements were tested in this run.</p>}
+          {run.solver === "single" && <p className="swarm-note">One agent has no reviewer, so it has no tested statements.</p>}
         </div>
+        )}
+        {run?.solver === "glhf" && !live && idle.length > 0 && (
+          <p className="swarm-note" data-testid="not-run-why">
+            {skipped.length > 0
+              ? <>Did not run: {skipped.map((x, i) => <span key={x.role}>{i > 0 && "; "}{x.role} ({x.why})</span>)}{idle.length > skipped.length && "; the record gives no reason for the others"}.</>
+              : "Only these roles ran in this run."}
+          </p>
         )}
         <ol className="swarm-steps" aria-label="Roles, in the order they run">
           {run?.solver === "single" ? (
             <li data-step={live ? (run.phase === "queued" ? "todo" : "now") : run.phase === "done" ? "done" : "todo"}>
-              <span>One agent alone</span>
+              <span>One agent</span>
               <span className="swarm-step">{live ? (run.phase === "queued" ? "○ waiting" : STEP_TEXT.now) : run.phase === "done" ? STEP_TEXT.done : `○ ${run.phase}`}</span>
             </li>
           ) : ROLES.map((r, i) => (
@@ -294,15 +324,15 @@ export function SwarmView() {
           <div className="swarm-relations">
             {run.pairedWith && (
               <p>
-                Paired with <RunLink id={run.pairedWith} onOpen={openRun} />
-                {partner && <> ({solverName(partner.solver).toLowerCase()}) <StatusPill state={runState(partner.phase, partner.score !== undefined)} /></>}
-                <span className="muted"> · same task, model, time limit, text limit and seed</span>
+                Paired with <RunLink id={run.pairedWith} label={runNoun(partner)} onOpen={openRun} />
+                {partner && runState(partner.phase, partner.score !== undefined) !== "done" && <> <StatusPill state={runState(partner.phase, partner.score !== undefined)} /></>}
+                <span className="muted"> · same task, model, time limit, {TOKEN_LIMIT} and seed</span>
               </p>
             )}
             {run.after && (
-              <p>{run.phase === "queued" ? "Starts when" : "Was queued behind"} <RunLink id={run.after} onOpen={openRun} />{run.phase === "queued" && " has ended"}</p>
+              <p>{run.phase === "queued" ? "Starts when" : "Was queued behind"} <RunLink id={run.after} label={runNoun(byId(run.after))} onOpen={openRun} />{run.phase === "queued" && " has ended"}</p>
             )}
-            {run.note && <p className="swarm-rownote">Note: {run.note}</p>}
+            {run.note && <p className="swarm-rownote">Note: {noteWords(run.note)}</p>}
           </div>
         )}
         {run?.phase === "failed" && <p className="pill swarm-failure" data-kind="danger" role="alert">{run.error ?? "No error message was recorded."}</p>}
@@ -339,7 +369,7 @@ export function SwarmView() {
           <div className="swarm-scroll">
           <table className="swarm-table" aria-label="One agent against the team, per task and settings">
             <thead><tr>
-              <th scope="col">Task and shared settings</th><th scope="col">One agent alone</th><th scope="col">Team of nine</th>
+              <th scope="col">Task and shared settings</th><th scope="col">One agent</th><th scope="col">Team of nine</th>
               <th scope="col" className="num">Difference</th>{anyBenchmark && <th scope="col" className="num">Record to beat</th>}
             </tr></thead>
             <tbody>
@@ -347,9 +377,9 @@ export function SwarmView() {
                 return (
                   <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
                     <td>
-                      {row.task} <Provenance kind={provenanceOf({ model: row.model })} compact />{row.task === "demo" && <DemoTask />}
-                      <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
-                      {row.note && <div className="swarm-rownote">{row.note}</div>}
+                      {taskName(row.task)} <Provenance kind={provenanceOf({ model: row.model })} compact />{row.task === "demo" && <DemoTask />}
+                      <div className="muted small">{row.model !== "mock" && <><code>{row.model}</code> · </>}{budget(row)}</div>
+                      {row.note && <div className="swarm-rownote">{noteWords(row.note)}</div>}
                     </td>
                     <td><ScoreCellView cell={row.single} onOpen={openRun} /></td>
                     <td><ScoreCellView cell={row.swarm} onOpen={openRun} /></td>
@@ -366,23 +396,20 @@ export function SwarmView() {
           <summary>How to read this</summary>
           <div>
             <h3>Score</h3>
-            <p>A scoring program checks the files that a run wrote. The score goes from 0 to 1. A score of 1 means every required result was correct. No model decides the score.</p>
+            <p>A scoring program checks the files a run wrote and gives 0 to 1. A score of 1 means every required result was correct.</p>
             <h3>Statements</h3>
-            <p>The team writes down what it thinks it found. Each of these is a statement (experts say "claim"). Then it tests each one and tries to prove it wrong.</p>
+            <p>The team writes down what it thinks it found, then tests each statement and tries to prove it wrong. Code decides each mark from the test numbers.</p>
             <ul>
-              <li><MarkChip verdict="supported" technical /> The statement passed its tests. It counts as a finding.</li>
-              <li><MarkChip verdict="refuted" technical /> A test went against the statement. It is rejected and is not reported as a finding.</li>
-              <li><MarkChip verdict="insufficient" technical /> Its tests gave too little evidence, or a planned test has no result. It is not reported as a finding.</li>
-              <li><MarkChip verdict="untested" technical /> No test of it has a result. It is not reported as a finding.</li>
+              <li><MarkChip verdict="supported" technical /> It passed its tests. It counts as a finding.</li>
+              <li><MarkChip verdict="refuted" technical /> A test went against it. It is rejected.</li>
+              <li><MarkChip verdict="insufficient" technical /> Its tests did not settle it, or a planned test has no result.</li>
+              <li><MarkChip verdict="untested" technical /> No test of it has a result.</li>
             </ul>
-            <p>Code decides each result from the test numbers. One agent alone has no reviewer, so it has no tested statements.</p>
             <h3>Difference</h3>
-            <p>The difference is the team's score minus the lone agent's score. It is shown only when both runs had the same task, model, time limit and text limit (tokens).
-              If these settings are not the same, a higher score could come from more time or more text, and not from the team. Then the row shows a note and no difference.</p>
-            <p>Extras, such as Exa search, memory or the number of review rounds, are listed next to each run. They show what one run had and the other did not.</p>
+            <p>The team's score minus the one agent's score. It is shown only when both runs had the same task, model, time limit and {TOKEN_LIMIT}; otherwise the row shows a note and no difference.
+              Extras (Exa search, memory, review rounds) are listed next to each run.</p>
             <h3>Record to beat</h3>
-            <p>{fmtScore(record)} is the best published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only. The score of one task is not the same measure as the score of the whole benchmark.
-              A run on the demo task, or a practice run, is never a benchmark result.</p>
+            <p>{fmtScore(record)} is the best published BixBench3 score across its 20 studies. It applies to BixBench3 tasks only; one task's score is not the benchmark's score.</p>
           </div>
         </details>
       </section>
@@ -456,15 +483,15 @@ export function SwarmView() {
             <h2>Run settings</h2>
             <dl className="swarm-settings">
               <dt>Run</dt><dd><RunId id={run.id} /></dd>
-              <dt>Task</dt><dd>{run.task}</dd>
+              <dt>Task</dt><dd>{taskName(run.task)}</dd>
               <dt>Who</dt><dd>{solverName(run.solver)}</dd>
               <dt>Where</dt><dd>{run.mode === "cloud" ? "Cloud VM" : "This machine"}</dd>
-              <dt>Model</dt><dd><code>{run.model}</code></dd>
+              <dt>Model</dt><dd>{modelWords(run.model)}</dd>
               {Object.entries(run.roleModels).map(([role, model]) => (
-                <div key={role} style={{ display: "contents" }}><dt>{role}</dt><dd><code>{model}</code></dd></div>
+                <div key={role} style={{ display: "contents" }}><dt>{role}</dt><dd>{modelWords(model)}</dd></div>
               ))}
               <dt>Time limit</dt><dd>{run.settings?.timeLimit ? fmtDuration(run.settings.timeLimit * 1000) : "benchmark default"}</dd>
-              <dt>Text limit (tokens)</dt><dd>{run.settings?.maxTokens ? fmtTokens(run.settings.maxTokens) : "none"}</dd>
+              <dt>Token limit</dt><dd>{run.settings?.maxTokens ? fmtTokens(run.settings.maxTokens) : "none"}</dd>
               {run.solver === "glhf" && <><dt>Review rounds</dt><dd>{run.settings?.reviewRounds ?? 3}</dd></>}
               {run.settings?.maxMessagesPerRole !== undefined && <><dt>Messages per role</dt><dd>{run.settings.maxMessagesPerRole}</dd></>}
               {run.solver === "glhf" && <><dt>Exa search</dt><dd>{run.settings?.exa ? "on" : "off"}</dd><dt>Memory</dt><dd>{run.settings?.memory ? "on" : "off"}</dd></>}
@@ -510,10 +537,13 @@ function Elapsed({ since }: { since: number }) {
   return <span className="swarm-elapsed">{now === undefined ? "–" : fmtDuration(Math.max(0, now - since))}</span>
 }
 
-/** A run id that opens that run. Cut to fit; the whole id is in the title. */
-function RunLink({ id, onOpen }: { id: string; onOpen: (id: string) => void }) {
-  return <button type="button" className="link-btn swarm-runlink" title={`Open ${id}`} onClick={() => onOpen(id)}>{id}</button>
+/** A link that opens another run, named by what that run is. Its id is the tooltip, not the text. */
+function RunLink({ id, label, onOpen }: { id: string; label: string; onOpen: (id: string) => void }) {
+  return <button type="button" className="link-btn swarm-runlink" title={`Run id: ${id}`} onClick={() => onOpen(id)}>{label}</button>
 }
+
+/** A model as a person reads it: the practice "model" is no model at all. */
+const modelWords = (model: string) => (model === "mock" ? "none (practice: fixed steps)" : <code>{model}</code>)
 
 /**
  * The tests of one claim: the results recorded, then the planned tests that have no result. A planned test without
