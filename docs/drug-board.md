@@ -108,9 +108,19 @@ With `memory.enabled: true`, each member's verified and contradicted claims are 
 
 All first-pass wording lives in `engine/src/questions.ts`. All decision logic lives in `engine/src/triage.ts`. Which provider and key each tier needs: `engine/src/providers.ts`.
 
+## Before the first real run
+
+1. `cd engine && npm run preflight`. It needs the real keys (from `.env`) and makes **no billed call**: only a model-list request to each vendor (`GET /v1/models`, no completion) and no search. It checks that each tier's key is set and accepted, that each model id is in the vendor's list and has a price in the catalog, and it prints the caps, what Exa has used of the $40 ceiling, and an estimated worst case for one run. It prints which endpoints it called and exits 1 naming anything that would fail. It refuses to run when `PAID_SWITCH_LOCKED=1`.
+2. Lower the cap for the first run: `npm run board -- run <brief> --max-usd 0.5` (a plan's limits work the same way). The value can only lower the cap in `board/config.yaml`.
+3. If a vendor refuses a model id (404) or a key (401, 403) on a call, the run stops at once with a plain message naming the tier, the model and the vendor, spends nothing more, and is listed as `failed` with that message (not `running`). Fix `board/config.yaml` or `.env` and resume it. Rate limits (429) and server errors are not treated this way.
+
 ## The paid switch (practice mode and real mode)
 
 Paid calls start off. The dashboard's switch (`POST /api/paid`) turns them on **for the running engine only**: it is kept in memory and a restart goes back to `.env`. It needs the session token, the exact text `I will be charged`, every key the board needs, and `PAID_SWITCH_LOCKED` not set to 1. Details and what it does when turned off: [configuration.md](configuration.md#paid-calls-no_paid_calls-and-the-runtime-switch). A run keeps the mode it started in: switching never relabels past runs, and a real run is not continued as scripted.
+
+## How the evidence reaches the members
+
+The scout (the only member with a search tool) replies first in each round; the other members then get its screened sources in their prompt (title, study type, URL and the text kept, up to 12 sources, marked as data). A `[literature]` claim is checked against the text kept for the source it cites, so cite a source by its exact URL. Highlights from the search are what is kept, so a claim whose numbers are not in them goes to the second checker and may end `unsupported`: this is honest, and it makes `verified` rarer. If it proves too rare in a real run, ask Exa for longer highlights with `meeting.exa_highlight_chars` (the price of that was not verified). Each member's reply may open with `In short: ...`; the engine parses that line into `summary` on the `member.replied` event.
 
 ## What a real run checks, and what was lost
 
@@ -156,3 +166,15 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Add the Exa key to the dashboard Settings (keychain) instead of `.env`.
 
 Decision support only. This doesn't replace expert review or regulatory judgment.
+
+## Free literature search (Europe PMC)
+
+The scout has a second search tool, `literature_search` (`engine/src/literature.ts`). It searches PubMed and
+preprints through [Europe PMC](https://europepmc.org/RestfulWebService) and returns abstracts. It needs no key and
+costs nothing, so it does not use the Exa credit; the scout is told to use it first and to keep `exa_search` for
+what papers do not cover. Its results go through the same screening and the same evidence pool as Exa's, and a
+statement is "verified" only when the quoted passage is in the abstract. Limits: `meeting.max_literature_searches`
+per run (default 20); abstracts only, not full papers; preprints are marked `[preprint]`. A practice run reaches no
+network and gets the example sources. The idea (a PubMed query tool that retries with fewer words when nothing is
+found) comes from Biomni's `query_pubmed` (snap-stanford/Biomni, Apache-2.0); the code is ours. Not yet done: a real
+board run that uses it, and listing it in the Home catalogue.

@@ -1,0 +1,111 @@
+// literature_search: a free search of the biomedical literature for the board's members.
+// Source: Europe PMC (https://europepmc.org/RestfulWebService), which indexes PubMed/MEDLINE, PubMed Central and
+// preprints. No key and no charge. The idea of giving the agent a PubMed query, and of retrying a query that finds
+// nothing with fewer words, is taken from Biomni's `query_pubmed` (snap-stanford/Biomni, Apache-2.0); the code here
+// is our own. What it returns is the paper's abstract: a "verified" statement must quote a passage that is in it.
+// A scripted (practice) run never reaches the network: it gets the fixture sources.
+import type { EvidenceItem } from "./events.ts"
+import type { SearchResult } from "./exa.ts"
+
+export const LITERATURE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+export const DEFAULT_MAX_LITERATURE_SEARCHES = 20
+const MAX_RESULTS = 8
+const MAX_ABSTRACT_CHARS = 3000
+
+export const LITERATURE_GUIDANCE = `# Searching the literature
+\`literature_search\` searches PubMed and preprints through Europe PMC and returns abstracts. It is free: use it
+first for anything a peer-reviewed paper would answer (assay results, mechanisms, clinical findings).
+- Write a short keyword query, as you would type into PubMed: 3 to 6 terms, no sentences. Example: KRAS G12C covalent inhibitor hERG.
+- A preprint is marked [preprint]: it has not been peer reviewed. Say so when you cite one.
+- You see abstracts, not full papers. Do not state a number that is not in the abstract.
+- Cite a source by its exact URL.`
+
+interface EuropePmcRecord {
+  id?: string; source?: string; pmid?: string; doi?: string; title?: string; abstractText?: string; pubYear?: string
+  journalInfo?: { journal?: { title?: string } }
+  pubTypeList?: { pubType?: string[] }
+}
+
+/** Text from a field that may hold HTML tags and entities (Europe PMC abstracts carry <h4>, <i>, <sub>). */
+export function plainText(html: string): string {
+  return html
+    .replace(/<\/(h\d|p|li)>/gi, ". ").replace(/<(h\d|p|li|br)\b[^>]*>/gi, " ").replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;|&apos;/g, "'").replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ").replace(/\.\s*\./g, ".").replace(/([:;,])\.\s/g, "$1 ").trim()
+}
+
+/** The records of one Europe PMC answer as evidence items. A record with no abstract is left out: there is nothing to check a statement against. */
+export function parseEuropePmc(body: unknown): EvidenceItem[] {
+  const records = (body as { resultList?: { result?: EuropePmcRecord[] } })?.resultList?.result
+  if (!Array.isArray(records)) return []
+  const items: EvidenceItem[] = []
+  for (const r of records) {
+    const text = plainText(String(r.abstractText ?? "")).slice(0, MAX_ABSTRACT_CHARS)
+    const title = plainText(String(r.title ?? ""))
+    if (!text || !title || !r.id || !/^[\w.-]+$/.test(r.id)) continue
+    const preprint = r.source === "PPR"
+    const url = r.source === "MED" && /^\d+$/.test(r.pmid ?? "") ? `https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/` : `https://europepmc.org/article/${encodeURIComponent(r.source ?? "MED")}/${r.id}`
+    const where = [preprint ? "preprint" : r.journalInfo?.journal?.title, /^\d{4}$/.test(r.pubYear ?? "") ? r.pubYear : undefined].filter(Boolean).join(", ")
+    const review = (r.pubTypeList?.pubType ?? []).some((t) => /review/i.test(t))
+    items.push({ url, title: `${title}${where ? ` (${where})` : ""}${preprint ? " [preprint]" : review ? " [review]" : ""}`.slice(0, 300), text, provider: "europepmc" })
+  }
+  return items
+}
+
+/** The queries to try, in order: the query as given, then with words dropped from the end (never fewer than two words). */
+export function retryQueries(query: string, retries = 2): string[] {
+  const words = query.trim().split(/\s+/).filter(Boolean)
+  const out = [words.join(" ")]
+  for (let drop = 1; drop <= retries && words.length - drop >= 2; drop++) out.push(words.slice(0, words.length - drop).join(" "))
+  return out
+}
+
+/** One live literature search. Throws on a non-2xx answer. `fetchFn` is replaced in tests. */
+export async function literatureLive(query: string, fetchFn: typeof fetch = fetch): Promise<SearchResult> {
+  const notices: string[] = []
+  for (const q of retryQueries(query)) {
+    const url = `${LITERATURE_URL}?${new URLSearchParams({ query: q, resultType: "core", format: "json", pageSize: String(MAX_RESULTS) })}` // no `sort`: relevance is the default, and sort=RELEVANCE is answered with 503
+    const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(15_000) })
+    if (!res.ok) throw new Error(`Europe PMC answered ${res.status}`)
+    const items = parseEuropePmc(await res.json())
+    if (items.length) {
+      if (q !== query.trim().split(/\s+/).join(" ")) notices.push(`Nothing was found for the full query; these are the results for "${q}".`)
+      return { items, notices }
+    }
+  }
+  return { items: [], notices: ["No paper with an abstract was found, also with fewer words. Try other terms."] }
+}
+
+export interface LiteratureDeps {
+  state: { literature?: Record<string, { items: EvidenceItem[]; notices: string[] }> }
+  mock: boolean
+  maxSearches: number
+  search: (query: string) => Promise<SearchResult>
+  /** True once the run has spent max_usd: the search is free, but screening its results is not. */
+  capReached: () => Promise<boolean>
+  /** True when paid calls were switched off during a real run: its results could not be screened. */
+  paidOff?: () => boolean
+}
+
+/**
+ * One literature search for a tool call. A call id that already has a stored result (a crash replay) returns it
+ * without a second request. Refused past the per-run count, the spend cap, or with paid calls switched off; a
+ * refusal never falls back to fixture sources.
+ */
+export async function literatureOnce(deps: LiteratureDeps, callId: string, query: string): Promise<{ result?: SearchResult; refused?: string; failed?: boolean }> {
+  const { state } = deps
+  if (deps.mock) return { result: await deps.search(query) }
+  const stored = state.literature?.[callId]
+  if (stored) return { result: stored }
+  const used = Object.keys(state.literature ?? {}).length
+  if (deps.paidOff?.()) return { refused: "Paid calls were switched off: search results can no longer be screened. Work from what you have and say so." }
+  if (used >= deps.maxSearches) return { refused: `Literature search budget used up: ${used} of ${deps.maxSearches} for this run. Work from what you have and say so.` }
+  if (await deps.capReached()) return { refused: "Spend cap reached: search results can no longer be screened. Work from what you have and say so." }
+  // The service being down is not a reason to stop the run: the member is told, and the failed call is not counted.
+  let result: SearchResult
+  try { result = await deps.search(query) } catch (error) {
+    return { refused: `The literature search could not be reached (${error instanceof Error ? error.message : String(error)}). Use another search if you have one, or work from what you have and say so.`, failed: true }
+  }
+  state.literature = { ...state.literature, [callId]: { items: result.items, notices: result.notices } }
+  return { result }
+}

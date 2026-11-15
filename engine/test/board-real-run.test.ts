@@ -90,6 +90,9 @@ test("evidence events and the run summary say where the sources came from; the c
   assert.equal(buildCatalog(config, { NO_PAID_CALLS: "0", EXA_API_KEY: "k" }).search.provider, "exa")
   assert.equal(buildCatalog(config, { NO_PAID_CALLS: "0" }).search.provider, "fixture", "no key: the run would be refused, never searched live")
   assert.equal(buildCatalog(config, { NO_PAID_CALLS: "0", EXA_API_KEY: "k", DRUG_BOARD_MOCK: "1" }).search.provider, "fixture")
+  const lit = buildCatalog(config, {}).search.literature
+  assert.deepEqual([lit.provider, lit.free, lit.keyNeeded], ["europepmc", true, false], "the free literature search is listed")
+  assert.equal(lit.available, boardMembers(config).members.some((m) => m.tools.includes("literature_search")), "available follows the roster")
 })
 
 // ── 1. evidence reaches the members ───────────────────────────────────────────────────────────────

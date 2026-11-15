@@ -13,6 +13,7 @@ meeting:
   member_turns: 6          # model calls each board member may make per question
   max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
   max_searches: 20         # Exa searches per run (as in the swarm). The scout is the member with the exa_search tool
+  max_literature_searches: 20 # free literature searches per run (Europe PMC: PubMed abstracts and preprints, no key). Free to make; each one's results are screened by the first pass, which is why they are counted
   exa_usd_per_search: 0.007 # price assumed per search until Exa's response states one: measured once (2 live searches, $0.014), a small sample. Counted against max_usd and daily_usd
   exa_ceiling_usd: 40      # lifetime Exa spend the engine will allow, from board/runs/.exa-ledger.jsonl. The account holds $50 and is not topped up; the rest is room for searches made outside the engine
   # exa_highlight_chars: 2000  # optional: ask Exa for longer highlights (default: Exa's own length). A claim is checked against what is kept, so thin highlights make 'verified' rarer; the price of longer highlights is not verified

@@ -21,7 +21,7 @@ export interface Catalog {
   providers: Provider[]
   /** exa.usedUsd: Exa spend this engine has recorded in board/runs/.exa-ledger.jsonl; ceilingUsd: the lifetime limit it enforces (meeting.exa_ceiling_usd). */
   /** `provider`: what a board run started now would search with: "exa" (live search; paid calls on, and the key is set) or "fixture" (a practice run's example sources). */
-  search: { provider: "exa" | "fixture"; exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number } }
+  search: { provider: "exa" | "fixture"; exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number }; literature: { provider: "europepmc"; free: true; keyNeeded: false; available: boolean } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
 }
@@ -115,7 +115,9 @@ export function buildCatalog(config: BoardConfig, env: NodeJS.ProcessEnv = proce
     paidCalls: !paidCallsOff(env),
     paidSource: paidState(env).source,
     providers: providers(config, env),
-    search: { provider: mockMode(env) || !env.EXA_API_KEY ? "fixture" : "exa", exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) } },
+    search: { provider: mockMode(env) || !env.EXA_API_KEY ? "fixture" : "exa", exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) },
+      // Europe PMC literature search (PubMed abstracts and preprints): free, no key. `available` is true when a board member has the tool.
+      literature: { provider: "europepmc", free: true, keyNeeded: false, available: members.some((m) => m.tools.includes("literature_search")) } },
     agents: [...board, ...specialists.map(({ basedOn: _b, purpose: _p, ...agent }) => agent)],
     skills: loadSkills(),
   }
