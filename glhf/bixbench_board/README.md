@@ -80,8 +80,7 @@ On macOS the sandbox uses `sandbox-exec` instead. R is optional there.
 The baseline's settings: 20 studies, 3 repeats, 500,000 tokens, 90 tool calls and 600 seconds per
 run, and gpt-4o as the judge. The single agent uses gpt-5.1; the board uses the app's tiers.
 
-Run **both solvers the same way**, with R and with `--sandbox modal`. The earlier baseline ran on
-macOS without R, so it cannot be compared with a board run that had R.
+Run with R and with `--sandbox modal`.
 
 ```bash
 STUDIES=bix-1,bix-2,bix-3,bix-4,bix-5,bix-6,bix-7,bix-8,bix-9,bix-10,bix-11,bix-12,bix-13,bix-14,bix-16,bix-17,bix-18,bix-19,bix-20,bix-21
@@ -96,9 +95,8 @@ The board needs both keys in `.env` (Anthropic and OpenAI); the single agent and
 the OpenAI key. `run.py` and `regrade.py` make paid calls. They refuse to start unless
 `NO_PAID_CALLS=0`. Only the person who pays sets it.
 
-Earlier runs, not comparable with these: the single-agent baseline scored 0.260 (64 of 246) on
-macOS without R. A 5-member board ran once (2026-11-15); it is not the board this folder runs now,
-and its numbers are not a result.
+Earlier runs: the single-agent baseline scored 0.260 (64 of 246) on macOS without R. A 5-member
+board ran once (2026-11-15); it is not the board this folder runs now.
 
 The uncapped conditions (the second baseline report): no token or time limit, tool calls
 capped at 10^9. Leave out `--budget-tokens` and `--budget-seconds`:
@@ -117,6 +115,11 @@ capped at 10^9. Leave out `--budget-tokens` and `--budget-seconds`:
   `result.json` has an `error`, and keeps the others. `summarize.py` reads every `result.json`.
 - `read_file` returns at most 200 lines and at most 20,000 characters (`MAX_READ_CHARS` in
   `bixbase/cellrun.py`), so a file with very long lines cannot fill a prompt.
+
+Result (2026-11-15, uncapped, 20 studies x 3 repeats, gpt-4o judge): the optimized system, the
+app's board with its model tiers, R and code cells on Modal, scored **0.537** (132 of 246). The
+uncapped single-agent baseline (gpt-5.1, no R) scored 0.240 (59 of 246): a gain of 29.7 points.
+Details in `docs/status.md`.
 
 Do not commit `runs/` or `data/`.
 
