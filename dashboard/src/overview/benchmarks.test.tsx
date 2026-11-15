@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { routes } from "@/test/engine"
 import { Benchmarks } from "./Benchmarks"
-import { plainConclusion, pricedByToken, record3Of, rowsOf, shortModel } from "./benchmarkNumbers"
+import { modelFacts, plainConclusion, pricedByToken, record3Of, rowsOf, shortModel } from "./benchmarkNumbers"
 
 const side = (correct: number, n: number, notGraded = 0) => ({ correct, n, accuracy: correct / n, notGraded, wilson95: [0.1, 0.3], tokens: n * 1000, seconds: 600, costUsd: 1.5, failedRuns: 0 })
 const BOARD = [
@@ -38,6 +38,16 @@ describe("benchmark numbers", () => {
   })
 })
 
+describe("who made a model", () => {
+  it("is read from the id without calling an OpenAI-style endpoint OpenAI", () => {
+    expect(modelFacts("openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8")).toEqual({ name: "Qwen/Qwen3.6-35B-A3B-FP8", servedBy: "an open model, served on our own Modal endpoint" })
+    expect(modelFacts("openai-api/lab/mistralai/Ministral")).toEqual({ name: "mistralai/Ministral", servedBy: "served on our own endpoint (lab)" })
+    expect(modelFacts("openai/gpt-5.5")).toEqual({ name: "gpt-5.5", servedBy: "OpenAI's own service" })
+    expect(modelFacts("ollama/qwen2.5:14b")).toEqual({ name: "qwen2.5:14b", servedBy: "an open model, run on this computer" })
+    expect(modelFacts("something-else")).toEqual({ name: "something-else", servedBy: "" })
+  })
+})
+
 describe("the engine's sentence in the app's words", () => {
   it("names the team of nine, one agent and datasets, and changes no number", () => {
     expect(plainConclusion("No difference detected (+4.9 percentage points). The solvers are not shown equal: swarm minus single runs from -2.4 to +12.4. The 82 questions come from 20 capsules and questions of one capsule share data."))
@@ -59,7 +69,10 @@ describe("the Benchmarks card", () => {
     expect(screen.getByText("Ours: not known (no real run yet)")).toBeTruthy()
     const text = () => document.body.textContent ?? ""
     // Set out as an evaluation: the model's full id, the setup, and a row per solver.
-    expect(text()).toContain("openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8")
+    // An open model reached through an OpenAI-style endpoint is not OpenAI's, and is not shown as if it were.
+    expect(text()).toContain("Qwen/Qwen3.6-35B-A3B-FP8 (an open model, served on our own Modal endpoint)")
+    expect(text()).not.toContain("openai-api")
+    expect(text()).toContain("claude-sonnet-5-5 (Anthropic's own service)")
     expect(text()).toContain("Like for like: both had the same token limit")
     expect(text()).toContain("Not like for like")
     expect(text()).toContain("our own rules per question type")

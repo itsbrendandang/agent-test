@@ -75,3 +75,18 @@ export const plainConclusion = (text: string): string => text
  * model sold by the token. A model served on rented GPUs is paid by the second: for it the figure is not a cost.
  */
 export const pricedByToken = (model: string): boolean => /^(anthropic|openai|google)\//.test(model)
+
+/**
+ * Who made the model and where it ran, in plain words. "openai-api/<service>/<maker>/<name>" is how the harness
+ * addresses ANY endpoint that speaks the OpenAI wire format: it does not mean the model is OpenAI's. Such a model
+ * is shown by its own maker and name, with where it was served.
+ */
+export function modelFacts(model: string): { name: string; servedBy: string } {
+  const own = /^openai-api\/([^/]+)\/(.+)$/.exec(model)
+  if (own) return { name: own[2], servedBy: own[1] === "openmodels" ? "an open model, served on our own Modal endpoint" : `served on our own endpoint (${own[1]})` }
+  const local = /^ollama\/(.+)$/.exec(model)
+  if (local) return { name: local[1], servedBy: "an open model, run on this computer" }
+  const [maker, ...rest] = model.split("/")
+  const MAKER: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI", google: "Google" }
+  return rest.length && MAKER[maker] ? { name: rest.join("/"), servedBy: `${MAKER[maker]}'s own service` } : { name: model, servedBy: "" }
+}

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react"
 import { readEngine } from "@/lib/engine"
 import "@/overview/overview.css"
 
-import { plainConclusion, pricedByToken, record3Of, rowsOf, shortModel, type Record3, type Row, type Side } from "@/overview/benchmarkNumbers"
+import { modelFacts, plainConclusion, pricedByToken, record3Of, rowsOf, shortModel, type Record3, type Row, type Side } from "@/overview/benchmarkNumbers"
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`
 
@@ -21,12 +21,13 @@ const GRADING: Record<string, string> = { "per-mode": "our own rules per questio
 function Evaluation({ row }: { row: Row }) {
   const sides: [string, Side | undefined][] = [["One agent", row.single], ["Team of nine", row.team]]
   const priced = pricedByToken(row.model)
+  const facts = modelFacts(row.model)
   const ungraded = sides.filter(([, side]) => side && side.notGraded > 0)
   return (
     <div className="ov-bench-row">
       <div className="ov-bench-head"><b>{shortModel(row.model)}</b><span>{row.questions} {row.questions === 1 ? "question" : "questions"} from {row.datasets || UNKNOWN} {row.datasets === 1 ? "dataset" : "datasets"}</span></div>
       <dl className="ov-setup">
-        <div><dt>Model</dt><dd>{row.model}</dd></div>
+        <div><dt>Model</dt><dd>{facts.name}{facts.servedBy && ` (${facts.servedBy})`}</dd></div>
         <div><dt>Comparison</dt><dd>{row.fair ? "Like for like: both had the same token limit" : "Not like for like"}</dd></div>
         <div><dt>Graded by</dt><dd>{row.grading ? GRADING[row.grading] ?? row.grading : UNKNOWN}</dd></div>
         <div><dt>Answers</dt><dd>{row.answerMode === "open" ? "Open answers (no multiple choice)" : row.answerMode ?? UNKNOWN}</dd></div>
