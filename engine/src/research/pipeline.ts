@@ -321,8 +321,9 @@ export const MAX_PROTOCOL_QUERIES = 2
  */
 export function withProtocols(plan: Plan, question: string, level: Pick<Level, "queries">): Plan {
   const max = Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries))
-  const protocols = plan.protocols.length ? plan.protocols.slice(0, max) : plan.fallback && looksProtocol(question) && plan.literature[0] ? [plan.literature[0]] : []
-  return { ...plan, protocols }
+  if (plan.protocols.length) return { ...plan, protocols: plan.protocols.slice(0, max) }
+  if (plan.fallback && looksProtocol(question) && plan.literature[0]) return { ...plan, protocols: [plan.literature[0]], opening: openingFallback(plan.databases.length > 0, true) }
+  return plan
 }
 
 export const MAX_OPENING_CHARS = 240

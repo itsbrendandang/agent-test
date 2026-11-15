@@ -95,6 +95,7 @@ test("when the planner writes no protocol query, none runs, even for an SOP ques
     const { record } = await paidAllowed(() => unread.answer({ question: sop, effort: "standard" }))
     assert.equal(record.status, "done")
     assert.ok(record.searches.some((s) => s.provider === "protocols"))
+    assert.match(record.opening ?? "", /published lab protocols/, "the opening names the protocol search code added")
     assert.ok(record.sources.some((s) => s.provider === "protocols" && s.note === "protocol"))
   } finally { await unread.close() }
 })
