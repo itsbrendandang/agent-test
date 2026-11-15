@@ -87,11 +87,12 @@ export function quoteInSource(quote: string, source: string): boolean {
 /** The numbers a claim states ("5.2", "300", "-4.96"). Each must appear in the quote that supports it. */
 export const numbersIn = (text: string): string[] =>
   text.match(/(?<![A-Za-z0-9_.,]|[A-Za-z]-)-?\d+(?:[.,]\d+)?/g) ?? [] // not the digits inside names: CMP-0517, H358, G12C, p53, IC50
-const hasNumber = (quote: string, n: string) => {
+export const hasNumber = (quote: string, n: string) => {
   const digits = n.replace(/^-/, "").replace(/[.,]/g, "[.,]")
   // A negative claim number needs the minus sign in the quote; a positive one must not be a negative number in the quote.
   const sign = n.startsWith("-") ? "(?<![\\d.,])-" : "(?<![\\d.,])(?<!(?:^|[\\s(])-)"
-  return new RegExp(`${sign}${digits}(?![\\d])`).test(squash(quote))
+  // The number must end there: "5" is not in "5.8" or "5,000", but it is in "5." at the end of a sentence.
+  return new RegExp(`${sign}${digits}(?!\\d|[.,]\\d)`).test(squash(quote))
 }
 
 /**
