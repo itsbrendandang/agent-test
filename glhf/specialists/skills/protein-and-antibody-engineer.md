@@ -58,6 +58,7 @@
 - Hub URL: https://biomni.phylo.bio/skills?section=marketplace (the hub's general skill listing; a skill-specific link was not captured)
 - package: not installed
 - Licence / commercial-use flag: none raised. This is silence in the Overview, not a clearance.
+- Wired in the app for known-variant comparison only: a research answer about a protein lists up to 6 variants UniProt reports with cited papers, and its Variants tab folds the reference and each variant with the free ESMFold API and compares pLDDT at the changed position (`engine/src/variants/`, see `docs/research-answer.md`, "Known variants"). Predictions and confidence, not measurements; nothing new is designed. The rest of this skill (AlphaFold v2, Boltz-2, Chai-1, ESMCFold2, pTM, HPC jobs) is still instructions only.
 
 ## What this agent cannot do
 

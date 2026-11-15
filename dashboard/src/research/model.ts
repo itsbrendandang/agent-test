@@ -5,6 +5,7 @@
 //  - a search that did not run is never shown as done: its reason is shown instead.
 import type { Verdict } from "@/board/api"
 import { PROVIDERS, searchPlace } from "./providers"
+import { type KnownVariants, variantsOf } from "./variants/model"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
 export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[]; /** A picture of the page (https), as the search returned it. Absent in answers recorded before pictures. */ image?: string }
@@ -58,6 +59,8 @@ export interface AnswerState {
   hypotheses: Hypothesis[]; hypothesesNote?: string; hypothesesCut: { text: string; reason: string }[]
   /** "What is missing": plain sentences the engine's code wrote (searches that did not run, failed checks, open concerns). */
   missing: string[]
+  /** Known variants of the answer's protein, as UniProt reports them with cited papers (engine/src/variants/known.ts). Absent: none. */
+  variants?: KnownVariants
   /** Why these sources were chosen, and what was found but left out. Written by the engine's code, not by a model. */
   selection?: Selection
   /** The engine restarted while this answer was being made, and went on with it. */
@@ -142,6 +145,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "research.resumed": s.resumed = true; break
+      case "variants": { const v = variantsOf(e); if (v) s.variants = v; break }
       case "missing": if (Array.isArray(e.items)) s.missing = (e.items as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== ""); break
       case "research.cancelled": s.status = "cancelled"; s.spentUsd = num(e.spentUsd); s.seconds = num(e.seconds); break
       case "search.started": if (str(e.provider) && str(e.query) !== undefined) s.searches.push({ provider: str(e.provider)!, query: str(e.query)! }); break
@@ -399,6 +403,7 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   }
   if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
   if (Array.isArray(r.missing)) push("missing", { items: r.missing })
+  if (r.variants && typeof r.variants === "object") push("variants", r.variants as Record<string, unknown>)
   for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })
   if (r.status === "done") push("research.finished", { usd: r.usd, seconds: r.seconds, counts: r.counts, searches: {}, review: r.review, stopped: r.stopped, note: r.note })
   else if (r.status === "failed") push("research.failed", { error: r.error, spentUsd: r.usd })

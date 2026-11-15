@@ -6,6 +6,7 @@ import type { BoardConfig } from "../config.ts"
 import type { SpecialistRoom } from "../specialists.ts"
 import type { Verdict } from "../events.ts"
 import type { Manifest } from "../manifest.ts"
+import type { KnownVariants } from "../variants/known.ts"
 
 export type Effort = "quick" | "standard"
 export const EFFORTS: Effort[] = ["quick", "standard"]
@@ -318,6 +319,12 @@ export interface ResearchRecord {
   stopped?: Stopped
   note?: string
   error?: string
+  /**
+   * Known variants of the protein the answer is about: substitutions UniProt reports with cited papers (at most 6),
+   * looked up by code (variants/known.ts). Absent when the answer is about no protein, the lookup found none or did not
+   * run. Their predicted structures are made only when a person opens the Variants tab (GET /api/variants/compare).
+   */
+  variants?: KnownVariants
 }
 
 // ── Events (events.jsonl, and the SSE stream) ────────────────────────────────────────────────────
@@ -347,6 +354,7 @@ export type ResearchEvent =
   | { type: "sources.cited"; n: number[] }
   | { type: "recommendations"; items: Recommendation[] }
   | { type: "missing"; items: string[] }
+  | ({ type: "variants" } & KnownVariants)
   | { type: "artifact.created"; artifact: Artifact } // nested: the envelope already has `type` and `at`
   | { type: "research.finished"; usd: number; seconds: number; counts: Counts; searches: Partial<Record<Provider, number>>; review: { checker: string; critic: string; revised: boolean; notes: { raised: number; resolved: number } }; stopped?: Stopped; note?: string }
   | { type: "research.failed"; error: string; spentUsd: number }

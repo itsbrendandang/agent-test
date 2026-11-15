@@ -402,3 +402,15 @@
 .agents-line { font-size: 13px; color: var(--text-muted, #6b675f); }
 @keyframes agents-hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-9px); } 60% { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .agents-one { animation: none; } }
+
+/* The Variants tab (research/variants/KnownVariants.tsx): known variants and their predicted confidence. */
+.variants-label { margin: 0 0 8px; padding: 6px 8px; border-left: 3px solid currentColor; font-size: 0.85rem; }
+.variants-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.variants-table th, .variants-table td { text-align: left; vertical-align: top; padding: 6px 4px; border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+.variants-table td a + a { margin-left: 2px; }
+.variants-view { margin: 12px 0 0; }
+.variants-side { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; }
+.variants-key { display: inline-block; width: 14px; height: 3px; vertical-align: middle; background: currentColor; }
+.variants-key[data-line="variant"], .variants-line[data-line="variant"] { color: #c2410c; stroke: #c2410c; background: #c2410c; }
+.variants-line { fill: none; stroke: currentColor; stroke-width: 1.2; }
+.variants-mark { stroke: currentColor; stroke-dasharray: 2 2; opacity: 0.5; }
