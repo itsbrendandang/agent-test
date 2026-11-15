@@ -47,6 +47,16 @@ function routeIn(layout: LabLayout, room: RoomId, from: Point, to: Point): Point
 export function pathBetween(layout: LabLayout, from: Point, to: Point, lane = layout.corridorX): Point[] {
   const a = roomAt(from, layout), b = roomAt(to, layout)
   if (a && a === b) return routeIn(layout, a, from, to)
+  if (layout.corridorY !== undefined) {
+    const offset = lane - layout.corridorX
+    const exit = a ? layout.at[a].x + ROOM.width + 30 + offset : from.x
+    const enter = b ? layout.at[b].x + ROOM.width + 30 + offset : to.x
+    return [
+      ...(a ? [...routeIn(layout, a, from, doorOf(layout, a)), { x: exit, y: doorOf(layout, a).y }] : []),
+      { x: exit, y: layout.corridorY }, { x: enter, y: layout.corridorY },
+      ...(b ? [{ x: enter, y: doorOf(layout, b).y }, doorOf(layout, b), ...routeIn(layout, b, doorOf(layout, b), to)] : [to]),
+    ]
+  }
   const out = a ? [...routeIn(layout, a, from, doorOf(layout, a)), { x: lane, y: doorOf(layout, a).y }] : [{ x: lane, y: from.y }]
   const into = b ? [{ x: lane, y: doorOf(layout, b).y }, doorOf(layout, b), ...routeIn(layout, b, doorOf(layout, b), to)] : [{ x: lane, y: to.y }, to]
   return [...out, ...into]

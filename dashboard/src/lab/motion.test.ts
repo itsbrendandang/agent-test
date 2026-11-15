@@ -1,8 +1,8 @@
 // The walking simulation, without a browser: routes, the wait at a pick-up point, the parcel, the queue, and the
 // rule that nothing moves unless the model holds a trip.
 import { describe, expect, it } from "vitest"
-import { TALL, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
-import { MAX_WAITING, active, advance, claimPlace, createSim, dropPoint, pickupPoint, searchPoint, settle, stationPoint, syncTrips, type Sim } from "./motion"
+import { GRID, ROOM, ROOMS, TALL, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
+import { MAX_WAITING, active, advance, claimPlace, createSim, dropPoint, pathBetween, pickupPoint, searchPoint, settle, stationPoint, syncTrips, type Sim } from "./motion"
 
 const withTrips = (trips: Partial<Record<CharacterId, Trip[]>>, runId = "r1", more: Partial<LabModel> = {}): LabModel => {
   const m = { ...emptyLab(), runId, status: "running" as const, ...more }
@@ -24,6 +24,32 @@ function run(sim: Sim, who: CharacterId, seconds = 120) {
 const all = () => true
 
 describe("the lab's walking", () => {
+  it("lays out six unchanged rooms in three columns and routes every room pair through corridors, never another room", () => {
+    expect(ROOMS.map((r) => [GRID.at[r.id].x, GRID.at[r.id].y])).toEqual([[20, 16], [530, 16], [1040, 16], [20, 300], [530, 300], [1040, 300]])
+    for (const from of ROOMS) for (const to of ROOMS) {
+      const start = stationPoint({ room: from.id, home: [200, 180] }, GRID)
+      const end = stationPoint({ room: to.id, home: [200, 180] }, GRID)
+      const path = [start, ...pathBetween(GRID, start, end)]
+      expect(path.at(-1)).toEqual(end)
+      for (let i = 1; i < path.length; i++) for (let t = 0; t <= 20; t++) {
+        const x = path[i - 1].x + (path[i].x - path[i - 1].x) * t / 20
+        const y = path[i - 1].y + (path[i].y - path[i - 1].y) * t / 20
+        for (const other of ROOMS.filter((r) => r.id !== from.id && r.id !== to.id)) {
+          const r = GRID.at[other.id]
+          expect(x > r.x && x < r.x + ROOM.width && y > r.y && y < r.y + ROOM.height).toBe(false)
+        }
+      }
+    }
+  })
+
+  it("finishes a cross-column fetch and returns home on the three-column map", () => {
+    const sim = createSim(GRID)
+    syncTrips(sim, withTrips({ guardian: [fetch("grid-fetch", "bench", 0)] }), all)
+    const path = run(sim, "guardian")
+    expect(path.some((p) => p.carrying)).toBe(true)
+    expect(active(sim)).toBe(false)
+    expect(sim.walkers.guardian).toMatchObject(sim.walkers.guardian.home)
+  })
   it("puts the twelve teammates at their places: two a room, beside the equipment they work at", () => {
     const sim = createSim()
     expect(sim.walkers.scout.home).toEqual({ x: 392, y: 178 })

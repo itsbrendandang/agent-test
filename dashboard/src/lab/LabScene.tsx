@@ -16,7 +16,7 @@ import { agentIdentity } from "./identity"
 import { LabMap } from "./LabMap"
 import { Mascot, type Mood } from "./Mascot"
 import {
-  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, STATE_GLYPH, STATE_WORD, TALL, WIDE, activeRooms, captionOf, characterOf, describeActivity,
+  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, GRID, NOT_IN_RUN, ROOM, ROOMS, STATE_GLYPH, STATE_WORD, TALL, WIDE, activeRooms, captionOf, characterOf, describeActivity,
   type Activity, type CharacterId, type LabLayout, type LabModel, type LabState, type RoomId, type Trip,
 } from "./model"
 import { active, advance, claimPlace, createSim, moving, settle, stationPoint, syncTrips, visitorPoint } from "./motion"
@@ -38,7 +38,7 @@ export interface LabSceneProps {
   settleKey?: string | number
   /** A small scene for a side panel: fewer words around the map. */
   compact?: boolean
-  /** "auto" (the default): Anh's wide map, or the same rooms in one column when the scene is narrower than 600 px. */
+  /** Three columns, two below 800 px, one below 600 px. */
   layout?: "auto" | "wide" | "tall"
   /** Shown in the bar under the map, before the status and "Pause motion": a replay's controls. */
   footer?: ReactNode
@@ -91,11 +91,11 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const [paused, setPaused] = useState(() => { try { return localStorage.getItem(PAUSED) === "true" } catch { return false } })
   const still = reduced || !canAnimate // no walking at all; states still show
 
-  // Which map: Anh's wide one, or one column of rooms when the scene is narrow. Measured, not guessed from the window.
+  // Measured from the scene, not guessed from the window.
   const root = useRef<HTMLElement>(null), lab = useRef<HTMLDivElement>(null)
-  const [narrow, setNarrow] = useState(false)
+  const [sceneWidth, setSceneWidth] = useState(1000)
   const scale = useRef(1) // px for one map unit
-  const layout: LabLayout = wanted === "tall" || (wanted === "auto" && narrow) ? TALL : WIDE
+  const layout: LabLayout = wanted === "tall" || (wanted === "auto" && sceneWidth < 600) ? TALL : wanted === "auto" && sceneWidth < 800 ? WIDE : GRID
   const sim = useMemo(() => createSim(layout), [layout]) // one simulation a map; it is changed in place, outside React
 
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})
@@ -246,7 +246,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
     if (!el || typeof ResizeObserver === "undefined") return
     const measure = () => {
       const width = el.getBoundingClientRect().width
-      if (width > 0) setNarrow(width < 600)
+      if (width > 0) setSceneWidth(width)
       if (lab.current?.clientWidth) { scale.current = lab.current.clientWidth / sim.layout.width; paint() }
     }
     const watch = new ResizeObserver(measure)

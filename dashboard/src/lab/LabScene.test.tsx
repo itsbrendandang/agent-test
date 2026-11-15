@@ -6,8 +6,8 @@ import { T0, fixtureModel } from "./fixtures/streams"
 import { Lab } from "./Lab"
 import { LabPanel } from "./LabPanel"
 import { LabScene } from "./LabScene"
-import { CHARACTERS, WIDE, characterOf, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
-import { stationPoint } from "./motion"
+import { CHARACTERS, GRID, ROOM, characterOf, emptyLab, type CharacterId, type LabModel, type Trip } from "./model"
+import { pickupPoint, stationPoint } from "./motion"
 
 // A stand-in for the browser's frames: nothing runs until a test asks for it.
 let pending = new Map<number, FrameRequestCallback>(), nextId = 1, now = 0
@@ -28,7 +28,7 @@ const walker = (id: CharacterId) => document.querySelector<HTMLElement>(`[data-w
 const chip = (id: CharacterId) => document.querySelector<HTMLElement>(`[data-chip="${id}"]`)!
 const place = (el: HTMLElement) => `${el.style.left} ${el.style.top}`
 /** Where a teammate's desk is, written the way the page writes a place (jsdom rounds what it stores). */
-const homeOf = (id: CharacterId) => { const p = stationPoint(characterOf(id)), el = document.createElement("i"); el.style.left = `${(p.x / WIDE.width) * 100}%`; el.style.top = `${(p.y / WIDE.height) * 100}%`; return place(el) }
+const homeOf = (id: CharacterId) => { const p = stationPoint(characterOf(id), GRID), el = document.createElement("i"); el.style.left = `${(p.x / GRID.width) * 100}%`; el.style.top = `${(p.y / GRID.height) * 100}%`; return place(el) }
 const out: Trip = { id: "t1", kind: "fetch", room: "review", label: "Checking", short: "…", at: T0 }
 const back: Trip = { ...out, back: T0 + 1000, outcome: "carried", label: "✓ Supported: “a statement”", short: "✓ Supported" }
 const quiet = (trips: Trip[] = [], more: Partial<LabModel["characters"]["guardian"]> = {}): LabModel => {
@@ -47,7 +47,8 @@ describe("LabScene", () => {
       expect(chip(c.id)).not.toBeVisible() // idle says nothing
     }
     expect(screen.getByText("Team idle")).toBeInTheDocument()
-    expect(place(walker("scout"))).toBe("39.2% 25.2125%") // in Discovery, by the bookshelf
+    expect(place(walker("scout"))).toBe(homeOf("scout"))
+    expect(document.querySelector(".lab-scene")).toHaveAttribute("data-layout", "grid")
     expect(requestAnimationFrame).not.toHaveBeenCalled()
   })
 
@@ -100,7 +101,7 @@ describe("LabScene", () => {
     render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
     const spots = CHARACTERS.map((c) => { const el = document.querySelector<HTMLElement>(`button[data-agent="${c.id}"]`)!; return [parseFloat(el.style.left), parseFloat(el.style.top)] })
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
-      const dx = Math.abs(spots[i][0] - spots[j][0]) * 10, dy = Math.abs(spots[i][1] - spots[j][1]) * 7.06 // map units
+      const dx = Math.abs(spots[i][0] - spots[j][0]) * GRID.width / 100, dy = Math.abs(spots[i][1] - spots[j][1]) * GRID.height / 100
       expect(dx >= 170 || dy >= 150, `${CHARACTERS[i].name} and ${CHARACTERS[j].name}`).toBe(true)
     }
   })
@@ -109,18 +110,18 @@ describe("LabScene", () => {
     const model = fixtureModel({ experimenter: { inRun: true, label: "A very long caption for the Experimenter" }, guardian: { label: "A very long caption for the Guardian here" } })
     render(<LabScene model={model} clock={T0 + 3_600_000} />)
     const plate = (id: CharacterId) => document.querySelector<HTMLElement>(`button[data-agent="${id}"]`)!
-    const half = (text: string) => ((text.length * 7 + 16 + 14) / 2 / WIDE.width) * 100 // the scene's own estimate of a label's width, in % of the map
+    const half = (text: string) => (Math.min(190, text.length * 7 + 16 + 14) / 2 / GRID.width) * 100
     const left = parseFloat(plate("experimenter").style.left), right = parseFloat(plate("guardian").style.left)
-    expect(left - half("A very long caption for the Experimenter")).toBeGreaterThanOrEqual(2) // the Experiment bench starts at 2% of the map
-    expect(right + half("A very long caption for the Guardian here")).toBeLessThanOrEqual(47) // Quality control ends at 47%
-    expect(parseFloat(plate("scout").style.left)).toBeCloseTo(39.2, 1) // a short one stays under its teammate
+    expect(left - half("A very long caption for the Experimenter")).toBeGreaterThanOrEqual(GRID.at.bench.x / GRID.width * 100)
+    expect(right + half("A very long caption for the Guardian here")).toBeLessThanOrEqual((GRID.at.quality.x + ROOM.width) / GRID.width * 100)
+    expect(parseFloat(plate("scout").style.left)).toBeCloseTo(parseFloat(homeOf("scout")), 1)
   })
 
   it("never puts a walker's bubble on a name plate when two teammates of a room carry something at once", async () => {
     const carry = (id: string): Trip => ({ id, kind: "fetch", room: "discovery", label: "4 example sources", short: "4 example sources", at: T0, back: T0, outcome: "carried", provider: "fixture" })
     const model = fixtureModel({ scout: { state: "fetching", label: "Investigator 1", trips: [carry("a")] }, librarian: { state: "fetching", label: "Investigator 2", trips: [carry("b")] } }, T0)
     render(<LabScene model={model} clock={T0} />)
-    const rect = (el: HTMLElement, text: string) => { const w = ((text.length * 7 + 16) / WIDE.width) * 100, h = (20 / WIDE.height) * 100, x = parseFloat(el.style.left), y = parseFloat(el.style.top); return { x1: x - w / 2, x2: x + w / 2, y1: y - h / 2, y2: y + h / 2 } }
+    const rect = (el: HTMLElement, text: string) => { const w = ((text.length * 7 + 16) / GRID.width) * 100, h = (20 / GRID.height) * 100, x = parseFloat(el.style.left), y = parseFloat(el.style.top); return { x1: x - w / 2, x2: x + w / 2, y1: y - h / 2, y2: y + h / 2 } }
     const hit = (a: ReturnType<typeof rect>, b: ReturnType<typeof rect>) => Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.3 && Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) > 0.3
     for (let i = 0; i < 120; i++) {
       await frames(4)
@@ -151,7 +152,7 @@ describe("LabScene", () => {
     expect(guardian).toHaveAttribute("data-moving", "false")
     expect(pending.size).toBe(0)
     const waitingAt = place(guardian)
-    expect(parseFloat(guardian.style.left)).toBeGreaterThan(56)
+    expect(parseFloat(guardian.style.left)).toBeCloseTo(pickupPoint("review", characterOf("guardian").index, GRID).x / GRID.width * 100, 3)
     // the engine reports the result: the parcel appears with its label and is carried back
     rerender(<LabScene model={quiet([back])} clock={T0 + 1000} />)
     await frames(100)

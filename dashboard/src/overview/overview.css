@@ -136,6 +136,7 @@
 
 /* The lab under the question box, the answer asked from this page, and the one line of counts. */
 .ov-lab { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ov-page > .ov-lab { width: 100%; max-width: none; }
 .ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
 .ov-answer { min-width: 0; }
 .ov-counts { font-size: 13px; color: var(--text-muted); }
