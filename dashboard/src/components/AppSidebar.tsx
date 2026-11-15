@@ -1,5 +1,5 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
-// Four places carry the everyday work; the advanced ones sit under "More", quieter; Settings is once, at the foot.
+// Five places carry the everyday work (the Agent Lab sits right under Research); the advanced ones sit under "More", quieter; Settings is once, at the foot.
 import { FlaskConical, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, Microscope, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { SideCrew } from "@/components/SideCrew"

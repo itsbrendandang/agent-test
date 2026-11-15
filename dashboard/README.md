@@ -46,10 +46,10 @@ addresses still work (`#Experiments`, `#Swarm`, `#Worlds`, and the on-screen wor
 | Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |
 | Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
 | Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
-| Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
+| Agent Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
 | Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
-Research, Saved research and Compare are the primary places. Team review, Agents, Graph and Lab sit under "More".
+Overview, Research, Agent Lab, Saved research and Compare are the primary places. Team review, Agents, Graph and Benchmarks sit under "More".
 Settings has one entry, at the foot of the navigation.
 
 ## The shell

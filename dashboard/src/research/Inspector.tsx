@@ -19,7 +19,7 @@ import { PROVIDERS } from "./providers"
 // The Lab draws the whole scene: loaded only when its tab is opened.
 const LabTab = lazy(() => import("./LabTab"))
 
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity", lab: "Lab" }
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity", lab: "Agent Lab" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
@@ -43,7 +43,7 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
         {current === "hypotheses" && <HypothesesTable state={state} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
-        {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Lab.</p>}><LabTab id={id} events={events} /></Suspense>}
+        {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Agent Lab.</p>}><LabTab id={id} events={events} /></Suspense>}
       </div>
     </div>
   )

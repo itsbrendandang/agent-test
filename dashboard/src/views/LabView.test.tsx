@@ -147,7 +147,7 @@ describe("LabView", () => {
     engine({ board: [DONE_REVIEW], answers: [DONE_ANSWER] })
     const { unmount } = render(<LabView />)
     await tick(0)
-    const picker = screen.getByRole("combobox", { name: "Run shown in the lab" })
+    const picker = screen.getByRole("combobox", { name: "Run shown in the Agent Lab" })
     const options = within(picker).getAllByRole("option").map((o) => o.textContent)
     expect(options[0]).toMatch(/^Is hERG a risk for KRAS G12C inhibitors\? · Research answer · .* · Practice · finished$/)
     expect(options[1]).toMatch(/^Kras g12c hit to lead · Team review · .* · finished$/)

@@ -8,7 +8,7 @@ export const VIEWS = ["Overview", "Home", "Runs", "Compare", "Benchmarks", "Boar
 export type View = (typeof VIEWS)[number]
 export const DEFAULT_VIEW: View = "Overview"
 /** What a person reads in the navigation and in the header. Renames happen here only. */
-export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Lab", Settings: "Settings" }
+export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Lab", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
   Overview: "How much has been run, and how much of it is research.",
@@ -23,9 +23,9 @@ export const ABOUT: Record<View, string> = {
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
 /** The everyday workflow: these get the weight. */
-export const PRIMARY: readonly View[] = ["Overview", "Home", "Runs", "Compare"]
+export const PRIMARY: readonly View[] = ["Overview", "Home", "Lab", "Runs", "Compare"]
 /** Advanced views: kept, quieter, under "More". */
-export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Lab", "Benchmarks"]
+export const MORE: readonly View[] = ["Board", "Agents", "Graph", "Benchmarks"]
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }

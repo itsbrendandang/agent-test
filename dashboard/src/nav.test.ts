@@ -5,9 +5,10 @@ describe("navigation", () => {
   it("keeps the view keys (they are addresses), with Overview first and Home still the key of Research", () => {
     expect(VIEWS).toEqual(["Overview", "Home", "Runs", "Compare", "Benchmarks", "Board", "Agents", "Graph", "Lab", "Settings"])
   })
-  it("renames on screen only: Overview, Research, Saved research, Compare first; Benchmarks and the rest under More; Settings once", () => {
-    expect(PRIMARY.map((v) => LABEL[v])).toEqual(["Overview", "Research", "Saved research", "Compare"])
-    expect(MORE.map((v) => LABEL[v])).toEqual(["Team review", "Agents", "Graph", "Lab", "Benchmarks"])
+  it("renames on screen only: Overview, Research, Agent Lab, Saved research, Compare first; the rest under More; Settings once", () => {
+    expect(PRIMARY.map((v) => LABEL[v])).toEqual(["Overview", "Research", "Agent Lab", "Saved research", "Compare"])
+    expect(LABEL.Lab).toBe("Agent Lab") // the label only: the key and the address stay "Lab"
+    expect(MORE.map((v) => LABEL[v])).toEqual(["Team review", "Agents", "Graph", "Benchmarks"])
     expect([...PRIMARY, ...MORE, "Settings"].sort()).toEqual([...VIEWS].sort()) // every view is reachable, none twice
   })
   it("opens Overview when the address names no view and nothing is remembered", () => {

@@ -195,7 +195,7 @@ export function LabView() {
   const picker = known.length > 0 && (
     <>
       <label className="lab-picker">
-        <span className="sr-only">Run shown in the lab</span>
+        <span className="sr-only">Run shown in the Agent Lab</span>
         <select value={key ?? ""} onChange={(e) => pick(e.target.value)} title="A teammate moves only when the engine reports a step of this run.">
           {target && !known.some((r) => `${r.kind}/${r.id}` === key) && <option value={key}>{target.title}</option>}
           {known.map((r) => (
@@ -211,11 +211,11 @@ export function LabView() {
 
   return (
     <div className="page lab-page" data-wide>
-      <h1 className="sr-only">Lab</h1>
+      <h1 className="sr-only">Agent Lab</h1>
       {problem && !runs ? <EngineOffline needs="The lab reads its runs from the engine." said={problem.said} onRetry={retry} />
         : !runs ? <p className="muted" role="status">Looking for runs…</p>
           : target ? <RunLab key={`${target.kind}/${target.id}`} run={target} picker={picker} />
-            : <><p className="lab-note">No run yet. Ask a question on Research or start a team review; the lab then shows the team as it works.</p><Lab model={emptyLab()} /></>}
+            : <><p className="lab-note">No run yet. Ask a question on Research or start a team review; the Agent Lab then shows the team as it works.</p><Lab model={emptyLab()} /></>}
     </div>
   )
 }

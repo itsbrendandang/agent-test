@@ -32,7 +32,7 @@ describe("tabs", () => {
     const user = userEvent.setup()
     render(<Shown events={lines(S_REAL)} />)
     const tabs = within(screen.getByRole("tablist", { name: "Inspector" })).getAllByRole("tab")
-    expect(tabs.map((t) => t.textContent)).toEqual(["Evidence", "Results", "Activity", "Lab"])
+    expect(tabs.map((t) => t.textContent)).toEqual(["Evidence", "Results", "Activity", "Agent Lab"])
     expect(tabs[0]).toHaveAttribute("aria-selected", "true")
     tabs[0].focus(); await user.keyboard("{ArrowRight}")
     expect(screen.getByRole("tab", { name: "Results" })).toHaveAttribute("aria-selected", "true")

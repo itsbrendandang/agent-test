@@ -263,7 +263,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const done = (room: RoomId) => { const mine = CHARACTERS.filter((c) => c.room === room && model.characters[c.id].inRun); return mine.length > 0 && mine.every((c) => model.characters[c.id].state === "done") }
 
   return (
-    <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} aria-label="Lab view">
+    <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} aria-label="Agent Lab">
       <div className="lab-viewport">
         <span className="lab-badge" data-status={model.status}>{STATUS_GLYPH[model.status] && <span aria-hidden="true">{STATUS_GLYPH[model.status]} </span>}{STATUS[model.status]}</span>
         <div ref={lab} className="lab" data-still={still || undefined} data-paused={paused || undefined} style={{ "--lab-w": layout.width, "--lab-h": layout.height } as CSSProperties}>

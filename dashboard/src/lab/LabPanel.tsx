@@ -16,7 +16,7 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
   // A practice run's example sources are not searches, and the Practice badge already says what they are.
   const credited = Object.entries(model.searches ?? {}).filter(([provider]) => provider !== "fixture")
   return (
-    <aside className="lab-panel" aria-label="Selected teammate and lab activity">
+    <aside className="lab-panel" aria-label="Selected teammate and activity">
       <div className="lab-eyebrow">Selected teammate</div>
       <div className="lab-who">
         <div className="lab-portrait" data-in-run={a.inRun} aria-hidden="true"><Mascot shape={c.shape} color={c.color} /></div>
@@ -94,7 +94,7 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
         </>
       )}
       <hr />
-      <h3 id="lab-activity">Lab activity</h3>
+      <h3 id="lab-activity">Activity</h3>
       {newest.length
         ? <ol className="lab-log" role="log" aria-labelledby="lab-activity" reversed>{newest.map((l) => <li key={l.id} data-tone={l.tone} title={l.text}>{l.at > 0 ? <time dateTime={new Date(l.at).toISOString()}>{clockTime(l.at)}</time> : <time />}<span>{l.text}</span></li>)}</ol>
         : <p className="lab-hint">{model.status === "empty" ? "No run yet. " : "Nothing reported yet. "}{IDLE_HINT}</p>}
