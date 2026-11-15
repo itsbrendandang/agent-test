@@ -1,20 +1,23 @@
-// Agent Lab design by Anh Lam (https://github.com/Anhlam09/agent-lab-report). The dashboard's version of Anh's
-// lab scene: the map of six rooms, the twelve teammates at their desks, the walk to a room and back with a parcel,
-// the "Pause motion" control and reduced-motion support.
+// Agent Lab design by Anh Lam (https://github.com/Anhlam09/agent-lab-report; the look is Agent Lab 2.0,
+// https://github.com/Anhlam09/agent-lab-2.0). The dashboard's lab scene: 2.0's map of six rooms with their equipment,
+// the Buddy characters, the walk to a room and back with something in hand, the "Pause motion" control and
+// reduced-motion support.
 //
-// What differs from Anh's page: the scene has no clock of its own for work. It draws an activity model (model.ts)
-// that is made from engine events, and a teammate walks only when that model holds a trip it has not walked yet.
-// With no event nothing moves and no animation frame is requested.
+// What differs from Anh's pages: the scene has no clock of its own for work. 2.0 plays a demo in which everyone
+// wanders during "the search" and the active room's agents use equipment at random; none of that is here. The scene
+// draws an activity model (model.ts) that is made from engine events, and a teammate walks only when that model
+// holds a trip it has not walked yet. With no event nothing moves and no animation frame is requested.
 //
-// How it is laid out so nothing collides: each desk has a fixed name plate under it (the button a person selects),
-// and each teammate has a status chip above its head. A teammate that is away from its desk carries its name in the
-// chip, and the chip moves to a free side when something is in the way.
+// How it is laid out so nothing collides: each teammate's place has a fixed name plate under it (2.0's name tag, and
+// the button a person selects with), and each teammate has a bubble above its head. A teammate that is away from
+// its place carries its name in the bubble, and the bubble moves to a free side when something is in the way.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { agentIdentity } from "./identity"
 import { LabMap } from "./LabMap"
-import { Mascot } from "./Mascot"
+import { Mascot, type Mood } from "./Mascot"
 import {
-  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, SEARCH_SPOTS, SPOT, STATE_GLYPH, STATE_WORD, TALL, WIDE, captionOf, describeActivity,
-  type CharacterId, type LabLayout, type LabModel, type LabState, type Shape, type Trip,
+  CHARACTERS, CLAIM_GLYPH, CLAIM_WORD, FRESH_MS, NOT_IN_RUN, ROOM, ROOMS, STATE_GLYPH, STATE_WORD, TALL, WIDE, activeRooms, captionOf, describeActivity,
+  type Activity, type CharacterId, type LabLayout, type LabModel, type LabState, type RoomId, type Trip,
 } from "./model"
 import { active, advance, claimPlace, createSim, moving, settle, stationPoint, syncTrips, visitorPoint } from "./motion"
 import "./lab.css"
@@ -45,12 +48,21 @@ export interface LabSceneProps {
 const PAUSED = "lab.paused"
 const STATUS: Record<LabModel["status"], string> = { empty: "Team idle", waiting: "Waiting to start", running: "Team at work", done: "Run finished", failed: "Run failed", cancelled: "Run cancelled" }
 const STATUS_GLYPH: Record<LabModel["status"], string> = { empty: "", waiting: "…", running: "●", done: "✓", failed: "✕", cancelled: "■" }
-const VISITOR_SHAPES: Shape[] = ["mushroom", "acorn", "tree", "owl"]
-/** What the chip above a teammate's head says for each state: a mark and a word, never colour alone. Idle says nothing. */
+/** What the bubble above a teammate's head says for each state: a mark and a word, never colour alone. Idle says nothing. */
 const CHIP: Record<LabState, string> = { idle: "", working: "… working", fetching: "⇄ fetching", "handing-off": "→ handed off", done: "✓ done", failed: "✕ failed", cancelled: "■ cancelled" }
-/** A character's drawing, in map units (lab.css sizes it the same). */
-const ART = { w: 60, h: 65 }
-
+/** A Buddy on the map: 56 units tall, standing on its point (2.0 draws its 100-unit box at 0.56). The box is for the bubbles' placing. */
+const ART = { left: 28, right: 28, up: 53, down: 3 }
+/** The name plate sits this far under a teammate's home, as 2.0's name tag does. */
+const PLATE_DY = 19
+/** 2.0's moods, from what the model says: asleep with no run or no part in it, at work, alarmed when its step failed. */
+const moodOf = (a: Activity, status: LabModel["status"]): Mood =>
+  !a.inRun || status === "empty" || a.state === "cancelled" ? "sleeping" : a.state === "failed" ? "alert" : a.state === "working" || a.state === "fetching" ? "working" : "happy"
+/** What a teammate has in hand while it works at its place: 2.0's pencil, flask, book and slide. The others type. */
+const TOOL: Partial<Record<CharacterId, Held>> = { proposer: "pencil", navigator: "pencil", reviser: "pencil", reporter: "pencil", experimenter: "flask", pilot: "flask", librarian: "book", critic: "slide" }
+type Held = "paper" | "book" | "flask" | "slide" | "pencil"
+/** What a walk carries, drawn as one of 2.0's held items: papers come as a book, a checked statement as a slide, bench work as a flask, the rest as a paper. */
+const heldOf = (trip: Trip | undefined, who: CharacterId): Held =>
+  !trip ? "paper" : trip.provider && trip.provider !== "exa" && trip.provider !== "fixture" ? "book" : trip.kind === "fetch" && trip.room === "review" ? "slide" : trip.kind === "handoff" && (who === "experimenter" || who === "pilot") ? "flask" : "paper"
 const motionQuery = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : undefined)
 /** True when the person asked the system for less motion. Follows a change of the setting. */
 function useReducedMotion(): boolean {
@@ -71,7 +83,7 @@ const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(
 /** A label of this many characters at 12 px, in px: an estimate that errs on the wide side. */
 const textWidth = (text: string) => text.length * 7 + 16
 
-interface Nodes { walker: HTMLElement | null; art: HTMLElement | null; feet: SVGGElement | null; chip: HTMLElement | null }
+interface Nodes { walker: HTMLElement | null; art: HTMLElement | null; flip: HTMLElement | null; held: HTMLElement | null; chip: HTMLElement | null }
 
 export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, layout: wanted = "auto", footer, className = "" }: LabSceneProps) {
   const reduced = useReducedMotion()
@@ -88,9 +100,10 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
 
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})
   /** A ref callback that files one element of one teammate. */
-  const keep = <K extends keyof Nodes>(id: CharacterId, part: K) => (el: Nodes[K]) => { (nodes.current[id] ??= { walker: null, art: null, feet: null, chip: null })[part] = el }
+  const keep = <K extends keyof Nodes>(id: CharacterId, part: K) => (el: Nodes[K]) => { (nodes.current[id] ??= { walker: null, art: null, flip: null, held: null, chip: null })[part] = el }
   /** The claim cards: every room's tray holds one for each claim, and only the one in the claim's place is shown. */
   const cards = useRef(new Map<string, HTMLElement>())
+  const counts = useRef(new Map<RoomId, HTMLElement>())
   const frame = useRef(0)
   const previous = useRef<number | null>(null)
   // What the frame loop reads: always the latest props, without restarting the loop.
@@ -113,16 +126,17 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       const last: Trip | undefined = a.trips.at(-1)
       const holds = stand ? (a.state === "fetching" && last?.outcome === "carried") || a.state === "handing-off" : w.carrying
       const tag = stand ? (holds ? last?.short ?? "" : "") : w.tag
-      const stride = walking ? Math.sin(sim.clock * 15 + w.index) : 0
+      const phase = sim.clock * 10 + w.index // 2.0's walk: a small hop and a sway
       n.walker.style.left = `${(w.x / at.width) * 100}%`
       n.walker.style.top = `${(w.y / at.height) * 100}%`
       n.walker.style.zIndex = String(10 + Math.round(w.y))
       n.walker.dataset.moving = String(walking)
       n.walker.dataset.carrying = String(holds)
       n.walker.dataset.out = String(!stand && (w.route.length > 0 || w.waiting))
-      if (n.art) n.art.style.transform = walking ? `translateY(${-Math.abs(stride) * 2}px) rotate(${stride * 3}deg)` : ""
-      n.feet?.setAttribute("transform", `translate(${stride * 1.5} 0)`)
-      taken.push({ x1: w.x - ART.w / 2, y1: w.y - ART.h / 2, x2: w.x + ART.w / 2, y2: w.y + ART.h / 2, of: w.id })
+      if (n.flip) n.flip.style.transform = `scaleX(${stand ? 1 : w.facing})`
+      if (n.art) n.art.style.transform = walking ? `translateY(${-Math.abs(Math.sin(phase)) * 4 * s}px) rotate(${Math.sin(phase) * 3.4}deg)` : ""
+      if (n.held) n.held.dataset.kind = holds ? heldOf(stand ? last : w.job ?? last, w.id) : ""
+      taken.push({ x1: w.x - ART.left, y1: w.y - ART.up, x2: w.x + ART.right, y2: w.y + ART.down, of: w.id })
       const away = !stand && Math.hypot(w.x - w.home.x, w.y - w.home.y) > 8
       // At its desk the chip says the state, or what is in the parcel. Away from it, the chip also says who it is
       // (the name plate stayed at the desk): the name, and what it carries or the mark of its state.
@@ -130,10 +144,10 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       const text = !away ? says : holds && tag ? `${captionOf(a)}: ${tag}` : `${captionOf(a)}${a.inRun && STATE_GLYPH[a.state] ? ` ${STATE_GLYPH[a.state]}` : ""}`
       chips.push({ id: w.id, text, x: w.x, y: w.y, away, cargo: holds && !!tag })
     }
-    // The fixed name plates under the desks are never covered.
+    // The fixed name plates under the teammates' places are never covered.
     for (const c of CHARACTERS) {
-      const home = stationPoint(c, at), half = unit(textWidth(captionOf(m.characters[c.id]))) / 2
-      taken.push({ x1: home.x - half, y1: home.y + (SPOT.plate - SPOT.stand) - unit(11), x2: home.x + half, y2: home.y + (SPOT.plate - SPOT.stand) + unit(11) })
+      const home = stationPoint(c, at), half = unit(textWidth(captionOf(m.characters[c.id])) + 10) / 2
+      taken.push({ x1: home.x - half, y1: home.y + PLATE_DY - unit(11), x2: home.x + half, y2: home.y + PLATE_DY + unit(11) })
     }
     // Chips: a teammate at its desk has its chip above its head (that row is kept free). One that is away tries
     // above, then each side, then below, and takes the first place where nothing else is.
@@ -145,13 +159,14 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       el.dataset.cargo = String(chip.cargo)
       if (!chip.text) continue
       const w = unit(textWidth(chip.text)), h = unit(20), gap = unit(3)
+      const above = chip.y - ART.up - h / 2 - gap, side = ART.right + w / 2 + gap
       const spots = [
-        { x: chip.x, y: chip.y - ART.h / 2 - h / 2 - gap },
+        { x: chip.x, y: above },
         ...(chip.away ? [
-          { x: chip.x + ART.w / 2 + w / 2 + gap, y: chip.y - 6 }, { x: chip.x - ART.w / 2 - w / 2 - gap, y: chip.y - 6 }, // right, left
-          { x: chip.x, y: chip.y + ART.h / 2 + h / 2 + gap }, // below
-          { x: chip.x + w / 2, y: chip.y - ART.h / 2 - h * 1.5 - gap * 2 }, { x: chip.x - w / 2, y: chip.y - ART.h / 2 - h * 1.5 - gap * 2 }, // higher, to either side
-          { x: chip.x + ART.w / 2 + w / 2 + gap, y: chip.y + ART.h / 2 }, { x: chip.x - ART.w / 2 - w / 2 - gap, y: chip.y + ART.h / 2 }, // lower corners
+          { x: chip.x + side, y: chip.y - 30 }, { x: chip.x - side, y: chip.y - 30 }, // right, left
+          { x: chip.x + w / 2, y: above - h - gap }, { x: chip.x - w / 2, y: above - h - gap }, // higher, to either side
+          { x: chip.x, y: chip.y + ART.down + h / 2 + gap }, // below
+          { x: chip.x + side, y: chip.y - 4 }, { x: chip.x - side, y: chip.y - 4 }, // lower corners
         ] : []),
       ]
       const box = (p: { x: number; y: number }): Box => ({ x1: p.x - w / 2, y1: p.y - h / 2, x2: p.x + w / 2, y2: p.y + h / 2 })
@@ -162,6 +177,14 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       el.style.top = `${(best.y / at.height) * 100}%`
       el.style.zIndex = String(2000 + Math.round(best.y))
       taken.push(box(best))
+    }
+    // How many teammates are in each room now (2.0's count beside the room's name).
+    for (const r of ROOMS) {
+      const el = counts.current.get(r.id)
+      if (!el) continue
+      const room = at.at[r.id]
+      const n = Object.values(sim.walkers).filter((w) => w.x >= room.x && w.x <= room.x + ROOM.width && w.y >= room.y && w.y <= room.y + ROOM.height).length
+      if (el.textContent !== String(n)) el.textContent = String(n)
     }
     // A claim is shown in one room: where it is being fetched from while the Engine walks to it, nowhere while it
     // is carried, else the room of the state the model gives it.
@@ -226,18 +249,24 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const toggle = () => setPaused((was) => { try { localStorage.setItem(PAUSED, String(!was)) } catch { /* private mode */ } return !was })
   const perRoom = new Map<string, number>()
   const place = (x: number, y: number): CSSProperties => ({ left: `${(x / layout.width) * 100}%`, top: `${(y / layout.height) * 100}%` })
-  const discovery = layout.at.discovery
+  const on = activeRooms(model)
+  /** A room is done when every teammate of it that is in the run is done (2.0's green dot). */
+  const done = (room: RoomId) => { const mine = CHARACTERS.filter((c) => c.room === room && model.characters[c.id].inRun); return mine.length > 0 && mine.every((c) => model.characters[c.id].state === "done") }
 
   return (
     <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} aria-label="Lab view">
       <div className="lab-viewport">
         <span className="lab-badge" data-status={model.status}>{STATUS_GLYPH[model.status] && <span aria-hidden="true">{STATUS_GLYPH[model.status]} </span>}{STATUS[model.status]}</span>
         <div ref={lab} className="lab" data-still={still || undefined} data-paused={paused || undefined} style={{ "--lab-w": layout.width, "--lab-h": layout.height } as CSSProperties}>
-          <LabMap layout={layout} />
-          {ROOMS.map((r) => <span key={r.id} className="lab-room-name" style={place(layout.at[r.id].x + 44, layout.at[r.id].y + 28)}>{r.name}</span>)}
-          {Object.values(SEARCH_SPOTS).map((spot) => <span key={spot.sign} className="lab-spot-name" title={spot.about} style={place(discovery.x + (discovery.door === "right" ? spot.signDx : ROOM.width - spot.signDx), discovery.y + spot.signDy)}>{spot.sign}</span>)}
+          <LabMap layout={layout} active={on.join(",")} />
+          {/* Each room's name, as 2.0 labels it: a dot for its state, the name, and how many teammates are in it. */}
+          {ROOMS.map((r) => (
+            <span key={r.id} className="lab-room-name" data-room-state={on.includes(r.id) ? "active" : done(r.id) ? "done" : "rest"} style={place(layout.at[r.id].x + 16, layout.at[r.id].y + 28)} title={on.includes(r.id) ? `${r.name}: someone is working here` : done(r.id) ? `${r.name}: its teammates are done` : r.name}>
+              <i aria-hidden="true" />{r.name}<b aria-hidden="true" ref={(el) => { if (el) counts.current.set(r.id, el); else counts.current.delete(r.id) }}>2</b>
+            </span>
+          ))}
           {model.claims && ROOMS.map((r) => (
-            <ul key={r.id} className="lab-tray" aria-label={`Claims in ${r.name}`} style={{ ...place(layout.at[r.id].x + 232, layout.at[r.id].y + 13), width: `${(176 / layout.width) * 100}%` }}>
+            <ul key={r.id} className="lab-tray" aria-label={`Claims in ${r.name}`} style={{ ...place(layout.at[r.id].x + 262, layout.at[r.id].y + 9), width: `${(176 / layout.width) * 100}%` }}>
               {model.claims!.map((c) => (
                 <li key={c.id} className="lab-claim" data-claim={c.id} data-state={c.state} hidden={c.room !== r.id} title={`${c.text}${c.reason ? ` Why it is here: ${c.reason}` : ""}`}
                   ref={(el) => { if (el) cards.current.set(`${r.id}/${c.id}`, el); else cards.current.delete(`${r.id}/${c.id}`) }}>
@@ -246,15 +275,15 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
               ))}
             </ul>
           ))}
-          {/* The name plate under each desk: the control a person selects a teammate with. It never moves. */}
+          {/* The name plate under each teammate's place: the control a person selects a teammate with. It never moves. */}
           {CHARACTERS.map((c) => {
             const a = model.characters[c.id], home = stationPoint(c, layout)
             const told = describeActivity(captionOf(a), a)
             return (
-              <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + (SPOT.plate - SPOT.stand))}
+              <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + PLATE_DY)}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
                 aria-pressed={selected === c.id} aria-label={`Inspect ${told}`} title={told} onClick={() => onSelect?.(c.id)}>
-                {captionOf(a)}
+                <i aria-hidden="true" />{captionOf(a)}
               </button>
             )
           })}
@@ -264,20 +293,23 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
             return (
               <span key={c.id} className="lab-agent" ref={keep(c.id, "walker")} data-walker={c.id} data-state={a.state} data-in-run={a.inRun} data-selected={selected === c.id || undefined}
                 aria-hidden="true" title={a.inRun ? captionOf(a) : `${captionOf(a)}: ${NOT_IN_RUN.toLowerCase()}`} onClick={() => onSelect?.(c.id)}>
-                <span className="lab-cargo" />
+                <span className="lab-ring" />
                 {a.problem && <span className="lab-alert">!</span>}
-                <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} feetRef={keep(c.id, "feet")} /></span>
+                <span className="lab-flip" ref={keep(c.id, "flip")}>
+                  <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} mood={moodOf(a, model.status)} /></span>
+                  <span className="lab-held" ref={keep(c.id, "held")} data-kind="" data-tool={a.inRun && (a.state === "working" || a.state === "fetching") ? TOOL[c.id] : undefined}><HeldItems /></span>
+                </span>
               </span>
             )
           })}
           {CHARACTERS.map((c) => <span key={c.id} className="lab-chip" ref={keep(c.id, "chip")} data-chip={c.id} data-state={model.characters[c.id].state} aria-hidden="true" hidden />)}
-          {model.visitors.map((v, i) => {
+          {model.visitors.map((v) => {
             const n = perRoom.get(v.room) ?? 0
             perRoom.set(v.room, n + 1)
-            const at = visitorPoint(v.room, n, layout)
+            const at = visitorPoint(v.room, n, layout), who = agentIdentity(v.id, { title: v.title })
             return (
-              <span key={v.id} className="lab-agent lab-visitor" style={{ ...place(at.x, at.y + Math.floor(n / 2) * 8), zIndex: 10 + Math.round(at.y) }} data-state={v.state} data-visitor={v.id} role="img" aria-label={`Visitor ${v.name}: ${STATE_WORD[v.state]}. ${v.doing}`} title={`Visiting specialist: ${v.name}. ${v.doing}`}>
-                <span className="lab-art"><Mascot shape={VISITOR_SHAPES[i % VISITOR_SHAPES.length]} color="#d9d2c0" /></span>
+              <span key={v.id} className="lab-agent lab-visitor" style={{ ...place(at.x, at.y), zIndex: 10 + Math.round(at.y) }} data-state={v.state} data-visitor={v.id} role="img" aria-label={`Visitor ${v.name}: ${STATE_WORD[v.state]}. ${v.doing}`} title={`Visiting specialist: ${v.name}. ${v.doing}`}>
+                <span className="lab-art"><Mascot shape={who.shape} color={who.colour} mood={v.state === "working" ? "working" : "happy"} /></span>
                 <span className="lab-visitor-name">{STATE_GLYPH[v.state] && <span aria-hidden="true">{STATE_GLYPH[v.state]} </span>}{v.name}</span>
               </span>
             )
@@ -291,5 +323,18 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
         </button>
       </div>
     </section>
+  )
+}
+
+/** 2.0's held items, small: a paper, a book, a flask, a slide and a pencil. One is shown at a time (lab.css, by data-kind or data-tool). */
+function HeldItems() {
+  return (
+    <svg viewBox="-12 -20 24 32" aria-hidden="true" focusable="false">
+      <g data-held="paper"><rect x="-7" y="-9" width="14" height="18" rx="2" fill="#fffdf6" stroke="#e2dccb" /><rect x="-4" y="-5" width="8" height="1.6" rx=".8" fill="#e2dccb" /><rect x="-4" y="-0.5" width="8" height="1.6" rx=".8" fill="#e2dccb" /><rect x="-4" y="4" width="5" height="1.6" rx=".8" fill="#e2dccb" /></g>
+      <g data-held="book"><rect x="-8" y="-6" width="16" height="12" rx="2" fill="#6b9bf2" /><rect x="-7" y="-5" width="7" height="10" rx="1" fill="#fffdf6" /><rect x="0" y="-5" width="7" height="10" rx="1" fill="#fffdf6" /></g>
+      <g data-held="flask" transform="translate(0 8) scale(.8)"><path d="M-3 -17 L-3 -10 L-9.5 -1 Q-10 0 -9 0 L9 0 Q10 0 9.5 -1 L3 -10 L3 -17 Z" fill="rgba(107,155,242,.22)" /><path d="M-5.5 -6.5 L5.5 -6.5 L9.5 -1 Q10 0 9 0 L-9 0 Q-10 0 -9.5 -1 Z" fill="#5cc48d" /></g>
+      <g data-held="slide"><rect x="-9" y="-3" width="18" height="6" rx="1.5" fill="rgba(107,155,242,.45)" /><circle cx="0" cy="0" r="2.2" fill="#f6b6cd" /></g>
+      <g data-held="pencil" transform="rotate(40)"><rect x="-1.8" y="-9" width="3.6" height="13" rx="1" fill="#ffcf4a" /><path d="M-1.8 4 L1.8 4 L0 8 Z" fill="#c9a27a" /></g>
+    </svg>
   )
 }

@@ -96,17 +96,17 @@ describe("AgentAvatar", () => {
     expect(pictures.map((p) => [p.getAttribute("width"), p.getAttribute("height")])).toEqual([["24", "24"], ["32", "32"], ["40", "40"]])
     for (const p of pictures) {
       expect(p).toHaveAttribute("aria-hidden", "true")
-      expect(p).toHaveAttribute("data-face", "bunny:#edb7cb")
+      expect(p).toHaveAttribute("data-face", "bunny:#f6b6cd")
       expect(p.querySelector("animate, animateTransform")).toBeNull()
-      expect(p.querySelector(".lab-feet")).toBeNull() // the head only
+      expect(p.querySelector("text")).toBeNull() // the Buddy alone: no mood signs
     }
     expect(screen.queryByRole("img")).toBeNull()
   })
 
   it("can carry its label for a screen reader, and shows the same face as the mapping says", () => {
     render(<><AgentAvatar name="lead-scientist" title="Lead Scientist" labelled /><AgentAvatar name="experimenter" mode="pilot" labelled /><AgentAvatar name="who-is-this" labelled /></>)
-    expect(screen.getByRole("img", { name: "Lead Scientist" })).toHaveAttribute("data-face", "mountain:#7496e8")
-    expect(screen.getByRole("img", { name: "Experimenter" })).toHaveAttribute("data-face", "flame:#f2b35e")
+    expect(screen.getByRole("img", { name: "Lead Scientist" })).toHaveAttribute("data-face", "mountain:#8f7fe0")
+    expect(screen.getByRole("img", { name: "Experimenter" })).toHaveAttribute("data-face", "egg:#ffcf4a")
     expect(screen.getByRole("img", { name: "Who is this" })).toHaveAttribute("data-face", "generic:#cfcabd")
   })
 

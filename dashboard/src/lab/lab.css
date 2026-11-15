@@ -1,6 +1,6 @@
 /* Agent Lab design by Anh Lam. Anh's look (a warm ground, white plates, pastel characters) on the app's tokens. */
 .lab-scene, .lab-panel, .lab-page {
-  --lab-ground: var(--bg, #f8f7f3);
+  --lab-ground: var(--bg, #f6f3ec);
   --lab-floor: var(--surface, #fdfcfa);
   --lab-hall: var(--surface, #fdfcfa);
   --lab-hall-grid: var(--line, #e9e7e0);
@@ -16,59 +16,112 @@
   --lab-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
-/* ── The scene: the map, then one slim bar under it ── */
+/* ── The scene: the map of Agent Lab 2.0, then one slim bar under it ── */
 .lab-scene { min-width: 0; background: var(--surface, #fdfcfa); border: 1px solid var(--lab-wall); border-radius: var(--radius-card, 12px); display: flex; flex-direction: column; overflow: hidden; }
 .lab-viewport { min-width: 0; background: var(--lab-ground); position: relative; padding-top: 30px; }
 .lab-viewport > .lab-badge { position: absolute; top: 5px; left: 10px; z-index: 5; }
 /* Everything on the map is sized from --u, one map unit, so it keeps its proportions at any width. */
 .lab { position: relative; width: 100%; aspect-ratio: var(--lab-w) / var(--lab-h); isolation: isolate; container-type: inline-size; --u: calc(100cqw / var(--lab-w)); margin: 0 auto; }
 .lab-map { display: block; width: 100%; height: 100%; }
-.lab-room-name { position: absolute; transform: translateY(-50%); font-size: clamp(12px, calc(var(--u) * 14), 15px); font-weight: 600; color: var(--lab-ink); white-space: nowrap; pointer-events: none; line-height: 1; z-index: 1; }
-.lab-spot-name { position: absolute; transform: translate(-50%, -50%); font-size: 12px; line-height: 1; color: var(--lab-muted); white-space: nowrap; pointer-events: none; z-index: 1; }
+.lab-map .lab-card { filter: drop-shadow(0 3px 7px rgba(16, 24, 40, .08)); }
+.lab-map .lab-room[data-active] .lab-card { filter: drop-shadow(0 0 9px rgba(255, 210, 63, .55)); }
 
-/* The name plate under a desk: fixed, and the control that selects the teammate. */
-.lab-plate { position: absolute; transform: translate(-50%, -50%); max-width: calc(var(--u) * 182); min-height: 22px; padding: 2px 8px; border: 1px solid var(--lab-wall); border-radius: 7px; background: #fffffff2; color: var(--lab-ink); font: inherit; font-size: clamp(12px, calc(var(--u) * 13), 14px); font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 3; -webkit-tap-highlight-color: transparent; }
+/* The room's name, as 2.0 labels it: a pill with a dot for the room's state, the name, and a count. */
+.lab-room-name { position: absolute; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 9px; border: 1px solid #e2dccb; border-radius: 14px; background: #fffdf6; box-shadow: 0 1px 3px rgba(16, 24, 40, .06); font-family: var(--font-toon, inherit); font-size: clamp(12px, calc(var(--u) * 15), 16px); font-weight: 600; color: #1b1a17; white-space: nowrap; pointer-events: none; line-height: 1.2; z-index: 6; }
+.lab-room-name i { width: 9px; height: 9px; border-radius: 50%; background: #c4bdad; flex: none; }
+.lab-room-name[data-room-state="active"] i { background: #ffd23f; box-shadow: 0 0 0 2px #1b1a1722; }
+.lab-room-name[data-room-state="done"] i { background: #5cc48d; }
+.lab-room-name b { font-family: var(--ui-font-sans, inherit); font-size: 12px; font-weight: 600; color: #55504a; background: #e9e6dd; border-radius: 8px; padding: 0 6px; }
+
+/* The name plate under a teammate's place: 2.0's name tag, fixed here, and the control that selects the teammate. */
+.lab-plate { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 5px; max-width: calc(var(--u) * 190); min-height: 20px; padding: 1px 9px 1px 7px; border: 1px solid #e2dccb; border-radius: 10px; background: #fffdf6; color: #1b1a17; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 8; -webkit-tap-highlight-color: transparent; }
+.lab-plate i { width: 7.5px; height: 7.5px; border-radius: 50%; background: #6a6457; flex: none; }
+.lab-plate[data-state="working"] i { background: #2b6cb0; }
+.lab-plate[data-state="fetching"] i, .lab-plate[data-state="handing-off"] i { background: #c26a00; }
+.lab-plate[data-state="done"] i { background: #17824d; }
+.lab-plate[data-state="failed"] i { background: var(--lab-fail); border-radius: 2px; }
 .lab-plate:hover { border-color: var(--edge-strong, #8a8983); }
 .lab-plate:focus-visible { outline: 2px solid var(--lab-select); outline-offset: 2px; }
-.lab-plate[aria-pressed="true"] { border-color: var(--lab-select); box-shadow: 0 0 0 1px var(--lab-select); font-weight: 650; }
-.lab-plate[data-state="failed"] { border-color: var(--lab-fail); color: var(--lab-fail); }
+.lab-plate[aria-pressed="true"] { background: #1b1a17; border-color: #1b1a17; color: #fffdf6; }
+.lab-plate[data-state="failed"] { border-color: var(--lab-fail); }
 /* Not in this run: quiet. No box; the words are in the tooltip, the screen reader's name and the side panel. */
-.lab-plate[data-in-run="false"] { border-color: transparent; background: transparent; color: var(--lab-muted); font-weight: 400; opacity: .75; }
-.lab-plate[data-in-run="false"][aria-pressed="true"] { border-color: var(--lab-select); background: #fffffff2; opacity: 1; }
+.lab-plate[data-in-run="false"] { border-color: transparent; background: transparent; color: var(--lab-muted); font-weight: 400; opacity: .8; }
+.lab-plate[data-in-run="false"] i { display: none; }
+.lab-plate[data-in-run="false"][aria-pressed="true"] { background: #1b1a17; color: #fffdf6; opacity: 1; }
 
-/* A teammate. */
-.lab-agent { position: absolute; width: calc(var(--u) * 60); min-width: 26px; transform: translate(-50%, -50%); cursor: pointer; display: block; -webkit-tap-highlight-color: transparent; }
-.lab-art { display: block; width: 100%; aspect-ratio: 50 / 56; filter: drop-shadow(0 2px 2px #0000001c); }
-.lab-art svg { display: block; width: 100%; height: 100%; }
-/* Selected: Anh's ring under the feet. */
-.lab-agent::before { content: ""; position: absolute; left: 12%; right: 12%; bottom: 2%; height: 26%; border: 2px solid transparent; border-radius: 50%; z-index: -1; }
-.lab-agent[data-selected]::before { border-color: var(--lab-select); }
-.lab-agent[data-in-run="false"] .lab-art { opacity: .28; filter: grayscale(1); }
-.lab-agent[data-state="working"] .lab-art { animation: lab-work 1.6s ease-in-out infinite; }
-.lab[data-still] .lab-art, .lab[data-paused] .lab-art, .lab-agent[data-moving="true"] .lab-art { animation: none; }
-@keyframes lab-work { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-@media (prefers-reduced-motion: reduce) { .lab-art { animation: none !important; } .lab-cargo { transition: none !important; } }
+/* A teammate: a Buddy, 56 map units tall, standing on its point. */
+.lab-agent { position: absolute; width: calc(var(--u) * 60.5); min-width: 24px; transform: translate(-50%, -90.7%); cursor: pointer; display: block; -webkit-tap-highlight-color: transparent; }
+.lab-flip { display: block; position: relative; }
+.lab-art { display: block; width: 100%; aspect-ratio: 1; transform-origin: 50% 90%; }
+.lab-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* The shadow under its feet; a turning ring while it works (2.0's floor mark); a dashed ring when it is selected. */
+.lab-ring { position: absolute; left: 50%; top: 90.7%; width: 52%; aspect-ratio: 30 / 9; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(27, 26, 23, .10); z-index: -1; }
+.lab-agent[data-state="working"]:not([data-out="true"]) .lab-ring, .lab-agent[data-state="fetching"]:not([data-out="true"]) .lab-ring { width: 84%; background: transparent; border: 2.5px dashed #2b6cb0; animation: lab-turn 2.8s linear infinite; }
+.lab-agent[data-selected] .lab-ring { width: 100%; background: transparent; border: 1.5px dashed rgba(27, 26, 23, .55); animation: none; }
+@keyframes lab-turn { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.lab-agent[data-in-run="false"] .lab-art { opacity: .3; filter: grayscale(1); }
+.lab-agent[data-in-run="false"] .lab-ring { opacity: .4; }
+/* At work at its place: 2.0's small working hop. */
+.lab-agent[data-state="working"]:not([data-out="true"]) .lab-art { animation: lab-work .8s ease-in-out infinite; }
+@keyframes lab-work { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-2.5%); } }
+.lab-agent[data-moving="true"] .lab-art { animation: none; }
+.lab-mood-dot { animation: lab-pulse 2s ease-in-out infinite; }
+@keyframes lab-pulse { 50% { opacity: .45; } }
 /* A failed step keeps a mark on the teammate to the end of the run. */
-.lab-alert { position: absolute; left: 0; top: -6%; width: 16px; height: 16px; border-radius: 50%; background: var(--lab-fail); color: #fff; font-size: 12px; font-weight: 700; line-height: 16px; text-align: center; z-index: 2; }
-/* The parcel a teammate carries back after a pick-up (Anh's). What is in it is written in the chip. */
-.lab-cargo { position: absolute; left: 68%; top: 6%; width: 26%; aspect-ratio: 14 / 11; border: 1.5px solid #c98a55; border-radius: 3px; background: linear-gradient(90deg, #f6c896 42%, #e3a46c 42% 58%, #f6c896 58%); box-shadow: 0 2px 3px #0000002a; opacity: 0; transform: scale(.4); transition: opacity .2s, transform .2s; z-index: 2; }
-.lab-agent[data-carrying="true"] .lab-cargo { opacity: 1; transform: scale(1); }
+.lab-alert { position: absolute; left: 4%; top: 8%; width: 16px; height: 16px; border-radius: 50%; background: var(--lab-fail); color: #fff; font-size: 12px; font-weight: 700; line-height: 16px; text-align: center; z-index: 2; }
+/* What is in hand, beside the Buddy: the thing it carries, or the tool it works with. */
+.lab-held { position: absolute; left: 62%; top: 30%; width: 36%; pointer-events: none; }
+.lab-held svg { display: block; width: 100%; overflow: visible; }
+.lab-held [data-held] { display: none; }
+.lab-held[data-kind="paper"] [data-held="paper"], .lab-held[data-kind="book"] [data-held="book"], .lab-held[data-kind="flask"] [data-held="flask"], .lab-held[data-kind="slide"] [data-held="slide"] { display: inline; }
+.lab-agent:not([data-out="true"]) .lab-held[data-kind=""][data-tool="pencil"] [data-held="pencil"], .lab-agent:not([data-out="true"]) .lab-held[data-kind=""][data-tool="flask"] [data-held="flask"],
+.lab-agent:not([data-out="true"]) .lab-held[data-kind=""][data-tool="book"] [data-held="book"], .lab-agent:not([data-out="true"]) .lab-held[data-kind=""][data-tool="slide"] [data-held="slide"] { display: inline; }
+.lab-agent[data-state="working"] .lab-held[data-kind=""] svg { animation: lab-tool .5s ease-in-out infinite alternate; }
+@keyframes lab-tool { to { transform: translateY(-6%) rotate(8deg); } }
 
-/* The chip above a head: the state in a mark and a word, or what is being carried. */
-.lab-chip { position: absolute; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 9px; border: 1px solid var(--lab-wall); background: #ffffff; color: var(--lab-ink); font-size: 12px; line-height: 1.35; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 1px 2px #0000001a; }
+/* The bubble above a head, in 2.0's speech-bubble look: the state in a mark and a word, or what is being carried. */
+.lab-chip { position: absolute; transform: translate(-50%, -50%); padding: 2px 9px; border-radius: 13px; border: 1px solid #e2dccb; background: #fffdf6; color: #1b1a17; font-size: 12px; line-height: 1.35; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(16, 24, 40, .10); }
 .lab-chip[hidden] { display: none; }
-.lab-chip[data-state="working"] { border-color: #9db4ec; color: var(--info, #1d4e8f); }
-.lab-chip[data-state="fetching"], .lab-chip[data-state="handing-off"] { border-color: #e3a46c; background: #fff7ea; color: var(--lab-job); }
-.lab-chip[data-cargo="true"] { border-color: #e3a46c; background: #fff7ea; color: var(--lab-job); }
-.lab-chip[data-state="done"] { border-color: #a9d9bd; color: var(--success, #0d5f37); }
-.lab-chip[data-state="failed"] { border-color: var(--lab-fail); background: #fff1f1; color: var(--lab-fail); border-width: 2px; }
+.lab-chip[data-state="working"] { color: #1d4e8f; }
+.lab-chip[data-state="fetching"], .lab-chip[data-state="handing-off"] { color: var(--lab-job); }
+.lab-chip[data-cargo="true"] { border-color: #e3a46c; background: #fff7ea; color: var(--lab-job); font-weight: 600; }
+.lab-chip[data-state="done"] { color: var(--success, #0d5f37); }
+.lab-chip[data-state="failed"] { border-color: var(--lab-fail); background: #fff1f1; color: var(--lab-fail); border-width: 2px; font-weight: 600; }
 .lab-chip[data-state="cancelled"] { border-style: dashed; color: var(--neutral, #55504a); }
 
-.lab-visitor { cursor: default; width: calc(var(--u) * 46); }
-.lab-visitor-name { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); padding: 0 6px; border: 1px dotted var(--edge-strong, #8a8983); border-radius: 6px; background: #fffffff2; font-size: 12px; line-height: 1.4; white-space: nowrap; max-width: calc(var(--u) * 170); overflow: hidden; text-overflow: ellipsis; }
+.lab-visitor { cursor: default; width: calc(var(--u) * 50); }
+.lab-visitor-name { position: absolute; left: 50%; top: 96%; transform: translateX(-50%); padding: 0 7px; border: 1px dotted var(--edge-strong, #8a8983); border-radius: 10px; background: #fffdf6; font-size: 12px; line-height: 1.4; white-space: nowrap; max-width: calc(var(--u) * 170); overflow: hidden; text-overflow: ellipsis; }
+
+/* The equipment of a room comes alive only while the model says someone of that room works or fetches (data-active),
+   and never without motion: under reduced motion, or with "Pause motion", everything on the map is still. */
+.lab-map .lab-on, .lab-map .lab-fx-bubble { display: none; }
+.lab-map .lab-room[data-active] .lab-on, .lab-map .lab-room[data-active] .lab-fx-bubble { display: inline; }
+.lab-map .lab-room[data-active] .lab-lamp { fill: #6b9bf2; }
+.lab-map .lab-room[data-active] .lab-lamp-green { fill: #5cc48d; }
+.lab-map .lab-room[data-active] .lab-lamp-yellow { fill: #ffcf4a; }
+.lab-map .lab-room[data-active] .lab-lamp-flame { fill: #ff7a59; }
+.lab-map .lab-room[data-active] .lab-warm { fill: #fff1d1; }
+.lab-map .lab-room[data-active] .lab-hood { fill: #eef5ff; }
+.lab-map .lab-room[data-active] .lab-fx-bubble { animation: lab-bubble 1.1s linear infinite; }
+.lab-map .lab-room[data-active] .lab-fx-line { animation: lab-line 1.2s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: left center; }
+.lab-map .lab-room[data-active] .lab-fx-spin { animation: lab-spin .7s linear infinite; }
+.lab-map .lab-room[data-active] .lab-fx-drip { animation: lab-drip .65s linear infinite; }
+.lab-map .lab-room[data-active] .lab-fx-bob { animation: lab-bob 1.6s ease-in-out infinite alternate; }
+.lab-map .lab-room[data-active] .lab-fx-bar { animation: lab-bar 1.4s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center bottom; }
+.lab-map .lab-room[data-active] .lab-fx-glow, .lab-map .lab-room[data-active] .lab-fx-led { animation: lab-pulse 1s ease-in-out infinite; }
+.lab-map .lab-room[data-active] .lab-fx-paper { animation: lab-paper 4s linear infinite; transform-box: fill-box; transform-origin: center top; }
+@keyframes lab-bubble { from { transform: translateY(0); opacity: .8; } to { transform: translateY(-20px); opacity: 0; } }
+@keyframes lab-line { from { transform: scaleX(.45); } to { transform: scaleX(1); } }
+@keyframes lab-spin { to { transform: rotate(360deg); } }
+@keyframes lab-drip { from { transform: translateY(0); } to { transform: translateY(14px); } }
+@keyframes lab-bob { from { transform: translateY(-1.5px); } to { transform: translateY(1.5px); } }
+@keyframes lab-bar { from { transform: scaleY(.55); } to { transform: scaleY(1); } }
+@keyframes lab-paper { from { transform: scaleY(.1); } to { transform: scaleY(1.6); } }
+.lab[data-still] .lab-map *, .lab[data-paused] .lab-map *, .lab[data-still] .lab-agent *, .lab[data-paused] .lab-agent *, .lab[data-still] .lab-ring, .lab[data-paused] .lab-ring { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .lab-map *, .lab-agent *, .lab-ring { animation: none !important; } }
 
 /* A claims-engine run: each claim is a small card in the room of its state. The state is written on it. */
-.lab-tray { position: absolute; margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; pointer-events: none; z-index: 4; }
+.lab-tray { position: absolute; margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; pointer-events: none; z-index: 7; }
 .lab-claim { pointer-events: auto; padding: 1px 6px; border: 1px solid #c98a55; border-radius: 4px; background: #fff7ea; color: #5a3300; font-size: 12px; line-height: 1.35; white-space: nowrap; box-shadow: 0 1px 2px #0000001a; }
 .lab-claim[hidden] { display: none; }
 .lab-claim[data-state="supported"] { border-color: #17824d; background: #e9f8ef; color: #0d5f37; }
@@ -94,7 +147,7 @@
 .lab-panel { min-width: 0; background: var(--surface, #fdfcfa); border: 1px solid var(--lab-wall); border-radius: var(--radius-card, 12px); padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
 .lab-eyebrow { color: var(--lab-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 .lab-who { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 2px 12px; align-items: center; }
-.lab-portrait { width: 56px; height: 62px; grid-row: span 2; }
+.lab-portrait { width: 60px; height: 60px; grid-row: span 2; }
 .lab-portrait svg { width: 100%; height: 100%; }
 .lab-portrait[data-in-run="false"] { opacity: .4; filter: grayscale(1); }
 .lab-panel h2, .page .lab-panel h2 { font-size: 18px; font-weight: 650; line-height: 1.2; letter-spacing: 0; text-transform: none; color: var(--lab-ink); margin: 0; overflow-wrap: anywhere; }

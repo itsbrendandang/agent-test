@@ -79,7 +79,7 @@ describe("the engine's example answer streams", () => {
     expect(m.characters.guardian.trips.filter((t) => t.id.startsWith("check:")).every((t) => t.room === "review")).toBe(true)
     expect(m.searches?.exa).toBe(1)
     // at every prefix the model can be built, and no step is ever attributed to someone outside an answer
-    for (let n = 0; n <= events.length; n++) expect(["proposer", "experimenter", "pilot"].some((id) => answerLab(events.slice(0, n)).characters[id as "pilot"].inRun)).toBe(false)
+    for (let n = 0; n <= events.length; n++) expect(["experimenter", "pilot"].some((id) => answerLab(events.slice(0, n)).characters[id as "pilot"].inRun)).toBe(false)
   })
 
   it("an answer with failed and empty searches still finishes, and the failures stay on their teammates", () => {
@@ -98,20 +98,30 @@ describe("the engine's example answer streams", () => {
     expect(CHARACTER_IDS.flatMap((id) => m.characters[id].trips).every((t) => t.kind !== "fetch" || t.back !== undefined)).toBe(true)
   })
 
-  it("a Standard answer with hypotheses: the Proposer sets them up, three chains of searches overlap, the Guardian carries each result", () => {
+  it("a Standard answer with hypotheses: three investigators work at once, each on its own hypothesis, and the Guardian carries each result to its investigator", () => {
     const m = answerLab(ENGINE_HYPOTHESES)
     expect(m.status).toBe("done")
     expect(working(ENGINE_HYPOTHESES)).toEqual([])
-    expect(m.characters.proposer).toMatchObject({ inRun: true, state: "done" })
-    expect(m.characters.scout.trips.filter((t) => t.kind === "fetch" && t.provider === "exa")).toHaveLength(3) // one web search a hypothesis
+    // the three teammates that search and screen play the three investigators, and are captioned so
+    expect([m.characters.scout.label, m.characters.librarian.label, m.characters.auditor.label]).toEqual(["Investigator 1", "Investigator 2", "Investigator 3"])
+    expect(m.characters.scout.standsFor).toMatch(/Investigator 1 of this answer: it does all the work on one hypothesis \(h1\)/)
+    for (const id of ["scout", "librarian", "auditor"] as const) {
+      expect(m.characters[id].state, id).toBe("done")
+      expect(m.characters[id].trips.some((t) => t.kind === "fetch" && t.provider === "exa"), id).toBe(true) // each made its own web search
+    }
+    expect(m.searches?.exa).toBe(3)
+    // each section goes to the Reporter, who compares the hypotheses
+    expect(m.log.filter((l) => /gave its section on h[123] to the Reporter\.$/.test(l.text))).toHaveLength(3)
+    expect(m.log.some((l) => /^Investigator \d gave .* to the Investigator/.test(l.text))).toBe(false) // no work passes between investigators
     const results = m.characters.guardian.trips.filter((t) => t.id.startsWith("hypothesis:"))
-    expect(results.map((t) => [t.kind, t.to, t.room])).toEqual([["handoff", "proposer", "planning"], ["handoff", "proposer", "planning"], ["handoff", "proposer", "planning"]])
+    expect(results.map((t) => [t.kind, t.to, t.room])).toEqual([["handoff", "scout", "discovery"], ["handoff", "librarian", "discovery"], ["handoff", "auditor", "review"]])
     for (const t of results) expect(t.label).toMatch(/^the result for hypothesis h[123]: (✓ Supported|✕ Contradicted|\? Insufficient evidence|○ Not checked)(: the sources disagree)? \(\d+ sources? for, \d+ against\)$/)
     expect(m.log.some((l) => l.text === "3 hypotheses set up. Tested against published sources, not by experiment.")).toBe(true)
-    // while the three chains run, the searches are out at the same time
-    const mid = answerLab(ENGINE_HYPOTHESES.filter((e) => (e.seq as number) <= (ENGINE_HYPOTHESES.find((x) => x.step === "search:exa:3")!.seq as number)))
-    expect(mid.characters.scout.trips.filter((t) => t.kind === "fetch" && t.back === undefined)).toHaveLength(3)
-    expect(mid.characters.scout.state).toBe("fetching")
+    // twice in the run all three are busy at once: with their first searches, and with their sections
+    const at = (step: string) => answerLab(ENGINE_HYPOTHESES.filter((e) => (e.seq as number) <= (ENGINE_HYPOTHESES.find((x) => x.type === "step.started" && x.step === step)!.seq as number)))
+    expect(["scout", "librarian", "auditor"].map((id) => at("search:exa:3").characters[id as "scout"].state)).toEqual(["fetching", "fetching", "fetching"])
+    expect(["scout", "librarian", "auditor"].map((id) => at("write:h3").characters[id as "scout"].state)).toEqual(["working", "working", "working"])
+    expect(at("write:h3").characters.scout.doing).toMatch(/^Drafting the section for H1/)
   })
 
   it("a practice answer with hypotheses says its results are examples", () => {

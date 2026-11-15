@@ -5,9 +5,9 @@ import { memo } from "react"
 import { agentIdentity, type FaceShape } from "./identity"
 import { MascotHead } from "./Mascot"
 
-/** The square of each shape's drawing that holds the head: x, y, size (in the character's 50 x 56 drawing). */
+/** The square of each Buddy's 100 x 100 drawing that holds it: x, y, size. */
 const BOX: Record<FaceShape, [number, number, number]> = {
-  bunny: [0, 0, 48], tree: [0, -2, 51], mushroom: [1, 2, 46], flame: [1, 4, 48], mountain: [1, 3, 48], fuzzy: [0, 1, 50], acorn: [1, -1, 48], owl: [1, 5, 47], generic: [3, 7, 44],
+  bunny: [2, 0, 96], flame: [0, 2, 100], egg: [3, 8, 94], mountain: [2, 6, 96], sprout: [4, 0, 92], generic: [8, 18, 84],
 }
 
 export interface AgentAvatarProps {

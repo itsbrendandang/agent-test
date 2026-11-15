@@ -24,13 +24,13 @@ function run(sim: Sim, who: CharacterId, seconds = 120) {
 const all = () => true
 
 describe("the lab's walking", () => {
-  it("puts the twelve teammates at Anh's desks: two a room", () => {
+  it("puts the twelve teammates at their places: two a room, beside the equipment they work at", () => {
     const sim = createSim()
-    expect(sim.walkers.scout.home).toEqual({ x: 145, y: 174 })
-    expect(sim.walkers.librarian.home).toEqual({ x: 335, y: 174 })
-    expect(sim.walkers.finisher.home).toEqual({ x: 875, y: 654 })
+    expect(sim.walkers.scout.home).toEqual({ x: 392, y: 178 })
+    expect(sim.walkers.librarian.home).toEqual({ x: 170, y: 188 })
+    expect(sim.walkers.finisher.home).toEqual({ x: 890, y: 654 })
     expect(new Set(Object.values(sim.walkers).map((w) => `${w.home.x},${w.home.y}`)).size).toBe(12)
-    expect(stationPoint({ room: "planning", slot: 0 })).toEqual({ x: 685, y: 174 })
+    expect(stationPoint({ room: "planning", home: [120, 150] })).toEqual({ x: 650, y: 166 })
   })
 
   it("moves nobody when the model holds no trip", () => {
@@ -48,7 +48,7 @@ describe("the lab's walking", () => {
     expect(active(sim)).toBe(true)
     const path = run(sim, "guardian")
     const spot = pickupPoint("review", sim.walkers.guardian.index)
-    expect(path.some((p) => p.x === 500)).toBe(true) // through the corridor
+    expect(path.some((p) => Math.abs(p.x - 500) <= 8 && p.y > 480 && p.y < 660)).toBe(true) // down the corridor, in a lane of its own
     const at = path.findIndex((p) => p.x === spot.x && p.y === spot.y)
     expect(at).toBeGreaterThan(0)
     expect(path.slice(0, at).every((p) => !p.carrying)).toBe(true) // empty hands on the way out
@@ -63,7 +63,7 @@ describe("the lab's walking", () => {
     const sim = createSim()
     syncTrips(sim, withTrips({ scout: [fetch("t1", "discovery", 0)] }), all)
     const path = run(sim, "scout")
-    expect(path.every((p) => p.x < 440)).toBe(true)
+    expect(path.every((p) => p.x < 470)).toBe(true)
     expect(path.some((p) => p.carrying)).toBe(true)
   })
 
@@ -179,27 +179,43 @@ describe("the lab's walking", () => {
 
   it("walks the same routes on the narrow map: one column of rooms beside the corridor", () => {
     const sim = createSim(TALL)
-    expect(new Set(Object.values(sim.walkers).map((w) => w.home.x)).size).toBe(2) // every room has the same two desks
-    expect(Object.values(sim.walkers).every((w) => w.home.x < TALL.corridorX && w.home.y < TALL.height)).toBe(true)
+    expect(Object.values(sim.walkers).every((w) => w.home.x < 470 && w.home.y < TALL.height)).toBe(true)
     syncTrips(sim, withTrips({ guardian: [fetch("t1", "review", 0)] }), all)
     const path = run(sim, "guardian")
     const spot = pickupPoint("review", sim.walkers.guardian.index, TALL)
-    expect(path.some((p) => p.x === TALL.corridorX)).toBe(true)
+    expect(path.some((p) => Math.abs(p.x - TALL.corridorX) <= 8)).toBe(true)
     expect(path.some((p) => p.x === spot.x && p.y === spot.y)).toBe(true)
     expect(path.every((p) => p.x >= 0 && p.x <= TALL.width && p.y >= 0 && p.y <= TALL.height)).toBe(true)
     expect(path.at(-1)).toMatchObject(sim.walkers.guardian.home)
   })
 
-  it("picks a real search up at its own point in Discovery: the web by the door, papers by the far wall", () => {
+  it("goes through the doorways and around the furniture, as 2.0's agents do, and never through a wall", () => {
+    const sim = createSim()
+    syncTrips(sim, withTrips({ guardian: [fetch("t1", "review", 0)] }), all)
+    const path = run(sim, "guardian")
+    // it leaves Quality control and enters Evidence review at their doorways (34 above each room's bottom edge)
+    const crossings = path.filter((p, i) => i > 0 && (p.x > 470) !== (path[i - 1].x > 470)).map((p) => Math.round(p.y))
+    expect(new Set(crossings)).toEqual(new Set([656])) // out of and back into its own room at its door
+    const entering = path.filter((p, i) => i > 0 && (p.x >= 530) !== (path[i - 1].x >= 530)).map((p) => Math.round(p.y))
+    expect(new Set(entering)).toEqual(new Set([426])) // Evidence review's door
+    // inside a room it walks around the table: the Librarian's way to the bookshelf goes along the front lane
+    const lib = createSim()
+    syncTrips(lib, withTrips({ librarian: [{ ...fetch("p", "discovery", 0), provider: "europepmc" }] }), all)
+    const way = run(lib, "librarian")
+    expect(way.some((p) => Math.round(p.y) === 196 && p.x > 200)).toBe(true) // the lane at the door's height, past the lab table
+    expect(way.some((p) => p.x > 143 && p.x < 277 && p.y > 136 && p.y < 160)).toBe(false) // never across the lab table
+  })
+
+  it("picks a real search up at 2.0's own furniture in Discovery: the computer for the web, the bookshelf for papers", () => {
     const sim = createSim()
     const web: Trip = { ...fetch("w", "discovery", 0), provider: "exa" }, papers: Trip = { ...fetch("p", "discovery", 0), provider: "europepmc" }
     syncTrips(sim, withTrips({ scout: [web] }), all)
     const toWeb = run(sim, "scout")
-    expect(Math.max(...toWeb.map((p) => p.x))).toBe(searchPoint("web", 0).x)
+    expect(Math.min(...toWeb.map((p) => p.x))).toBe(searchPoint("web", 0).x) // across the room to the computer
+    expect(sim.walkers.scout.home.x - searchPoint("web", 0).x).toBeGreaterThan(250)
     syncTrips(sim, withTrips({ scout: [web, papers] }), all)
     const toPapers = run(sim, "scout")
-    expect(Math.min(...toPapers.map((p) => p.x))).toBe(searchPoint("papers", 0).x)
-    expect(searchPoint("web", 0).x).toBeGreaterThan(searchPoint("papers", 0).x + 300) // a walk across the room either way
+    expect(toPapers.some((p) => p.x === searchPoint("papers", 0).x && p.y === searchPoint("papers", 0).y)).toBe(true)
   })
 
   it("carries a claim from the room of its old state to the room of its new one", () => {

@@ -347,7 +347,14 @@ export function stepCharacter(kind: string | undefined, provider: string | undef
 const MADE: Record<string, string> = { hypothesize: "the hypotheses to test", prepare: "the search plan", search: "the search results", fetch: "the source text", evaluate: "the kept sources", write: "the draft", check: "the check results", review: "its review notes", revise: "the revised answer", save: "the saved answer" }
 const isFetch = (kind: string) => kind === "search" || kind === "fetch" || kind === "evaluate"
 
-interface StepSeen { id: string; kind: string; label: string; provider?: string; who: CharacterId; at: number; running: boolean }
+interface StepSeen { id: string; kind: string; label: string; provider?: string; who: CharacterId; at: number; running: boolean; /** A step of one hypothesis's investigator. */ investigator?: boolean; /** What it leaves for the next teammate, when that is not the kind's usual word. */ made?: string }
+/**
+ * A Standard answer with hypotheses gives each hypothesis an investigator that does all of its work (its searches,
+ * the screening, its section) beside the others. Up to three: they are played by the three teammates that search
+ * and screen in a plain answer, each captioned "Investigator N" for that run.
+ */
+const INVESTIGATORS: CharacterId[] = ["scout", "librarian", "auditor"]
+const investigatorOf = (agent: string | undefined): { who: CharacterId; n: number } | undefined => { const n = Number(/^investigator-(\d)$/.exec(agent ?? "")?.[1]); return n >= 1 && n <= INVESTIGATORS.length ? { who: INVESTIGATORS[n - 1], n } : undefined }
 
 /** `seq` is the order. A seq that arrives twice counts once (the later copy wins); events without one keep their place at the end. */
 export function answerOrder(events: readonly LabEvent[]): LabEvent[] {
@@ -371,12 +378,14 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
   const handed = new Set<string>()
   const latest = (...kinds: string[]) => finished.findLast((s) => kinds.includes(s.kind))
   /** The finished steps a starting step builds on. */
-  const feeds = (id: string, kind: string): (StepSeen | undefined)[] => {
+  const feeds = (id: string, kind: string, investigator: boolean): (StepSeen | undefined)[] => {
+    // an investigator works down its own chain: only its first search takes something over (what to test)
+    if (investigator) return kind === "search" ? [latest("hypothesize", "prepare")] : []
     switch (kind) {
       case "hypothesize": return [latest("prepare")]
       case "search": case "fetch": return [latest("hypothesize", "prepare")]
       case "evaluate": { const twin = finished.find((s) => s.id === id.replace(/^evaluate:/, "search:")); return [twin ?? latest("search", "fetch")] }
-      case "write": return [latest("evaluate")]
+      case "write": { const sections = finished.filter((s) => s.kind === "write" && s.investigator); return sections.length ? sections : [latest("evaluate")] } // the investigators' sections, to be compared
       case "check": return [latest("write", "revise")]
       case "review": return [latest("write", "revise")] // "review:2" reads the revised text
       case "revise": return [latest("check"), latest("review")]
@@ -404,19 +413,24 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "step.started": {
         const id = str(e.step), kind = str(e.kind) ?? "", label = str(e.label) || "Working"
         if (!id || steps.has(id)) break
-        const provider = str(e.provider), who = stepCharacter(kind, provider)
+        const provider = str(e.provider), inv = investigatorOf(str(e.agent)), hyp = clip(str(e.hypothesis) ?? "", 8)
+        const who = inv?.who ?? stepCharacter(kind, provider)
         if (!who) { b.log(at, `${label}.`); break }
+        if (inv && b.who(who).label !== `Investigator ${inv.n}`) {
+          b.who(who).label = `Investigator ${inv.n}`
+          b.who(who).standsFor = `Investigator ${inv.n} of this answer: it does all the work on one hypothesis${hyp ? ` (${hyp})` : ""}, beside the other investigators: its searches, the screening and its section.`
+        }
         if (who === "proposer" && !b.who(who).inRun) b.who(who).standsFor = "The hypotheses step of a Standard answer: writes down what the answer will test against published sources."
         // the hand-off into this step
-        for (const from of feeds(id, kind)) {
+        for (const from of feeds(id, kind, !!inv)) {
           if (!from || from.who === who || handed.has(`${from.id}>${who}`)) continue
           handed.add(`${from.id}>${who}`)
-          const made = MADE[from.kind] ?? "its work", giver = from.who
+          const made = from.made ?? MADE[from.kind] ?? "its work", giver = from.who
           b.trip(giver, { id: `handoff:${from.id}>${who}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${b.name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
           if (!running(giver).length && b.who(giver).state !== "failed") b.set(giver, "handing-off", `Gave ${made} to the ${b.name(who)}.`, at)
           b.log(at, `${b.name(giver)} gave ${made} to the ${b.name(who)}.`, b.name(giver))
         }
-        steps.set(id, { id, kind, label, provider, who, at: at ?? 0, running: true })
+        steps.set(id, { id, kind, label, provider, who, at: at ?? 0, running: true, ...(inv && { investigator: true }), ...(inv && kind === "write" && { made: `its section${hyp ? ` on ${hyp}` : ""}` }) })
         lastWho = who
         const query = str(e.query)
         const doing = `${label}${kind === "search" && query ? `: “${clip(query, 70)}”` : ""}.`
@@ -475,7 +489,9 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const practice = m.provenance === "practice"
         const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : ""}`
         const label = `the result for hypothesis ${id}: ${said} (${sides})`
-        b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: "planning", to: "proposer", label, short: practice ? `${id}: example` : `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
+        // code works the result out; the Guardian carries it to the investigator whose hypothesis it is, else to where the hypotheses were set up
+        const to = investigatorOf(str(e.agent))?.who ?? "proposer"
+        b.trip("guardian", { id: `hypothesis:${id}`, kind: "handoff", room: characterOf(to).room, to, label, short: practice ? `${id}: example` : `${id} ${MARK_GLYPH[mark]}`, at: at ?? 0 })
         b.log(at, `${b.name("guardian")} brought ${label}.`, b.name("guardian"), !practice && mark === "contradicted" ? "bad" : undefined)
         break
       }

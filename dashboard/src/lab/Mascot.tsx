@@ -1,46 +1,64 @@
-// Agent Lab design by Anh Lam. The eight character shapes of the Agent Lab, drawn as Anh drew them (bunny, tree,
-// mushroom, flame, mountain, fuzzy, acorn, owl), each in the colour Anh gave its teammate. Pure SVG, decoration only:
-// the teammate's name and state are always in text beside it.
+// Agent Lab design by Anh Lam. The Buddy characters, as Agent Lab 2.0 draws them in the lab: the same shapes and
+// faces as the app's Buddy (components/Buddy.tsx: bunny, flame, egg, mountain, sprout, in its 100 x 100 box), with
+// the colour as a parameter so that two teammates of one species can be told apart. Pure SVG, still, decoration
+// only: a teammate's name and state are always in text beside it.
 import type { ReactNode } from "react"
 import type { FaceShape } from "./identity"
 
-const INK = "#1d1c19"
+const INK = "#1b1a17"
+/** How a Buddy looks at the moment: 2.0's four moods. */
+export type Mood = "happy" | "working" | "sleeping" | "alert"
 
+/** Where the face sits on each body (Buddy.tsx's table). */
+const FACE: Record<FaceShape, { x: number; y: number; spread: number }> = {
+  bunny: { x: 50, y: 66, spread: 11 }, flame: { x: 50, y: 66, spread: 10 }, egg: { x: 50, y: 54, spread: 9 },
+  mountain: { x: 50, y: 72, spread: 10 }, sprout: { x: 50, y: 46, spread: 11 }, generic: { x: 50, y: 60, spread: 10 },
+}
+
+// Flat, outline-free shapes: one soft colour each, plus one small detail.
 function body(shape: FaceShape, color: string): ReactNode {
   switch (shape) {
-    case "generic": return <rect x="8" y="11" width="34" height="37" rx="17" fill={color} />
-    case "bunny": return <><ellipse cx="17" cy="13" rx="5" ry="12" fill={color} /><ellipse cx="31" cy="12" rx="5" ry="12" fill={color} /><ellipse cx="24" cy="32" rx="17" ry="15" fill={color} /></>
-    case "tree": return <><rect x="19" y="32" width="10" height="14" rx="4" fill="#c8a582" /><path d="M9 35C-1 29 5 17 13 17C10 4 29 2 33 13C46 9 51 28 40 32C35 44 18 43 9 35" fill={color} /></>
-    case "mushroom": return <><rect x="14" y="23" width="21" height="23" rx="10" fill="#f5e3cc" /><path d="M3 25C3 0 45 0 45 25Q25 32 3 25" fill={color} /><circle cx="15" cy="17" r="4" fill="#fff1ec" /><circle cx="29" cy="11" r="4" fill="#fff1ec" /><circle cx="36" cy="22" r="3" fill="#fff1ec" /></>
-    // Rounded teardrop flame with a lighter belly.
-    case "flame": return <><path d="M25 3C33 15 44 24 44 35C44 45 36 51 25 51C14 51 6 45 6 35C6 24 17 15 25 3Z" fill={color} /><path d="M25 31C31 36 34 40 34 44C34 49 30 51 25 51C20 51 16 49 16 44C16 40 19 36 25 31Z" fill="#f8c08a" opacity=".9" /></>
-    // Mountain with a snowcap.
-    case "mountain": return <><path d="M25 6L47 45Q48.5 49 44 49H6Q1.5 49 3 45Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" /><path d="M25 6L32.5 19.5L29 18L25.5 21L22 18L17.5 19.5Z" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" /></>
-    case "fuzzy": return <path d="M24 2L29 12L38 5L38 17L48 16L42 27L48 35L37 36L37 47L26 42L17 49L14 38L3 40L8 29L1 20L13 18L11 7L21 13Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
-    case "acorn": return <><rect x="10" y="17" width="29" height="29" rx="14" fill={color} /><path d="M8 24C6 4 40 3 42 24Z" fill="#a8835e" /><path d="M25 7L28 2" stroke="#a8835e" strokeWidth="5" strokeLinecap="round" /></>
-    case "owl": return <><path d="M9 6L18 13Q25 8 32 13L41 6L39 25C49 48 3 53 8 26Z" fill={color} /><ellipse cx="17" cy="29" rx="9" ry="11" fill="#fbf3ea" /><ellipse cx="31" cy="29" rx="9" ry="11" fill="#fbf3ea" /><path d="M21 35L25 40L29 35" fill="#f2b35e" /></>
+    case "bunny": return <><rect x="29" y="6" width="15" height="44" rx="7.5" transform="rotate(-8 36 28)" fill={color} /><rect x="56" y="6" width="15" height="44" rx="7.5" transform="rotate(8 64 28)" fill={color} /><rect x="16" y="38" width="68" height="56" rx="28" fill={color} /></>
+    case "flame": return <><path d="M50 8 C62 26 82 38 82 62 C82 80 68 94 50 94 C32 94 18 80 18 62 C18 38 38 26 50 8Z" fill={color} /><path d="M50 52 C56 61 66 67 66 78 C66 87 59 94 50 94 C41 94 34 87 34 78 C34 67 44 61 50 52Z" fill="#ffd98a" opacity="0.6" /></>
+    case "egg": return <><ellipse cx="50" cy="54" rx="42" ry="38" fill="#ffffff" stroke="#e6e0d0" strokeWidth="2" /><circle cx="50" cy="54" r="24" fill={color} /></>
+    case "mountain": return <><path d="M43 20 C46 13 54 13 57 20 L88 82 C91 88 87 94 80 94 L20 94 C13 94 9 88 12 82Z" fill={color} /><path d="M43 20 C46 13 54 13 57 20 L67 40 C62 46 56 46 50 41 C44 46 38 46 33 40Z" fill="#ffffff" /></>
+    case "sprout": return <><rect x="45" y="72" width="10" height="22" rx="5" fill="#c9a27a" /><rect x="12" y="10" width="76" height="68" rx="34" fill={color} /></>
+    case "generic": return <rect x="18" y="26" width="64" height="68" rx="30" fill={color} />
   }
 }
 
-/** A character's body and face without its feet and shadow: what the scene and the small avatar both draw. */
-export function MascotHead({ shape, color }: { shape: FaceShape; color: string }) {
+// Two dots and a small mouth. Moods only change these.
+function face(shape: FaceShape, mood: Mood): ReactNode {
+  const { x, y, spread } = FACE[shape]
+  const down = mood === "working" ? 2 : 0
+  const line = { fill: "none", stroke: INK, strokeWidth: 2.6, strokeLinecap: "round" as const }
   return (
-    <>
-      {body(shape, color)}
-      <g fill={INK}><circle cx="18" cy="30" r="2.4" /><circle cx="31" cy="30" r="2.4" /></g>
-      <g fill="#f19bb3" opacity=".75"><ellipse cx="12.5" cy="35" rx="3" ry="1.8" /><ellipse cx="36.5" cy="35" rx="3" ry="1.8" /></g>
-      {shape !== "owl" && <path d="M22 35.5Q24.5 38.5 27 35.5" fill="none" stroke={INK} strokeWidth="1.4" strokeLinecap="round" />}
-    </>
+    <g>
+      {[x - spread, x + spread].map((ex) => (mood === "sleeping"
+        ? <path key={ex} d={`M${ex - 4} ${y - 1} Q${ex} ${y + 3} ${ex + 4} ${y - 1}`} {...line} />
+        : <circle key={ex} cx={ex} cy={y + down} r={mood === "alert" ? 4.2 : 3.4} fill={INK} />))}
+      {[x - spread - 7, x + spread + 7].map((bx) => <circle key={bx} cx={bx} cy={y + 7} r="4" fill="#ff5c8a" opacity="0.28" />)}
+      {mood === "happy" && <path d={`M${x - 3.5} ${y + 6} Q${x} ${y + 10} ${x + 3.5} ${y + 6}`} {...line} />}
+      {mood === "working" && <path d={`M${x - 3} ${y + 8} h6`} {...line} />}
+      {mood === "sleeping" && <path d={`M${x - 2.5} ${y + 7} h5`} {...line} strokeWidth={2.2} />}
+      {mood === "alert" && <circle cx={x} cy={y + 9} r="2.6" fill={INK} />}
+    </g>
   )
 }
 
-/** One character. `feetRef` lets the scene shift the feet while it walks, as in Anh's page. */
-export function Mascot({ shape, color, feetRef }: { shape: FaceShape; color: string; feetRef?: (el: SVGGElement | null) => void }) {
+/** A Buddy's body and face in its 100 x 100 box: what the scene, the side panel and the small avatar all draw. */
+export function MascotHead({ shape, color, mood = "happy" }: { shape: FaceShape; color: string; mood?: Mood }) {
+  return <>{body(shape, color)}{face(shape, mood)}</>
+}
+
+/** One character, with the small sign of its mood beside its head (2.0's zz, spark and alert dot). */
+export function Mascot({ shape, color, mood = "happy" }: { shape: FaceShape; color: string; mood?: Mood }) {
   return (
-    <svg viewBox="0 0 50 56" aria-hidden="true" focusable="false">
-      <ellipse cx="25" cy="51" rx="15" ry="3" fill="#0000000f" />
-      <g ref={feetRef} className="lab-feet" fill={color}><ellipse cx="17" cy="48" rx="5" ry="3" /><ellipse cx="32" cy="48" rx="5" ry="3" /></g>
-      <MascotHead shape={shape} color={color} />
+    <svg viewBox="-4 -4 108 108" aria-hidden="true" focusable="false" data-mood={mood}>
+      <MascotHead shape={shape} color={color} mood={mood} />
+      {mood === "sleeping" && <g fill="#a39d8e" fontWeight="600"><text x="82" y="20" fontSize="13">z</text><text x="91" y="10" fontSize="9">z</text></g>}
+      {mood === "alert" && <circle className="lab-mood-dot" cx="90" cy="12" r="5" fill="#ff7a59" />}
+      {mood === "working" && <circle className="lab-mood-dot" cx="90" cy="12" r="5" fill="#ffcf4a" />}
     </svg>
   )
 }

@@ -1,5 +1,6 @@
-// Agent Lab design by Anh Lam (https://github.com/Anhlam09/agent-lab-report): the six rooms, the twelve teammates,
-// the walk to a room and back with a parcel, the side panel and the activity log are Anh's design, rebuilt here for
+// Agent Lab design by Anh Lam (https://github.com/Anhlam09/agent-lab-report, and the look of Agent Lab 2.0,
+// https://github.com/Anhlam09/agent-lab-2.0): the six rooms and their equipment, the Buddy characters, the walk to
+// a room and back with something in hand, the side panel and the activity log are Anh's design, rebuilt here for
 // the dashboard (src/lab/). This file is the "Lab" destination: it picks a run, reads its events from the engine,
 // and shows the team at work. The teammates move only when the engine reported work.
 //

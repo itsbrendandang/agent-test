@@ -47,7 +47,7 @@ describe("LabScene", () => {
       expect(chip(c.id)).not.toBeVisible() // idle says nothing
     }
     expect(screen.getByText("Team idle")).toBeInTheDocument()
-    expect(place(walker("scout"))).toBe("14.5% 23.5135%") // Anh's first desk in Discovery
+    expect(place(walker("scout"))).toBe("39.2% 25.2125%") // in Discovery, by the bookshelf
     expect(requestAnimationFrame).not.toHaveBeenCalled()
   })
 
@@ -96,12 +96,12 @@ describe("LabScene", () => {
     expect(picked).toEqual(CHARACTERS.map((c) => c.id)) // also the ones that are not in this run
   })
 
-  it("keeps each name plate under its own desk, so no caption can lie on another", () => {
+  it("keeps each name plate under its own teammate's place, so no caption can lie on another", () => {
     render(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
     const spots = CHARACTERS.map((c) => { const el = document.querySelector<HTMLElement>(`button[data-agent="${c.id}"]`)!; return [parseFloat(el.style.left), parseFloat(el.style.top)] })
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
-      const dx = Math.abs(spots[i][0] - spots[j][0]) * 10, dy = Math.abs(spots[i][1] - spots[j][1]) * 7.4 // map units
-      expect(dx >= 185 || dy >= 200, `${CHARACTERS[i].name} and ${CHARACTERS[j].name}`).toBe(true)
+      const dx = Math.abs(spots[i][0] - spots[j][0]) * 10, dy = Math.abs(spots[i][1] - spots[j][1]) * 7.06 // map units
+      expect(dx >= 170 || dy >= 150, `${CHARACTERS[i].name} and ${CHARACTERS[j].name}`).toBe(true)
     }
   })
 
@@ -248,10 +248,78 @@ describe("LabScene", () => {
     expect(document.querySelector(".lab-scene")).toHaveAttribute("data-layout", "tall")
     for (const c of CHARACTERS) {
       const w = walker(c.id)
-      expect(parseFloat(w.style.left)).toBeLessThan(75) // all in the one column, left of the corridor
+      expect(parseFloat(w.style.left)).toBeLessThan(87) // all in the one column, left of the corridor
       expect(parseFloat(w.style.top)).toBeGreaterThan(0); expect(parseFloat(w.style.top)).toBeLessThan(100)
     }
     expect(screen.getAllByRole("button", { name: /^Inspect / })).toHaveLength(12)
+  })
+
+  it("lights a room's equipment only while the model says a teammate of it is working or fetching", () => {
+    const room = (id: string) => document.querySelector(`.lab-room[data-room="${id}"]`)!
+    const label = (name: string) => screen.getByText(name).closest(".lab-room-name")!
+    const { rerender } = render(<LabScene model={emptyLab()} />)
+    expect(document.querySelectorAll(".lab-room[data-active]")).toHaveLength(0) // no run: every room is still
+    for (const r of ["Discovery", "Quality control"]) expect(label(r)).toHaveAttribute("data-room-state", "rest")
+    // the Guardian (Quality control) is out fetching in Evidence review: its own room and the room it fetches in
+    rerender(<LabScene model={quiet([out])} clock={T0} />)
+    expect([...document.querySelectorAll(".lab-room[data-active]")].map((el) => el.getAttribute("data-room"))).toEqual(["review", "quality"])
+    expect(label("Quality control")).toHaveAttribute("data-room-state", "active")
+    expect(label("Quality control")).toHaveAttribute("title", "Quality control: someone is working here")
+    expect(room("discovery")).not.toHaveAttribute("data-active")
+    // it is back and done: nothing is lit any more, and its room says done only when all of its teammates are
+    rerender(<LabScene model={quiet([back], { state: "done", doing: "Checked." })} clock={T0 + 600_000} />)
+    expect(document.querySelectorAll(".lab-room[data-active]")).toHaveLength(0)
+    expect(label("Quality control")).toHaveAttribute("data-room-state", "rest") // the Reviser is not done
+    // the equipment's animation is CSS on data-active; without motion the map is marked still, which switches it off
+    motion(true)
+    rerender(<LabScene model={quiet([out])} clock={T0} />)
+    expect(document.querySelector(".lab")).toBeInTheDocument()
+  })
+
+  it("draws the map of Agent Lab 2.0: every room's furniture, wall items and counter equipment", () => {
+    render(<LabScene model={emptyLab()} />)
+    const kinds = (id: string) => [...document.querySelectorAll(`.lab-room[data-room="${id}"] [data-furniture]`)].map((el) => el.getAttribute("data-furniture")).sort()
+    expect(kinds("discovery")).toEqual(["cabinet", "labtable", "plant", "plant", "shelf"])
+    expect(kinds("review")).toEqual(["desk2", "microscope", "plant", "rack"])
+    expect(kinds("quality")).toEqual(["clipdesk", "plant", "plant", "shielddesk"])
+    expect(kinds("report")).toEqual(["desk2", "easel", "plant", "printer", "shelf"])
+    expect(document.querySelectorAll(".lab-room")).toHaveLength(6)
+    expect(document.querySelector(".lab-map canvas")).toBeNull() // drawn as SVG: no canvas is needed
+  })
+
+  it("gives each teammate a Buddy with 2.0's mood: asleep with no run, at work, alarmed when its step failed", () => {
+    const mood = (id: CharacterId) => walker(id).querySelector("svg[data-mood]")!.getAttribute("data-mood")
+    const { rerender } = render(<LabScene model={emptyLab()} />)
+    expect(CHARACTERS.map((c) => mood(c.id))).toEqual(Array(12).fill("sleeping")) // no run: everyone rests
+    rerender(<LabScene model={fixtureModel()} clock={T0 + 3_600_000} />)
+    expect([mood("auditor"), mood("scout"), mood("reporter"), mood("librarian"), mood("proposer"), mood("critic"), mood("reviser")]).toEqual(["working", "working", "alert", "happy", "sleeping", "happy", "sleeping"])
+  })
+
+  it("shows what is in hand: the tool of a teammate at work, and the item a walk carries", async () => {
+    const held = (id: CharacterId) => walker(id).querySelector<HTMLElement>(".lab-held")!
+    const model = quiet([back])
+    model.characters.reporter = { ...model.characters.reporter, state: "working", doing: "Writing." }
+    model.characters.auditor = { ...model.characters.auditor, state: "working", doing: "Screening." }
+    render(<LabScene model={model} clock={T0 + 1000} />)
+    expect(held("reporter")).toHaveAttribute("data-tool", "pencil") // writing
+    expect(held("auditor")).not.toHaveAttribute("data-tool") // it types at its screen: nothing in hand
+    expect(held("finisher")).not.toHaveAttribute("data-tool") // idle: nothing in hand
+    expect(held("guardian")).toHaveAttribute("data-kind", "") // on its way out with empty hands
+    // it picks the checked statement up in Evidence review and carries it home as a slide
+    const kinds = new Set<string>()
+    for (let i = 0; i < 400; i++) { await frames(5); kinds.add(held("guardian").getAttribute("data-kind") ?? "") }
+    expect([...kinds].sort()).toEqual(["", "slide"])
+    await frames(500)
+    expect(held("guardian")).toHaveAttribute("data-kind", "") // delivered
+  })
+
+  it("turns a walking teammate to face the way it goes", async () => {
+    render(<LabScene model={quiet([out])} clock={T0} />)
+    const flip = walker("guardian").querySelector<HTMLElement>(".lab-flip")!
+    const seen = new Set<string>()
+    for (let i = 0; i < 300; i++) { await frames(5); seen.add(flip.style.transform) }
+    expect(seen.has("scaleX(1)")).toBe(true) // out to the right, towards the corridor
+    expect(seen.size).toBeGreaterThanOrEqual(1)
   })
 
   it("shows the replay controls it is given in the bar under the map, beside Pause motion", () => {

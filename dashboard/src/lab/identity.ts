@@ -9,12 +9,13 @@
 //    A caller that has only the label may pass that instead: "Methods Auditor (Quality Checker)" finds the same face.
 //  - The LABEL is the engine's own title when the caller has one (the roster, the run.roster event, the catalog).
 //    Without one it is the name itself, made readable ("methods-auditor" -> "Methods auditor"). No title is invented.
-//  - The twelve characters are Anh's. A specialist gets one of Anh's shapes in a colour none of the twelve has.
+//  - The twelve characters are the lab's (Agent Lab 2.0's Buddy species). A specialist gets a Buddy species in a
+//    colour none of the twelve has.
 //  - A name this file does not know gets the plain neutral face and its own name: never another agent's face.
 // This file has no React and no CSS, and does not import the lab's scene.
 import { CHARACTERS, type CharacterId, type Shape } from "./model"
 
-/** Anh's eight shapes, and one plain shape for an agent this app has no character for. */
+/** The five Buddy species, and one plain shape for an agent this app has no character for. */
 export type FaceShape = Shape | "generic"
 export interface AgentIdentity {
   /** The name that was asked about. */
@@ -75,9 +76,9 @@ export const agentKey = (nameOrLabel: string): string => {
   const slug = String(nameOrLabel ?? "").trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   return BY_TITLE[slug] ?? slug
 }
-const SHAPES: Shape[] = ["mushroom", "owl", "tree", "acorn", "bunny", "fuzzy", "mountain", "flame"]
-/** Colours none of the twelve characters has: teal, olive, slate, rose. Eight shapes in four colours: 32 faces. */
-const SPECIALIST_COLOURS = ["#6fc3b8", "#b9c46a", "#93a4bd", "#d98bb5"]
+const SHAPES: Shape[] = ["mountain", "bunny", "flame", "sprout", "egg"]
+/** Colours none of the twelve characters has: slate, sand, plum, moss, clay, steel. Five species in six colours: 30 faces. */
+const SPECIALIST_COLOURS = ["#93a4bd", "#d6c08a", "#b889c9", "#8aa37b", "#cf9478", "#7fa8c9"]
 export const NEUTRAL_COLOUR = "#cfcabd"
 
 /** "methods-auditor" -> "Methods auditor". The name itself, readable; nothing is added. */
