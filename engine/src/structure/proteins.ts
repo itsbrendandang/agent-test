@@ -77,13 +77,32 @@ export function asSequence(letters: string): string | undefined {
 
 /**
  * The residues of a line of a sequence listing, or undefined: after position numbers and one closing ".", ",", ")" or "*"
- * are dropped, the line is only letters, one run or blocks of ten ("MKTAYIAKQR QISFVKSHFS"). Capitals only, unless anyCase.
+ * are dropped, the line is only letters, one run or blocks of ten ("MKTAYIAKQR QISFVKSHFS"). Capitals only, unless anyCase
+ * (then all capitals or all lower case).
  */
 const residueLetters = (line: string, anyCase = false): string | undefined => {
   const blocks = line.trim().replace(/[.,)*]$/, "").split(/[ \t]+/).filter((b) => !/^\d+$/.test(b))
-  if (blocks.length === 0 || !blocks.every((b) => (anyCase ? /^[A-Za-z]+$/ : /^[A-Z]+$/).test(b))) return undefined
+  if (blocks.length === 0 || !blocks.every((b) => (anyCase ? /^(?:[A-Z]+|[a-z]+)$/ : /^[A-Z]+$/).test(b))) return undefined
   if (blocks.length > 1 && !blocks.every((b, i) => (i === blocks.length - 1 ? b.length <= 10 : b.length === 10))) return undefined
-  return blocks.join("").toUpperCase()
+  const letters = blocks.join("")
+  return anyCase && letters !== letters.toUpperCase() && letters !== letters.toLowerCase() ? undefined : letters
+}
+
+/**
+ * The residues of the listing that starts on lines[i] (a residue line), and the line after it. When wrapped, the next
+ * lines of the same length and case join it, then one shorter last line of at least ten letters if the whole still
+ * passes asSequence; a shorter word ("KRAS", "MUTANT") is not taken.
+ */
+function listing(lines: string[], i: number, wrapped: boolean, anyCase: boolean): { body: string; next: number } {
+  const first = residueLetters(lines[i], anyCase)!
+  const upper = first === first.toUpperCase()
+  let body = first, next = i + 1
+  for (let l; wrapped && next < lines.length && (l = residueLetters(lines[next], anyCase)) !== undefined && l.length <= first.length && (l === l.toUpperCase()) === upper; ) {
+    if (l.length === first.length) { body += l; next++; continue }
+    if (l.length >= 10 && asSequence(body + l)) { body += l; next++ }
+    break
+  }
+  return { body, next }
 }
 
 /** The letter counts a wrapped listing uses for each line but the last (FASTA and GenBank wrap at 60, some at 50 or 80). */
@@ -104,7 +123,7 @@ function header(line: string): Omit<Found, "sequence"> {
 /**
  * The amino-acid sequences written in a text, decided line by line: a FASTA record (a ">" header and the residue lines
  * below it); a residue line, joined with the next ones only as a wrapped listing (each line but the last has the same
- * WRAP_MIN-WRAP_MAX letters); and, inside any other line, one unbroken run of at least MIN_SEQUENCE capitals. Words,
+ * WRAP_MIN-WRAP_MAX letters, see listing); and, inside any other line, one unbroken run of at least MIN_SEQUENCE capitals. Words,
  * gene symbols and DNA are not taken, and a rejected candidate never hides the others.
  */
 export function sequencesIn(text: string): Found[] {
@@ -115,24 +134,18 @@ export function sequencesIn(text: string): Found[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (/^\s*>\s*\S/.test(line)) { // a FASTA header, or a Markdown quote: only letters on the lines below make it a record
-      let body = "", j = i + 1
-      for (let l; j < lines.length && (l = residueLetters(lines[j], true)) !== undefined; j++) body += l
-      const sequence = asSequence(body)
-      if (sequence) { add({ sequence, ...header(line.trim()) }); i = j - 1; continue }
+      if (i + 1 < lines.length && residueLetters(lines[i + 1], true) !== undefined) {
+        const { body, next } = listing(lines, i + 1, true, true)
+        const sequence = asSequence(body)
+        if (sequence) { add({ sequence, ...header(line.trim()) }); i = next - 1; continue }
+      }
     }
     const letters = residueLetters(line)
     if (letters !== undefined) {
-      let body = letters, j = i + 1
-      if (letters.length >= WRAP_MIN && letters.length <= WRAP_MAX) {
-        for (let l; j < lines.length && (l = residueLetters(lines[j])) !== undefined && l.length <= letters.length; ) {
-          body += l
-          j++
-          if (l.length < letters.length) break
-        }
-      }
+      const { body, next } = listing(lines, i, letters.length >= WRAP_MIN && letters.length <= WRAP_MAX, false)
       const sequence = asSequence(body)
       if (sequence) add({ sequence })
-      i = j - 1
+      i = next - 1
       continue
     }
     for (const m of line.matchAll(INLINE_RUN)) {

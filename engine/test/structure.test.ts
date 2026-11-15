@@ -81,6 +81,13 @@ test("sequences written in a text: FASTA with UniProt's header, one run, listing
   }
   const KRAS = testProteins().find((t) => t.id === "kras-g12c")!.sequence
   assert.deepEqual(sequencesIn(`WILDTYPE\n${THIOREDOXIN}\nMUTANT\n${KRAS}\n`), [{ sequence: THIOREDOXIN }, { sequence: KRAS }], "label lines between two sequences")
+  const UBIQUITIN = testProteins().find((t) => t.id === "ubiquitin")!.sequence
+  assert.equal(UBIQUITIN.length, 76)
+  for (const word of ["KRAS", "TP53.", "MUTANT"]) assert.deepEqual(sequencesIn(`Fold:\n${UBIQUITIN}\n${word}\n`), [{ sequence: UBIQUITIN }], `a 76-residue line, then ${word}`)
+  assert.deepEqual(sequencesIn(`WILDTYPE\n${UBIQUITIN}\nMUTANT\n${KRAS}\n`), [{ sequence: UBIQUITIN }, { sequence: KRAS }], "label lines after a sequence of wrap width")
+  assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60)}\nThanks.`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a FASTA record, then Thanks.")
+  assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN}\nKRAS\n`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a FASTA record, then a gene symbol")
+  assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN.slice(0, 60).toLowerCase()}\n${THIOREDOXIN.slice(60).toLowerCase()}\nOK`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a lower-case FASTA record, then a capital word")
 })
 
 test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
