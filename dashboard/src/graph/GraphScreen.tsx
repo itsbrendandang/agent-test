@@ -60,9 +60,11 @@ export function GraphScreen() {
     return () => window.removeEventListener("hashchange", sync)
   }, [])
   // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
-  // With no run listed (none yet, still loading, or no engine), the built-in example is open: it needs no engine.
+  // With no run listed (none yet, or no engine), the built-in example is open: it needs no engine. While the lists load, nothing is open.
   const [auto, setAuto] = useState<RunRef>()
   if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
+  const offline = !list.runs && list.failed.length === 2
+  const waiting = !picked && !list.runs && !offline
   const current: Pick<RunRef, "kind" | "id"> = picked ?? auto ?? EXAMPLE_REF
   const example = isExample(current)
   const board = useBoardRun(current.kind === "board" && !example ? current.id : undefined)
@@ -71,10 +73,11 @@ export function GraphScreen() {
   const runs = useMemo(() => [EXAMPLE_REF, ...(list.runs ?? [])], [list.runs])
 
   const full = useMemo<GraphModel | undefined>(() => {
+    if (waiting) return undefined
     if (example) return capGraph(buildBoardGraph({ runId: EXAMPLE_ID, events: EXAMPLE_EVENTS, roster: EXAMPLE_ROSTER, example: { retrievedOn: RETRIEVED_ON } }))
     if (current.kind === "board") return board.data ? capGraph(buildBoardGraph({ runId: current.id, ...board.data })) : undefined
     return swarm.data ? capGraph(buildSwarmGraph(swarm.data)) : undefined
-  }, [current, example, board.data, swarm.data])
+  }, [current, example, waiting, board.data, swarm.data])
 
   // null: the person has not chosen yet, so a run with claims starts calm and a run without any (a single agent) shows everything.
   // A picture in stages (the example) shows everything too: the stages, and the sources found in them, are what it is about.
@@ -172,7 +175,7 @@ export function GraphScreen() {
   const mode = chosenMode ?? (full && firstPicture < SMALL_RUN ? "list" : "graph")
   const useList = mode === "list" || unavailable !== undefined
 
-  const offline = !list.runs && list.failed.length === 2
+  if (waiting) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading your runs…</Loading></div>
 
   const status = full?.status
   const kindsPresent = new Set((full?.nodes ?? []).map((n) => n.kind))

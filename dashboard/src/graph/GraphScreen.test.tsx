@@ -48,17 +48,15 @@ const swarmRun = { ...SWARM_DETAIL.run, startedAt: T }
 const lists = { "GET /api/runs": { status: 200, body: [boardRun] }, "GET /api/glhf/runs": { status: 200, body: [swarmRun] }, "GET /api/roster": { status: 200, body: ROSTER } }
 const swarmRoutes = { "GET /api/glhf/runs/s1": { status: 200, body: SWARM_DETAIL }, "GET /api/glhf/runs/s2": { status: 200, body: SINGLE_DETAIL } }
 const EXAMPLE = "board:example:pembrolizumab"
-/** Pick from the run picker, as a person would, once the runs are listed (until then the example is open by default). */
+/** Pick from the run picker, as a person would, once the runs are listed. */
 const pick = async (value: string) => {
-  const picker = screen.getByRole("combobox", { name: /run/i })
+  const picker = await screen.findByRole("combobox", { name: /run/i })
   await waitFor(() => expect(within(picker).getAllByRole("option").length).toBeGreaterThan(1))
   expect(within(picker).getAllByRole("option").map((o) => (o as HTMLOptionElement).value)).toContain(value)
   if ((picker as HTMLSelectElement).value !== value) fireEvent.change(picker, { target: { value } })
 }
 const streamBoard = async (events = BOARD_EVENTS) => {
-  const first = FakeEventSource.all.length === 0
   await waitFor(() => expect(FakeEventSource.all.length).toBeGreaterThan(0))
-  if (first) { fake.data = []; fake.reveals = [] } // forget what the example drew while the runs were loading
   act(() => { for (const e of events) FakeEventSource.all.at(-1)!.emit(e) })
 }
 const CONTRADICTED = /^claim:scout:/
@@ -82,8 +80,11 @@ describe("Graph view: the built-in example", () => {
   it("puts the cancer-drug example first in the picker; picked, it is labelled as an example and drawn in stages", async () => {
     routes(lists)
     render(<WorldsView />)
-    const picker = screen.getByRole("combobox", { name: /run/i })
+    expect(screen.getByText("Loading your runs…")).toBeInTheDocument()
+    expect(screen.queryByTestId("example-banner")).toBeNull() // nothing is open while the runs load: the example does not flash
+    const picker = await screen.findByRole("combobox", { name: /run/i })
     await waitFor(() => expect(within(picker).getAllByRole("option").length).toBe(3))
+    expect(picker).toHaveValue("board:r1")
     expect(within(picker).getAllByRole("option")[0]).toHaveTextContent(/^Example · a cancer drug from biomanufacturing to FDA approval/)
     await pick(EXAMPLE)
     expect(picker).toHaveValue(EXAMPLE)
@@ -475,7 +476,7 @@ describe("Graph view", () => {
     const small = render(<WorldsView />)
     await streamBoard(PRACTICE_EVENTS) // fewer than 15 nodes
     expect(await screen.findByRole("table", { name: /nodes of the graph/i })).toBeInTheDocument()
-    expect(screen.queryByTestId("graph-canvas")).toBeNull()
+    expect(fake.calls).not.toContain("create")
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true")
     fireEvent.click(screen.getByRole("button", { name: "3D graph" })) // the person chooses
     await waitFor(() => expect(fake.calls).toContain("create"))
@@ -485,8 +486,7 @@ describe("Graph view", () => {
     routes(lists)
     render(<WorldsView />) // the stored choice wins over the small-run default
     await streamBoard(PRACTICE_EVENTS)
-    await waitFor(() => expect(fake.data.at(-1)?.nodes.some((n) => n.id.startsWith("claim:scout:"))).toBe(true))
-    expect(screen.getByTestId("graph-canvas")).toBeInTheDocument()
+    await waitFor(() => expect(fake.calls).toContain("create"))
     expect(screen.queryByRole("table", { name: /nodes of the graph/i })).toBeNull()
   })
 
@@ -569,7 +569,7 @@ describe("Graph view", () => {
     await streamBoard(BOARD_EVENTS.slice(0, 6))
     await waitFor(() => expect(fake.calls).toContain("create"))
     unmount()
-    expect(fake.destroyed).toBe(fake.calls.filter((c) => c === "create").length) // every renderer made (the example's, then this run's) is destroyed
+    expect(fake.destroyed).toBe(1)
     expect(FakeEventSource.all.every((s) => s.closed)).toBe(true)
   })
 
