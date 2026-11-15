@@ -6,11 +6,13 @@ results (de-duplicated by DOI/title), and saves the abstracts. This is a cached
 evidence base you can inspect, cite, or demo offline.
 
 Sources (all free, no API key):
-  * Europe PMC  - PubMed / NIH (ncbi.nlm.nih.gov) + preprints; the source the app
-                  itself uses (engine/src/literature.ts).
-  * OpenAlex    - open scholarly catalog across ~all disciplines.
-  * Crossref    - the official DOI registry (every publisher).
-  * arXiv       - preprints (physics / CS / quant bio).
+  * Europe PMC      - PubMed / NIH (ncbi.nlm.nih.gov) + preprints; the source the
+                      app itself uses (engine/src/literature.ts).
+  * OpenAlex        - open scholarly catalog across ~all disciplines.
+  * Crossref        - the official DOI registry (every publisher).
+  * Semantic Scholar- broad corpus with abstracts (AI2).
+  * ClinicalTrials  - clinicaltrials.gov trial records (NIH .gov).
+  * arXiv           - preprints (physics / CS / quant bio).
 
 For each query it saves one Markdown file with the merged top results (title,
 authors, venue, year, DOI/URL, source, abstract). Standard library only.
@@ -31,6 +33,7 @@ import html
 import json
 import re
 import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -65,13 +68,23 @@ def _ssl_ctx() -> ssl.SSLContext:
         return ctx
 
 
-def _get(url: str, timeout: int = 25) -> bytes:
+def _get(url: str, timeout: int = 25, retries: int = 3) -> bytes:
     global _SSL
     if _SSL is None:
         _SSL = _ssl_ctx()
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
-                                timeout=timeout, context=_SSL) as resp:
-        return resp.read()
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
+                                        timeout=timeout, context=_SSL) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            # 429 (rate limit) and 5xx are transient; back off and retry.
+            if e.code in (429, 500, 502, 503) and attempt + 1 < retries:
+                import time
+                time.sleep(2 ** attempt + 1)
+                continue
+            raise
+    raise RuntimeError("unreachable")
 
 
 def _tags(s: str) -> str:
@@ -197,10 +210,59 @@ def src_arxiv(query: str, n: int) -> list[dict]:
     return out
 
 
+# --- source: Semantic Scholar ------------------------------------------------
+def src_semanticscholar(query: str, n: int) -> list[dict]:
+    fields = "title,authors,year,venue,abstract,externalIds,url"
+    params = {"query": query, "limit": str(n), "fields": fields}
+    url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urllib.parse.urlencode(params)
+    body = json.loads(_get(url))
+    out = []
+    for p in body.get("data", []) or []:
+        doi = _clean_doi((p.get("externalIds") or {}).get("DOI"))
+        out.append({
+            "title": _tags(p.get("title") or ""),
+            "authors": ", ".join(a.get("name", "") for a in (p.get("authors") or [])[:8]),
+            "venue": p.get("venue") or "",
+            "year": str(p.get("year") or ""),
+            "doi": doi,
+            "url": ("https://doi.org/" + doi) if doi else (p.get("url") or ""),
+            "abstract": _tags(p.get("abstract") or "")[:MAX_ABSTRACT_CHARS],
+            "source": "Semantic Scholar",
+        })
+    return out
+
+
+# --- source: ClinicalTrials.gov (NIH, .gov) ----------------------------------
+def src_clinicaltrials(query: str, n: int) -> list[dict]:
+    params = {"query.term": query, "pageSize": str(n), "format": "json"}
+    url = "https://clinicaltrials.gov/api/v2/studies?" + urllib.parse.urlencode(params)
+    body = json.loads(_get(url))
+    out = []
+    for s in body.get("studies", []) or []:
+        ps = s.get("protocolSection", {})
+        ident = ps.get("identificationModule", {})
+        nct = ident.get("nctId", "")
+        status = ps.get("statusModule", {})
+        out.append({
+            "title": _tags(ident.get("briefTitle") or ident.get("officialTitle") or ""),
+            "authors": _tags((ps.get("sponsorCollaboratorsModule", {})
+                              .get("leadSponsor", {}) or {}).get("name", "")),
+            "venue": "ClinicalTrials.gov " + (status.get("overallStatus", "") or ""),
+            "year": str((status.get("startDateStruct", {}) or {}).get("date", ""))[:4],
+            "doi": "",
+            "url": f"https://clinicaltrials.gov/study/{nct}" if nct else "",
+            "abstract": _tags((ps.get("descriptionModule", {}) or {}).get("briefSummary", ""))[:MAX_ABSTRACT_CHARS],
+            "source": "ClinicalTrials.gov",
+        })
+    return out
+
+
 SOURCES = {
     "europepmc": src_europepmc,
     "openalex": src_openalex,
     "crossref": src_crossref,
+    "semanticscholar": src_semanticscholar,
+    "clinicaltrials": src_clinicaltrials,
     "arxiv": src_arxiv,
 }
 

@@ -25,7 +25,12 @@ Sources (all free, no API key):
 | Europe PMC | PubMed / NIH (`ncbi.nlm.nih.gov`) + preprints — the source the app uses |
 | OpenAlex | open scholarly catalog, ~all disciplines |
 | Crossref | official DOI registry (every publisher) |
+| Semantic Scholar | broad corpus with abstracts (may rate-limit without a key) |
+| ClinicalTrials.gov | NIH clinical-trial records (`.gov`) |
 | arXiv | preprints (physics / CS / quant bio) |
+
+If a source is temporarily unavailable (e.g. Semantic Scholar returns 429), the
+script skips it and keeps the others — one query still returns merged evidence.
 
 ```bash
 python3 glhf/scripts/fetch_literature.py "KRAS G12C covalent inhibitor resistance"
