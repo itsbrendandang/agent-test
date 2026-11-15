@@ -29,6 +29,29 @@ describe("group chat thread", () => {
     expect(chatItems([])).toEqual([])
   })
 
+  it("draws a round line where a team review's round begins, and a new round starts a new run of messages", () => {
+    const rows = eventRows([
+      { key: "r1", at: 1, type: "round.started", round: 1, message: "Round 1. State your position.", final: false },
+      { key: "a", at: 2, type: "member.replied", member: "scout", round: 1, text: "In short: the data is complete.\nTwelve samples." },
+      { key: "s", at: 3, type: "evidence.triaged", member: "scout", provider: "exa", query: "q", kept: 1, dropped: 0 },
+      { key: "c", at: 4, type: "claim.checked", member: "scout", round: 1, claim: "Twelve samples", verdict: "contradicted", checker: "first-pass" },
+      { key: "r2", at: 5, type: "round.started", round: 2, message: "", final: true },
+      { key: "b", at: 6, type: "member.replied", member: "lead-scientist", round: 2, text: "We stop here." },
+    ], "board")
+    const items = chatItems(rows)
+    expect(items.map((i) => i.round)).toEqual([{ n: 1 }, undefined, undefined, undefined, { n: 2, final: true }, undefined])
+    // The lead opens round 2 and replies in it: one run. The lead's last message of round 1 would not join it.
+    expect(items.slice(4).map((i) => [i.first, i.last])).toEqual([[true, false], [false, true]])
+    expect(chatItems([{ ...row("x", "lead-scientist"), round: { n: 1 } }, { ...row("y", "lead-scientist"), round: { n: 2 } }]).map((i) => [i.first, i.last])).toEqual([[true, true], [true, true]])
+    // What each row says: the lead's own words without the "Round 1." prefix, the reply's one line first, the check as a quiet note with its mark.
+    expect(rows[0]).toMatchObject({ agentId: "lead-scientist", text: "State your position.", thought: true })
+    expect(rows[1]).toMatchObject({ agentId: "scout", text: "the data is complete.\nTwelve samples.", thought: true })
+    expect(rows[2]).toMatchObject({ note: true, provider: "exa", text: "Searched the web for “q”: kept 1, dropped 0." })
+    expect(rows[3]).toMatchObject({ note: true, kind: "check", mark: "contradicted", agentId: "first-pass" })
+    expect(rows[3].text).toMatch(/^Contradicted: .*'s statement “Twelve samples”\.$/)
+    expect(rows[4]).toMatchObject({ text: "Started round 2.", round: { n: 2, final: true } })
+  })
+
   it("marks tool calls, searches and system steps as notes, and agents' turns as messages", () => {
     const rows = eventRows(CLAIMS_EVENTS, "swarm")
     const of = (kind: string) => rows.filter((r) => CLAIMS_EVENTS[Number(r.id.split(":")[0])]?.kind === kind)

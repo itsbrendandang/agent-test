@@ -56,6 +56,15 @@
 .chat-note strong { color: var(--foreground); font-weight: 500; }
 .chat-note-text { white-space: pre-wrap; }
 .chat-note[data-kind="error"], .chat-note[data-kind="error"] .chat-note-icon { color: var(--danger); }
+/* A team review's discussion: a quiet line where each round begins, and each statement check's mark beside its note. */
+.chat-round { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; color: var(--muted-foreground); }
+.chat-round::before, .chat-round::after { content: ""; flex: 1; border-top: 1px solid var(--edge); }
+.chat-round h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: inherit; }
+.chat-round:first-child { margin-top: 4px; }
+.chat-note-mark { display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; }
+.chat-note[data-mark="supported"] .chat-note-mark { color: var(--success); }
+.chat-note[data-mark="contradicted"], .chat-note[data-mark="contradicted"] .chat-note-mark { color: var(--danger); }
+.chat-note[data-mark="insufficient"] .chat-note-mark { color: var(--warning); }
 .chat-jump { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); box-shadow: var(--shadow-pop); background: var(--background); }
 @media (max-width: 520px) { .chat-thread { padding-inline: 12px; } .chat-note { margin-left: 0; } }
 /* A touch-size window: every control 44 px, like the rest of the app (index.css), and the menus full width. */

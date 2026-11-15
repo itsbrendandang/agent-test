@@ -37,6 +37,8 @@ const open = async (mock: boolean | undefined, status: "done" | "running" | "fai
 }
 const search = (provider: string | undefined, items: object[], query = "KRAS G12C hERG") => emit({ type: "evidence.triaged", member: "scout", query, kept: items.length, dropped: 2, ...(provider && { provider }), items })
 const EXA_LINK = { href: "https://exa.ai", target: "_blank" }
+/** The discussion is the Agent Log's chat: a search is a quiet note, and so is each statement check. */
+const note = (kind: "search" | "check") => screen.getByRole("list", { name: "Run events" }).querySelector<HTMLElement>(`.chat-note[data-kind='${kind}']`)!
 
 describe("the credit itself", () => {
   it("says exactly 'Search powered by Exa', with Exa linking to exa.ai in a new tab, and no logo", () => {
@@ -66,9 +68,11 @@ describe("a review's sources", () => {
     await search("exa", [{ url: "https://example.org/herg", title: "hERG margins in practice", studyType: "review", relevance: 0.5, provider: "exa" }])
     await emit({ type: "member.replied", round: 1, member: "scout", text: "In short: the margin is thin.", usd: 0.12 })
     await emit({ type: "claim.checked", round: 1, member: "scout", claim: "The margin is under 30x", kind: "literature", verdict: "verified", checker: "first-pass", source: "https://example.org/herg", note: 'quoted: "margin of 12x"', quoteFound: true })
-    const step = screen.getByRole("note", { name: "Scout searched" })
-    expect(step).toHaveTextContent("Scout searched the web · Search powered by Exa")
-    expect(step).toHaveTextContent("“KRAS G12C hERG”: kept 1 of 3 results") // the query it ran and how many were kept
+    const step = note("search")
+    expect(step.querySelector("strong")).toHaveTextContent(/^Scout$/) // who searched
+    expect(step).toHaveTextContent("Searched the web for “KRAS G12C hERG”: kept 1, dropped 2.") // the query it ran and how many were kept
+    expect(within(step).getByRole("link", { name: "Exa" })).toHaveAttribute("href", "https://exa.ai")
+    expect(step).toHaveTextContent("Search powered by Exa")
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getAllByRole("link", { name: "Exa" })[0]).toHaveAttribute("href", "https://exa.ai")
     const item = sources.getByRole("link", { name: "hERG margins in practice" }).closest("li")!
@@ -76,10 +80,10 @@ describe("a review's sources", () => {
     expect(item).not.toHaveTextContent(/relevance|0\.5/)
     expect(within(item).getByTestId("screened")).toHaveAttribute("title", expect.stringContaining("not a measured score"))
     expect(within(item).getByRole("list", { name: "Statements that rest on this source" })).toHaveTextContent(/(Holds up|Supported) ?The margin is under 30xThe quoted passage was found in this source\./)
-    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1: Supported/ }))
-    const detail = screen.getByText("The statement").closest("dl")!
-    expect(detail).toHaveTextContent("Sourcehttps://example.org/herg · Search powered by Exa")
-    expect(detail).toHaveTextContent("Quoted passageFound in the source: “margin of 12x”")
+    const check = note("check")
+    expect(check).toHaveTextContent("Supported: Scout's statement “The margin is under 30x”.")
+    expect(check).toHaveTextContent('quoted: "margin of 12x" The quoted passage was found in the source.')
+    expect(within(check).getByRole("link", { name: "https://example.org/herg" })).toHaveAttribute("href", "https://example.org/herg")
   })
   it("says when the quoted passage was not found in the source", async () => {
     await open(false)
@@ -87,13 +91,13 @@ describe("a review's sources", () => {
     await emit({ type: "member.replied", round: 1, member: "scout", text: "x" })
     await emit({ type: "claim.checked", round: 1, member: "scout", claim: "c", kind: "literature", verdict: "unsupported", checker: "first-pass", source: "https://example.org/a", quoteFound: false })
     expect(within(screen.getByRole("region", { name: "Sources" })).getByText("The quoted passage was not found in the source.")).toHaveAttribute("data-found", "false")
-    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1/ }))
-    expect(screen.getByText("The statement").closest("dl")).toHaveTextContent("Quoted passageThe quoted passage was not found in the source.")
+    expect(note("check")).toHaveTextContent("The quoted passage was not found in the source.")
   })
   it("the literature search has its own label, and a preprint is marked", async () => {
     await open(false)
     await search("europepmc", [{ url: "https://europepmc.org/article/PPR/1", title: "A new KRAS inhibitor [preprint]", provider: "europepmc" }, { url: "https://europepmc.org/article/MED/2", title: "A reviewed paper", provider: "europepmc" }])
-    expect(screen.getByRole("note", { name: "Scout searched" })).toHaveTextContent("Scout searched the research literature · Found in PubMed and preprints (Europe PMC)")
+    expect(note("search")).toHaveTextContent("Searched PubMed and preprints for “KRAS G12C hERG”")
+    expect(note("search")).toHaveTextContent("Found in PubMed and preprints (Europe PMC)")
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getByRole("link", { name: /A new KRAS inhibitor/ }).closest("li")).toHaveTextContent("Preprint: not peer reviewed")
     expect(sources.getByRole("link", { name: "A reviewed paper" }).closest("li")).not.toHaveTextContent("Preprint")
@@ -110,7 +114,8 @@ describe("a review's sources", () => {
   it("a practice run: 'Example sources (practice run)', and Exa is never named", async () => {
     await open(true)
     await search("fixture", [{ url: "https://example.org/fixture", title: "An example source", provider: "fixture" }])
-    expect(screen.getByRole("note", { name: "Scout searched" })).toHaveTextContent("Scout looked up sources · Example sources (practice run)")
+    expect(note("search")).toHaveTextContent("Searched practice example sources for “KRAS G12C hERG”")
+    expect(note("search")).toHaveTextContent("Example sources (practice run)")
     const sources = screen.getByRole("region", { name: "Sources" })
     expect(sources).toHaveTextContent("Example sources (practice run)")
     expect(document.body).not.toHaveTextContent("powered by Exa")

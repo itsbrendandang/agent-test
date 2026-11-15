@@ -1,5 +1,6 @@
 import { hasWords } from "@/lib/format"
-import { sandboxWords } from "@/lib/words"
+import { MARK_WORD, sandboxWords, markOf, splitReply, type Mark } from "@/lib/words"
+import { PROVIDERS } from "@/research/providers"
 import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
 import type { Provenance, RunKind } from "./model"
@@ -28,6 +29,12 @@ export interface EventRow {
   note?: boolean
   /** The text after the first line is the agent's reasoning, so the chat labels it "Show thinking" (else "Show more"). */
   thought?: boolean
+  /** A team review's discussion round this event belongs to: the chat draws a "Round n" line where a new one begins. */
+  round?: { n: number; final?: boolean }
+  /** What a check found about a statement, as one of the four marks. */
+  mark?: Mark
+  /** Where a search looked, as the run recorded it: the chat credits it (Exa, Europe PMC, a database, or example sources). */
+  provider?: string
 }
 export interface LogFilter { agent: string; kind: string; query: string }
 const objects = (value: unknown): LabEvent[] => Array.isArray(value) ? value.filter((v): v is LabEvent => !!v && typeof v === "object" && !Array.isArray(v)) : []
@@ -36,7 +43,7 @@ const join = (...values: unknown[]) => values.filter((v) => typeof v === "string
 /** Event types that are tool calls, searches or bookkeeping rather than an agent speaking. */
 const NOTE_TYPES = new Set([
   "run.started", "run.resumed", "run.finished", "run.failed", "research.started", "research.resumed", "research.queued", "research.finished", "research.failed", "research.cancelled",
-  "run.roster", "specialists", "evidence.triaged", "constraint", "step.started", "step.progress", "sources", "sources.cited", "artifact.created",
+  "run.roster", "specialists", "evidence.triaged", "claim.checked", "constraint", "step.started", "step.progress", "sources", "sources.cited", "artifact.created",
   "phase.started", "phase.finished", "claim.transition", "claim.illegal_transition", "test.executed", "test.recorded", "budget.allocated", "budget.spent", "flags", "triage.uncovered",
 ])
 const NOTE_KINDS = new Set(["search", "fetch", "sources"])
@@ -91,10 +98,34 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "specialists": kind = "team"; text = objects(e.items).map((s) => join(`${str(s.title) ?? str(s.name)} joined.`, s.why, names(s.methods) ? `Method skills: ${names(s.methods)}.` : "")).join("\n"); if (!text) text = "No method specialist joined."; break
       case "opening": agentId = "planner"; kind = "prepare"; text = str(e.text) ?? "Opened the research question."; break
       case "lead.framed": agentId = "lead-scientist"; kind = "prepare"; text = `Framed the question: ${str(e.text) ?? ""}`; break
-      case "round.started": agentId = "lead-scientist"; kind = "prepare"; text = `Started round ${num(e.round) ?? ""}. ${str(e.message) ?? ""}`; break
-      case "member.replied": kind = "write"; text = join(`Replied in round ${num(e.round) ?? ""}.`, e.summary, e.text); break
-      case "evidence.triaged": kind = "search"; text = `Searched ${str(e.provider) === "fixture" ? "practice example sources" : str(e.provider) ?? "sources"}${query ? ` for “${query}”` : ""}: kept ${num(e.kept) ?? "not recorded"}, dropped ${num(e.dropped) ?? "not recorded"}.`; break
-      case "claim.checked": agentId = str(e.checker) ?? "checker"; kind = "check"; text = join(`Checked ${str(e.member) ?? "a member"}'s statement: ${str(e.claim) ?? ""}.`, e.verdict, e.note); break
+      // A team review's discussion: the lead opens each round, each member replies (its one-line summary first, the
+      // whole reply behind "Show thinking"), and each statement check is a quiet note under the reply it checked.
+      case "round.started": agentId = "lead-scientist"; kind = "prepare"; text = (str(e.message) ?? "").replace(/^\s*Round \d+\.\s*/, "").trim() || `Started round ${num(e.round) ?? ""}.`; break
+      case "member.replied": {
+        kind = "write"
+        // The reply's one line (the engine's summary, else its own "In short:" sentence) first, the rest behind the toggle.
+        const full = (str(e.text) ?? "").trim(), reply = splitReply(full), summary = str(e.summary)?.trim()
+        const line = summary || (reply.marked ? reply.short : "")
+        const rest = !line ? full : reply.marked ? reply.rest : full === line ? "" : full
+        text = [line, rest].filter(Boolean).join("\n") || `Replied in round ${num(e.round) ?? ""}.`
+        break
+      }
+      case "evidence.triaged": {
+        kind = "search"
+        const provider = str(e.provider), place = provider === "fixture" ? "practice example sources" : provider && PROVIDERS[provider] ? PROVIDERS[provider].place : provider ?? "sources"
+        text = `Searched ${place}${query ? ` for “${query}”` : ""}: kept ${num(e.kept) ?? "not recorded"}, dropped ${num(e.dropped) ?? "not recorded"}.`
+        break
+      }
+      case "claim.checked": {
+        agentId = str(e.checker) ?? "checker"; kind = "check"
+        const member = str(e.member), whose = member ? `${titles.get(member) ?? agentIdentity(member).label}'s` : "a"
+        const mark = markOf(e.verdict)
+        const by = str(e.checkedBy), source = str(e.source)
+        text = join(`${MARK_WORD[mark]}: ${whose} statement “${str(e.claim) ?? ""}”.`, e.note,
+          e.quoteFound === true ? "The quoted passage was found in the source." : e.quoteFound === false ? "The quoted passage was not found in the source." : "",
+          source === "brief" ? "Source: the brief." : "", by === "scripted" ? "Practice run: no model checked it." : by ? `Checked by ${by}.` : "")
+        break
+      }
       case "constraint": kind = "limit"; text = join("Reached a run limit.", e.detail, e.reason); break
       case "memo.written": agentId = "reporter"; kind = "save"; text = join("Saved the decision memo.", e.decision, e.path); break
       case "step.started": kind = str(e.kind) ?? "step"; text = join(`Started: ${str(e.label) ?? readableName(str(e.step) ?? "step")}.`, query ? `Query: ${query}` : ""); break
@@ -146,7 +177,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const usd = num(e.usd) ?? num(e.spentUsd)
     links = [...new Map(links.map((s) => [s.url, s])).values()]
     const note = agentId === "engine" || NOTE_TYPES.has(type) || NOTE_KINDS.has(kind)
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}) }]
+    const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(e.final === true ? { final: true } : {}) } : undefined
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && str(e.provider) ? { provider: str(e.provider) } : {}) }]
   })
 }
 

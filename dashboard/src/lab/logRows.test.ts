@@ -30,7 +30,7 @@ describe("full event log", () => {
       { key: "search", type: "evidence.triaged", member: "x", provider: "fixture", kept: 1, dropped: 0, items: [{ title: "Example", url: "https://example.org" }] },
       { key: "fail", type: "run.failed", error: "The run failed safely." },
     ], "board")
-    expect(rows.find((r) => r.kind === "write")).toMatchObject({ agent: "Custom expert", text: "Replied in round 1. Full reply", usd: 0 })
+    expect(rows.find((r) => r.kind === "write")).toMatchObject({ agent: "Custom expert", text: "Full reply", usd: 0, round: { n: 1 } })
     expect(rows.find((r) => r.kind === "search")?.text).toContain("practice example sources")
     expect(rows.find((r) => r.kind === "search")?.sources).toHaveLength(1)
     expect(rows.find((r) => r.kind === "error")?.text).toContain("The run failed safely.")

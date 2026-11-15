@@ -29,10 +29,24 @@ export interface ChatItem {
   first: boolean
   /** The last message of an agent's run: the bubble gets its tail. */
   last: boolean
+  /** A team review's round begins here: the chat draws a "Round n" line above this row. */
+  round?: { n: number; final?: boolean }
 }
 
-/** Consecutive messages from the same agent form one run; a note (tool call, search, system step) ends a run. */
+/** Consecutive messages from the same agent form one run; a note (tool call, search, system step) or a new round
+ * ends a run. A row from a round other than the last one seen starts that round. */
 export function chatItems(rows: readonly EventRow[]): ChatItem[] {
-  const same = (a?: EventRow, b?: EventRow) => !!a && !!b && !a.note && !b.note && a.agentId === b.agentId
-  return rows.map((row, i) => ({ row, first: !row.note && !same(rows[i - 1], row), last: !row.note && !same(row, rows[i + 1]) }))
+  const rounds: (number | undefined)[] = []
+  let now: number | undefined
+  const starts = rows.map((row) => {
+    const begins = row.round && row.round.n !== now ? row.round : undefined
+    if (row.round) now = row.round.n
+    rounds.push(now)
+    return begins
+  })
+  const same = (i: number, j: number) => {
+    const a = rows[i], b = rows[j]
+    return !!a && !!b && !a.note && !b.note && a.agentId === b.agentId && rounds[i] === rounds[j] && !starts[Math.max(i, j)]
+  }
+  return rows.map((row, i) => ({ row, first: !row.note && !same(i - 1, i), last: !row.note && !same(i, i + 1), ...(starts[i] ? { round: starts[i] } : {}) }))
 }

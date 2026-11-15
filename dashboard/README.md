@@ -48,7 +48,7 @@ view adds one. See "How the screens connect" in the main README.
 | Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work, read the answer with its sources. |
 | Saved research | `Runs` | `ExperimentsView.tsx` | Everything that was researched, newest first, with keyword search. Runs of the same brief are one row with their history. |
 | Compare | `Compare` | `SwarmView.tsx` | One agent alone and a team of nine on the same task, side by side. Start a run here (see below). |
-| Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |
+| Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion (the Agent Log's group chat, `lab/EventLog.tsx`), the sources. |
 | Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
 | Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
 | Agent Log | `Lab` | `LabView.tsx`, `src/lab/` | Every event of one run, with filters and downloads. (The animated Agent Lab scene is on Overview.) |
