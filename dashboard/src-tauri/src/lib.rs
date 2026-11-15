@@ -70,8 +70,28 @@ fn open_window(app: &tauri::App, engine: Option<&engine::Engine>) -> tauri::Resu
   if let Some(engine) = engine {
     builder = builder.initialization_script(engine.init_script());
   }
+  // Never open larger than the screen: a 1280x820 window does not fit a small laptop display.
+  let screen = app.primary_monitor().ok().flatten().map(|m| {
+    let size = m.size().to_logical::<f64>(m.scale_factor());
+    (size.width, size.height)
+  });
+  let (width, height, min_width, min_height) =
+    fit_window(config.width, config.height, config.min_width.unwrap_or(0.0), config.min_height.unwrap_or(0.0), screen);
+  builder = builder.inner_size(width, height).min_inner_size(min_width, min_height).center();
   builder.build()?;
   Ok(())
+}
+
+/// Room kept free for the menu bar, the Dock and the window's own title bar, in points.
+const SCREEN_MARGIN: (f64, f64) = (32.0, 140.0);
+
+/// The window size and smallest size to use on a screen of the given size (in points): the configured ones,
+/// made smaller when the screen is smaller. With no screen known, the configured ones.
+fn fit_window(width: f64, height: f64, min_width: f64, min_height: f64, screen: Option<(f64, f64)>) -> (f64, f64, f64, f64) {
+  let Some((screen_width, screen_height)) = screen else { return (width, height, min_width, min_height) };
+  let width = width.min((screen_width - SCREEN_MARGIN.0).max(320.0));
+  let height = height.min((screen_height - SCREEN_MARGIN.1).max(320.0));
+  (width, height, min_width.min(width), min_height.min(height))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -123,6 +143,21 @@ mod tests {
   use std::sync::Mutex;
   use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder};
   use tauri::webview::InvokeRequest;
+
+  #[test]
+  fn the_window_never_opens_larger_than_the_screen() {
+    // A large screen keeps the configured size.
+    assert_eq!(super::fit_window(1280.0, 820.0, 720.0, 520.0, Some((1920.0, 1080.0))), (1280.0, 820.0, 720.0, 520.0));
+    // A 13-inch laptop (1280x800 points): smaller than the configured window, so it is made to fit.
+    let (w, h, min_w, min_h) = super::fit_window(1280.0, 820.0, 720.0, 520.0, Some((1280.0, 800.0)));
+    assert!(w <= 1280.0 - 32.0 && h <= 800.0 - 140.0, "window {w}x{h} does not fit 1280x800");
+    assert!(min_w <= w && min_h <= h);
+    // A very small screen: the smallest size shrinks with it, so the window can still be shown whole.
+    let (w, h, min_w, min_h) = super::fit_window(1280.0, 820.0, 720.0, 520.0, Some((640.0, 480.0)));
+    assert!(w <= 640.0 && h <= 480.0 && min_w <= w && min_h <= h);
+    // No screen known: the configured size.
+    assert_eq!(super::fit_window(1280.0, 820.0, 720.0, 520.0, None), (1280.0, 820.0, 720.0, 520.0));
+  }
 
   #[test]
   #[cfg(target_os = "macos")]

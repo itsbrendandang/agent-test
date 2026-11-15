@@ -2,6 +2,8 @@
 
 Team GLHF, hackathon Track 3 (AI Scientist Swarms).
 
+Built by Brendan Dang, Anh Lam and Josh Bustamante.
+
 ## What this is
 
 You ask a science question. A team of AI agents works on it. Then every statement they make is
@@ -59,9 +61,10 @@ repeat finished work. We tested this by stopping a practice run in the middle.
 
 No terminal and nothing to install. For Macs with Apple Silicon (M1 or newer), macOS 11 or later.
 
-1. Open the [latest desktop release](https://github.com/itsbrendandang/agent-test/releases/tag/desktop-v0.2.0)
-   and download `AI-Scientist-Bot-macOS-Apple-Silicon.dmg` (54 MB). The repository is private, so you
-   must be signed in to GitHub with an account that has access.
+1. Download [`AI-Scientist-Bot-macOS-Apple-Silicon.dmg`](downloads/AI-Scientist-Bot-macOS-Apple-Silicon.dmg)
+   (54 MB): open that link and click the download button. The same file is on the
+   [desktop release page](https://github.com/itsbrendandang/agent-test/releases/tag/desktop-v0.2.0).
+   The repository is private, so you must be signed in to GitHub with an account that has access.
 2. Double-click the downloaded file. Drag **AI Scientist Bot** onto **Applications**.
 3. Open **Applications** and double-click **AI Scientist Bot**. The first time, macOS refuses to open it,
    because the app is not signed with a paid Apple developer account. This is expected. Click **Done**.
@@ -84,9 +87,10 @@ What to expect:
 - **Your runs are kept** in `~/Library/Application Support/com.brendandang.aiscientistbot/`. Delete that
   folder to remove them. To remove the app, drag it to the Bin.
 - **Quit with Cmd-Q.** Nothing keeps running afterwards.
+- **The window sizes itself to your screen**, and you can resize it.
 
 To check the download: its SHA-256 is
-`7ae98f8d57a1a6ee6464a03d4b28dc119f6eefe2bf28a9657e0ab36e3c1bb1e7`
+`920d792e6b6fb634af8cfb8e26e7eb04bdb8d1f85d29a3c435d0e617ff1d417f`
 (`shasum -a 256 AI-Scientist-Bot-macOS-Apple-Silicon.dmg`).
 
 Not tested: an Intel Mac, a second Mac, and the first-open steps on a freshly downloaded copy. Windows
