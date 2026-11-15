@@ -11,8 +11,9 @@ export type Effort = "quick" | "standard"
 export const EFFORTS: Effort[] = ["quick", "standard"]
 export const isEffort = (value: unknown): value is Effort => value === "quick" || value === "standard"
 
-/** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/. */
-export type Provider = "exa" | "europepmc" | "fixture" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
+/** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/.
+ * "openalex", "semanticscholar" and "arxiv" are papers the literature search (search "europepmc", scholarly.ts) found there. */
+export type Provider = "exa" | "europepmc" | "openalex" | "semanticscholar" | "arxiv" | "fixture" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
 
 export interface Level {
   /** Dollars one answer may cost. Checked before every paid step, against that step's worst case. */

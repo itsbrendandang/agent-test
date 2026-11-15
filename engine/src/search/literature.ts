@@ -34,11 +34,26 @@ export function plainText(html: string): string {
     .replace(/\s+/g, " ").replace(/\.\s*\./g, ".").replace(/([:;,])\.\s/g, "$1 ").trim()
 }
 
+/** A paper found by a literature search, with its DOI (lower case, no "https://doi.org/") when the source gave one: scholarly.ts merges sources by it. */
+export interface FoundPaper { item: EvidenceItem; doi?: string }
+
+/** A DOI as a merge key: lower case, without the resolver prefix. Undefined when it does not look like a DOI. */
+export function cleanDoi(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const doi = value.trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "").toLowerCase()
+  return /^10\.\d{4,9}\/\S+$/.test(doi) ? doi : undefined
+}
+
 /** The records of one Europe PMC answer as evidence items. A record with no abstract is left out: there is nothing to check a statement against. */
 export function parseEuropePmc(body: unknown): EvidenceItem[] {
+  return parseEuropePmcPapers(body).map((p) => p.item)
+}
+
+/** parseEuropePmc, with each record's DOI kept beside its item. */
+export function parseEuropePmcPapers(body: unknown): FoundPaper[] {
   const records = (body as { resultList?: { result?: EuropePmcRecord[] } })?.resultList?.result
   if (!Array.isArray(records)) return []
-  const items: EvidenceItem[] = []
+  const items: FoundPaper[] = []
   for (const r of records) {
     const text = plainText(String(r.abstractText ?? "")).slice(0, MAX_ABSTRACT_CHARS)
     const title = plainText(String(r.title ?? ""))
@@ -47,7 +62,8 @@ export function parseEuropePmc(body: unknown): EvidenceItem[] {
     const url = r.source === "MED" && /^\d+$/.test(r.pmid ?? "") ? `https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/` : `https://europepmc.org/article/${encodeURIComponent(r.source ?? "MED")}/${r.id}`
     const where = [preprint ? "preprint" : r.journalInfo?.journal?.title, /^\d{4}$/.test(r.pubYear ?? "") ? r.pubYear : undefined].filter(Boolean).join(", ")
     const review = (r.pubTypeList?.pubType ?? []).some((t) => /review/i.test(t))
-    items.push({ url, title: `${title}${where ? ` (${where})` : ""}${preprint ? " [preprint]" : review ? " [review]" : ""}`.slice(0, 300), text, provider: "europepmc" })
+    const doi = cleanDoi(r.doi)
+    items.push({ item: { url, title: `${title}${where ? ` (${where})` : ""}${preprint ? " [preprint]" : review ? " [review]" : ""}`.slice(0, 300), text, provider: "europepmc" }, ...(doi ? { doi } : {}) })
   }
   return items
 }
@@ -62,18 +78,25 @@ export function retryQueries(query: string, retries = 2): string[] {
 
 /** One live literature search. Throws on a non-2xx answer. `fetchFn` is replaced in tests. */
 export async function literatureLive(query: string, fetchFn: typeof fetch = fetch): Promise<SearchResult> {
+  const { papers, notices } = await europePmcPapers(query, fetchFn)
+  return { items: papers.map((p) => p.item), notices }
+}
+
+/** literatureLive, with each paper's DOI kept (scholarly.ts). `signal` (optional) ends the search early. */
+export async function europePmcPapers(query: string, fetchFn: typeof fetch = fetch, signal?: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> {
   const notices: string[] = []
   for (const q of retryQueries(query)) {
     const url = `${LITERATURE_URL}?${new URLSearchParams({ query: q, resultType: "core", format: "json", pageSize: String(MAX_RESULTS) })}` // no `sort`: relevance is the default, and sort=RELEVANCE is answered with 503
-    const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(15_000) })
+    const timeout = AbortSignal.timeout(15_000)
+    const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
     if (!res.ok) throw new Error(`Europe PMC answered ${res.status}`)
-    const items = parseEuropePmc(await res.json())
-    if (items.length) {
+    const papers = parseEuropePmcPapers(await res.json())
+    if (papers.length) {
       if (q !== query.trim().split(/\s+/).join(" ")) notices.push(`Nothing was found for the full query; these are the results for "${q}".`)
-      return { items, notices }
+      return { papers, notices }
     }
   }
-  return { items: [], notices: ["No paper with an abstract was found, also with fewer words. Try other terms."] }
+  return { papers: [], notices: ["No paper with an abstract was found, also with fewer words. Try other terms."] }
 }
 
 export interface LiteratureDeps {

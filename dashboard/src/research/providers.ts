@@ -5,6 +5,9 @@ export interface ProviderInfo { label: string; link?: string; linkText?: string;
 export const PROVIDERS: Record<string, ProviderInfo> = {
   exa: { label: "Found through Exa (web search)", link: "https://exa.ai", linkText: "Exa", place: "the web", kind: "web" },
   europepmc: { label: "Found in PubMed and preprints (Europe PMC)", link: "https://europepmc.org", linkText: "Europe PMC", place: "PubMed and preprints", kind: "literature" },
+  openalex: { label: "Found in OpenAlex (scholarly index)", link: "https://openalex.org", linkText: "OpenAlex", place: "OpenAlex", kind: "literature" },
+  semanticscholar: { label: "Found in Semantic Scholar", link: "https://www.semanticscholar.org", linkText: "Semantic Scholar", place: "Semantic Scholar", kind: "literature" },
+  arxiv: { label: "Found in arXiv (preprints)", link: "https://arxiv.org", linkText: "arXiv", place: "arXiv", kind: "literature" },
   chembl: { label: "ChEMBL record", link: "https://www.ebi.ac.uk/chembl/", linkText: "ChEMBL", place: "ChEMBL", kind: "database" },
   clinicaltrials: { label: "ClinicalTrials.gov record", link: "https://clinicaltrials.gov", linkText: "ClinicalTrials.gov", place: "ClinicalTrials.gov", kind: "database" },
   openfda: { label: "FDA label or report counts (openFDA)", link: "https://open.fda.gov", linkText: "openFDA", place: "openFDA", kind: "database" },

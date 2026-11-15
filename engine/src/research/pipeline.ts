@@ -1,7 +1,8 @@
 // One research answer, from the question to the reviewed text. docs/research-answer.md describes it in plain words.
 //
 //   prepare   a cheap model writes the queries and the opening sentence (a fixed fallback when its reply cannot be read)
-//   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC),
+//   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC,
+//             OpenAlex, Semantic Scholar and arXiv at once, merged: search/scholarly.ts),
 //             further web searches and, at the standard level, database lookups
 //   evaluate  each search's results are screened by the board's first pass (triage.ts)
 //   sources   what was kept is numbered [1]..[n]; the selection says why each was kept and why the others were not
@@ -39,6 +40,7 @@ import type { Model, Models, ThinkingLevel } from "@earendil-works/pi-ai"
 import type { BoardConfig } from "../config.ts"
 import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "../search/exa.ts"
+import { MAX_MERGED } from "../search/scholarly.ts"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../paid/exaledger.ts"
@@ -553,6 +555,12 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
 const urlKey = (url: string) => { try { const u = new URL(url); return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}` } catch { return url } }
 
 /** A search's items as they may be kept: a safe address, a title and some text; plain text, cut. Everything else is left out. */
+/** The indexes the literature search (scholarly.ts) also searches: a paper found there keeps its own name as its provider. */
+export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv"]
+const isPaperIndex = (value: unknown): value is Provider => (PAPER_INDEXES as readonly unknown[]).includes(value)
+/** Where a found item came from: the index of a literature search's paper, else the search that found it. */
+export const providerOf = (item: EvidenceItem, search: Provider): Provider => (search === "europepmc" && isPaperIndex(item.provider) ? item.provider : search)
+
 export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[] {
   const out: EvidenceItem[] = []
   for (const item of items) {
@@ -560,7 +568,7 @@ export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[
     const title = oneLine(withoutInlineTags(String(item.title ?? "")), MAX_TITLE_CHARS), text = plainBlock(withoutInlineTags(String(item.text ?? "")), MAX_SOURCE_CHARS)
     if (!title || text.length < 40) continue // nothing a statement could be checked against
     const image = imageUrl(item.image) // a picture the search returned with the page; never fetched by the engine
-    out.push({ url: item.url, title, text, provider: provider as EvidenceItem["provider"], ...(image ? { image } : {}) })
+    out.push({ url: item.url, title, text, provider: (provider === "europepmc" && isPaperIndex(item.provider) ? item.provider : provider) as EvidenceItem["provider"], ...(image ? { image } : {}) })
   }
   return out
 }
@@ -591,7 +599,7 @@ export function exaSpentBy(config: BoardConfig, id: string): number {
   return Math.max(0, usd)
 }
 
-export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
+export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
 
 /**
  * Why each numbered source was selected and what limits it, and why the others were not: assembled by code from what
@@ -649,9 +657,10 @@ export function numberSources(candidates: Candidate[], max: number, hypotheses: 
   }
   return ordered.slice(0, max).map((c, i) => {
     const note = noteOf(c.item, c.provider)
-    const year = c.provider === "europepmc" ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts writes "(Journal, 2025)" at the end of a title
+    const provider = providerOf(c.item, c.provider)
+    const year = provider === "europepmc" || isPaperIndex(provider) ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts and scholarly.ts write "(Journal, 2025)" at the end of a title
     const serves = hypotheses.filter((id) => c.serves.includes(id))
-    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), ...(c.item.image ? { image: c.item.image } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
+    return { n: i + 1, url: c.item.url, title: c.item.title, provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), ...(c.item.image ? { image: c.item.image } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
   })
 }
 
@@ -730,10 +739,10 @@ export const countsOf = (sources: number, statements: Statement[]): Counts => ({
 
 // ── The run ──────────────────────────────────────────────────────────────────────────────────────
 
-const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed and preprints", fixture: "Loading example sources" }
+const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar and arXiv", fixture: "Loading example sources" }
 const NOT_SEARCHED: Partial<Record<Provider, string>> = {
   exa: "The web search did not run, so this answer rests on the other searches only.",
-  europepmc: "PubMed and preprints were not searched, so this answer rests on the other searches only.",
+  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv) was not searched, so this answer rests on the other searches only.",
 }
 const hash = (value: unknown) => createHash("sha1").update(JSON.stringify(value)).digest("hex").slice(0, 16)
 /** First-pass calls that run at once, at most (as triage.ts does inside one FirstPass). */
@@ -1015,7 +1024,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           screened = screened.map((s) => (record_ && !s.keep && s.item.relevance !== 0 ? { ...s, keep: true } : s))
           screened.forEach((s, at) => {
             if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); tag?.chain?.add(urlKey(s.item.url)); kept++ }
-            else notSelected.push({ title: s.item.title, url: s.item.url, provider, order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
+            else notSelected.push({ title: s.item.title, url: s.item.url, provider: providerOf(s.item, provider), order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
           })
           end(step, "completed", { found: fresh.length, kept: screened.filter((s) => s.keep).length, summary: `${screened.filter((s) => s.keep).length} of ${fresh.length} kept.` })
         } catch (error) {
@@ -1106,7 +1115,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const db = databaseOf.get(h.id)
       const sameBefore = db ? tested.slice(0, at).filter((x) => databaseOf.get(x.id)?.source === db.source).length : 0
       await together([
-        search("europepmc", h.literature, { maxResults: 8, text: "abstracts" }, new Set(chain), () => deps.literature(h.literature), undefined, tag(1, at + 1)),
+        search("europepmc", h.literature, { maxResults: MAX_MERGED, text: "abstracts" }, new Set(chain), () => deps.literature(h.literature), undefined, tag(1, at + 1)),
         ...(db && deps.database ? [search(db.source, db.query, { text: "database records" }, new Set(chain), () => deps.database!(db.source, db.query), undefined, tag(2, sameBefore + 1))] : []),
       ])
     }
@@ -1124,7 +1133,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const afterFirst = keysOf()
       await together([
         ...moreWeb.map((w) => web(w, afterFirst)),
-        ...plan.literature.slice(0, level.queries).map((q) => search("europepmc", q, { maxResults: 8, text: "abstracts" }, afterFirst, () => deps.literature(q))),
+        ...plan.literature.slice(0, level.queries).map((q) => search("europepmc", q, { maxResults: MAX_MERGED, text: "abstracts" }, afterFirst, () => deps.literature(q))),
         ...plan.databases.slice(0, level.databaseLookups).map((d) => search(d.source, d.query, { text: "database records" }, afterFirst, () => deps.database!(d.source, d.query))),
       ])
       // A follow-up may list sources of the answer before it again, when they pass screening for the new question.

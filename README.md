@@ -148,6 +148,11 @@ only the biology word, never a person in the search. When none is about biology,
 cannot be read, curated biology questions are shown. On Overview a click fills the box; on
 Research it sends the question. If the engine cannot be reached, the older example questions stay.
 
+Research answers search the literature in four free sources at once: Europe PMC (PubMed and
+preprints), OpenAlex, Semantic Scholar and arXiv. A source that fails is skipped and named; a
+paper found twice is listed once. No key is needed. See
+[docs/research-answer.md](docs/research-answer.md#the-flow).
+
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
 service. Light is the default. Dark and Match system are in Settings → Appearance.
@@ -361,7 +366,7 @@ flowchart TB
     sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
     store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
     paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
-    free["<b>Free public sources</b><br/>Europe PMC: papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
+    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv:<br/>papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
 
     you --> app
     app -- "questions, starts, cancels" --> gate

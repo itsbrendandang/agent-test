@@ -26,11 +26,13 @@ export type BoardEvent =
 
 /**
  * `provider`: the search that found a source. "exa": a live Exa web search. "europepmc": a free literature search
- * (literature.ts). "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem": a record from that
+ * (literature.ts). "openalex", "semanticscholar", "arxiv": a paper the research answer's literature search found
+ * there (scholarly.ts). "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem": a record from that
  * public database (sources/). "fixture": a practice run's example source, not a search. Absent in runs recorded before
  * this field.
  */
-export type SearchProvider = "exa" | "europepmc" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem" | "fixture"
+export type SearchProvider = "exa" | "europepmc" | "openalex" | "semanticscholar" | "arxiv" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem" | "fixture"
+/** The searches of a board review. The research answer's paper indexes ("openalex", "semanticscholar", "arxiv") are not among them. */
 export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem", "fixture"]
 /**
  * One source in the evidence pool. `provider` and `query` say which search found it and with which query; they are set

@@ -1,7 +1,8 @@
 // A research-answer engine for tests: the real routes, pipeline and Pi Durable sessions, with every outside thing faked.
 //   models   pi-ai's faux providers under the real ids (anthropic: haiku and sonnet; openai: gpt-4o-mini and gpt-5-mini);
 //            each call is answered by a function chosen from the call's system prompt, and is recorded
-//   network  globalThis.fetch is replaced: Exa and Europe PMC are answered from tables, anything else throws
+//   network  globalThis.fetch is replaced: Exa and Europe PMC are answered from tables, OpenAlex, Semantic Scholar and
+//            arXiv find nothing, anything else throws
 //   folder   a temp folder for runs (so the Exa ledger and every answer live there), never board/runs
 // Nothing here can reach a vendor: keys are fake words and the only fetch is the fake.
 import { mkdtempSync, readFileSync } from "node:fs"
@@ -49,6 +50,10 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
     return (net.exa[Math.min(n, net.exa.length) - 1])(body ?? {})
   }
   if (url.startsWith("https://www.ebi.ac.uk/europepmc/webservices/rest/search?")) return net.europepmc(new URL(url).searchParams.get("query") ?? "")
+  // The other free literature indexes (scholarly.ts) find nothing here, so every answer's papers are Europe PMC's.
+  if (url.startsWith("https://api.openalex.org/works?")) return jsonResponse({ results: [] })
+  if (url.startsWith("https://api.semanticscholar.org/graph/v1/paper/search?")) return jsonResponse({ data: [] })
+  if (url.startsWith("https://export.arxiv.org/api/query?")) return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 })
   throw new Error(`a test tried to reach ${url}`)
 }) as typeof fetch
 

@@ -75,5 +75,5 @@ test("the example streams in test/fixtures/research are what the code emits toda
   const sources = (streams.real.find((e) => e.type === "sources") as { items: { provider: string; url: string }[] }).items
   assert.deepEqual(sources.filter((s) => s.provider === "clinicaltrials").map((s) => s.url), ["https://clinicaltrials.gov/study/NCT03574597"])
   const failedEnd = streams["failed-source"].find((e) => e.type === "missing") as { items: string[] }
-  assert.deepEqual(failedEnd.items.map((m) => m.slice(0, 44)), ["Web search (Exa) could not be used (Exa 503:", "Literature search (Europe PMC: PubMed abstra", "ClinicalTrials.gov database could not be use"])
+  assert.deepEqual(failedEnd.items.map((m) => m.slice(0, 44)), ["Web search (Exa) could not be used (Exa 503:", "Literature search (PubMed, OpenAlex, Semanti", "ClinicalTrials.gov database could not be use"])
 })
