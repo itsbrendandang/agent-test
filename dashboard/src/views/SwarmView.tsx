@@ -91,7 +91,7 @@ function ScoreCellView({ cell, onOpen }: { cell: ScoreCell | undefined; onOpen: 
       aria-label={`Open run ${cell.id}: ${[what, ...cell.extras].join(", ")}`}>
       <b>{fmtScore(cell.score)}</b>
       {state !== "done" && <StatusPill state={state} />}
-      {cell.extras.map((e) => <span key={e} className="swarm-extra">{e}</span>)}
+      {cell.extras.map((e) => <span key={e} className="pill" data-kind="outline">{e}</span>)}
     </button>
   )
 }
@@ -207,9 +207,9 @@ export function SwarmView() {
             <h3>Claims</h3>
             <p>The swarm writes down what it thinks it found. Each of these is a claim. Then it tests each claim and tries to prove it wrong.</p>
             <ul>
-              <li><span className="sv sv-supported">supported</span> The claim passed its tests. It counts as a finding.</li>
-              <li><span className="sv sv-refuted">refuted</span> A test went against the claim. It is rejected and is not reported as a finding.</li>
-              <li><span className="sv sv-untested">not established</span> There was not enough evidence, or a planned test has no result, or no test was run. It is not reported as a finding.</li>
+              <li><span className="pill sv-supported">supported</span> The claim passed its tests. It counts as a finding.</li>
+              <li><span className="pill sv-refuted">refuted</span> A test went against the claim. It is rejected and is not reported as a finding.</li>
+              <li><span className="pill sv-untested">not established</span> There was not enough evidence, or a planned test has no result, or no test was run. It is not reported as a finding.</li>
             </ul>
             <p>Code decides each result from the test numbers. A single agent has no reviewer, so it has no checked claims.</p>
             <h3>Difference</h3>
@@ -259,9 +259,9 @@ export function SwarmView() {
           )}
           {run.solver === "glhf" && ledger && (
             <p className="swarm-counts">
-              <span className="sv sv-supported">{count.supported} supported</span>
-              <span className="sv sv-refuted">{count.refuted} refuted</span>
-              <span className="sv sv-untested">{count.open} not established</span>
+              <span className="pill sv-supported">{count.supported} supported</span>
+              <span className="pill sv-refuted">{count.refuted} refuted</span>
+              <span className="pill sv-untested">{count.open} not established</span>
               <span className="muted small">of {claims.length} claim{claims.length === 1 ? "" : "s"} · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
             </p>
           )}
@@ -319,7 +319,7 @@ export function SwarmView() {
 
 
       {!details && run && (
-        <button type="button" className="swarm-link" onClick={() => setDetails(true)}>See every claim, test and problem, and the reports →</button>
+        <button type="button" className="link-btn swarm-more-link" onClick={() => setDetails(true)}>See every claim, test and problem, and the reports →</button>
       )}
 
       {details && run && (
@@ -341,7 +341,7 @@ export function SwarmView() {
             {claims.length === 0 && <p className="muted small">{run.solver === "single" ? "A single agent registers no claims." : "No claims yet."}</p>}
             {claims.map((c) => (
               <article key={c.id} className="swarm-claim">
-                <header><span className={`sv sv-${c.verdict}`}>{c.verdict}</span><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
+                <header><span className={`pill sv-${c.verdict}`}>{c.verdict}</span><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
                 <p>{c.text}</p>
                 <p className="swarm-note">If the claim were false: {c.null_hypothesis}</p>
                 <p className="swarm-note">
@@ -356,7 +356,7 @@ export function SwarmView() {
             {issues.map((i) => (
               <article key={i.id} className="swarm-issue">
                 <header>
-                  <span className={`sv sv-${i.severity}`}>{i.severity}</span><span className={`sv sv-${i.status}`}>{i.status}</span>
+                  <span className={`pill sv-${i.severity}`}>{i.severity}</span><span className={`pill sv-${i.status}`}>{i.status}</span>
                   <b>{i.id}</b><span className="muted small">from {i.raised_by} · outputs: {i.artifact_ids.join(", ") || "none"}</span>
                 </header>
                 <p>{i.problem}</p>
@@ -473,8 +473,8 @@ function ClaimTests({ claim: c }: { claim: LedgerClaim }) {
         {c.tests.map((t, i) => (
           <li key={`r${i}`}>
             <b>{t.name}</b> · p = {num(t.p_value)} · e = {num(t.e_value)}
-            {t.contradicts && <> · <span className="sv sv-refuted">goes against the claim</span></>}
-            {t.registered === false && <> · <span className="sv sv-minor" title="A result that goes against a claim is always accepted, planned or not.">not planned beforehand</span></>}
+            {t.contradicts && <> · <span className="pill sv-refuted">goes against the claim</span></>}
+            {t.registered === false && <> · <span className="pill sv-minor" title="A result that goes against a claim is always accepted, planned or not.">not planned beforehand</span></>}
             <span className="muted"> · by {t.by}</span>
             {plan(t.name) && <div className="muted">Planned: {plan(t.name)!.method}</div>}
             {t.note && <div className="muted">{t.note}</div>}
@@ -482,7 +482,7 @@ function ClaimTests({ claim: c }: { claim: LedgerClaim }) {
         ))}
         {pending.map((name) => (
           <li key={`p${name}`} data-pending>
-            <b>{name}</b> · <span className="sv sv-insufficient">no result recorded</span> · counts as e = 0
+            <b>{name}</b> · <span className="pill sv-insufficient">no result recorded</span> · counts as e = 0
             {plan(name) && <><span className="muted"> · planned by {plan(name)!.by}</span><div className="muted">Planned: {plan(name)!.method}</div></>}
           </li>
         ))}

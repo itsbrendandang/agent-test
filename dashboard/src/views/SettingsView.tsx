@@ -8,8 +8,6 @@ import { call, isDesktop } from "@/system/desktop"
 const PROVIDERS = [
   { id: "openai", name: "OpenAI", hint: "sk-..." },
   { id: "anthropic", name: "Anthropic", hint: "sk-ant-..." },
-  { id: "xai", name: "xAI", hint: "xai-..." },
-  { id: "google", name: "Google Gemini", hint: "AIza..." },
 ]
 
 type Result = { ok: boolean; detail: string } | "testing" | undefined
@@ -48,15 +46,15 @@ export function SettingsView() {
 
   return (
     <div className="page settings">
-      <PageHead title="Settings" about="What the engine on this machine can use, and the API keys kept by the desktop app." />
+      <PageHead title="Settings" about={isDesktop ? "What the engine on this machine can use, and the API keys kept by the desktop app." : "What the engine on this machine can use. Keys are set in its .env file, never in this page."} />
       <EngineSection />
+      {isDesktop && (
       <section className="keys" aria-labelledby="keys-title">
         <h2 id="keys-title">Desktop app API keys</h2>
         <p className="muted small">
           Connect a model provider to test it. Keys are stored in your Mac's keychain, not in this window, and are
           sent only to the provider they belong to. No agent uses them yet.
         </p>
-        {!isDesktop && <p className="pill pill-warning">Connecting keys needs the desktop app</p>}
         <ul>
           {PROVIDERS.map((p) => {
             const r = result[p.id]
@@ -89,6 +87,7 @@ export function SettingsView() {
           })}
         </ul>
       </section>
+      )}
     </div>
   )
 }

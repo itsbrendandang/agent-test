@@ -141,6 +141,11 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   if (o.reducedMotion) graph.warmupTicks(400).cooldownTicks(0)
   else graph.warmupTicks(60).cooldownTime(3500)
   graph.d3Force("charge")?.strength((n: unknown) => -24 - sizeOf((n as Sim).node, false) * 5)
+  // A light pull towards the middle keeps loosely connected nodes (a checker that ruled on two claims) from drifting far
+  // away, which would make the whole graph small after the camera fits it.
+  let pulled: Sim[] = []
+  const gravity = Object.assign((alpha: number) => { for (const n of pulled) { const k = 0.06 * alpha; n.vx = (n.vx ?? 0) - (n.x ?? 0) * k; n.vy = (n.vy ?? 0) - (n.y ?? 0) * k; n.vz = (n.vz ?? 0) - (n.z ?? 0) * k } }, { initialize: (nodes: Sim[]) => { pulled = nodes } })
+  graph.d3Force("gravity", gravity as never)
   const linkForce = graph.d3Force("link") as { distance?: (f: (l: unknown) => number) => void; strength?: (f: (l: unknown) => number) => void } | undefined
   linkForce?.distance?.((l) => LINK_DISTANCE[linkNode(l).kind] ?? 40)
   linkForce?.strength?.((l) => (STRENGTH[linkNode(l).kind] ?? 0.7))

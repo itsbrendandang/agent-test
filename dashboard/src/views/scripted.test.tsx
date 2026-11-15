@@ -7,6 +7,7 @@ import { forgetScripted, swarmScripted } from "@/lib/scripted"
 import { routes } from "@/test/engine"
 import { BoardView } from "./BoardView"
 import { ExperimentsView } from "./ExperimentsView"
+import { SettingsView } from "./SettingsView"
 
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
 beforeEach(() => {
@@ -91,6 +92,26 @@ describe("Runs list", () => {
     list(false)
     await card("s-mock")
     expect(screen.getByRole("searchbox", { name: "Search experiments by keyword" })).not.toHaveFocus()
+  })
+})
+
+describe("one place for each input", () => {
+  it("Runs has the keyword search and no Ask box: questions are asked on Home", async () => {
+    const sent = routes({ "GET /api/search": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] } })
+    render(<ExperimentsView onOpen={() => {}} />)
+    expect(await screen.findByText(/No experiments yet/)).toBeInTheDocument()
+    expect(screen.getAllByRole("searchbox")).toHaveLength(1)
+    expect(screen.queryByRole("textbox")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()
+    expect(sent.some((r) => r.url.includes("/api/ask"))).toBe(false)
+  })
+  it("Settings in a browser shows what the engine has, and no place to type an API key", async () => {
+    routes({ "GET /api/glhf/status": { status: 200, body: { paidCalls: false, tools: { docker: true }, keys: { ANTHROPIC_API_KEY: true } } }, "GET /api/status": { status: 200, body: { keys: { EXA_API_KEY: false } } } })
+    const { container } = render(<SettingsView />)
+    expect(await screen.findByText("ANTHROPIC_API_KEY")).toBeInTheDocument()
+    expect(screen.queryByText("Desktop app API keys")).toBeNull()
+    expect(container.querySelectorAll("input")).toHaveLength(0)
+    for (const gone of ["xAI", "Google Gemini"]) expect(screen.queryByText(gone)).toBeNull()
   })
 })
 

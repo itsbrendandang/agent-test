@@ -17,7 +17,7 @@ export function PageHead({ title, about, children }: { title: string; about: Rea
 }
 
 export function StatusPill({ state }: { state: RunState }) {
-  return <span className="pill status-pill" data-kind={STATE_KIND[state]}>{state}</span>
+  return <span className="pill" data-kind={STATE_KIND[state]}>{state}</span>
 }
 
 /** A long id cut to fit, with the whole id on hover and for screen readers. */
@@ -43,7 +43,7 @@ export function EngineOffline({ needs, onRetry }: { needs: string; onRetry?: () 
 export function ModeLabel({ scripted, demo }: { scripted: Scripted; demo?: boolean }) {
   if (scripted === undefined && !demo) return null
   return (
-    <span className="pill mode-label" data-kind={scripted ? "neutral" : scripted === false ? "info" : "warning"} data-mode={scripted ? "scripted" : scripted === false ? "real" : "demo"}>
+    <span className="pill" data-kind={scripted ? "neutral" : scripted === false ? "info" : "warning"} data-mode={scripted ? "scripted" : scripted === false ? "real" : "demo"}>
       {scripted ? "scripted: fixed text, not research" : scripted === false ? "real model" : ""}{demo ? `${scripted === undefined ? "" : " · "}demo case` : ""}
     </span>
   )

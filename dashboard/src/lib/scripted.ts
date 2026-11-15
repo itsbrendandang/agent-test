@@ -38,21 +38,23 @@ export async function boardScripted(id: string, signal?: AbortSignal): Promise<S
 const known = new Map<string, Scripted>()
 /** For tests. */
 export const forgetScripted = () => known.clear()
+/** The engine allows only so many event streams at once, so the runs are read a few at a time. */
+const AT_ONCE = 4
 
-/** The scripted flag of each board run in `ids`, filled in as each is read. A run is read once per page load. */
+/** The scripted flag of each board run in `ids`, filled in as each is read. A run that was read is not read again. */
 export function useBoardScripted(ids: string[]): Record<string, Scripted> {
   const [, setTick] = useState(0)
   const key = ids.join("\n")
   useEffect(() => {
     const stop = new AbortController()
-    for (const id of key ? key.split("\n") : []) {
-      if (known.has(id)) continue
-      known.set(id, undefined)
-      void boardScripted(id, stop.signal).then((flag) => {
-        if (stop.signal.aborted && flag === undefined) { known.delete(id); return } // not read: read it next time
-        known.set(id, flag); setTick((n) => n + 1)
-      })
+    const todo = (key ? key.split("\n") : []).filter((id) => !known.has(id))
+    const worker = async () => {
+      for (let id = todo.shift(); id !== undefined && !stop.signal.aborted; id = todo.shift()) {
+        const flag = await boardScripted(id, stop.signal)
+        if (flag !== undefined) { known.set(id, flag); setTick((n) => n + 1) } // a run that could not be read is tried again later
+      }
     }
+    for (let i = 0; i < AT_ONCE; i++) void worker()
     return () => stop.abort()
   }, [key])
   return Object.fromEntries(ids.map((id) => [id, known.get(id)]))

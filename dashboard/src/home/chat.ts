@@ -4,7 +4,7 @@ import { HOW_TO_TURN_ON } from "@/lib/paid"
 import type { RunSummary } from "@/board/api"
 import { fmtDuration } from "@/lib/format"
 import type { ScoreRow } from "@/swarm/api"
-import type { Catalog, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, SearchKind, SearchResult, StartRequest } from "./api"
+import type { Catalog, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
 export const MODE_LABEL: Record<ChatMode, string> = {
@@ -146,25 +146,6 @@ export function loadTurns(): Turn[] {
 export const saveTurns = (turns: Turn[]) => {
   try { if (turns.length) sessionStorage.setItem(STORE, JSON.stringify(turns)); else sessionStorage.removeItem(STORE) } catch { /* storage full or off: the conversation stays in memory */ }
 }
-
-// ---- search (finds what exists; the chat asks a question)
-export const SEARCH_KINDS: readonly { id: SearchKind | "all"; label: string }[] = [
-  { id: "all", label: "All" }, { id: "swarm", label: "Swarm runs" }, { id: "board", label: "Board reviews" }, { id: "agent", label: "Agents" }, { id: "skill", label: "Skills" },
-]
-export const KIND_LABEL: Record<SearchKind, string> = { swarm: "swarm run", board: "board review", agent: "agent", skill: "skill" }
-/** Where a result opens: a run in its view, an agent or a skill in the Agents view. */
-export const viewOfResult = (r: Pick<SearchResult, "kind">): "Compare" | "Board" | "Agents" => (r.kind === "swarm" ? "Compare" : r.kind === "board" ? "Board" : "Agents")
-
-/** Text cut into pieces, with the pieces that are one of the query's words marked. Matching ignores case. */
-export function highlight(text: string, query: string): { text: string; hit: boolean }[] {
-  const words = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))]
-  if (!words.length || !text) return text ? [{ text, hit: false }] : []
-  const pattern = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length).join("|")})`, "gi")
-  return text.split(pattern).filter(Boolean).map((part) => ({ text: part, hit: words.includes(part.toLowerCase()) }))
-}
-/** The row the arrow keys move to. -1 is the search field itself; the ends do not wrap. */
-export const moveActive = (active: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End", count: number): number =>
-  count === 0 ? -1 : key === "ArrowDown" ? Math.min(count - 1, active + 1) : key === "ArrowUp" ? Math.max(-1, active - 1) : key === "Home" ? 0 : count - 1
 
 // ---- "What was checked"
 /** The newest row where both solvers ran with the same settings and both were graded. */

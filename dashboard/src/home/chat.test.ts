@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { CATALOG_ON, EFFORTS, PLAN, reply, SCRIPTED_PLAN } from "@/test/home"
-import { routes, to } from "@/test/engine"
-import { ChatRefused, getCatalog, searchAll, sendChat, startPlan } from "./api"
+import { routes } from "@/test/engine"
+import { ChatRefused, getCatalog, sendChat, startPlan } from "./api"
 import {
-  chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, highlight, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
-  MODE_LABEL, moveActive, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, viewOfResult, type Turn,
+  chatRequest, controlOf, editsOf, effortFacts, effortInEffect, estimateText, KEY_REFUSAL, loadEffort, loadTurns, looksLikeKey, MAX_HISTORY, MAX_MESSAGE,
+  MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, startBlock, startRequest, type Turn,
 } from "./chat"
 
 const turns: Turn[] = [
@@ -156,29 +156,6 @@ describe("the conversation of a session", () => {
   })
 })
 
-describe("search helpers", () => {
-  it("marks the query's words, whatever their case", () => {
-    expect(highlight("hERG liability of HERG blockers", "herg")).toEqual([{ text: "hERG", hit: true }, { text: " liability of ", hit: false }, { text: "HERG", hit: true }, { text: " blockers", hit: false }])
-    expect(highlight("plain", "")).toEqual([{ text: "plain", hit: false }])
-    expect(highlight("", "x")).toEqual([])
-  })
-  it("treats the query as words, not as a pattern", () => {
-    expect(highlight("a(b[ c.d", "a(b[ .")).toEqual([{ text: "a(b[", hit: true }, { text: " c", hit: false }, { text: ".", hit: true }, { text: "d", hit: false }])
-  })
-  it("moves through the rows without wrapping; -1 is the field", () => {
-    expect(moveActive(-1, "ArrowDown", 3)).toBe(0)
-    expect(moveActive(2, "ArrowDown", 3)).toBe(2)
-    expect(moveActive(0, "ArrowUp", 3)).toBe(-1)
-    expect(moveActive(-1, "ArrowUp", 3)).toBe(-1)
-    expect(moveActive(1, "Home", 3)).toBe(0)
-    expect(moveActive(1, "End", 3)).toBe(2)
-    expect(moveActive(0, "ArrowDown", 0)).toBe(-1)
-  })
-  it("opens runs in their view and agents and skills in Agents", () => {
-    expect((["swarm", "board", "agent", "skill"] as const).map((kind) => viewOfResult({ kind }))).toEqual(["Compare", "Board", "Agents", "Agents"])
-  })
-})
-
 describe("client", () => {
   it("POSTs the conversation and keeps only what it can read of the reply", async () => {
     const sent = routes({ "POST /api/chat": { status: 200, body: { reply: "hi", mode: "scripted", note: "", runs: [{ kind: "board", id: "a", title: "t", why: "w" }, { kind: "other" }], plan: { id: 1 }, extra: true } } })
@@ -210,10 +187,5 @@ describe("client", () => {
   it("refuses a catalog it cannot read", async () => {
     routes({ "GET /api/chat/catalog": { status: 200, body: { paidCalls: "no" } } })
     await expect(getCatalog()).rejects.toMatchObject({ message: "The engine sent a catalog this page cannot read." })
-  })
-  it("searches with q, kind and limit, and leaves out rows it cannot read", async () => {
-    const sent = routes({ "GET /api/chat/search": { status: 200, body: { mode: "keyword", results: [{ kind: "agent", id: "tox", title: "Toxicologist" }, { kind: "memo", id: "x", title: "t" }, { kind: "skill", id: 4 }] } } })
-    expect(await searchAll("hERG risk", "agent", 5)).toEqual([{ kind: "agent", id: "tox", title: "Toxicologist", excerpt: "" }])
-    expect(to(sent, "GET", "/api/chat/search")[0].query).toBe("?q=hERG%20risk&kind=agent&limit=5")
   })
 })

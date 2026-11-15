@@ -52,10 +52,6 @@ export interface ChatReply { reply: string; mode: ChatMode; note?: string; runs?
 export interface ChatRequest { messages: ChatMessage[]; provider?: ProviderId; model?: string; effort?: EffortId }
 export interface StartRequest { confirm: true; effort?: EffortId; limits?: PlanLimits; agents?: string[] }
 
-export type SearchKind = "swarm" | "board" | "agent" | "skill"
-export interface SearchResult { kind: SearchKind; id: string; title: string; excerpt: string; status?: string; score?: number; startedAt?: number }
-/** GET /api/chat/search: a word search over runs, agents and skills. No model is involved. */
-export interface SearchReply { results: SearchResult[]; mode: "keyword" }
 export interface Started { kind: "board"; id: string }
 
 /** The engine said no, or could not be reached (status 0). `field`: the control a 400 is about. `run`: on 409, the run the plan already started, when the engine names it. */
@@ -116,20 +112,4 @@ export async function startPlan(id: string, request: StartRequest): Promise<Star
   const body = await call<Partial<Started>>(`/api/chat/plans/${encodeURIComponent(id)}/start`, json(request))
   if (!body || typeof body.id !== "string") throw new ChatRefused("The engine started something but did not say what.", 200)
   return { kind: "board", id: body.id }
-}
-
-const KINDS: readonly string[] = ["swarm", "board", "agent", "skill"]
-/** Searches existing runs, agents and skills. Results the page cannot read are left out. */
-export async function searchAll(q: string, kind: SearchKind | "all", limit = 20, signal?: AbortSignal): Promise<SearchResult[]> {
-  let r: Response
-  try { r = await fetch(`${ENGINE}/api/chat/search?q=${encodeURIComponent(q)}&kind=${kind}&limit=${limit}`, { signal }) }
-  catch (error) {
-    if ((error as Error)?.name === "AbortError") throw error
-    throw new ChatRefused("The engine cannot be reached. Start it from the repo root with npm run engine.", 0)
-  }
-  const body = (await r.json().catch(() => undefined)) as Partial<SearchReply> & { error?: unknown } | undefined
-  if (!r.ok) throw new ChatRefused(r.status === 404 ? NO_CHAT_ROUTES : typeof body?.error === "string" ? body.error : `The engine answered ${r.status}.`, r.status)
-  if (!body || !Array.isArray(body.results)) throw new ChatRefused("The engine sent search results this page cannot read.", 200)
-  return body.results.filter((x) => x && KINDS.includes(x.kind) && typeof x.id === "string" && typeof x.title === "string")
-    .map((x) => ({ ...x, excerpt: typeof x.excerpt === "string" ? x.excerpt : "" }))
 }

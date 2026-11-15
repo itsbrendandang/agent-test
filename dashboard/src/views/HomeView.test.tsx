@@ -3,7 +3,6 @@ import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
-import { AgentCatalog } from "@/home/AgentCatalog"
 import type { Catalog } from "@/home/api"
 import { TOKEN_HEADER } from "@/lib/token"
 import { routes, to } from "@/test/engine"
@@ -490,7 +489,7 @@ describe("what this can use", () => {
     expect(row("OpenRouter")).toHaveTextContent("key missing")
     expect(row("Exa search")).toHaveTextContent("key missing")
     expect(panel.getByText("Paid calls on")).toBeInTheDocument()
-    expect(t.view.container.querySelectorAll("input[type=password], input[type=text]")).toHaveLength(0)
+    expect(t.view.container.querySelectorAll("input[type=password], input[type=text], input[type=search]")).toHaveLength(0)
   })
   it("says paid calls are off and how a person turns them on", async () => {
     home(CATALOG_OFF)
@@ -586,131 +585,12 @@ describe("an engine that was started before the chat routes existed", () => {
   })
 })
 
-describe("search", () => {
-  const RESULTS = { status: 200, body: { mode: "keyword", results: [
-    { kind: "swarm", id: "202611141543-demo-glhf", title: "Task demo · swarm · mock", excerpt: "claim C2 refuted: hERG rows missing", status: "done", score: 1, startedAt: 1794688999518 },
-    { kind: "board", id: "202611142034-kras", title: "Drug board · kras hERG", excerpt: "hERG IC50 of 6 uM fails", status: "done" },
-    { kind: "agent", id: "toxicologist", title: "Toxicologist", excerpt: "Judges hERG safety margins" },
-    { kind: "skill", id: "herg-triage", title: "herg-triage", excerpt: "How to read hERG patch-clamp data." },
-  ] } }
-  const field = () => screen.getByRole("combobox", { name: "Search" })
-  const options = () => within(screen.getByRole("listbox", { name: "Search results" })).findAllByRole("option")
-  const searches = (t: ReturnType<typeof home>) => to(t.sent, "GET", "/api/chat/search")
-
-  it("is a field of its own, labelled apart from the chat box", () => {
-    home(CATALOG_ON)
-    expect(field()).not.toBe(screen.getByLabelText("Ask a research question"))
-    expect(field()).toHaveAccessibleDescription(/Search finds runs, agents and skills that already exist.*To ask a question or plan research, use the chat box/)
-  })
-  it("waits until typing pauses, then asks once; it never calls the chat", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    expect(searches(t)).toHaveLength(0)
-    expect(await options()).toHaveLength(4)
-    expect(searches(t)).toHaveLength(1)
-    expect(searches(t)[0].query).toBe("?q=herg&kind=all&limit=20")
-    expect(t.chats()).toHaveLength(0)
-  })
-  it("shows kind, status, score, and marks the matches", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    const rows = await options()
-    expect(rows[0]).toHaveTextContent("swarm run")
-    expect(rows[0]).toHaveTextContent("done")
-    expect(rows[0]).toHaveTextContent("1.000")
-    expect(rows[2]).toHaveTextContent("agent")
-    expect([...rows[1].querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["hERG", "hERG"])
-    expect(screen.getByText(/4 results · keyword search, no model/)).toBeInTheDocument()
-  })
-  it("filters by kind with the chips", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    await options()
-    await t.user.click(screen.getByRole("button", { name: "Skills" }))
-    await waitFor(() => expect(searches(t).at(-1)!.query).toBe("?q=herg&kind=skill&limit=20"))
-    expect(screen.getByRole("button", { name: "Skills" })).toHaveAttribute("aria-pressed", "true")
-    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false")
-  })
-  it("arrow keys move through the results and Enter opens a run through takeOpen", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    const rows = await options()
-    await t.user.keyboard("{ArrowDown}{ArrowDown}")
-    expect(rows[1]).toHaveAttribute("aria-selected", "true")
-    expect(field()).toHaveAttribute("aria-activedescendant", rows[1].id)
-    await t.user.keyboard("{ArrowUp}")
-    expect(rows[0]).toHaveAttribute("aria-selected", "true")
-    await t.user.keyboard("{End}")
-    expect(rows[3]).toHaveAttribute("aria-selected", "true")
-    await t.user.keyboard("{Home}{ArrowDown}{Enter}")
-    expect(sessionStorage.getItem("open.board")).toBe("202611142034-kras")
-    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
-    expect(t.chats()).toHaveLength(0)
-  })
-  it("Enter without moving opens the first result; a click opens the one clicked", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    await options()
-    await t.user.keyboard("{Enter}")
-    expect(sessionStorage.getItem("open.swarm")).toBe("202611141543-demo-glhf")
-    expect(t.onOpen).toHaveBeenLastCalledWith("Compare")
-  })
-  it("opens an agent or a skill in the Agents view at that item", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    const rows = await options()
-    await t.user.click(rows[3])
-    expect(sessionStorage.getItem("open.agents")).toBe("skill:herg-triage")
-    expect(t.onOpen).toHaveBeenLastCalledWith("Agents")
-    t.view.unmount()
-    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
-    render(<AgentCatalog />)
-    const card = (await screen.findByText("herg-triage")).closest("li")!
-    await waitFor(() => expect(card).toHaveAttribute("data-target"))
-    expect(card).toHaveFocus()
-    expect(screen.getByText("Toxicologist").closest("article")).not.toHaveAttribute("data-target")
-  })
-  it("Escape closes the results and keeps the words", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.type(field(), "herg")
-    await options()
-    await t.user.keyboard("{Escape}")
-    expect(field()).toHaveAttribute("aria-expanded", "false")
-    expect(field()).toHaveValue("herg")
-  })
-  it("'/' and Ctrl+K or Cmd+K put the cursor in the search field, but '/' typed into the chat box is just a slash", async () => {
+describe("one input", () => {
+  it("has the chat box and no search field: keyword search is on Runs", () => {
     const t = home(CATALOG_ON)
+    expect(t.view.container.querySelectorAll("textarea")).toHaveLength(1)
+    expect(screen.queryByRole("searchbox")).toBeNull()
+    expect(screen.queryByRole("combobox", { name: "Search" })).toBeNull()
     expect(t.box()).toHaveFocus()
-    await t.user.keyboard("/")
-    expect(t.box()).toHaveFocus()
-    expect(t.box()).toHaveValue("/")
-    await t.user.keyboard("{Control>}k{/Control}")
-    expect(field()).toHaveFocus()
-    t.box().focus()
-    await t.user.keyboard("{Meta>}k{/Meta}")
-    expect(field()).toHaveFocus()
-    ;(document.activeElement as HTMLElement).blur()
-    await t.user.keyboard("/")
-    expect(field()).toHaveFocus()
-    expect(field()).toHaveValue("")
-  })
-  it("with nothing typed asks nothing, and says what search is for and how to use it", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": RESULTS })
-    await t.user.click(field())
-    await new Promise((done) => setTimeout(done, 300))
-    expect(searches(t)).toHaveLength(0)
-    expect(field()).toHaveAttribute("aria-expanded", "false")
-    expect(screen.getByText(/Type a word to search/)).toBeVisible()
-    expect(within(screen.getByRole("listbox", { name: "Search results" })).queryAllByRole("option")).toHaveLength(0)
-  })
-  it("says so when nothing matches, and points to the chat box for questions", async () => {
-    const t = home(CATALOG_ON, { "GET /api/chat/search": { status: 200, body: { results: [], mode: "keyword" } } })
-    await t.user.type(field(), "zzz")
-    expect(await screen.findByText(/Nothing matches “zzz”\. Try fewer words\. To ask a question, use the chat box\./)).toBeInTheDocument()
-  })
-  it("says so when the search fails", async () => {
-    const t = home(CATALOG_ON)
-    await t.user.type(field(), "herg")
-    expect(await screen.findByText(/Search did not work: The engine cannot be reached/)).toBeInTheDocument()
   })
 })

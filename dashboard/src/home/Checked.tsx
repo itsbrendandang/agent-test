@@ -34,9 +34,9 @@ export function Checked({ onOpen }: { onOpen: (kind: "swarm" | "board", id: stri
           <span className="home-checked-what">Latest board review <ModeLabel scripted={f.scripted} /></span>
           {events.length === 0 ? <span className="muted small">reading its checks…</span> : (
             <span className="trust">
-              <span className="v v-verified">{f.verified} verified</span>
-              <span className="v v-contradicted">{f.contradicted} contradicted</span>
-              <span className="v v-unsupported">{f.unsupported + f.unchecked} unsupported</span>
+              <span className="pill v-verified">{f.verified} verified</span>
+              <span className="pill v-contradicted">{f.contradicted} contradicted</span>
+              <span className="pill v-unsupported">{f.unsupported + f.unchecked} unsupported</span>
               <span className="muted small">of {f.claims.length} claims</span>
             </span>
           )}

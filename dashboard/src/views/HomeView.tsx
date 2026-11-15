@@ -3,20 +3,19 @@
 // until a person confirms it in its card. The conversation is kept for the browser session only.
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { PageHead } from "@/components/Shared"
-import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type ProviderId, type SearchResult } from "@/home/api"
+import { ChatRefused, getCatalog, sendChat, type Catalog, type EffortId, type ProviderId } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
-import { chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, viewOfResult, type Choice, type PlanState, type Turn } from "@/home/chat"
+import { chatRequest, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
 import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
-import { SearchBox } from "@/home/SearchBox"
-import { setOpen, setOpenItem, viewOfKind } from "@/lib/open"
+import { setOpen, viewOfKind } from "@/lib/open"
 
 const ABOUT = "Ask a research question. The answer says whether a model wrote it, links the runs it used, and may propose a plan that starts only when you confirm it."
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
-export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Agents") => void }) {
+export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
   const [turns, setTurns] = useState<Turn[]>(loadTurns)
   const [text, setText] = useState("")
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
@@ -80,10 +79,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Age
   }
   const clear = () => { asking.current?.abort(); setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
   const openRun = (kind: "swarm" | "board", id: string) => { setOpen(kind, id); onOpen(viewOfKind(kind)) }
-  const openResult = (r: SearchResult) => {
-    if (r.kind === "swarm" || r.kind === "board") return openRun(r.kind, r.id)
-    setOpenItem(r.kind, r.id); onOpen(viewOfResult(r))
-  }
   /** The plan of one reply, asked for again at another effort. The reply is replaced only when a new plan arrives. */
   const replan = async (turnId: number, next: EffortId): Promise<string | undefined> => {
     const request = replanRequest(turns, turnId, { ...choice, effort: next })
@@ -103,7 +98,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Age
     <div className="page home-chat" data-wide>
       <PageHead title="Home" about={ABOUT}>
         {!empty && <button type="button" className="btn" onClick={clear}>Clear conversation</button>}
-        <SearchBox onOpen={openResult} />
       </PageHead>
       <div className="home-cols">
         <section className="home-main" aria-label="Conversation">
@@ -131,7 +125,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Age
                     {t.reply.runs.map((r) => (
                       <li key={`${r.kind}:${r.id}`}>
                         <button type="button" className="exp-hit card-surface" onClick={() => openRun(r.kind, r.id)}>
-                          <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
+                          <span className="exp-head"><b>{r.title}</b><span className="pill" data-kind="outline">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
                           <span className="muted small run-id" title={r.id}>{r.id}</span>
                           {r.why && <span className="exp-match small">{r.why}</span>}
                         </button>

@@ -127,32 +127,37 @@ export function GraphScreen() {
             <button type="submit" className="btn" disabled={!query || matches.length === 0}>Find</button>
             {query && <span className="muted small" role="status">{matches.length === 0 ? "No match" : `${matches.length} match${matches.length === 1 ? "" : "es"}; Enter for the next`}</span>}
           </form>
-          <label className="graph-check"><input type="checkbox" checked={emphasis} onChange={(e) => setEmphasis(e.target.checked)} /><span>Refuted and contested first</span></label>
           <div className="graph-seg" role="group" aria-label="Show as">
             <button type="button" className="btn" aria-pressed={!useList} disabled={unavailable !== undefined} onClick={() => setMode("graph")}>3D graph</button>
             <button type="button" className="btn" aria-pressed={useList} onClick={() => setMode("list")}>List</button>
           </div>
         </div>
         <div className="graph-row">
-          <fieldset className="graph-filter"><legend>Show</legend>
-            {NODE_KINDS.filter((k) => full?.nodes.some((n) => n.kind === k)).map((k) => (
-              <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenKinds.has(k)} disabled={k === "run"} onChange={() => setHiddenKinds((s) => toggle(s, k))} /><span>{KIND_LABEL[k]}</span></label>
-            ))}
-          </fieldset>
+          <label className="graph-check"><input type="checkbox" checked={emphasis} onChange={(e) => setEmphasis(e.target.checked)} /><span>Refuted and contested first</span></label>
           <fieldset className="graph-filter"><legend>Verdict</legend>
             {VERDICT_CLASSES.map((v) => (
               <label key={v} className="graph-check" title={VERDICT_WORD[v]}><input type="checkbox" checked={!hiddenVerdicts.has(v)} onChange={() => setHiddenVerdicts((s) => toggle(s, v))} /><span><span aria-hidden="true">{GLYPH[v]}</span> {v === "pass" ? "verified" : v === "fail" ? "refuted" : "not established"}</span></label>
-            ))}
-          </fieldset>
-          <fieldset className="graph-filter"><legend>Lines</legend>
-            {LINK_KINDS.filter((k) => full?.links.some((l) => l.kind === k)).map((k) => (
-              <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenLinks.has(k)} onChange={() => setHiddenLinks((s) => toggle(s, k))} /><span>{LINK_LABEL[k]}</span></label>
             ))}
           </fieldset>
           <button type="button" className="btn" onClick={jumpRefuted} disabled={refuted.length === 0}>
             <span aria-hidden="true">{GLYPH.fail}</span> Next refuted or contested ({refuted.length})
           </button>
         </div>
+        <details className="graph-more">
+          <summary>More filters: kinds of node and kinds of line{hiddenKinds.size + hiddenLinks.size > 0 ? ` (${hiddenKinds.size} node kinds and ${hiddenLinks.size} line kinds hidden)` : ""}</summary>
+          <div className="graph-row">
+            <fieldset className="graph-filter"><legend>Show</legend>
+              {NODE_KINDS.filter((k) => full?.nodes.some((n) => n.kind === k)).map((k) => (
+                <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenKinds.has(k)} disabled={k === "run"} onChange={() => setHiddenKinds((s) => toggle(s, k))} /><span>{KIND_LABEL[k]}</span></label>
+              ))}
+            </fieldset>
+            <fieldset className="graph-filter"><legend>Lines</legend>
+              {LINK_KINDS.filter((k) => full?.links.some((l) => l.kind === k)).map((k) => (
+                <label key={k} className="graph-check"><input type="checkbox" checked={!hiddenLinks.has(k)} onChange={() => setHiddenLinks((s) => toggle(s, k))} /><span>{LINK_LABEL[k]}</span></label>
+              ))}
+            </fieldset>
+          </div>
+        </details>
       </section>
 
       {list.failed.length === 1 && <p className="pill" data-kind="warning" role="status">The {list.failed[0] === "board" ? "board" : "swarm"} run list could not be loaded, so only the other kind is listed.</p>}

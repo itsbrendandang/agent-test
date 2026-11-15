@@ -164,10 +164,10 @@ export function BoardView() {
           <h2 className="decision-text">{plain(bullets(memo["decision"])[0]) || "See memo"}</h2>
           {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
           <p className="trust">
-            <span className="v v-verified">{count("verified")} verified</span>
-            {count("contradicted") > 0 && <span className="v v-contradicted">{count("contradicted")} contradicted</span>}
-            {count("unsupported") > 0 && <span className="v v-unsupported">{count("unsupported")} unsupported</span>}
-            {count("unchecked") > 0 && <span className="v v-unchecked">{count("unchecked")} unchecked</span>}
+            <span className="pill v-verified">{count("verified")} verified</span>
+            {count("contradicted") > 0 && <span className="pill v-contradicted">{count("contradicted")} contradicted</span>}
+            {count("unsupported") > 0 && <span className="pill v-unsupported">{count("unsupported")} unsupported</span>}
+            {count("unchecked") > 0 && <span className="pill v-unchecked">{count("unchecked")} unchecked</span>}
             <span className="muted small">of {claims.length} claims checked against {uniqueEvidence.length} sources</span>
           </p>
           <p className="muted small">Verified: a source supports the claim. Contradicted: a source goes against it. Unsupported: no source was found. Unchecked: no checker ruled on it. A checker decides each one; the board does not.</p>
@@ -180,7 +180,7 @@ export function BoardView() {
       )}
 
       {!details && runId && (
-        <button type="button" className="link-button" onClick={() => setDetails(true)}>See the full discussion, evidence and checks →</button>
+        <button type="button" className="link-btn" onClick={() => setDetails(true)}>See the full discussion, evidence and checks →</button>
       )}
 
       {details && (
@@ -203,7 +203,7 @@ export function BoardView() {
                       <ul className="verdicts">
                         {r.claims.filter((c) => c.member === reply.member).map((c) => (
                           <li key={c.key} title={c.note}>
-                            <span className={`v v-${c.verdict}`}>{c.verdict}</span>
+                            <span className={`pill v-${c.verdict}`}>{c.verdict}</span>
                             <span className="muted">{c.checker}{c.p !== undefined ? ` ${c.p.toFixed(2)}` : ""}</span>
                             <span>{c.claim}</span>
                           </li>
