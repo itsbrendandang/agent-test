@@ -291,7 +291,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |
 | `dashboard/src/swarm/NewRun.tsx` | The form that starts a run from the dashboard. |
 | `board/` | Board review configuration, members, briefs. The folder and the API keep the name "board". |
-| `glhf/specialists/` | Domain specialist profiles and skill agents. Instructions only. Nothing runs them. |
+| `glhf/specialists/` | Domain specialist profiles and method notes. Research answers match their skills to the question and ask selected specialists to write from the sources found. |
 | `bixbench/` | A teammate's separate single-agent baseline for BixBench v1. Not used for our comparison. |
 | `datasets/` | A catalogue of 1,262 public biology and chemistry datasets with their licences. Pointers only, no data. No code reads it yet. See [datasets/README.md](../datasets/README.md). |
 | `scripts/start.mjs`, `scripts/check.mjs` | What `npm start` and `npm run check` run. |

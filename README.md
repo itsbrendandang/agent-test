@@ -43,17 +43,25 @@ The hackathon's instructions for the track we entered, as given:
 > **Judged on:** score vs. the record and a single-agent baseline on the same compute budget,
 > rigour, reproducibility. Report what the swarm rejected as well as what it found.
 
-## Try it
+## Run it on your machine
 
-You need a terminal and [Node.js](https://nodejs.org) 24 or newer.
+You need a terminal, [Node.js](https://nodejs.org) 24 or newer, and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/itsbrendandang/agent-test.git && cd agent-test
 npm run setup    # once, after cloning
-npm start        # starts everything and opens http://127.0.0.1:5317 in your browser
+cp .env.example .env    # leave the keys blank for Demo mode
+npm run engine
 ```
 
-Press Ctrl+C to stop. After every `git pull`, stop and run `npm start` again.
+In a second terminal, in the same folder:
+
+```bash
+npm run dashboard
+```
+
+Open http://localhost:5317. Press Ctrl+C in both terminals to stop. Restart after `git pull`.
+You can also use `npm start` to start both parts and open the browser.
 
 A new copy starts in **Demo mode**. Demo mode is free and needs no account. Its answers are fixed
 examples that show how the app works. They are not research.
@@ -67,16 +75,17 @@ examples that show how the app works. They are not research.
 | Cost | Free | Costs money, with limits you see before you start |
 | Keys needed | None | Your own keys (below) |
 
-To use Real mode:
+For real searches, put your own `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `EXA_API_KEY` in `.env`.
+The person who pays can check the keys without starting a run:
 
 ```bash
-cp .env.example .env    # open .env and paste your own keys after the = signs
-npm run preflight       # free: checks your keys and prints the spending limits
+npm --prefix engine run preflight    # for the person who pays: checks keys and prints limits
 ```
 
-You need an `ANTHROPIC_API_KEY`, an `OPENAI_API_KEY` and an `EXA_API_KEY`. Then start the app and
-switch from Demo to Real in **Settings**. The app shows the limits and asks you to confirm before
-anything is spent.
+Only the person who pays may set `NO_PAID_CALLS=0` there and restart, or turn on the paid switch
+in **Settings**. The dashboard switch needs the session token from the file the engine prints
+at startup. Paste it when asked and confirm the cost. It lasts only until the engine restarts.
+`PAID_SWITCH_LOCKED=1` disables that switch. A coding agent never turns paid calls on.
 
 - Keys are never stored in this repository. Each person uses their own. Do not share them or
   paste them in a chat.
@@ -84,23 +93,72 @@ anything is spent.
 - Each run has a spending limit, and each day has one too. A run is stopped at its limit (it can
   pass it by a few cents, because the check happens between steps).
 
+The limits in `board/config.yaml` are **$0.15 per Quick answer**, **$0.60 per Standard answer**,
+**$5 per team review**, and **$20 per day** across answers and reviews. Exa also has a **$40
+lifetime limit** in the engine's search record. These are limits, not price quotes.
+
 ## What is in the app
 
 | Screen | What it is for |
 |---|---|
-| Overview | The first screen: a question box with the agents waiting around it, then how much has been run, how much of it is research, and a chart per day. |
+| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. Totals and charts separate practice from research. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
-| Saved research | Everything that was run before. You can search it and open any result. |
+| Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
-| Agent Lab | The agents as characters in a lab. They walk only when the engine reports real work. |
+| Agent Log | Every event of the selected run. Filter by agent or kind of step, search, follow live events, and download the shown log as JSON or CSV. No room picture here; the Lab stays on Overview. |
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
-| Settings | Demo or Real, spending limits, how it works. |
+| Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
 
-The pictures below are from **Demo mode**. Every one shows a practice run: fixed example text,
-not research. The app labels such runs "Practice" itself.
+The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
+Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
+below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.
+The room art is unchanged. The Lab's look is by Anh Lam.
+
+Research answers can add **method specialists** whose skills fit the question. Code matches
+the question to their method notes. They write from the sources found; their sections are
+checked and reviewed with the rest of the answer. Quick can add one specialist on the cheap
+model tier. Standard can add two on the strong tier. If the cheap model is from a different
+company than the writer, the specialist uses the writer's model instead. This keeps its
+statement checker independent. A question with no match gets none. See
+[docs/research-answer.md](docs/research-answer.md#method-specialists).
+
+Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
+Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
+service. Light is the default. Dark and Match system are in Settings → Appearance.
+
+### Example library
+
+Saved research → Examples has six committed Demo runs:
+
+1. **GLP-1 market** — a Quick answer.
+2. **Safety and specialists** — hERG risk for KRAS G12C inhibitors, with method specialists.
+3. **Hypothesis investigation** — KRAS G12C response and resistance.
+4. **Clinical evidence** — KRAS G12C inhibitors in previously treated lung cancer.
+5. **Stopped research** — a cancelled answer about KRAS G12C safety and resistance.
+6. **KRAS G12C board review** — the bundled team review, through its written recommendation.
+
+Each is labelled **"Example · practice, $0"**, including downloads. They are read-only: they
+cannot be changed, deleted, resumed or replayed. They are not counted in totals or spending.
+Open them in Research or Team review, the Agent Log, or the Overview Lab.
+
+Set `GLHF_HIDE_EXAMPLES=1` before starting the engine to hide them. To replace the committed
+files in `examples/` with fresh scripted Demo runs, make sure port 8812 is free, then run:
+
+```bash
+node scripts/generate-examples.mjs
+```
+
+The script starts its own engine with paid calls off and locked. It makes the events through
+the Demo pipeline, not by hand. These are practice runs, not research or benchmark results.
+
+### Earlier Demo screenshots
+
+The Overview, Research, Team review and Lab pictures below show earlier layouts in **Demo
+mode**. They are practice runs: fixed example text, not research. The app labels them "Practice".
+The Benchmarks picture is described separately.
 
 **Overview.** Practice runs are counted apart from research, so the big number is only what real
 models produced.
@@ -116,10 +174,10 @@ it.
 
 ![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
 
-**Agent Lab.** The same run as a scene: who is working, who fetched what, and a log of every step.
-The lab's look is by Anh Lam.
+**Overview's Agent Lab.** The same run as a scene: who is working and who fetched what.
+This earlier picture shows the room art, not the current three-column layout or the Agent Log.
 
-![The Lab screen: six rooms with the agents as characters, and a side panel for the selected one](docs/images/lab.png)
+![Earlier Demo Lab: six rooms with agents as characters and an activity panel](docs/images/lab.png)
 
 **Benchmarks.** These numbers are real runs, read from the run records. Where something was not
 measured the screen says "Not known".
@@ -308,10 +366,18 @@ a practice review in the middle.
 npm run check    # about 3 minutes; never spends money
 ```
 
-It prints one line per part, `ok` or `FAIL`. On `main` today all five parts print `ok`: no
-merge-conflict markers, both type checks clean, 452 engine tests and 798 dashboard tests pass.
+It prints one line per part, `ok` or `FAIL`. It checks merge-conflict markers, the engine and
+dashboard types, engine tests and dashboard tests.
 If a line says `FAIL` on your copy, run `npm run setup` again first. More about the tests is in
 [docs/developers.md](docs/developers.md#tests).
+
+## Working with the Pi coding agent
+
+With [Pi](https://pi.dev) installed, run `pi` in this repository's root. After you trust the
+project, it reads `.pi/settings.json`: skills from `.agents/skills/` and the pinned `pi-agents`
+package. The profiles in `.pi/agents/` are **advisor**, **dashboard-qa**, **docs-writer** and
+**reviewer**. `AGENTS.md` rules apply. The agent never turns paid calls on. Pi uses its own
+model account; it is separate from the app's free Demo mode. See [docs/pi-setup.md](docs/pi-setup.md).
 
 ## Read more
 
