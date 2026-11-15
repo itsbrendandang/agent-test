@@ -14,15 +14,17 @@ export type BoardEvent =
   | { type: "run.resumed"; runId: string }
   | { type: "lead.framed"; text: string }
   | { type: "round.started"; round: number; message: string; final: boolean }
-  | { type: "member.replied"; round: number; member: string; text: string; usd: number }
-  | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[] }
+  | { type: "member.replied"; round: number; member: string; text: string; usd: number; summary?: string /** the "In short:" line the reply opened with, when it did */ }
+  | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[]; provider?: SearchProvider }
   | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }
   | { type: "constraint"; reason: "time" | "budget" | "rounds"; detail: string }
   | { type: "memo.written"; path: string; decision: string }
   | { type: "run.finished"; usd: number; minutes: number }
   | { type: "run.failed"; error: string }
 
-export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number }
+/** `provider`: where the source came from: "exa" (a live Exa search) or "fixture" (a practice run's example source). Absent in runs recorded before this field. */
+export type SearchProvider = "exa" | "fixture"
+export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider }
 
 export type Stamped = BoardEvent & { key: string; at: number }
 

@@ -10,4 +10,14 @@ export function parseClaims(reply: string): Claim[] {
   })
 }
 
+/**
+ * The one-line summary a member opens its reply with: the text after "In short:" on the first non-empty line (also
+ * "**In short:**"), cut at 300 characters. Undefined when the reply does not open that way. Plain code, no model call.
+ */
+export function shortSummary(reply: string): string | undefined {
+  const first = reply.split("\n").map((l) => l.trim()).find(Boolean) ?? ""
+  const text = /^[*_#>\s]*in short[*_]*\s*:[*_]*\s*(.+)$/i.exec(first)?.[1]?.replace(/[*_]+$/, "").trim()
+  return text ? text.slice(0, 300) : undefined
+}
+
 export const stripClaims = (reply: string) => reply.split(/^#*\s*CLAIMS\s*:?\s*$/im)[0].trim()

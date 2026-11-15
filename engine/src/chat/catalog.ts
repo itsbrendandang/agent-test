@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { parse } from "yaml"
 import { loadAgent, loadRoster } from "../agents.ts"
-import { type BoardConfig, ROOT } from "../config.ts"
+import { type BoardConfig, mockMode, ROOT } from "../config.ts"
 import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "../exaledger.ts"
 import { MODEL_CHOICES } from "../glhf/types.ts"
 import { paidCallsOff, paidState } from "../paid.ts"
@@ -20,7 +20,8 @@ export interface Catalog {
   paidSource: "env" | "switch"
   providers: Provider[]
   /** exa.usedUsd: Exa spend this engine has recorded in board/runs/.exa-ledger.jsonl; ceilingUsd: the lifetime limit it enforces (meeting.exa_ceiling_usd). */
-  search: { exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number } }
+  /** `provider`: what a board run started now would search with: "exa" (live search; paid calls on, and the key is set) or "fixture" (a practice run's example sources). */
+  search: { provider: "exa" | "fixture"; exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
 }
@@ -114,7 +115,7 @@ export function buildCatalog(config: BoardConfig, env: NodeJS.ProcessEnv = proce
     paidCalls: !paidCallsOff(env),
     paidSource: paidState(env).source,
     providers: providers(config, env),
-    search: { exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) } },
+    search: { provider: mockMode(env) || !env.EXA_API_KEY ? "fixture" : "exa", exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) } },
     agents: [...board, ...specialists.map(({ basedOn: _b, purpose: _p, ...agent }) => agent)],
     skills: loadSkills(),
   }
