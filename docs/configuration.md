@@ -10,15 +10,13 @@ A variable that is already set in your shell wins over `.env`.
 
 | Key | Used for | Needed |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Claude models as swarm agents. Also the Ask box in the dashboard. | For runs with Claude models. |
-| `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). The drug board's literature checker. | For every cloud run. |
+| `ANTHROPIC_API_KEY` | Claude models as swarm agents. Also the Ask box in the dashboard. On the drug board: the `lead`, `strong` and `cheap` tiers. | For runs with Claude models, and for a live drug board. |
+| `OPENAI_API_KEY` | OpenAI models as swarm agents. The benchmark's judge and network gate (cloud runs). On the drug board: the `rival` tier, the first-pass checker for claims made by a Claude member, and the literature checker. | For every cloud run, and for a live drug board. |
 | `HF_TOKEN` | Access to the dataset `EdisonScientific/BixBench3` on Hugging Face. | For cloud runs. |
-| `EXA_API_KEY` | Exa search: the drug board's literature search and the swarm's `--exa`. | For `--exa` and for live board searches. |
+| `EXA_API_KEY` | Exa search: the swarm's `--exa`, and the drug board's search for any member that has the `exa_search` tool (none has it today). | For `--exa`. For a live board run only if a member can search. |
 | `PAST_API_KEY` | past.dev memory for the swarm (`--memory`). Approved lessons are sent there when a person runs the `approve` command, and runs ask past.dev for lessons first. While paid calls are off, a run started by the engine does not get this key and reads the local file. | Optional. Without it, runs read the approved file `glhf/memory/lessons.md`. |
-| `OPENROUTER_API_KEY` | All drug board models, and the Jev checker. | For a live drug board. Without it, or while paid calls are off, the board uses scripted models. |
-| `TYPESAFE_API_KEY` | Calls Jev directly, not through OpenRouter. | Optional. |
 
-No key is needed for `npm run demo` or for a scripted drug board run.
+No key is needed for `npm run demo` or for a scripted drug board run. A **live** drug board run needs the key of every tier in `board/config.yaml` (Anthropic and OpenAI today). If one is missing, the run is refused when it starts, with the tier and the key named (HTTP 503 from `POST /api/runs`). It is never silently run with scripted models.
 
 ## Paid calls: `NO_PAID_CALLS`
 
@@ -33,7 +31,7 @@ is exactly `0`.
 paid calls off.
 
 While paid calls are off, the engine gives these keys as empty values to every process it
-starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `EXA_API_KEY`,
+starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `EXA_API_KEY`,
 `PAST_API_KEY`, `HF_TOKEN`, `TINKER_API_KEY`.
 
 The switch covers the engine, the dashboard, the `npm run glhf` and `npm run board` CLIs, and
@@ -74,7 +72,7 @@ Set these in `.env` or in your shell. All are optional.
 | `DASHBOARD_ORIGINS` | none | Extra origins that may call the engine, separated by commas. The defaults are `localhost` and `127.0.0.1` on ports 5317, 5173 and 4173, and the Tauri app. | `engine/src/http.ts` |
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/ask.ts` |
-| `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`) or when `OPENROUTER_API_KEY` is missing. | `mockMode` in `engine/src/config.ts` |
+| `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
 
 ### Run tracker
@@ -136,9 +134,12 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `watch.enabled`, `watch.every_hours` | false, 24 | **Not implemented.** No code uses these keys yet. |
 | `brief.required_sections` | 8 section names | A brief without one of these sections is rejected. |
 | `paths.*` | folders under `board/` | Where agents, briefs, context, expertise and runs are. |
-| `models.lead`, `models.strong`, `models.cheap`, `models.rival` | OpenRouter model ids | Model for each tier. |
-| `checkers.jev.model` | `typesafe/jev-1.14` | The first checker. |
-| `checkers.jev.yes`, `checkers.jev.no` | 0.7, 0.3 | Above `yes` reads as yes. Below `no` reads as no. Between them the claim goes to a second checker. |
+| `models.lead`, `models.strong`, `models.cheap`, `models.rival` | `anthropic/claude-sonnet-5-5`, `anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5`, `openai/gpt-5-mini` | Model for each tier, as `<vendor>/<model>` (only `anthropic` and `openai`). `rival` must be on a different vendor from `lead`. Called directly, not through a gateway. Prices come from the catalog that ships with `@earendil-works/pi-ai`; they were not checked against the vendors' price pages. |
+| `checkers.first_pass.alt` | `openai/gpt-4o-mini` | The cheap model of the other vendor. The first pass of a claim uses `models.cheap`, or this one when `cheap` is on the claim author's vendor, so the checker is never from the author's vendor. |
+| `checkers.first_pass.max_source_chars` | 12000 | Source text sent to the first pass per check. |
+| `meeting.max_searches` | 20 | Exa searches per run. |
+| `meeting.exa_usd_per_search` | 0.007 | Assumed price of one search, used until Exa's response states a cost. Measured once (two searches). |
+| `meeting.exa_ceiling_usd` | 40 | Lifetime Exa spend the engine allows, summed from `board/runs/.exa-ledger.jsonl`. The Exa account holds $50 and is not topped up. At the ceiling a live run refuses to search; it does not use fixture papers. |
 | `checkers.escalate.literature`, `checkers.escalate.computed` | `openai`, `claude-code` | Second checker for each kind of claim. |
 | `checkers.openai_model` | `gpt-5-mini` | Model for the OpenAI checker. |
 | `checkers.claude_code_cmd` | `claude -p --output-format json --restricted --strict-mcp-config` | Command for the Claude Code checker. `--restricted` removes the tools that run commands or code and the web fetch tool, keeps file tools inside the working folder, and ignores user and project settings. `--strict-mcp-config` loads no MCP servers. So by default the checker **cannot run code**: it checks a computed claim by reasoning, and answers "unsupported" when that is not enough. |

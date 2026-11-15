@@ -117,7 +117,7 @@ DRUG_BOARD_LOCAL_MODEL=ollama/qwen2.5:14b npm run board      # every agent on th
 DRUG_BOARD_LOCAL_MODEL=1 npm run board                       # per tier, from local_models in board/config.yaml
 ```
 
-No OpenRouter and no key are used. A value that is not a local model is an error; it never falls back to scripted
+No key is used. A value that is not a local model is an error; it never falls back to scripted
 or paid models.
 
 **What a local board run checks: nothing.** Only the agents' text comes from a real model. Because paid calls are
@@ -127,7 +127,7 @@ off, the rest stays scripted, exactly as in a mock run:
 | --- | --- |
 | Lead and members | real: the local model writes every turn and the memo |
 | Exa literature search | scripted: always the same four fixture papers about KRAS G12C |
-| Jev claim checker | scripted: word overlap, not judgement |
+| First-pass claim checker | scripted: word overlap, not judgement |
 | OpenAI and Claude Code escalation checkers | scripted: fixed verdicts |
 | Verdicts in the ledger ("verified", "unsupported") | computed from the scripted checkers: **not evidence** |
 | Expertise notes | written to the run folder only, never to `board/expertise/` |
@@ -145,7 +145,7 @@ One run each. The demo case is tiny (two small tables); it tests the plumbing, n
 | --- | --- | --- | --- | --- | --- |
 | GLHF single agent (`--solver single`, 400,000-token budget, 1500 s limit) | **1.000** (both artifacts) | 168 s | 58,537 | held: 5 model calls, 8 tool calls, 0 errors | wrote both files and METHODS.md |
 | GLHF swarm (`--solver glhf`, same budget and limit) | **0.000** (no artifact written) | 1,470 s (the whole limit) | 171,070 | partly: 34 model calls, 36 tool calls, 4 with wrong arguments, 11 turns with no tool call | every phase ended on its time limit; review was dropped from the plan; the experimenter wrote a script and never ran it |
-BOARD_ROW
+| Drug board, built-in KRAS brief, every agent local (run in a private copy of the repo with the labelling change applied) | no score exists | 15.9 min (the 15-minute limit) | not recorded | held for `converse` and search: 2 rounds, 16 member replies, 6 searches, 38 claims in the right form | **the lead never wrote the memo**: the run ended "finished" with no `memo.md`. The 20 "verified" verdicts came from scripted checkers and mean nothing. $0. |
 
 Reading these numbers:
 
@@ -159,6 +159,8 @@ Reading these numbers:
   plain text). The failures were wrong arguments and slowness, not the format.
 - Context held: the longest prompt in these runs was 15,993 tokens of 32,768, and the server log shows no
   truncation.
+- The board's protocol was followed for two rounds, but the run produced no memo, so a local board run is not usable
+  as it is: it needs a longer time limit or fewer members.
 - One run each. This says nothing about variance.
 
 Limits:

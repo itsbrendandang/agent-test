@@ -16,7 +16,7 @@ export type BoardEvent =
   | { type: "round.started"; round: number; message: string; final: boolean }
   | { type: "member.replied"; round: number; member: string; text: string; usd: number }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[] }
-  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string }
+  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }
   | { type: "constraint"; reason: "time" | "budget" | "rounds"; detail: string }
   | { type: "memo.written"; path: string; decision: string }
   | { type: "run.finished"; usd: number; minutes: number }

@@ -12,7 +12,7 @@ meeting:
   lead_turns: 20           # model calls the lead may make in one run
   member_turns: 6          # model calls each board member may make per question
   max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
-  max_searches: 20         # Exa searches per run (as in the swarm); a member that asks for more is told the budget is used up
+  max_searches: 20         # Exa searches per run (as in the swarm). Dormant while no board member has the exa_search tool: every member's `tools` is empty today
   exa_usd_per_search: 0.007 # price assumed per search until Exa's response states one: measured once (2 live searches, $0.014), a small sample. Counted against max_usd and daily_usd
   exa_ceiling_usd: 40      # lifetime Exa spend the engine will allow, from board/runs/.exa-ledger.jsonl. The account holds $50 and is not topped up; the rest is room for searches made outside the engine
 
@@ -54,8 +54,8 @@ models:
   # lead: the Lead Scientist frames the question and writes the memo. Sonnet-class by default because it is the
   # biggest line of spend. To raise it: lead: "anthropic/claude-opus-5-5" (about 2x the price per token).
   lead: "anthropic/claude-sonnet-5-5"
-  strong: "anthropic/claude-sonnet-5-5"  # the members that reason about chemistry, targets and toxicity
-  cheap: "anthropic/claude-haiku-5-5"    # search-driven members, and the first-pass checker for claims made by an OpenAI member
+  strong: "anthropic/claude-sonnet-5-5"  # proposer, experimenter, methods-auditor, reviser, reporter: the members that reason and write
+  cheap: "anthropic/claude-haiku-5-5"    # scout, pilot, finisher, and the first-pass checker for claims made by an OpenAI member (the critic)
   # rival: the Critic. It MUST stay on a different vendor from `lead`: that is what stops it sharing the lead's
   # blind spots. Change lead and rival together, never to the same vendor. A stronger option: "openai/gpt-5.5".
   rival: "openai/gpt-5-mini"

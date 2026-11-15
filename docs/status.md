@@ -139,7 +139,7 @@ sample.
 
 | Feature | Status |
 |---|---|
-| Full run with scripted models | Works (`npm run board` without `OPENROUTER_API_KEY`). |
+| Full run with scripted models | Works (`npm run board` with paid calls off, the default). |
 | Board roster: the nine roles of our own swarm (`board/agents/`), plus the Lead Scientist | Prompts only. Ran with scripted models only (`DRUG_BOARD_MOCK=1 npm run board`). Members reply all at once, not in order, and have no tools (no code, no search). Never run with a real model. |
 | Full run with real models | Not verified. The repository holds no record of a finished live run. |
 | Watch mode (`watch:` in `board/config.yaml`) | Not implemented. The key is read but no code uses it. |

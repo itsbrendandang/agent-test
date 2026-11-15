@@ -39,7 +39,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
 // The board in local mode, as `DRUG_BOARD_LOCAL_MODEL=ollama/qwen2.5:14b npm run board` has it. Set before config.ts loads.
 process.env.LOCAL_MODEL_URL = stubUrl
 process.env.DRUG_BOARD_LOCAL_MODEL = "ollama/qwen2.5:14b"
-for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "EXA_API_KEY"]) process.env[key] = "fake-key-for-tests"
+for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"]) process.env[key] = "fake-key-for-tests"
 
 const local = await import("../src/local.ts")
 const paid = await import("../src/paid.ts")
@@ -110,7 +110,7 @@ test("the paid switch: local and scripted models pass, paid ones and remote look
   assert.equal(paid.paidModelRefusal([REAL], { NO_PAID_CALLS: "0" }), undefined, "with paid calls allowed nothing is refused here")
   // Exa, the checkers and the cloud are refused as before, whatever the model.
   assert.throws(() => paid.refusePaid("Exa search (api.exa.ai)", ON), paid.PaidCallsOff)
-  const child = paid.childEnv({ ...ON, ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o", OPENROUTER_API_KEY: "r", EXA_API_KEY: "e", PAST_API_KEY: "p", LOCAL_MODEL_URL: "http://127.0.0.1:11434" })
+  const child = paid.childEnv({ ...ON, ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o", EXA_API_KEY: "e", PAST_API_KEY: "p", LOCAL_MODEL_URL: "http://127.0.0.1:11434" })
   for (const key of paid.PAID_KEYS) assert.equal(child[key], "", `${key} is blank in a child that runs a local model`)
   assert.equal(child.LOCAL_MODEL_URL, "http://127.0.0.1:11434")
   assert.match(paid.paidCallsLine(ON), /local models/)
@@ -187,7 +187,7 @@ test("a run's class is the costliest of its models", () => {
 })
 
 test("board: with DRUG_BOARD_LOCAL_MODEL every agent is the local model, reached only at the checked address, with no key", async () => {
-  assert.equal(config.MOCK, true, "paid calls are off: Exa, Jev and the checkers stay scripted")
+  assert.equal(config.MOCK, true, "paid calls are off: Exa, the first-pass checker and the escalation checkers stay scripted")
   assert.equal(config.LOCAL, LOCAL)
   const boardConfig = config.loadConfig()
   for (const tier of ["lead", "strong", "cheap", "rival"] as const) {
@@ -195,7 +195,7 @@ test("board: with DRUG_BOARD_LOCAL_MODEL every agent is the local model, reached
     assert.equal(localModelFor(boardConfig, tier, LOCAL, { DRUG_BOARD_LOCAL_MODEL: "1" }), boardConfig.local_models?.[tier])
   }
   const models = buildModels([])
-  assert.deepEqual(models.getProviders().map((p) => p.id), [LOCAL_PROVIDER], "no OpenRouter, no OpenAI")
+  assert.deepEqual(models.getProviders().map((p) => p.id), [LOCAL_PROVIDER], "no Anthropic, no OpenAI: only the local server")
   const model = models.getModel(LOCAL_PROVIDER, "qwen2.5:14b")!
   assert.deepEqual(model.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
   const answer = await models.complete(model, { systemPrompt: "Be brief.", messages: [{ role: "user", content: "Say hello.", timestamp: 1 }] })

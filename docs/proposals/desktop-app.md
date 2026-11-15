@@ -16,8 +16,8 @@ not low risk. Three things make it so, and none of them is in the desktop shell:
 1. The engine writes run folders inside its own source tree. Inside an application bundle that
    is a read-only, signed place. The engine needs a separate data folder first (section 3b).
 2. The engine reads keys only from environment variables and the repo's `.env`. The app's
-   keychain commands store keys for four providers, and the two keys the drug board needs
-   (OpenRouter and Exa) are not among them. Nothing hands a keychain key to the engine
+   keychain commands store keys for four providers, and the key the drug board needs that is
+   not among them is Exa's (the Anthropic and OpenAI keys are). Nothing hands a keychain key to the engine
    (section 2).
 3. Paid calls are off unless `NO_PAID_CALLS=0` is in `.env`. A downloaded app has no `.env`, so
    it needs a deliberate switch of its own.
@@ -128,16 +128,15 @@ What it uses:
 
 | Purpose | Variable | In the app's keychain list? |
 |---|---|---|
-| Every drug board model, and Jev | `OPENROUTER_API_KEY` | No |
-| Board literature search | `EXA_API_KEY` | No |
-| Jev directly (optional) | `TYPESAFE_API_KEY` | No |
-| Board checker, benchmark judge | `OPENAI_API_KEY` | Yes |
-| Swarm agents, Ask box | `ANTHROPIC_API_KEY` | Yes |
+| Board search (if a member has the tool), swarm `--exa` | `EXA_API_KEY` | No |
+| Board `rival` tier and checkers, benchmark judge | `OPENAI_API_KEY` | Yes |
+| Board `lead`, `strong`, `cheap` tiers, swarm agents, Ask box | `ANTHROPIC_API_KEY` | Yes |
 | Gated benchmark dataset | `HF_TOKEN` | No |
 | Allow anything paid | `NO_PAID_CALLS=0` | Not a key; `.env` only |
 
-Without `OPENROUTER_API_KEY`, or with paid calls off, the board runs on scripted models
-(`mockMode` in `engine/src/config.ts`). That is decided once, when the engine starts.
+With paid calls off the board runs on scripted models (`mockMode` in `engine/src/config.ts`). That is
+decided once, when the engine starts. With paid calls on and a tier's key missing, a board run is
+refused when it starts.
 
 ## 3. Three ways to make the download self-contained
 
@@ -207,7 +206,7 @@ path derived from it. `bixv1/store.ts` already does this with `BIXV1_RUNS_DIR`.
 puts the keys in the child's environment when it starts the engine. A key never passes through
 the window, as now. Needed:
 
-- OpenRouter and Exa (and optionally Typesafe and Hugging Face) added to the provider list in
+- Exa (and optionally Hugging Face) added to the provider list in
   `keys.rs` and in Settings, each mapped to its variable name.
 - A restart of the engine after a key is saved or removed, because mock mode is decided at
   start. The board resumes unfinished runs, so this is safe but must be said in the interface.

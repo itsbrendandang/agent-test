@@ -1,0 +1,120 @@
+{
+ "recorded_at": "2026-11-15T00:08:02Z",
+ "records": {
+  "10.6084/m9.figshare.5104873": {
+   "data": {
+    "id": "10.6084/m9.figshare.5104873",
+    "attributes": {
+     "doi": "10.6084/m9.figshare.5104873",
+     "titles": [
+      {
+       "title": "Chemical reactions from US patents (1976-Sep2016)"
+      }
+     ],
+     "descriptions": [
+      {
+       "description": "Reactions extracted by text-mining from United States patents published between 1976 and September 2016. The reactions are available as CML or reaction SMILES. Note that the reactions SMILES are derived from the CML. The files can be unzipped using a program like 7-Zip.<br><br>The reactions were extracted using an enhanced version of the reaction extraction code described in https://www.repository"
+      }
+     ],
+     "rightsList": [
+      {
+       "rights": "Creative Commons Zero v1.0 Universal",
+       "rightsUri": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+       "schemeUri": "https://spdx.org/licenses/",
+       "rightsIdentifier": "cc0-1.0",
+       "rightsIdentifierScheme": "SPDX"
+      }
+     ],
+     "sizes": [
+      "1494665893 Bytes"
+     ],
+     "formats": [],
+     "subjects": [
+      {
+       "subject": "Cheminformatics"
+      },
+      {
+       "subject": "30503 Organic Chemical Synthesis"
+      },
+      {
+       "subject": "FOS: Chemical sciences"
+      },
+      {
+       "subject": "FOS: Chemical sciences"
+      }
+     ],
+     "publicationYear": 2017,
+     "updated": "2020-09-02T08:08:51.000Z",
+     "state": "findable",
+     "citationCount": 5
+    },
+    "relationships": {
+     "client": {
+      "data": {
+       "id": "figshare.ars",
+       "type": "clients"
+      }
+     }
+    }
+   }
+  },
+  "10.5281/zenodo.268568": {
+   "data": {
+    "id": "10.5281/zenodo.268568",
+    "attributes": {
+     "doi": "10.5281/zenodo.268568",
+     "titles": [
+      {
+       "title": "dhimmel/hetionet v1.0.0: Hetionet v1.0 in JSON, TSV, and Neo4j formats"
+      }
+     ],
+     "descriptions": [
+      {
+       "description": "Hetionet is a network of biomedical knowledge created by Project Rephetio, an open project to repurpose drugs. This release contains the Hetionet v1.0 network as described in https://doi.org/10.1101/087619. In this release, the Neo4j Docker which powers https://neo4j.het.io uses Neo4j 3.1.1. For more information on Project Rephetio, see https://thinklab.com/p/rephetio."
+      }
+     ],
+     "rightsList": [
+      {
+       "rights": "Open Access",
+       "rightsUri": "info:eu-repo/semantics/openAccess"
+      }
+     ],
+     "sizes": [],
+     "formats": [],
+     "subjects": [
+      {
+       "subject": "hetionet"
+      },
+      {
+       "subject": "rephetio"
+      },
+      {
+       "subject": "hetnet"
+      },
+      {
+       "subject": "network"
+      },
+      {
+       "subject": "drug repurposing"
+      },
+      {
+       "subject": "Rephetio"
+      }
+     ],
+     "publicationYear": 2017,
+     "updated": "2024-06-25T13:29:05.000Z",
+     "state": "findable",
+     "citationCount": 3
+    },
+    "relationships": {
+     "client": {
+      "data": {
+       "id": "cern.zenodo",
+       "type": "clients"
+      }
+     }
+    }
+   }
+  }
+ }
+}

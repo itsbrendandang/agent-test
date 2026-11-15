@@ -1,0 +1,225 @@
+[
+ {
+  "doi": "10.17632/mrcf7f4tc2",
+  "expect": "Clinical Knowledge Graph"
+ },
+ {
+  "doi": "10.18434/mds2-2499",
+  "expect": "Genome In A Bottle"
+ },
+ {
+  "doi": "10.23645/epacomptox.6062623",
+  "expect": "ToxCast"
+ },
+ {
+  "doi": "10.3929/ethz-b-000482129",
+  "expect": "QMugs"
+ },
+ {
+  "doi": "10.4121/16896406",
+  "expect": "Papyrus"
+ },
+ {
+  "doi": "10.5281/zenodo.10108941",
+  "expect": "ANI-2x"
+ },
+ {
+  "doi": "10.5281/zenodo.11102664",
+  "expect": "DrugComb"
+ },
+ {
+  "doi": "10.5281/zenodo.13367755",
+  "expect": "MIBiG"
+ },
+ {
+  "doi": "10.5281/zenodo.15320447",
+  "expect": "OpenADMET"
+ },
+ {
+  "doi": "10.5281/zenodo.15324458",
+  "expect": "Genomic Benchmarks"
+ },
+ {
+  "doi": "10.5281/zenodo.15705606",
+  "expect": "ProteomeTools"
+ },
+ {
+  "doi": "10.5281/zenodo.173258",
+  "expect": "ExCAPE"
+ },
+ {
+  "doi": "10.5281/zenodo.268568",
+  "expect": "Hetionet"
+ },
+ {
+  "doi": "10.5281/zenodo.3715505",
+  "expect": "CORD-19"
+ },
+ {
+  "doi": "10.5281/zenodo.3778405",
+  "expect": "COCONUT"
+ },
+ {
+  "doi": "10.5281/zenodo.3905360",
+  "expect": "QM7-X"
+ },
+ {
+  "doi": "10.5281/zenodo.4911101",
+  "expect": "ATOM3D"
+ },
+ {
+  "doi": "10.5281/zenodo.4911141",
+  "expect": "ATOM3D"
+ },
+ {
+  "doi": "10.5281/zenodo.5501019",
+  "expect": "PCQM4M"
+ },
+ {
+  "doi": "10.5281/zenodo.5676265",
+  "expect": "DES370K"
+ },
+ {
+  "doi": "10.5281/zenodo.5794106",
+  "expect": "LOTUS"
+ },
+ {
+  "doi": "10.5281/zenodo.7041848",
+  "expect": "scPerturb"
+ },
+ {
+  "doi": "10.5281/zenodo.7711952",
+  "expect": "MISATO"
+ },
+ {
+  "doi": "10.5281/zenodo.7841780",
+  "expect": "EnzymeMap"
+ },
+ {
+  "doi": "10.5281/zenodo.7877719",
+  "expect": "SIDER",
+  "note": "The SIDER website was not read (its robots.txt blocks AI agents) and is reported to state CC BY-NC-SA 4.0. This Zenodo copy by the SIDER author carries the licence shown here. Check both before commercial use."
+ },
+ {
+  "doi": "10.5281/zenodo.7992926",
+  "expect": "Mega-scale"
+ },
+ {
+  "doi": "10.5281/zenodo.8095509",
+  "expect": "FireProtDB"
+ },
+ {
+  "doi": "10.5281/zenodo.8222043",
+  "expect": "SPICE"
+ },
+ {
+  "doi": "10.6075/j02v2h30",
+  "expect": "BindingDB"
+ },
+ {
+  "doi": "10.6084/m9.figshare.10047041",
+  "expect": "ANI-1x"
+ },
+ {
+  "doi": "10.6084/m9.figshare.12420968",
+  "expect": "atlas-level data integration"
+ },
+ {
+  "doi": "10.6084/m9.figshare.12654728",
+  "expect": "Tabula Muris Senis"
+ },
+ {
+  "doi": "10.6084/m9.figshare.12672038",
+  "expect": "MD17"
+ },
+ {
+  "doi": "10.6084/m9.figshare.14267219",
+  "expect": "Tabula Sapiens"
+ },
+ {
+  "doi": "10.6084/m9.figshare.14883867",
+  "expect": "OrbNet Denali"
+ },
+ {
+  "doi": "10.6084/m9.figshare.16511577",
+  "expect": "dockstring"
+ },
+ {
+  "doi": "10.6084/m9.figshare.19614657",
+  "expect": "Transition1x"
+ },
+ {
+  "doi": "10.6084/m9.figshare.20564034",
+  "expect": "PRISM Repurposing"
+ },
+ {
+  "doi": "10.6084/m9.figshare.22765112",
+  "expect": "DepMap"
+ },
+ {
+  "doi": "10.6084/m9.figshare.25459573",
+  "expect": "USPTO-50K"
+ },
+ {
+  "doi": "10.6084/m9.figshare.25559469",
+  "expect": "PharmaBench"
+ },
+ {
+  "doi": "10.6084/m9.figshare.27430305",
+  "expect": "HiQBind"
+ },
+ {
+  "doi": "10.6084/m9.figshare.27921984",
+  "expect": "Tabula Sapiens"
+ },
+ {
+  "doi": "10.6084/m9.figshare.3085426",
+  "expect": "LINCS L1000"
+ },
+ {
+  "doi": "10.6084/m9.figshare.5104873",
+  "expect": "Chemical reactions from US patents"
+ },
+ {
+  "doi": "10.6084/m9.figshare.5596750",
+  "expect": "Lipophilicity"
+ },
+ {
+  "doi": "10.6084/m9.figshare.5829687",
+  "expect": "Smart-seq2",
+  "name": "Tabula Muris: Smart-seq2 data of FACS-sorted cells (v2)"
+ },
+ {
+  "doi": "10.6084/m9.figshare.5968960",
+  "expect": "microfluidic emulsion",
+  "name": "Tabula Muris: microfluidic droplet data (v2)"
+ },
+ {
+  "doi": "10.6084/m9.figshare.6860261",
+  "expect": "ProteomeTools"
+ },
+ {
+  "doi": "10.6084/m9.figshare.7322252",
+  "expect": "GuacaMol"
+ },
+ {
+  "doi": "10.6084/m9.figshare.c.978904.v5",
+  "expect": "134 kilo molecules"
+ },
+ {
+  "doi": "10.7910/dvn/1rvmj0",
+  "expect": "B3DB"
+ },
+ {
+  "doi": "10.7910/dvn/ixa7bm",
+  "expect": "PrimeKG"
+ },
+ {
+  "doi": "10.7910/dvn/jngtdf",
+  "expect": "GEOM"
+ },
+ {
+  "doi": "10.7910/dvn/ovhaw8",
+  "expect": "AqSolDB"
+ }
+]

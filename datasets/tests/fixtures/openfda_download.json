@@ -1,0 +1,59 @@
+{
+ "recorded_at": "2026-11-14T23:47:07Z",
+ "index": {
+  "meta": {
+   "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+   "terms": "https://open.fda.gov/terms/",
+   "license": "https://open.fda.gov/license/",
+   "last_updated": "2026-11-13"
+  },
+  "results": {
+   "drug": {
+    "event": {
+     "export_date": "2026-11-09",
+     "partitions": [
+      {
+       "display_name": "2004 Q3 (part 1 of 5)",
+       "file": "https://download.open.fda.gov/drug/event/2004q3/drug-event-0001-of-0005.json.zip",
+       "size_mb": "26.51",
+       "records": 12000
+      },
+      {
+       "display_name": "2004 Q3 (part 2 of 5)",
+       "file": "https://download.open.fda.gov/drug/event/2004q3/drug-event-0002-of-0005.json.zip",
+       "size_mb": "2.95",
+       "records": 12000
+      }
+     ],
+     "total_records": 21054159
+    },
+    "ndc": {
+     "export_date": "2026-11-13",
+     "partitions": [
+      {
+       "display_name": "/drug/ndc data",
+       "file": "https://download.open.fda.gov/drug/ndc/drug-ndc-0001-of-0001.json.zip",
+       "size_mb": "26.94",
+       "records": 138372
+      }
+     ],
+     "total_records": 138372
+    }
+   },
+   "device": {
+    "udi": {
+     "export_date": "2026-11-10",
+     "partitions": [
+      {
+       "display_name": "/device/udi (part 1 of 52)",
+       "file": "https://download.open.fda.gov/device/udi/device-udi-0001-of-0052.json.zip",
+       "size_mb": "36.81",
+       "records": 100000
+      }
+     ],
+     "total_records": 5182695
+    }
+   }
+  }
+ }
+}

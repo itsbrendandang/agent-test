@@ -38,7 +38,7 @@ const { askDailyCap, ASK_DAILY_CAP, resetDaily } = await import("../src/ask.ts")
 type Entry = import("../src/ask.ts").Entry
 
 // After the imports (env.ts fills keys from .env when it loads): no real key is in reach of this file.
-for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "PAST_API_KEY"]) delete process.env[key]
+for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "PAST_API_KEY"]) delete process.env[key]
 process.env.EXA_API_KEY = "fake-exa-key" // so that an exa request is not refused for want of a key
 
 const DASH = "http://127.0.0.1:5317"

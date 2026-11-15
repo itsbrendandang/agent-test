@@ -51,7 +51,7 @@ export interface RunState {
   rounds: number
   lastRound: { member: string; reply: string; verdicts: string[] }[]
   evidence: Record<string, EvidenceItem>
-  ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string }[]
+  ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }[]
   escalations: number
   checkerUsd: number
   firstPassUsd?: number // first-pass checker spend, kept here because the checker's own counter restarts with the process
@@ -224,7 +224,7 @@ export interface ClaimDeps {
   state: Pick<RunState, "ledger" | "escalations" | "checkerUsd">
   maxEscalations: number
   /** The first-pass checker rules on several of one member's claims against one piece of evidence (a model from another vendor than the member's). */
-  firstPass: (member: string, claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; quote?: string; reason?: string; checkedBy?: string; p?: number }[]>
+  firstPass: (member: string, claims: string[], evidence: string) => Promise<{ verdict: Verdict | "escalate"; quote?: string; quoteFound?: boolean; reason?: string; checkedBy?: string; p?: number }[]>
   computedCheck: (claim: Claim) => Promise<{ verdict: Verdict; note: string; usd: number }>
   literatureCheck: (claim: Claim, evidence: string) => Promise<{ verdict: Verdict; note: string; usd: number }>
   /** True once the run has spent max_usd: no further paid check is made, and the claim is recorded as unchecked. Checked before every first-pass and escalation call. */
@@ -234,7 +234,7 @@ export interface ClaimDeps {
   /** The screened evidence text for a source ("brief" for the brief), or undefined when it is not in the pool. */
   evidenceFor: (source: string) => string | undefined
   save: () => void
-  emit: (key: string, event: { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string }) => void
+  emit: (key: string, event: { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }) => void
 }
 
 /**
@@ -252,12 +252,13 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
     if (row && !lines.includes(`[${row.verdict}] ${claim.text}`)) lines.push(`[${row.verdict}] ${claim.text}`)
     return Boolean(row)
   }
-  const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string, checkedBy?: string) => {
+  const record = (claim: Claim, verdict: Verdict, checker: Checker, p?: number, note?: string, checkedBy?: string, quoteFound?: boolean) => {
     const key = keyOf(claim)
     if (state.ledger.some((e) => e.key === key)) return // the same claim twice in one reply
-    state.ledger.push({ key, round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}) })
+    // `source` is what the member cited: a URL for a literature claim (written by a model: untrusted), "brief", or a description of the computation.
+    state.ledger.push({ key, round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}), ...(quoteFound === undefined ? {} : { quoteFound }), source: claim.source })
     deps.save()
-    deps.emit(`claim:${key}`, { type: "claim.checked", round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}) })
+    deps.emit(`claim:${key}`, { type: "claim.checked", round, member, claim: claim.text, kind: claim.kind, verdict, checker, p, note, ...(checkedBy ? { checkedBy } : {}), ...(quoteFound === undefined ? {} : { quoteFound }), source: claim.source })
     lines.push(`[${verdict}] ${claim.text}`)
   }
   const claimHash = (claim: Claim) => createHash("sha1").update(`${claim.kind}\n${claim.text}\n${claim.source}`).digest("hex").slice(0, 16)
@@ -269,7 +270,7 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
     const prior = state.ledger.find((e) => e.round < round && e.key === `${e.round}:${member}:${hash}` &&
       (e.verdict === "verified" || e.verdict === "contradicted" || (e.verdict === "unsupported" && !/^(source is not in|checker failed|checker gave no clear verdict)/.test(e.note ?? ""))))
     if (!prior) return false
-    record(claim, prior.verdict, prior.checker, prior.p, `${prior.note ?? ""} [ruling carried over from round ${prior.round}; not checked again]`.trim(), prior.checkedBy)
+    record(claim, prior.verdict, prior.checker, prior.p, `${prior.note ?? ""} [ruling carried over from round ${prior.round}; not checked again]`.trim(), prior.checkedBy, prior.quoteFound)
     return true
   }
   const escalate = async (claim: Claim, evidence: string, why?: string) => {
@@ -279,7 +280,7 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
     deps.save()
     const ruling = claim.kind === "computed" ? await deps.computedCheck(claim) : await deps.literatureCheck(claim, evidence)
     state.checkerUsd += ruling.usd
-    record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, ruling.note)
+    record(claim, ruling.verdict, claim.kind === "computed" ? "claude-code" : "openai", undefined, why ? `${ruling.note} [first pass escalated: ${why}]` : ruling.note)
   }
 
   // Group claims by the evidence they cite, so the first-pass checker reads each piece of evidence once.
@@ -300,7 +301,7 @@ export async function checkClaims(deps: ClaimDeps, round: number, member: string
       // A missing or unknown ruling is never a verdict: it escalates.
       const r = results[i]
       if (!r || (r.verdict !== "verified" && r.verdict !== "contradicted" && r.verdict !== "unsupported")) await escalate(claim, evidence, r?.reason)
-      else record(claim, r.verdict, "first-pass", r.p, r.quote ? `quoted: "${r.quote.replace(/\s+/g, " ").slice(0, 300)}"` : undefined, r.checkedBy)
+      else record(claim, r.verdict, "first-pass", r.p, r.quote ? `quoted: "${r.quote.replace(/\s+/g, " ").slice(0, 300)}"` : undefined, r.checkedBy, r.quoteFound)
     }
   }
   deps.save()

@@ -75,7 +75,7 @@ Should fix, not blocking:
 Checked and clean:
 
 - No key in history. `git log -p --all` (20 commits, one branch, no stash) was scanned for OpenAI, Anthropic,
-  OpenRouter, Hugging Face, GitHub, AWS, Google, Slack key shapes, JWTs, private-key blocks and
+  Hugging Face, GitHub, AWS, Google, Slack key shapes, JWTs, private-key blocks and
   `key|token|secret|password = <long value>`. One match: commit `47913c3`, file
   `glhf/bixbench/tests/unit/test_runner_commands.py` (line 183 today). It is an upstream test placeholder made
   of lowercase words, not a key. (F)

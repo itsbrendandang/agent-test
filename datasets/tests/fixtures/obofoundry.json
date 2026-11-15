@@ -1,0 +1,100 @@
+{
+ "recorded_at": "2026-11-14T23:47:15Z",
+ "ontologies": [
+  {
+   "id": "go",
+   "title": "Gene Ontology",
+   "description": "An ontology for describing the function of genes and gene products",
+   "license": {
+    "label": "CC BY 4.0",
+    "logo": "http://mirrors.creativecommons.org/presskit/buttons/80x15/png/by.png",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+   },
+   "activity_status": "active",
+   "ontology_purl": "http://purl.obolibrary.org/obo/go.owl",
+   "preferredPrefix": "GO",
+   "products": [
+    {
+     "id": "go.owl"
+    },
+    {
+     "id": "go.obo"
+    },
+    {
+     "id": "go.json"
+    }
+   ],
+   "domain": "biological systems"
+  },
+  {
+   "id": "chebi",
+   "title": "Chemical Entities of Biological Interest",
+   "description": "A structured classification of molecular entities of biological interest focusing on 'small' chemical compounds.",
+   "license": {
+    "label": "CC BY 4.0",
+    "logo": "http://mirrors.creativecommons.org/presskit/buttons/80x15/png/by.png",
+    "url": "https://creativecommons.org/licenses/by/4.0/"
+   },
+   "activity_status": "active",
+   "ontology_purl": "http://purl.obolibrary.org/obo/chebi.owl",
+   "preferredPrefix": "CHEBI",
+   "products": [
+    {
+     "id": "chebi.owl"
+    },
+    {
+     "id": "chebi.obo"
+    },
+    {
+     "id": "chebi.json"
+    }
+   ],
+   "domain": "chemistry and biochemistry"
+  },
+  {
+   "id": "hp",
+   "title": "Human Phenotype Ontology (HPO)",
+   "description": "The Human Phenotype Ontology (HPO) is a structured and controlled vocabulary for the phenotypic features encountered in human hereditary and other disease.",
+   "license": {
+    "label": "hpo",
+    "url": "https://hpo.jax.org/app/license"
+   },
+   "activity_status": "active",
+   "ontology_purl": "http://purl.obolibrary.org/obo/hp.owl",
+   "preferredPrefix": "HP",
+   "products": [
+    {
+     "id": "hp.json"
+    },
+    {
+     "id": "hp.obo"
+    },
+    {
+     "id": "hp.owl"
+    }
+   ],
+   "domain": "phenotype"
+  },
+  {
+   "id": "fix",
+   "title": "Physico-chemical methods and properties",
+   "description": "An ontology of physico-chemical methods and properties.",
+   "license": {
+    "label": "CC BY 4.0",
+    "logo": "http://mirrors.creativecommons.org/presskit/buttons/80x15/png/by.png",
+    "url": "http://creativecommons.org/licenses/by/4.0/"
+   },
+   "activity_status": "orphaned",
+   "ontology_purl": "http://purl.obolibrary.org/obo/fix.owl",
+   "products": [
+    {
+     "id": "fix.owl"
+    },
+    {
+     "id": "fix.obo"
+    }
+   ],
+   "domain": "chemistry and biochemistry"
+  }
+ ]
+}

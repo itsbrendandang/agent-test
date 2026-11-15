@@ -37,8 +37,8 @@ Plans and their briefs are files in `board/runs/.plans/` (gitignored). An unstar
 | Per-run model tier and search cap | **Recorded, not applied.** Each agent runs on the tier in its own file and searches are not counted. Every plan says so in `warnings`. |
 | Skills | Only skills with `installed: true` enter a plan. No board run loads a skill file; `build-with-exa` is named because `exa.ts` follows it. `biomni-lab` is an index only and is never chosen. |
 | Exa | Not used by the chat call. The run's members search through `exa.ts`. |
-| Chat model | Anthropic Messages by default, OpenAI or OpenRouter chat completions when chosen. Unit-tested with a fake fetch. **Never run against a real API.** |
-| Board models | OpenRouter, as in `board/config.yaml`, whichever provider wrote the plan. |
+| Chat model | Anthropic Messages by default, OpenAI chat completions when chosen. Unit-tested with a fake fetch. **Never run against a real API.** |
+| Board models | Anthropic and OpenAI directly, as in `board/config.yaml`, whichever provider wrote the plan. |
 
 Members and limits are applied by `applyOverrides` in `board.ts` (tested in `test/board-overrides.test.ts`). The model
 tier and the search cap need more: `modelFor` takes the tier from the agent file, and the search tool has no

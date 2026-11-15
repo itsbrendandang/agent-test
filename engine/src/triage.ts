@@ -11,7 +11,7 @@
 // and must QUOTE the passage of the source that shows it. Code then requires:
 //   - the reply is valid JSON of exactly the expected shape, one ruling per claim, no duplicates, known words only;
 //   - for "supports"/"contradicts": the quote is really in the source text (whitespace and case aside), is at
-//     least MIN_QUOTE characters long, has no ellipsis; and for "supports" every number in the claim appears in
+//     least MIN_QUOTE characters long; and for "supports" every number in the claim appears in
 //     the quote;
 //   - the checker is from a different vendor than the member who made the claim (providers.ts firstPassModel).
 // Anything else, including any malformed or truncated reply, is "escalate" (and "unchecked" once the escalation cap
@@ -20,7 +20,7 @@
 // supports the claim, and a web page can contain text written to be quoted (prompt injection). The number rule
 // narrows this, nothing removes it. Treat "verified" here as "a different model found a real supporting passage",
 // not as a proof.
-import type { Models } from "@earendil-works/pi-ai"
+import type { Model, Models, ThinkingLevel } from "@earendil-works/pi-ai"
 import { type BoardConfig, MOCK } from "./config.ts"
 import type { EvidenceItem, Verdict } from "./events.ts"
 import { refusePaid } from "./paid.ts"
@@ -36,6 +36,8 @@ export interface FirstPassRuling {
   verdict: Verdict | "escalate"
   /** The source passage a verified or contradicted ruling rests on (checked to be in the source). */
   quote?: string
+  /** For a "supports" or "contradicts" ruling: was its quote found in the source it was checked against? Absent for the other rulings, which need no quote. */
+  quoteFound?: boolean
   /** Why a ruling was not accepted, when it was not. */
   reason?: string
   /** The model that gave the ruling, "vendor/model", or "scripted". */
@@ -73,36 +75,42 @@ export function readRulings(text: string, n: number): RawRuling[] {
 }
 
 /** Lower case, one kind of quote mark and space, so a copy that differs in layout still matches. */
-const squash = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\s\u00a0]+/g, " ").trim()
+const squash = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\u2212/g, "-").replace(/[\s\u00a0]+/g, " ").trim()
 
-/** Is `quote` a real passage of `source`? Long enough, no ellipsis, and found in the source after squashing. */
+/** Is `quote` a real passage of `source`? Long enough, and found in the source after squashing (so a quote with "..." in it fails unless the source has them). */
 export function quoteInSource(quote: string, source: string): boolean {
   const q = squash(quote.replaceAll("&lt;", "<"))
-  if (q.length < MIN_QUOTE || quote.length > MAX_QUOTE || /\.{3}|\u2026/.test(quote)) return false
+  if (q.length < MIN_QUOTE || quote.length > MAX_QUOTE) return false
   return squash(source).includes(q)
 }
 
-/** The numbers a claim states ("5.2", "300"). Each must appear in the quote that supports it. */
-export const numbersIn = (text: string): string[] => text.match(/\d+(?:[.,]\d+)?/g) ?? []
-const hasNumber = (quote: string, n: string) => new RegExp(`(?<![\\d.,])${n.replace(/[.,]/g, "[.,]")}(?![\\d])`).test(squash(quote))
+/** The numbers a claim states ("5.2", "300", "-4.96"). Each must appear in the quote that supports it. */
+export const numbersIn = (text: string): string[] =>
+  text.match(/(?<![A-Za-z0-9_.,]|[A-Za-z]-)-?\d+(?:[.,]\d+)?/g) ?? [] // not the digits inside names: CMP-0517, H358, G12C, p53, IC50
+const hasNumber = (quote: string, n: string) => {
+  const digits = n.replace(/^-/, "").replace(/[.,]/g, "[.,]")
+  // A negative claim number needs the minus sign in the quote; a positive one must not be a negative number in the quote.
+  const sign = n.startsWith("-") ? "(?<![\\d.,])-" : "(?<![\\d.,])(?<!(?:^|[\\s(])-)"
+  return new RegExp(`${sign}${digits}(?![\\d])`).test(squash(quote))
+}
 
 /**
  * What one raw ruling is worth, given the claim, its source and whether the checker was independent of the claimant.
  * The only place a "verified" or "contradicted" is made.
  */
-export function route(raw: RawRuling, claim: string, source: string, independent = true): { verdict: Verdict | "escalate"; quote?: string; reason?: string } {
+export function route(raw: RawRuling, claim: string, source: string, independent = true): { verdict: Verdict | "escalate"; quote?: string; quoteFound?: boolean; reason?: string } {
   switch (raw.verdict) {
     case "not_stated": return { verdict: "unsupported" }
     case "unclear": return { verdict: "escalate", reason: "the checker could not tell" }
     case "invalid": return { verdict: "escalate", reason: "the checker's reply was not usable" }
     case "supports":
     case "contradicts": {
-      if (!quoteInSource(raw.quote, source)) return { verdict: "escalate", reason: "the quoted passage is not in the source" }
-      if (raw.verdict === "contradicts") return { verdict: "contradicted", quote: raw.quote }
-      if (!independent) return { verdict: "escalate", reason: "no checker from another vendor than the claimant is configured" }
+      if (!quoteInSource(raw.quote, source)) return { verdict: "escalate", quoteFound: false, reason: "the quoted passage is not in the source" }
+      if (raw.verdict === "contradicts") return { verdict: "contradicted", quote: raw.quote, quoteFound: true }
+      if (!independent) return { verdict: "escalate", quoteFound: true, reason: "no checker from another vendor than the claimant is configured" }
       const missing = numbersIn(claim).filter((n) => !hasNumber(raw.quote, n))
-      if (missing.length) return { verdict: "escalate", reason: `the quoted passage does not contain the claim's number ${missing.join(", ")}` }
-      return { verdict: "verified", quote: raw.quote }
+      if (missing.length) return { verdict: "escalate", quoteFound: true, reason: `the quoted passage does not contain the claim's number ${missing.join(", ")}` }
+      return { verdict: "verified", quote: raw.quote, quoteFound: true }
     }
   }
 }
@@ -136,6 +144,21 @@ export const keepItem = (t: TriageEntry | undefined): boolean => !t || !(t.answe
 
 export const RELEVANCE = { yes: 1, partly: 0.5, no: 0 } as const // a category, not a probability
 
+/**
+ * The reasoning level to ask pi-ai for so that the model reasons as little as it can. Hidden reasoning tokens bill as
+ * output (about 6-7x the cost of this checker), and the check needs none. Read from the model's own catalog entry:
+ *  - no reasoning mode (gpt-4o-mini): nothing to ask for;
+ *  - "off" supported (thinkingLevelMap.off is not null: Haiku, gpt-5.4-nano): ask for nothing, and pi-ai turns it off;
+ *  - "off" not supported (gpt-5-mini): the lowest level it has, "minimal" or "low". It still reasons a little.
+ * Unverified without a paid call: that the provider honours it. usage.reasoning on a real reply would show.
+ */
+export function quietReasoning(model: Pick<Model<never>, "reasoning" | "thinkingLevelMap">): ThinkingLevel | undefined {
+  if (!model.reasoning) return undefined
+  const map = (model.thinkingLevelMap ?? {}) as Record<string, string | null | undefined>
+  if (map.off !== null) return undefined
+  return (["minimal", "low"] as const).find((level) => map[level] !== null)
+}
+
 /** How many calls to the cheap model run at once (seven members search in parallel). */
 export const MAX_CONCURRENT = 4
 
@@ -162,7 +185,7 @@ export class FirstPass {
     if (!model) throw new Error(`First-pass model ${id.qualified} is not in the model catalog`)
     return this.slot(async () => {
       const reply = await this.models.completeSimple(model, { systemPrompt: system, messages: [{ role: "user", content: user, timestamp: Date.now() }] },
-        { signal: AbortSignal.timeout(60_000), maxTokens, ...(id.vendor === "openai" ? { reasoning: "minimal" as const } : {}) }) // reasoning tokens bill as output; the check needs none
+        { signal: AbortSignal.timeout(60_000), maxTokens, reasoning: quietReasoning(model as never) }) // reasoning tokens bill as output; the check needs none
       this.usd += reply.usage?.cost.total ?? 0
       if (reply.stopReason === "error" || reply.stopReason === "aborted") throw new Error(`First-pass check failed (${id.qualified}): ${reply.errorMessage ?? reply.stopReason}`)
       if (reply.stopReason === "length") return "" // cut off: not a usable reply, the caller escalates
@@ -173,7 +196,7 @@ export class FirstPass {
   /** Screen the results of one search. Returns each item with its study type, and whether to keep it. */
   async triage(items: EvidenceItem[], keyQuestion: string): Promise<{ keep: boolean; item: EvidenceItem }[]> {
     if (!items.length) return []
-    const entries = this.mock ? mockTriage(items) : readTriage(await this.ask(parseModelId(this.config.models.cheap, "models.cheap"), TRIAGE_SYSTEM, triagePrompt(keyQuestion, items), 800), items.length)
+    const entries = this.mock ? mockTriage(items) : readTriage(await this.ask(parseModelId(this.config.models.cheap, "models.cheap"), TRIAGE_SYSTEM, triagePrompt(keyQuestion, items), Math.min(800, 100 + 45 * items.length)), items.length)
     return items.map((item, i) => {
       const t = entries[i]
       return { keep: keepItem(t), item: t ? { ...item, studyType: t.study_type === "unclear" ? undefined : t.study_type, relevance: RELEVANCE[t.answers_question] } : item }
@@ -185,7 +208,7 @@ export class FirstPass {
     if (!claims.length) return []
     if (this.mock) return mockRulings(claims, source).map((raw, i) => ({ ...route(raw, claims[i], source), checkedBy: "scripted" }))
     const { model, independent } = firstPassModel(this.config, memberModel)
-    const text = await this.ask(model, CHECK_SYSTEM, checkPrompt(claims, source, this.config.checkers.first_pass.max_source_chars ?? 12_000), 1_500)
+    const text = await this.ask(model, CHECK_SYSTEM, checkPrompt(claims, source, this.config.checkers.first_pass.max_source_chars ?? 12_000), Math.min(1_500, 150 + 220 * claims.length))
     return readRulings(text, claims.length).map((raw, i) => ({ ...route(raw, claims[i], source, independent), checkedBy: model.qualified }))
   }
 }
