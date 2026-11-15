@@ -1,6 +1,6 @@
 # Notes for coding agents (Pi, Claude Code, Codex and others)
 
-This repository holds GLHF (the AI Scientist Bot product), a multi-agent solver (the swarm) for the BixBench3 benchmark, and a
+This repository holds GLHF (the Bit Crew product), a multi-agent solver (the swarm) for the BixBench3 benchmark, and a
 drug candidate board that shares its engine and dashboard. The swarm has nine phases, each
 with its own instructions and an empty context (`swarm/catalog.py`). The nine phases use four
 model groups: planner, experimenter, critic, reporter. So a run uses at most four different

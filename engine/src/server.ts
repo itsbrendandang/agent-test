@@ -18,7 +18,7 @@ const app = createApp()
 
 // app.handler answers its own errors (500); the catch is a last guard, so one request can never stop the engine.
 createServer((req, res) => void app.handler(req, res).catch((error) => { console.error("request handler failed:", error); res.destroy() })).listen(PORT, HOST, () => {
-  console.log(`AI Scientist Bot engine on http://${HOST}:${PORT}`)
+  console.log(`Bit Crew engine on http://${HOST}:${PORT}`)
   console.log(boardModeLine(loadConfig(), app.mock, LOCAL))
   console.log(paidCallsLine())
   console.log(previewLine(app.mock)) // whether the Research screen answers in Real mode (RESEARCH_PREVIEW)

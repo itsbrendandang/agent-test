@@ -15,11 +15,11 @@ beforeEach(() => { localStorage.clear(); vi.stubGlobal("fetch", vi.fn(() => new 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe("loading screen", () => {
-  const splash = () => screen.queryByRole("status", { name: "Loading AI Scientist Bot" })
+  const splash = () => screen.queryByRole("status", { name: "Loading Bit Crew" })
   it("carries the product's name, and no old one", () => {
     localStorage.setItem("app.characters", "1") // the person turned the characters on
     const { container } = render(<Splash ready={false} />)
-    expect(splash()).toHaveTextContent("AI Scientist Bot")
+    expect(splash()).toHaveTextContent("Bit Crew")
     expect(container.textContent).not.toMatch(/Sim Lab|Drug Board/)
     expect(container.querySelectorAll(".splash-crew svg.buddy")).toHaveLength(5) // the restored crew, as drawn before
     expect(container.querySelector(".splash-crew")).toHaveAttribute("aria-hidden", "true")
@@ -135,6 +135,6 @@ describe("characters", () => {
     setCharactersShown(false)
     const { container } = render(<Splash ready={false} />)
     expect(container.querySelector(".splash-crew")).toBeNull()
-    expect(screen.getByRole("status", { name: "Loading AI Scientist Bot" })).toHaveTextContent("AI Scientist Bot")
+    expect(screen.getByRole("status", { name: "Loading Bit Crew" })).toHaveTextContent("Bit Crew")
   })
 })
