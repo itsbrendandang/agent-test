@@ -14,8 +14,33 @@ agents answer them → count how many they got right.
 |---|---|---|
 | `fetch_eval_data.py` | **Downloads** science-question datasets from Hugging Face onto your computer. | Once per dataset. |
 | `eval_adapter.py` | **Runs** a solver on those questions and **scores** it against the known answers. | Every time you want a score. |
+| `demo.sh` | **One-command demo** that does download + run + score together, with explanations. | To quickly show it works. |
 
-So: `fetch` = get the data, `adapter` = run the test.
+So: `fetch` = get the data, `adapter` = run the test, `demo.sh` = both at once.
+
+## What it does, step by step
+
+1. **Download** a set of science questions that already have known answers
+   (from Hugging Face, a free public dataset hub).
+2. **Hide** the correct answer and shuffle the options, then show each question
+   to a "solver".
+3. **Compare** the solver's answers to the known-correct answers and print a
+   score, e.g. `42/50 = 84%`.
+
+The point: it gives you a concrete number for how good a solver is at science
+questions — proof you can show, instead of "trust us, it works".
+
+## Fastest way to see it work
+
+One command does everything (download + run + score):
+
+```bash
+./glhf/scripts/demo.sh            # uses sciq
+./glhf/scripts/demo.sh gpqa       # or another dataset
+```
+
+It prints what it's doing at each step and ends with two scores. If `oracle`
+is ~100% and `random` is ~25%, the whole pipeline works.
 
 ## Setup (once)
 
