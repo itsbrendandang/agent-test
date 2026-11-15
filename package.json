@@ -16,6 +16,7 @@
     "scoreboard": "node engine/src/glhf/cli.ts scoreboard",
     "dashboard": "npm --prefix dashboard run dev",
     "check": "node scripts/check.mjs",
+    "troubleshoot": "node scripts/troubleshoot.mjs",
     "preflight": "npm --prefix engine run preflight",
     "db:backfill": "node engine/src/db/backfill-cli.ts",
     "typecheck": "(cd engine && npx tsc --noEmit) && (cd dashboard && npx tsc -b)",

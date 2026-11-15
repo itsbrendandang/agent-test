@@ -100,6 +100,15 @@ that names the key — fix the typo in `board/config.yaml`.
 **Will tests or a coding agent spend money?**
 No. `npm run check` forces paid calls off, and tests never spend.
 
+## A quick self-check
+
+Before reading further, run the helper. It is free and read-only — it checks Node, uv, installed
+dependencies, your `.env` and run mode, and the two ports, then tells you what (if anything) to fix:
+
+```bash
+npm run troubleshoot
+```
+
 ## Still stuck
 
 - Run `npm run doctor` — it lists what your machine or container has and what is missing.
