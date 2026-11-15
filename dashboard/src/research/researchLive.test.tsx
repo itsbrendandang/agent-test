@@ -93,6 +93,17 @@ describe("the live Agent Lab beside the answer", () => {
     expect(scene()).toBeNull()
   })
 
+  it("counts only the teammates that started a step when the answer is stopped", async () => {
+    const stop = (after: ResearchEvent[]): ResearchEvent[] => [...after, { seq: 99, at: (after.at(-1)?.at ?? 0) + 10, run: REAL[0].run, key: "end", type: "research.cancelled" } as ResearchEvent]
+    const before = await page(stop(REAL.slice(0, 1)))
+    expect(lab()).toBeNull()
+    before.unmount(); streams.length = 0
+    // the planner's one step ("prepare"), then Stop: one teammate took part, not every teammate that has a desk
+    await page(stop(REAL.slice(0, 3)))
+    expect(within(lab()!).getByText("Answer stopped")).toBeInTheDocument()
+    expect(document.querySelector(".research-lab-status")).toHaveTextContent("1 teammate took part")
+  })
+
   it("remembers that the person closed it during a run, and then says the latest step on its one line", async () => {
     const user = userEvent.setup()
     const view = await page(RUNNING)

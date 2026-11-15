@@ -24,6 +24,7 @@ export const REPLAY_SPEED = 3
 /** After the last event of a replay, the end state stays this long (ms of replay time) before the replay ends. */
 const REPLAY_HOLD_MS = 4500
 const TICK_MS = 100
+const ENDS = new Set(["research.finished", "research.failed", "research.cancelled"])
 
 const STATUS_WORD = { empty: "Not started", waiting: "Waiting to start", running: "Team at work", done: "Answer finished", failed: "Answer failed", cancelled: "Answer stopped" } as const
 const STATUS_GLYPH = { empty: "", waiting: "…", running: "●", done: "✓", failed: "✕", cancelled: "■" } as const
@@ -73,7 +74,9 @@ export function ResearchLive({ answer, fresh = false, children }: Props) {
   const clock = playing && first !== undefined && count > 0 ? first + timeline.offsets[count - 1] : undefined
 
   // Who the engine has reported doing something: a step, a walk. A teammate with a role in answers but no step yet stays idle at its desk.
-  const took = CHARACTERS.filter((c) => { const a = full.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + full.visitors.length
+  // Counted before the answer's end, which sends every teammate back to its desk (or marks it done) whether it worked or not.
+  const worked = useMemo(() => answerLab(ordered.filter((e) => !ENDS.has(String(e.type))), answer), [ordered, answer])
+  const took = CHARACTERS.filter((c) => { const a = worked.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + worked.visitors.filter((v) => v.state !== "idle").length
   const has = !!answer && took > 0 // before the first step there is nobody to show: the answer says it is starting
   const live = full.status === "running" || full.status === "waiting"
   const finished = full.status === "done" || full.status === "failed" || full.status === "cancelled"
