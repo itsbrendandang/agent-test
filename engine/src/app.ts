@@ -50,6 +50,9 @@ export const bindHost = (env: NodeJS.ProcessEnv = process.env): string => env.HO
 export const MAX_STREAMS_PER_RUN = 8
 export const MAX_STREAMS = 32
 
+/** The HTTP status for an error a route threw: a known refusal keeps its own, anything else is a 500. */
+const statusOf = (error: unknown) => error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
+
 export interface AppOptions {
   config?: BoardConfig
   /** Scripted models (no cost). Defaults to the engine's mode. */
@@ -159,9 +162,23 @@ export function createApp(options: AppOptions = {}) {
     res.on("close", close)
   }
 
+  /**
+   * Every request goes through here. An error no route caught (a bad URL, an unreadable example file) is answered with
+   * its status, never left to reject: server.ts does not await the handler, and an unhandled rejection stops the engine
+   * and every run in it.
+   */
   async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try { await route(req, res) } catch (error) {
+      console.error(`request failed: ${req.method} ${req.url}:`, error)
+      if (res.headersSent) return void res.end()
+      json(res, statusOf(error), { error: String(error instanceof Error ? error.message : error) })
+    }
+  }
+
+  async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!guard(req, res, env)) return // foreign Host or Origin: refused; preflight: answered
-    const url = new URL(req.url ?? "/", "http://x")
+    let url: URL
+    try { url = new URL(req.url ?? "/", "http://x") } catch { throw new HttpError(400, "invalid URL") }
     const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
     if (parts[0] === "api" && handleExample(req, res, url, config, env)) return
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
@@ -228,8 +245,7 @@ export function createApp(options: AppOptions = {}) {
       json(res, 404, { error: "not found" })
     } catch (error) {
       if (res.headersSent) return void res.end()
-      const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
-      json(res, code, { error: String(error instanceof Error ? error.message : error) })
+      json(res, statusOf(error), { error: String(error instanceof Error ? error.message : error) })
     }
   }
 

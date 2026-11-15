@@ -30,9 +30,20 @@ export function exampleCsv(body: string): string {
   if (start < body.length) rows.push(body.slice(start))
   return rows.map((row, i) => `${row},"${i === 0 ? "provenance" : "Example · practice, $0"}"\r\n`).join("")
 }
-export function exampleEntries(env: NodeJS.ProcessEnv = process.env): Example[] {
-  if (env.GLHF_HIDE_EXAMPLES === "1" || !existsSync(`${root}/manifest.json`)) return []
-  return JSON.parse(readFileSync(`${root}/manifest.json`, "utf8")) as Example[]
+/**
+ * The example library's list. A manifest that cannot be read (half written, a bad merge) shows no examples: it runs
+ * before every /api request (handleExample), so it must never throw.
+ */
+export function exampleEntries(env: NodeJS.ProcessEnv = process.env, dir = root): Example[] {
+  if (env.GLHF_HIDE_EXAMPLES === "1" || !existsSync(`${dir}/manifest.json`)) return []
+  try {
+    const list: unknown = JSON.parse(readFileSync(`${dir}/manifest.json`, "utf8"))
+    if (Array.isArray(list)) return list as Example[]
+    throw new Error("not a list")
+  } catch (error) {
+    console.error(`examples/manifest.json cannot be read, so no examples are shown: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
 }
 export const exampleRecord = (e: Example) => ({ ...JSON.parse(read(e.id, "record.json")) as ResearchRecord, example: true, readOnly: true, provenance: "Example · practice, $0", artifacts: existsSync(`${root}/${e.id}/artifacts.json`) ? JSON.parse(read(e.id, "artifacts.json")) as Artifact[] : [] })
 export const exampleBoards = (env: NodeJS.ProcessEnv) => exampleEntries(env).filter((e) => e.kind === "board").map((e) => ({ ...e, example: true, readOnly: true, provenance: "Example · practice, $0", usd: 0 }))
