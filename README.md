@@ -139,12 +139,12 @@ labels them "Practice".
 
 The app opens here. Type a question in the **"Let's research together!"** box, choose Quick, Standard or Deep, and
 press Send. Under the box, **Try asking** shows biology questions; a click fills the box, and nothing is sent until
-you press Send. The answer is written right under the box. Below it, the **Agent Lab** shows the team as characters in
+you press Send. Below the box, the **Agent Lab** shows the team as characters in
 six rooms (Discovery, Planning, Experiment bench; Evidence review, Quality control, Report studio). Click a teammate to
 see what it does now, and its steps in the Agent Log. The activity panel follows the run. One quiet line counts
 research and practice apart. Spending and limits are in Settings.
 
-![The Overview: the question box, Try asking, and the Agent Lab with six rooms](docs/images/overview.png)
+![The Overview, idle: the question box, the Try asking cards, and the Agent Lab with six rooms](docs/images/overview.png)
 
 The Lab's look is by Anh Lam.
 
@@ -178,7 +178,7 @@ setting, nothing moves and nothing replays by itself. Code: `dashboard/src/resea
 
 ![Research with a Demo answer on the left and its Agent Lab replaying on the right](docs/images/research-lab.png)
 
-![A narrow screen: the Agent Lab, opened again after the answer, above the conversation (taken before name tags were hidden on narrow Labs)](docs/images/research-lab-narrow.png)
+![A narrow screen: the Agent Lab, opened again after the answer, above the conversation (the name tags are hidden, so each agent shows as a dot)](docs/images/research-lab-narrow.png)
 
 ### 3. Saved research: everything that was run
 
@@ -199,7 +199,7 @@ to **Follow newest**. Click a face or a name to see only that agent's messages, 
 Agents. A team review shows a "Round n" line where each round begins, the lead and the members as messages, and each
 statement check as a quiet note with its mark (✓ supported, ✕ contradicted, ? insufficient evidence, ○ not checked).
 
-![The Agent Log: one run as a group chat, with the search box and the Agent and Kind of step menus](docs/images/agent-log.png)
+![The Agent Log for a practice team review: the "Round 1" line, the lead's message, the scout's and the evidence verifier's searches as quiet notes, then the members' messages](docs/images/agent-log.png)
 
 A **Team review** is the drug board: a lead scientist and seven members discuss a written brief over rounds, and the
 lead writes a recommendation. In every round the scout gathers sources first, then the **evidence verifier** rechecks
@@ -209,7 +209,7 @@ insufficient evidence), who took part, and the discussion round by round. The di
 for that review, with a link "Open in Agent Log". Each member opens its messages in the Agent Log; each source and
 checked statement has an "In the graph" link.
 
-![Team review: the recommendation, the counts of checked statements, and who took part](docs/images/team-review.png)
+![Team review: the recommendation, the counts of checked statements, the seven members who took part, and the start of the discussion](docs/images/team-review.png)
 
 ### 5. Agents: who does the work
 
@@ -232,7 +232,7 @@ A research answer has no graph.
 
 Your profile (kept in this browser only), **Run mode** (Demo or Real; see [Turn on Real mode](#turn-on-real-mode)),
 **Usage and limits** (spent today, the limit per run and per day, Exa search), the session token for Real runs, and
-**Appearance**: Light, Dark or Match system. Light is the default.
+**Appearance**: Light, Dark or Match system. Light is the default. **Help** opens "How this works".
 
 ### Compare and Benchmarks
 
@@ -240,9 +240,7 @@ These two are not in the sidebar; open them by their address. **Compare** (`#Com
 one agent alone on the same benchmark task. **Benchmarks** (`#Benchmarks`) sets out our
 results as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. These
 numbers come from real runs, read from the run records. Where something was not measured the screen says "Not
-known". See [Benchmarks](#benchmarks).
-
-![The Benchmarks screen: the record to beat, and one agent against the team of nine with accuracy, tokens, time and cost](docs/images/benchmarks.png)
+known". The numbers are in [Benchmarks](#benchmarks) below.
 
 ### How the screens connect
 
@@ -485,7 +483,7 @@ holds the keys, enforces the spending limits, and is the only part that reaches 
 ```mermaid
 flowchart TB
     you(["You, in a browser"])
-    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Overview · Research · Agent Log · Saved research · Compare<br/>Team review · Agents · Graph · Benchmarks · Settings"]
+    app["<b>The app</b> (dashboard) · 127.0.0.1:5317<br/>Overview · Research · Saved research<br/>How it works: Agent Log · Team review · Graph · Agents<br/>Settings · by address: Compare · Benchmarks"]
 
     subgraph engine["The engine · 127.0.0.1:8787 · on your machine"]
         gate{"Access check and<br/>spending limits"}
