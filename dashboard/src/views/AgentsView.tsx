@@ -4,7 +4,7 @@
 // opening one never makes the other cards in its row grow. Everything on a card is something the engine or the role list
 // says: no invented field. Each agent's picture comes from the one shared mapping (lab/identity.ts), so it is the
 // same here, in a team review and in the Agent Lab. Which roles ran in a given run is on Compare, not on the cards.
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Provenance } from "@/components/Provenance"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -66,6 +66,7 @@ export function AgentsView() {
   const [retry, setRetry] = useState(0)
   /** The member whose details are open in the side panel: one at a time, by its stable key. */
   const [opened, setOpened] = useState<string>()
+  const opener = useRef<HTMLButtonElement>(undefined)
   useEffect(() => {
     let stale = false
     getCatalog().then((c) => { if (!stale) setCatalog(c) },
@@ -145,7 +146,7 @@ export function AgentsView() {
                       <p className="member-foot">{m.foot}</p>
                       {m.details && (
                         <Button type="button" variant="outline" size="sm" className="member-details" aria-label={`Details of ${m.name}`} aria-haspopup="dialog" aria-expanded={opened === m.key}
-                          onClick={() => setOpened(m.key)}>Details</Button>
+                          onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key) }}>Details</Button>
                       )}
                     </div>
                   </li>
@@ -154,7 +155,7 @@ export function AgentsView() {
             </section>
           )
         })}
-        <MemberPanel member={members.find((m) => m.key === opened)} onClose={() => setOpened(undefined)} />
+        <MemberPanel member={members.find((m) => m.key === opened)} onClose={() => setOpened(undefined)} returnFocus={() => opener.current?.focus()} />
         {roles && (group === "all" || group === "nine") && !filter.trim() && (
           <details className="team-prompt team-shared card-surface">
             <summary>Rules every role of the team of nine follows</summary>
@@ -177,10 +178,10 @@ export function AgentsView() {
   )
 }
 /** One member's details, in a side panel over the page. */
-function MemberPanel({ member, onClose }: { member?: Member; onClose: () => void }) {
+function MemberPanel({ member, onClose, returnFocus }: { member?: Member; onClose: () => void; returnFocus: () => void }) {
   return (
     <Sheet open={!!member} onOpenChange={(open) => { if (!open) onClose() }}>
-      <SheetContent side="right" className="member-panel">
+      <SheetContent side="right" className="member-panel" onCloseAutoFocus={(e) => { e.preventDefault(); returnFocus() }}>
         {member && (
           <>
             <SheetHeader className="member-panel-head">

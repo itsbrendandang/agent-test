@@ -56,8 +56,6 @@
 .chat-note strong { color: var(--foreground); font-weight: 500; }
 .chat-note-text { white-space: pre-wrap; }
 .chat-note[data-kind="error"], .chat-note[data-kind="error"] .chat-note-icon { color: var(--danger); }
-/* View → Times and costs off. */
-.event-log[data-meta="hidden"] :is(.chat-meta, .chat-time, .chat-cost) { display: none; }
 .chat-jump { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); box-shadow: var(--shadow-pop); background: var(--background); }
 @media (max-width: 520px) { .chat-thread { padding-inline: 12px; } .chat-note { margin-left: 0; } }
 /* A touch-size window: every control 44 px, like the rest of the app (index.css), and the menus full width. */

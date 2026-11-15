@@ -14,7 +14,7 @@ export function choose(trigger: HTMLElement, option: string | RegExp) {
 }
 
 /** Choose an item of a shadcn DropdownMenu, found by its accessible name. */
-export function chooseMenuItem(trigger: HTMLElement, item: string | RegExp, role: "menuitem" | "menuitemcheckbox" = "menuitem") {
+export function chooseMenuItem(trigger: HTMLElement, item: string | RegExp) {
   openMenu(trigger)
-  fireEvent.click(screen.getByRole(role, { name: item }))
+  fireEvent.click(screen.getByRole("menuitem", { name: item }))
 }

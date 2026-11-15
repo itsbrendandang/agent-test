@@ -155,26 +155,23 @@ it("opens only the bubble that was clicked: every Show thinking and Show more ke
   expect(screen.getAllByRole("button", { name: /thinking/ }).map((b) => b.getAttribute("aria-expanded"))).toEqual(["false", "true"])
 })
 
-it("groups the agent menu, hides step notes and times from the View menu, and clears only the filters", () => {
+it("groups the agent menu and clears the filters", () => {
   render(<EventLog rows={chat} run={run} connection="ended" />)
   openMenu(screen.getByRole("combobox", { name: "Agent" }))
   const options = screen.getAllByRole("option").map((o) => o.textContent)
   expect(options).toEqual(["All agents", "Critic1", "Planner2", "Scout1", "Engine1"])
   expect(screen.getByText("Team")).toBeInTheDocument()
   expect(screen.getByText("System")).toBeInTheDocument()
-  fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
-  chooseMenuItem(screen.getByRole("button", { name: "View" }), /Step notes/, "menuitemcheckbox")
-  expect(document.querySelectorAll(".chat-note")).toHaveLength(0)
-  expect(screen.getByRole("status")).toHaveTextContent("3 of 5 events shown")
-  chooseMenuItem(screen.getByRole("button", { name: "View" }), /Times and costs/, "menuitemcheckbox")
-  expect(screen.getByRole("region", { name: "Full event log" })).toHaveAttribute("data-meta", "hidden")
-  fireEvent.change(screen.getByRole("searchbox", { name: "Search log" }), { target: { value: "Planner" } })
+  fireEvent.click(screen.getByRole("option", { name: /^Planner/ }))
+  expect(screen.getByRole("status")).toHaveTextContent("2 of 5 events shown")
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search log" }), { target: { value: "pilot" } })
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 5 events shown")
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
-  // The view stays as the reader set it.
-  expect(screen.getByRole("status")).toHaveTextContent("3 of 5 events shown")
+  expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown")
+  expect(screen.getByRole("combobox", { name: "Agent" })).toHaveTextContent("All agents")
 })
 
-it("lists two agents with the same name once in the agent menu, and that choice shows both", () => {
+it("keeps two agents with the same name as two choices with different labels, each showing only its own events", () => {
   const twins: EventRow[] = [
     { id: "w1", agent: "Second check", agentId: "checker:a", kind: "check", text: "Checked claim one.", sources: [] },
     { id: "w2", agent: "Second check", agentId: "checker:b", kind: "check", text: "Checked claim two.", sources: [] },
@@ -182,7 +179,9 @@ it("lists two agents with the same name once in the agent menu, and that choice 
   ]
   render(<EventLog rows={twins} run={run} connection="ended" />)
   openMenu(screen.getByRole("combobox", { name: "Agent" }))
-  expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["All agents", "Planner1", "Second check2"])
-  fireEvent.click(screen.getByRole("option", { name: /Second check/ }))
-  expect(screen.getByRole("status")).toHaveTextContent("2 of 3 events shown")
+  expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["All agents", "Planner1", "Second check1", "Second check #21"])
+  fireEvent.click(screen.getByRole("option", { name: /^Second check #2/ }))
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 3 events shown")
+  expect(screen.getByText("Checked claim two.")).toBeInTheDocument()
+  expect(screen.queryByText("Checked claim one.")).toBeNull()
 })

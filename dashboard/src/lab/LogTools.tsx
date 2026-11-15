@@ -1,23 +1,15 @@
-// The Agent Log's toolbar, on one row: what to show (search, agent, kind of step, clear) on the left; how to show it
-// (View) and what to take away (Download) on the right. Every control is a 32 px shadcn control, so they line up.
-import { ChevronDownIcon, DownloadIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react"
+// The Agent Log's toolbar, on one row: what to show (search, agent, kind of step, clear) on the left; what to take
+// away (Download) on the right. Every control is a 32 px shadcn control, so they line up.
+import { ChevronDownIcon, DownloadIcon, SearchIcon, XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LogFilter } from "./logRows"
 
 /** The "everything" choice of a filter menu. A Radix select cannot hold "", which the filter uses for "everything". */
 const ALL = "all"
-
-/** How the log is drawn. Not a filter: Clear filters leaves it alone. */
-export interface LogView {
-  /** Show tool calls, searches and system steps (the small notes between messages). */
-  notes: boolean
-  /** Show each message's time and cost. */
-  meta: boolean
-}
 
 export interface FilterOption { value: string; label: string; count: number }
 export interface FilterGroup { label?: string; options: FilterOption[] }
@@ -49,13 +41,11 @@ function FilterSelect({ label, all, value, groups, onChange, className }: { labe
   )
 }
 
-export function LogTools({ filter, onFilter, agents, kinds, view, onView, shown, onDownload }: {
+export function LogTools({ filter, onFilter, agents, kinds, shown, onDownload }: {
   filter: LogFilter
   onFilter: (next: LogFilter) => void
   agents: FilterGroup[]
   kinds: FilterGroup[]
-  view: LogView
-  onView: (next: LogView) => void
   /** How many events are shown, which is what a download holds. */
   shown: number
   onDownload: (format: "json" | "csv") => void
@@ -75,20 +65,6 @@ export function LogTools({ filter, onFilter, agents, kinds, view, onView, shown,
         </Button>
       </div>
       <div className="event-log-actions">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline"><SlidersHorizontalIcon aria-hidden />View<ChevronDownIcon aria-hidden className="text-muted-foreground" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="event-log-menu w-64">
-            <DropdownMenuLabel>Show in the log</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem checked={view.notes} onCheckedChange={(on) => onView({ ...view, notes: on === true })}>
-              <span className="event-log-menu-text"><span>Step notes</span><small>Tool calls, searches and system steps</small></span>
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={view.meta} onCheckedChange={(on) => onView({ ...view, meta: on === true })}>
-              <span className="event-log-menu-text"><span>Times and costs</span><small>Under each message</small></span>
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="outline" disabled={!shown}><DownloadIcon aria-hidden />Download<ChevronDownIcon aria-hidden className="text-muted-foreground" /></Button>

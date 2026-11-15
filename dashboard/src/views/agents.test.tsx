@@ -66,6 +66,7 @@ describe("member cards", () => {
     expect(scout).toHaveAttribute("data-selected")
     await user.keyboard("{Escape}")
     expect(screen.queryByRole("dialog")).toBeNull()
+    expect(button).toHaveFocus()
     await user.click(within(card("Toxicologist")).getByRole("button", { name: "Details of Toxicologist" }))
     expect(screen.getByRole("dialog", { name: "Toxicologist" })).toHaveTextContent("Used whenthe question is about a safety margin")
     for (const list of lists()) expect(list).not.toHaveTextContent(/latest run|did not run|Ran in|No run yet|working now|2026\d{6}|swarm|task run|board/i)

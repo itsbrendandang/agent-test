@@ -12,13 +12,11 @@ import { AgentAvatar } from "./AgentAvatar"
 import { chatItems, splitMessage, type ChatItem } from "./chat"
 import { readableName } from "./identity"
 import { filterRows, logDownload, type EventRow, type LogFilter } from "./logRows"
-import { LogTools, type FilterGroup, type FilterOption, type LogView } from "./LogTools"
+import { LogTools, type FilterGroup, type FilterOption } from "./LogTools"
 import type { Provenance, RunKind } from "./model"
 import type { Connection } from "./useLabModel"
 import "../design/eventLog.css"
 
-/** The log starts with everything shown. */
-const DEFAULT_VIEW: LogView = { notes: true, meta: true }
 /** Pixels from the bottom that still count as "reading the newest message". */
 const NEAR_BOTTOM = 80
 
@@ -98,18 +96,22 @@ function Message({ item }: { item: ChatItem }) {
   )
 }
 
-/** The agent menu's key for a row: its name, so two ids with the same name (two checkers both called "Second, more
- * careful check") are one choice, not two that look the same. The engine's own steps keep their own key. */
-const agentKey = (r: EventRow) => (r.agentId === "engine" ? "engine" : `agent:${r.agent}`)
-/** The agent menu's choices: the team first, then the engine's own steps; each with its number of events. */
+/** The agent menu's choices, one per agent id: the team first, then the engine's own steps; each with its number of
+ * events. Two ids with the same name (two checkers both called "Second, more careful check") get "#2", "#3"… */
 function agentGroups(rows: readonly EventRow[]): FilterGroup[] {
   const seen = new Map<string, FilterOption>()
   for (const r of rows) {
-    const o = seen.get(agentKey(r))
+    const o = seen.get(r.agentId)
     if (o) o.count++
-    else seen.set(agentKey(r), { value: agentKey(r), label: r.agent, count: 1 })
+    else seen.set(r.agentId, { value: r.agentId, label: r.agent, count: 1 })
   }
-  const all = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label))
+  const all = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
+  const named = new Map<string, number>()
+  for (const o of all) {
+    const n = (named.get(o.label) ?? 0) + 1
+    named.set(o.label, n)
+    if (n > 1) o.label = `${o.label} #${n}`
+  }
   return [{ label: "Team", options: all.filter((o) => o.value !== "engine") }, { label: "System", options: all.filter((o) => o.value === "engine") }]
 }
 function kindGroups(rows: readonly EventRow[]): FilterGroup[] {
@@ -120,11 +122,10 @@ function kindGroups(rows: readonly EventRow[]): FilterGroup[] {
 
 export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { id: string; kind: RunKind; provenance?: Provenance }; connection: Connection }) {
   const [filter, setFilterState] = useState<LogFilter>({ agent: "", kind: "", query: "" })
-  const [view, setViewState] = useState<LogView>(DEFAULT_VIEW)
   const [downloadError, setDownloadError] = useState("")
   const agents = useMemo(() => agentGroups(rows), [rows])
   const kinds = useMemo(() => kindGroups(rows), [rows])
-  const shown = useMemo(() => filterRows(rows, { ...filter, agent: "" }).filter((r) => (!filter.agent || agentKey(r) === filter.agent) && (view.notes || !r.note)), [rows, filter, view.notes])
+  const shown = useMemo(() => filterRows(rows, filter), [rows, filter])
   const items = useMemo(() => chatItems(shown), [shown])
   const download = (format: "json" | "csv") => {
     try {
@@ -142,7 +143,6 @@ export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { i
   const thread = useRef<HTMLDivElement>(null)
   const [readUpTo, setReadUpTo] = useState<number>()
   const setFilter = (next: LogFilter) => { setFilterState(next); setReadUpTo(undefined) }
-  const setView = (next: LogView) => { setViewState(next); setReadUpTo(undefined) }
   const live = connection !== "ended" && connection !== "offline"
   const unread = live && readUpTo !== undefined && shown.length > readUpTo
   useLayoutEffect(() => {
@@ -158,8 +158,8 @@ export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { i
   }
 
   return (
-    <section className="event-log" aria-label="Full event log" data-meta={view.meta ? undefined : "hidden"}>
-      <LogTools filter={filter} onFilter={setFilter} agents={agents} kinds={kinds} view={view} onView={setView} shown={shown.length} onDownload={download} />
+    <section className="event-log" aria-label="Full event log">
+      <LogTools filter={filter} onFilter={setFilter} agents={agents} kinds={kinds} shown={shown.length} onDownload={download} />
       <div className="event-log-status" role="status">
         {connection === "connecting" ? "Reading the run’s events… " : connection === "lost" ? "The event connection failed. Reconnecting; previously received rows are kept. " : connection === "offline" ? "This browser cannot follow events. Try a browser with event-stream support. " : connection === "ended" ? "Finished run · " : "Following live events · "}
         {shown.length} of {rows.length} events shown
