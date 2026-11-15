@@ -95,7 +95,7 @@ Paths: `swarm/` is `glhf/bixbench/src/bixbench3/inspect_harness/swarm/`. `v1/` i
 | 53 | past.dev was tested against the live API. | `docs/status.md`, `README.md` | taken from docs |
 | 54 | Pi is the coding agent harness the project was built with. | `docs/pi-setup.md`; `.pi/settings.json`, `.pi/agents/` (4 profiles) exist | taken from docs; the files exist |
 | 55 | Pi Durable runs the tracker and the drug board. | `engine/package.json:14`; `engine/src/board/board.ts:28-29,473`; `engine/src/glhf/task.ts:14` | verified-by-me |
-| 56 | Modal is not used. | No `import modal` or `"modal"` dependency in any `.py`, `.ts`, `.json` or `.toml` file outside `node_modules` and `.venv` (grep) | verified-by-me |
+| 56 | Modal runs the adapter's analysis sandbox, serves open models and hosts the app in Demo mode. (Corrected on 15 Nov 2026. Before that, this line said "Modal is not used".) | `import modal` in `v1/modal_sandbox.py`, `v1/modal_image.py`, `glhf/openmodels/apps/qwen36_35b_a3b.py`; `modal==1.6.1` in `glhf/bixbench_v1/pyproject.toml:58`; `deploy/modal_host/`. The runs on Modal: `docs/status.md` ("Sponsor tools") | verified-by-me (code, grep); taken from docs (runs) |
 | 57 | The swarm's agent loop runs on Inspect AI, not on Pi. | `swarm/solver.py:22-26` (imports from `inspect_ai`) | verified-by-me |
 
 ## What we got wrong

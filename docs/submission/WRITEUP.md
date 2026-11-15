@@ -113,7 +113,7 @@ model. **They have not been run with a real model. We do not know if they help.*
 | past.dev | Approved lessons are sent and recalled (`swarm/past_memory.py`). | Calls tested with a stand-in. Live test: stated in `docs/status.md`. Not used inside a full run. |
 | Pi | The coding agent harness we built with (`.pi/`, `docs/pi-setup.md`). | |
 | Pi Durable | Runtime of the run tracker and the drug board (`engine/package.json`, `engine/src/board/board.ts`). | Crash and resume checked by hand, scripted runs only. |
-| Modal | Planned. | **Not used.** No code imports it. |
+| Modal | The analysis sandbox of the BixBench v1 adapter (`--sandbox modal`, `glhf/bixbench_v1/src/bixbench_v1/modal_sandbox.py`) and of swarm runs (`ANALYSIS_BACKEND=modal`). Open models served on GPUs (`glhf/openmodels/`). The app, hosted in Demo mode (`deploy/modal_host/`). | Adapter sandbox: ran with the scripted model and in the billed opt-in cloud tests. One open model (Qwen3.6 35B) was served there for the 82-question grid. App hosted in Demo mode. Swarm runs on Modal and `--jobs N` on Modal: tested with fakes only. Stated in `docs/status.md`. |
 
 The swarm's own agent loop runs on Inspect AI, the benchmark's framework, not on Pi.
 
