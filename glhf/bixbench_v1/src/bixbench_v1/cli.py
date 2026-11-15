@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from . import paid, staging
+from . import paid, roles, staging
 from . import report as reporting
 from .dataset import (
     ANSWER_MODES,
@@ -31,15 +31,18 @@ from .dataset import (
     find_capsules,
     group_capsules,
     load_questions,
+    new_shuffle_salt,
+    public_view,
 )
-from .grading import PROFILES, InspectJudge, Profile
+from .grading import PROFILE_JUDGES, PROFILES, InspectJudge, Profile
 from .runner import check_prompt, grade_run, load_env, run_capsule
-from .solvers import CRITIC_HINTS
+from .solvers import CRITIC_HINTS, SWARM_BUDGETS, swarm_budget_mode
 from .task import SOLVERS, backstop_tokens
 
 REPO = Path(__file__).resolve().parents[4]
 DATA = REPO / "glhf" / "data" / "bixbench_v1"
-DEFAULT_JUDGE = "openai/gpt-4o"  # the official grader's default model
+# The default profile's judge. Each profile has its own default: see grading.PROFILE_JUDGES.
+DEFAULT_JUDGE = PROFILE_JUDGES["per-mode"].model
 JUDGE_RESERVE_TOKENS = 20_000  # per run, when checking a total token cap
 
 
@@ -108,11 +111,9 @@ def cmd_audit(arguments: argparse.Namespace) -> int:
             reason = item["reason"].split(" (")[0]
             reasons[reason] = reasons.get(reason, 0) + 1
         try:
-            from . import roles
-            from .dataset import public_view
-
             for mode in ANSWER_MODES:
-                check_prompt(roles.brief(public_view(capsule.questions, mode)[0]), capsule, mode)
+                view = public_view(capsule.questions, mode, salt=new_shuffle_salt())[0]
+                check_prompt(roles.brief(view), capsule, mode)
             prompt = "prompts clean"
         except staging.IntegrityError as error:
             prompt, problems = f"PROMPT LEAK: {error}", problems + 1
@@ -123,16 +124,50 @@ def cmd_audit(arguments: argparse.Namespace) -> int:
             f"{capsule.key:20} staged={len(manifest.included):4} files {megabytes:8.1f} MB  "
             f"dropped={len(manifest.excluded)} {reasons or ''}  {prompt}"
         )
+        # A data-folder file whose type is not on the allow-list is withheld, and said out
+        # loud: it is either a new data type to add to staging.DATA_SUFFIXES or a write-up.
+        for item in manifest.not_listed:
+            print(f"    REVIEW withheld from /data: {item['member']} ({item['reason']})")
+            problems += 1
     print(f"{problems} problem(s)")
     return 1 if problems else 0
 
 
-def _judge(arguments: argparse.Namespace) -> InspectJudge | None:
+def _temperature(text: str) -> float | None:
+    """--judge-temperature: a number, or "default" for the provider's default."""
+    return None if text.lower() in ("default", "provider") else float(text)
+
+
+def _judges(
+    arguments: argparse.Namespace, profiles: tuple[Profile, ...]
+) -> dict[str, InspectJudge | None]:
+    """The judge of each grading profile: that profile's default model and temperature
+    (grading.PROFILE_JUDGES) unless --judge-model / --judge-temperature say otherwise. Every
+    judge model passes the NO_PAID_CALLS guard before any is built."""
     # A scripted run makes no paid call unless a judge is named explicitly.
-    if arguments.no_judge or (arguments.model == "mock" and arguments.judge_model == DEFAULT_JUDGE):
-        return None
-    paid.refuse_judge(arguments.judge_model)  # NO_PAID_CALLS
-    return InspectJudge(arguments.judge_model, arguments.judge_temperature)
+    scripted = getattr(arguments, "model", None) == "mock" and arguments.judge_model is None
+    if arguments.no_judge or scripted:
+        return dict.fromkeys(profiles)
+    chosen: dict[str, tuple[str, float | None]] = {}
+    for profile in profiles:
+        default = PROFILE_JUDGES[profile]
+        temperature = (
+            default.temperature
+            if arguments.judge_temperature is None
+            else _temperature(arguments.judge_temperature)
+        )
+        chosen[profile] = (arguments.judge_model or default.model, temperature)
+    for model, _ in chosen.values():
+        paid.refuse_judge(model)  # NO_PAID_CALLS
+    built: dict[tuple[str, float | None], InspectJudge] = {}
+    for spec in chosen.values():
+        if spec not in built:
+            built[spec] = InspectJudge(*spec)
+    return {profile: built[spec] for profile, spec in chosen.items()}
+
+
+def _judge_tokens(judges: dict[str, InspectJudge | None]) -> int:
+    return sum(j.tokens for j in {id(j): j for j in judges.values() if j is not None}.values())
 
 
 def _profiles(arguments: argparse.Namespace) -> tuple[Profile, ...]:
@@ -143,8 +178,12 @@ def _profiles(arguments: argparse.Namespace) -> tuple[Profile, ...]:
     return chosen
 
 
-def _write_report(out: Path, profile: str) -> None:
-    report = reporting.build(out, profile)
+def _write_report(out: Path, profile: str, model: str | None = None) -> None:
+    try:
+        report = reporting.build(out, profile, model=model)
+    except reporting.ReportError as error:
+        print(f"no report written: {error}")
+        return
     (out / "report.json").write_text(json.dumps(report, indent=2))
     text = reporting.markdown(report)
     (out / "report.md").write_text(text)
@@ -171,8 +210,9 @@ def cmd_run(arguments: argparse.Namespace) -> int:
         json.loads(budget_file.read_text()) if budget_file.exists() else {"spent": 0, "runs": []}
     )
     budget["cap"] = arguments.total_token_cap
-    judge = _judge(arguments)
     profiles = _profiles(arguments)
+    judges = _judges(arguments, profiles)
+    swarm_budget = swarm_budget_mode(arguments.swarm_budget)  # the option, else the variable
     stopped = False
     for capsule in _selected(arguments):
         units: list[list[str] | None] = (
@@ -181,18 +221,19 @@ def cmd_run(arguments: argparse.Namespace) -> int:
         for question_ids in units:
             count = len(question_ids) if question_ids else len(capsule.questions)
             max_tokens, seconds = _budget(arguments, count)
-            for solver in solvers:
+            for solver, repeat in [(s, r) for r in range(arguments.repeats) for s in solvers]:
                 run_dir = out / capsule.key
                 if question_ids:
                     run_dir = run_dir / question_ids[0]
-                run_dir = run_dir / solver
+                run_dir = run_dir / (solver if repeat == 0 else f"{solver}-r{repeat}")
                 done = run_dir / "run.json"
                 if done.exists() and not arguments.force:
                     if json.loads(done.read_text()).get("status") == "done":
                         print(f"skip {run_dir} (already done; --force reruns it)")
                         continue
                 # A run starts only if the cap still covers the most it can spend.
-                worst = backstop_tokens(max_tokens) + JUDGE_RESERVE_TOKENS
+                worst = backstop_tokens(max_tokens, swarm_budget=swarm_budget)
+                worst += JUDGE_RESERVE_TOKENS
                 if (
                     arguments.total_token_cap
                     and budget["spent"] + worst > arguments.total_token_cap
@@ -222,12 +263,14 @@ def cmd_run(arguments: argparse.Namespace) -> int:
                         max_messages_per_role=arguments.max_messages_per_role,
                         role_models=role_models,
                         critic_hints=arguments.critic_hints,
-                        seed=arguments.seed,
+                        seed=arguments.seed + repeat,
                         image=arguments.image,
+                        swarm_budget=swarm_budget,
+                        repeat=repeat,
                     )
                 except Exception as error:
                     # Unknown spend: charge the most the run could have used, so the cap holds.
-                    budget["spent"] += backstop_tokens(max_tokens)
+                    budget["spent"] += backstop_tokens(max_tokens, swarm_budget=swarm_budget)
                     budget["runs"].append(
                         {
                             "run": str(run_dir.relative_to(out)),
@@ -238,11 +281,9 @@ def cmd_run(arguments: argparse.Namespace) -> int:
                     budget_file.write_text(json.dumps(budget, indent=2))
                     print(f"  ERROR {type(error).__name__}: {str(error)[:300]}", flush=True)
                     continue
-                judge_before = judge.tokens if judge else 0
-                grade_run(
-                    run_dir, capsule, judge, arguments.judge_model if judge else None, profiles
-                )
-                judge_tokens = (judge.tokens - judge_before) if judge else 0
+                judge_before = _judge_tokens(judges)
+                grade_run(run_dir, capsule, judges, None, profiles)
+                judge_tokens = _judge_tokens(judges) - judge_before
                 budget["spent"] += summary["total_tokens"] + judge_tokens
                 budget["runs"].append(
                     {
@@ -269,40 +310,37 @@ def cmd_run(arguments: argparse.Namespace) -> int:
 
 def cmd_grade(arguments: argparse.Namespace) -> int:
     load_env(REPO / ".env")
-    by_key = {c.key: c for c in _capsules(arguments)}
-    if not arguments.no_judge:
-        paid.refuse_judge(arguments.judge_model)  # NO_PAID_CALLS
-    judge = (
-        None
-        if arguments.no_judge
-        else InspectJudge(arguments.judge_model, arguments.judge_temperature)
-    )
     profiles = _profiles(arguments)
+    judges = _judges(arguments, profiles)  # NO_PAID_CALLS is checked in there, before anything
+    by_key = {c.key: c for c in _capsules(arguments)}
     for run_file in sorted(arguments.out.rglob("run.json")):
         run = json.loads(run_file.read_text())
         if run.get("status") == "running":
             continue
-        grade_run(
-            run_file.parent,
-            by_key[run["capsule"]],
-            judge,
-            arguments.judge_model if judge else None,
-            profiles,
-        )
-    if judge:
-        print(f"judge: {judge.calls} calls, {judge.tokens:,} tokens")
+        grade_run(run_file.parent, by_key[run["capsule"]], judges, None, profiles)
+    for judge in {id(j): j for j in judges.values() if j is not None}.values():
+        print(f"judge {judge.model}: {judge.calls} calls, {judge.tokens:,} tokens")
     _write_report(arguments.out, profiles[0])
     return 0
 
 
 def cmd_report(arguments: argparse.Namespace) -> int:
-    _write_report(arguments.out, arguments.grading.split(",")[0])
+    _write_report(arguments.out, arguments.grading.split(",")[0], arguments.model)
     return 0
 
 
 def _grading_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--judge-model", default=DEFAULT_JUDGE, help="LLM judge (Inspect model id)")
-    parser.add_argument("--judge-temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--judge-model",
+        help="LLM judge (Inspect model id) for every profile. Default: each profile's own "
+        + ", ".join(f"{name}: {spec.model}" for name, spec in PROFILE_JUDGES.items()),
+    )
+    parser.add_argument(
+        "--judge-temperature",
+        help="a number, or \"default\" for the provider's default. Default: each profile's own "
+        "(per-mode 0, official 1, paper the provider's default); grade.json records it and the "
+        "report flags a deviation",
+    )
     parser.add_argument(
         "--no-judge", action="store_true", help="code rules only; the rest is ungraded"
     )
@@ -357,6 +395,16 @@ def main() -> int:
         default="route",
         help="swarm: show the critic the analyst's one-line route (default) or nothing",
     )
+    sub.add_argument(
+        "--swarm-budget",
+        choices=SWARM_BUDGETS,
+        help="swarm tokens: 'equal' to the single agent's budget, or 'extended' (the analyst "
+        "gets all of it and the total is 2.25 times that). Default: $BIXBENCH_V1_SWARM_BUDGET, "
+        "else equal",
+    )
+    sub.add_argument(
+        "--repeats", type=int, default=1, help="runs of each unit per solver (seed + repeat)"
+    )
     sub.add_argument("--total-token-cap", type=int, help="stop before a run that could exceed it")
     sub.add_argument("--seed", type=int, default=0, help="option shuffling; sent to the provider")
     sub.add_argument("--image", help="sandbox image (default: the official BixBench image)")
@@ -372,6 +420,7 @@ def main() -> int:
     sub = commands.add_parser("report", help="rebuild report.md and report.json")
     sub.add_argument("--out", type=Path, required=True)
     sub.add_argument("--grading", default="per-mode")
+    sub.add_argument("--model", help="report this model only (several are never pooled)")
     sub.set_defaults(run=cmd_report)
 
     arguments = parser.parse_args()

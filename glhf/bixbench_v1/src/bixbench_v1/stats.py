@@ -133,7 +133,9 @@ def capsule_sign_flip(
                 for signed in (total + value, total - value):
                     grown[round(signed, 9)] = grown.get(round(signed, 9), 0) + count
             totals = grown
-        extreme = sum(count for total, count in totals.items() if abs(total) >= observed - tolerance)
+        extreme = sum(
+            count for total, count in totals.items() if abs(total) >= observed - tolerance
+        )
         return {
             "p": extreme / 2 ** len(active),
             "method": "exact",

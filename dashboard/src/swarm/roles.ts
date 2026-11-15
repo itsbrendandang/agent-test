@@ -1,4 +1,4 @@
-// The swarm's nine roles, in the order they run. Shared by the Swarm view and the Agents view.
+// The swarm's nine roles, in the order they run. Shared by the Compare view and the Agents view.
 // `key` is the first word of the phase name the solver logs (see swarm/solver.py).
 export const ROLES = [
   { key: "scout", species: "bunny", name: "Scout", does: "Inspects the data and the tools before anyone plans" },

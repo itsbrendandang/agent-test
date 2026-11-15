@@ -1,6 +1,6 @@
 // Exa web search for board members. Follows Exa's build-with-exa skill (.agents/skills/build-with-exa):
 // the request is the query, the objective the model wrote, type "auto" and highlights, and nothing else.
-// Results pass through Jev triage before any LLM reads them, so off-topic hits never cost model tokens.
+// Results pass through the cheap first-pass triage (triage.ts) before any member reads them, so off-topic hits never cost the members' tokens.
 import { MOCK } from "./config.ts"
 import type { EvidenceItem } from "./events.ts"
 import { MOCK_EVIDENCE } from "./mock.ts"
@@ -22,11 +22,14 @@ export interface SearchResult {
   items: EvidenceItem[]
   /** Written by Exa for the model that reads the results; passed on with them. */
   notices: string[]
+  /** What Exa says this request cost (costDollars in its response), when it says. Undefined for fixtures and when the field is absent or unreadable. */
+  costUsd?: number
 }
 
 interface ExaResponse {
   results: { url: string; title?: string | null; highlights?: string[]; publishedDate?: string }[]
   notices?: { code: string; message: string }[]
+  costDollars?: unknown
   warnings?: { code: string; message: string }[]
 }
 
@@ -45,12 +48,28 @@ export async function exaLive(query: string, objective: string, apiKey: string):
   return {
     items: body.results.map((r) => ({ url: r.url, title: r.title || r.url, text: (r.highlights ?? []).join("\n") })),
     notices: (body.notices ?? []).map((n) => n.message),
+    costUsd: reportedCost(body.costDollars),
   }
 }
 
-/** Fixture papers in mock mode or without a key; a live search otherwise. */
-export async function exaSearch(query: string, objective: string, mock = MOCK): Promise<SearchResult> {
-  const key = process.env.EXA_API_KEY
-  if (mock || !key) return { items: MOCK_EVIDENCE.slice(0, 5), notices: [] }
+/** The cost in a response's `costDollars`: a number, or an object with a numeric `total`. Anything else is "not reported". */
+export function reportedCost(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : value && typeof value === "object" ? (value as { total?: unknown }).total : undefined
+  return typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
+/** A real board run needs EXA_API_KEY and does not have it. */
+export class MissingExaKey extends Error {
+  constructor() { super("Exa search: EXA_API_KEY is not set. A real run does not fall back to fixture papers; set the key in .env, or run with scripted models.") }
+}
+
+/**
+ * Fixture papers in scripted mode (the run itself is labelled scripted: run.started.mock, run.json mock); a live
+ * search otherwise. A real run with no key throws: fixture papers presented as search results would be fake evidence.
+ */
+export async function exaSearch(query: string, objective: string, mock = MOCK, env: NodeJS.ProcessEnv = process.env): Promise<SearchResult> {
+  if (mock) return { items: MOCK_EVIDENCE.slice(0, 5), notices: [] }
+  const key = env.EXA_API_KEY?.trim()
+  if (!key) throw new MissingExaKey()
   return exaLive(query, objective, key)
 }

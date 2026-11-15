@@ -36,7 +36,7 @@ process.env.NO_PAID_CALLS = "1" // the kill switch stays on, except inside cloud
 const { openTracker } = await import("../src/glhf/tracker.ts")
 const { loadStored, patchRun, runDir, RUNS, saveStored } = await import("../src/glhf/store.ts")
 const { failUntracked, processState, readLocal, RunTask, startOnce } = await import("../src/glhf/task.ts")
-const { alive, parseStamp } = await import("../src/glhf/proc.ts")
+const { alive, parseStamp, stamp } = await import("../src/glhf/proc.ts")
 
 // After the imports: env.ts fills the keys from .env when it loads. Nothing here may be able to spend.
 for (const key of Object.keys(process.env)) if (/(_API_KEY|_TOKEN)$/.test(key)) delete process.env[key]
@@ -265,7 +265,7 @@ scenario("watchLocal: a runner that exits non-zero", async (t) => {
 })
 
 scenario("watchLocal: a runner that writes a malformed run.json and exits 0", async (t) => {
-  for (const [kind, why] of [["text", "it is not JSON"], ["truncated", "it is not JSON"], ["array", "it is not a JSON object"], ["status", 'status is "finished-ish", not "running", "done" or "failed"']]) {
+  for (const [kind, why] of [["text", "it is not JSON"], ["truncated", "it is not JSON"], ["array", "it is not a JSON object"], ["status", 'status is "finished-ish", not "running", "done" or "failed"']] as const) {
     await t.test(kind, async () => {
       rmSync(stubLog, { force: true })
       const { id } = await startLocal("timeouts/garbage.mjs", { GLHF_STUB_GARBAGE: kind })
@@ -441,7 +441,8 @@ scenario("the spawn of the wrapping shell itself fails (child.pid is undefined):
     const final = await settle(id)
     assert.equal(final.phase, "failed")
     const why = `the folder to start it in does not exist (${join(base, "no-such-folder")})`
-    assert.ok([why, `${why}: spawn sh ENOENT`].includes(final.error!.replace("the local runner could not be started: ", "")), final.error) // Node's own reason arrives as an event, a moment later
+    const said = (final.error ?? "").replace("the local runner could not be started: ", "")
+    assert.ok(said === why || said === `${why}: spawn sh ENOENT`, said) // Node's own reason arrives as an event, a moment later
     assert.ok(final.finishedAt! - final.startedAt < 1_500, "known at the first look, not after five polls of guessing")
     assert.equal(text(id, "runner.pid"), "", "no pid: no process was created")
     assert.equal(text(id, "runner.nospawn"), `${why}: spawn sh ENOENT`)
@@ -617,4 +618,149 @@ scenario("awaitLaunch: the engine died between the pid marker and the pid of the
   sweep()
   await assertNoProcess()
   await assertRestartChangesNothing(alone, "launch")
+}))
+
+// ---------------------------------------------------------------- a tracking task that ends without a verdict
+
+const FAULT = /^the tracker stopped following this run: its tracking task faulted \(The argument 'args\[\d+\]' must be a string without null bytes[^\n]*\)$/
+
+scenario("a phase that throws faults the task: the run is failed with what was thrown, at once, and does not hold the machine", async () => {
+  // A request no check would let through today (a record from another version, or a damaged one): spawn() throws on it.
+  const id = "seeded-phase-throws"
+  await restart(() => saveStored({ request: { ...LOCAL, caseDir: "a\0b" }, run: { id, mode: "local", task: "demo", solver: "glhf", model: "mock", roleModels: {}, phase: "queued", startedAt: Date.now() } }))
+  const final = await settle(id, 3_000) // it once stayed "launching" until the engine was restarted
+  assert.equal(final.phase, "failed")
+  assert.match(final.error ?? "", FAULT)
+  assert.equal(final.detail, undefined)
+  assert.ok(final.finishedAt)
+  assert.match(text(id, "tracker.log"), /tracking ended: its tracking task faulted/)
+  assert.deepEqual(launches(), [])
+  await assertNoProcess()
+  const next = await startLocal("timeouts/silent.mjs") // not refused with "a local run is still going"
+  await settle(next.id)
+  await assertRestartChangesNothing(id, "runner")
+
+  // The engine died after the fault was stored and before the record was written: the next start writes it, with the same reason.
+  const log = text(id, "tracker.log")
+  await restart(() => { const stored = loadStored(id)!; const { error: _e, finishedAt: _f, ...run } = stored.run; saveStored({ ...stored, run: { ...run, phase: "launching", detail: "starting the local runner" } }) })
+  const again = await settle(id, 3_000)
+  assert.equal(again.phase, "failed")
+  assert.match(again.error ?? "", FAULT)
+  assert.equal(text(id, "tracker.log").slice(log.length).trim().split("\n").length, 1, "written once")
+  assert.deepEqual(launches().filter((line) => line.includes(id)), [], "nothing was launched for it")
+  await assertRestartChangesNothing(id, "runner")
+})
+
+scenario("failUntracked: a local runner nothing follows any more is stopped before its run is failed; repeating it changes nothing", async () => {
+  const id = "untracked-live-runner", dir = runDir(id)
+  await restart(async () => {
+    saveStored({ request: LOCAL, taskId: 999_999, run: { id, mode: "local", task: "demo", solver: "glhf", model: "mock", roleModels: {}, phase: "running", startedAt: Date.now() } })
+    assert.equal(startOnce(dir, "runner", [process.execPath, join(here, "fixtures/timeouts/hang.mjs"), "--out", dir], join(dir, "runner.log"), null, here), true)
+    await launched(id, "runner")
+    const both = [failUntracked(id, "its tracking task faulted (boom)"), failUntracked(id, "a second caller at the same moment")]
+    assert.equal(both[0], both[1], "two callers share one attempt")
+    await both[0]
+    const failed = structuredClone(run(id))
+    assert.equal(failed.phase, "failed")
+    assert.equal(failed.error, "the tracker stopped following this run: its tracking task faulted (boom). Its runner was stopped")
+    await assertNoProcess()
+    await failUntracked(id, "said again after a restart")
+    assert.deepEqual(run(id), failed, "a settled record is left exactly as it is")
+  })
+  assert.equal(run(id).phase, "failed")
+  assert.equal(run(id).error, "the tracker stopped following this run: its tracking task faulted (boom). Its runner was stopped", "openTracker leaves a settled record alone")
+})
+
+// ---------------------------------------------------------------- one phase, repeated the way a restart repeats it
+
+/** A runtime for one phase: memos live in `memos` (the durable part, shared by the attempts), commits are recorded. `dies` names the memo at which the engine dies. */
+const attempt = (memos: Map<string, unknown>, dies?: string) => {
+  const commits: any[] = []
+  const runtime = {
+    now: () => Date.now(),
+    memo: async (name: string, ...rest: unknown[]) => { // (name, context) reads; (name, candidate, context) stores unless there is one
+      if (rest.length < 2) return memos.get(name)
+      if (name === dies) throw new Error("the engine died here")
+      if (!memos.has(name)) memos.set(name, rest[0])
+      return memos.get(name)
+    },
+    commit: async (change: () => unknown) => { commits.push(await change()) },
+    sleepUntil: async (_until: number, checkpoint: unknown) => { commits.push({ status: "sleeping", checkpoint }) },
+  }
+  return { runtime: runtime as never, commits }
+}
+const cloudRecord = (id: string, task: string) => {
+  const request: RunRequest = { ...CLOUD, task }
+  saveStored({ request, taskId: 999_999, run: { id, mode: "cloud", task, solver: "glhf", model: CLOUD.model, roleModels: {}, phase: "launching", startedAt: Date.now() } })
+  return { input: { ...request, id }, state: { status: "running", checkpoint: { phase: "awaitLaunch", polls: 0 } } } as never
+}
+const awaitLaunch = RunTask.definition.phases.awaitLaunch
+
+scenario("replay: the stop of a stuck launcher is stored, so the phase says the same when it runs again after a crash", cloud(async () => {
+  const id = "replay-launch-stop", dir = runDir(id), task = cloudRecord(id, "replay-1")
+  env({ GLHF_STUB_RUN: "hang", GLHF_LAUNCH_TIMEOUT_MS: "0" })
+  assert.equal(startOnce(dir, "launch", [...BIXBENCH3.split(" "), "run", "--task", "replay-1"], join(dir, "launch.out"), join(dir, "launch.log"), here), true)
+  await launched(id, "launch")
+  await until("the launcher's first line", () => text(id, "launch.log") !== "")
+
+  // First attempt: the launcher is stopped, the result is stored, and the engine dies before the run is settled.
+  const memos = new Map<string, unknown>()
+  await assert.rejects(awaitLaunch(task, attempt(memos, "finished").runtime, undefined as never), /the engine died here/)
+  assert.deepEqual(memos.get("launchStop"), { left: false })
+  assert.deepEqual(leftovers(), [], "stopped before anything else")
+  assert.equal(run(id).phase, "launching", "not settled yet")
+
+  // Second attempt: the launcher is gone, which alone would read as "it stopped by itself". The stored stop decides.
+  const second = attempt(memos)
+  await awaitLaunch(task, second.runtime, undefined as never)
+  assert.equal(run(id).phase, "failed")
+  assert.match(run(id).error ?? "", STUCK)
+  assert.deepEqual(second.commits, [{ status: "terminal", outcome: { status: "completed", result: { phase: "failed", score: null } } }])
+  const settledAt = run(id).finishedAt, error = run(id).error
+
+  // A third (the engine died between the record and the commit): the same record, the same time.
+  await awaitLaunch(task, attempt(memos).runtime, undefined as never)
+  assert.deepEqual([run(id).finishedAt, run(id).error], [settledAt, error])
+  assert.equal((text(id, "tracker.log").match(/finished: failed/g) ?? []).length, 1, "logged once")
+  assert.equal(launches().length, 1)
+}))
+
+scenario("a stuck launcher that could not be stopped: the error does not say that no VM was created, and gives the commands to look and to remove it", cloud(async () => {
+  const dead = async () => { const child = spawn("sleep", ["30"], { stdio: "ignore" }); const mark = stamp(child.pid!); child.kill("SIGKILL"); await until("it to be gone", () => !alive(mark)); return mark }
+  const id = "replay-launcher-left", task = cloudRecord(id, "replay-2")
+  writeFileSync(file(id, "launch.pid"), await dead())
+  const memos = new Map<string, unknown>([["launchStop", { left: true }]]) // what an attempt stored whose SIGKILL did not empty the group
+  await awaitLaunch(task, attempt(memos).runtime, undefined as never)
+  assert.equal(run(id).phase, "failed")
+  assert.equal(run(id).error, "the launcher did not finish within 120 minutes, reported no run, and could not be stopped: it may still be running (see launch.pid). "
+    + "It can still create a VM that bills, and no run would follow it. Check for a VM with: gcloud compute instances list --project stub-project\n"
+    + `Remove it with: ${BIXBENCH3} cancel --run ID --project stub-project (ID: the run_id in the run_manifest.json it wrote under ${manifests})`)
+  assert.doesNotMatch(run(id).error ?? "", /no VM was created/)
+
+  // With a manifest, its cloud run is followed, and the detail says that the launcher is still there.
+  const other = "replay-launcher-left-manifest", second = cloudRecord(other, "replay-3")
+  writeFileSync(file(other, "launch.pid"), await dead())
+  mkdirSync(join(manifests, "remote-replay-3"), { recursive: true })
+  writeFileSync(join(manifests, "remote-replay-3", "run_manifest.json"), JSON.stringify({ run_id: "remote-replay-3", task_id: "replay-3", model: { id: CLOUD.model }, solver: "glhf", started_at: new Date().toISOString() }))
+  const followed = attempt(new Map<string, unknown>([["launchStop", { left: true }]]))
+  await awaitLaunch(second, followed.runtime, undefined as never)
+  assert.equal(run(other).detail, "cloud run remote-replay-3: launcher stuck, and it could not be stopped (see launch.pid); checking")
+  assert.deepEqual(followed.commits, [{ status: "running", checkpoint: { phase: "watchCloud", remoteId: "remote-replay-3", polls: 0, errors: 0 } }])
+}))
+
+scenario("watchCloud: past the hours of billing accepted at the start, the run says so and gives the command; the VM is not touched", cloud(async () => {
+  const id = "cloud-past-max-hours"
+  const watch = (maxHours?: number) => ({ input: { ...CLOUD, task: "hours-1", id, ...(maxHours && { maxHours }) }, state: { status: "running", checkpoint: { phase: "watchCloud", remoteId: "remote-hours-1", polls: 0, errors: 0 } } }) as never
+  saveStored({ request: { ...CLOUD, task: "hours-1" }, taskId: 999_999, run: { id, mode: "cloud", task: "hours-1", solver: "glhf", model: CLOUD.model, roleModels: {}, phase: "running", remoteId: "remote-hours-1", startedAt: Date.now() - 3 * 3_600_000 } })
+  env({ GLHF_STUB_STATUS: "running" })
+  const watchCloud = RunTask.definition.phases.watchCloud
+  await watchCloud(watch(4), attempt(new Map()).runtime, undefined as never)
+  assert.equal(run(id).detail, "cloud run remote-hours-1: running (phase=done, vm=TERMINATED)", "within the hours: nothing is added")
+  const late = attempt(new Map())
+  await watchCloud(watch(2), late.runtime, undefined as never)
+  assert.equal(run(id).detail, "cloud run remote-hours-1: running (phase=done, vm=TERMINATED) PAST THE 2 h OF BILLING ACCEPTED AT THE START: the VM is still there. "
+    + `Remove it with: ${BIXBENCH3} cancel --run remote-hours-1 --project stub-project`)
+  assert.equal(run(id).phase, "running", "it is still followed")
+  assert.equal(late.commits[0].status, "sleeping")
+  assert.deepEqual(launches(), [], "only `status` was called")
 }))

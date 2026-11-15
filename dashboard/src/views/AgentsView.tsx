@@ -165,7 +165,7 @@ function SwarmTeam() {
           <h2>Swarm team</h2>
           <p className="muted small">
             Nine roles, in the order they run. Each is a separate agent with its own instructions; they share only the files and the ledger.
-            {run ? <> Status is from the latest swarm run, <RunId id={run.id} />.</> : !offline && runs ? " No swarm run yet: start one in the Swarm view to see which roles ran." : ""}
+            {run ? <> Status is from the latest swarm run, <RunId id={run.id} />.</> : !offline && runs ? " No swarm run yet: start one in the Compare view to see which roles ran." : ""}
           </p>
         </div>
       </header>

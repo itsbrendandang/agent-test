@@ -37,9 +37,10 @@ and "paper" an open answer is therefore never `refused`; what we would count (no
 judge reply of `refused`) is kept in `own_refused`. "per-mode" sets both.
 
 Differences from the official code, all profiles:
-  * an empty answer is incorrect without a judge call (officially an empty string is a
-    substring of every ideal and is graded correct in str_verifier; in upstream's CSV path an
-    empty answer is read back as "nan" and judged as that text);
+  * an empty answer is incorrect without a judge call and stays in the denominator
+    (officially an empty string is a substring of every ideal and is graded correct in
+    str_verifier; through upstream's CSV path an empty answer becomes "nan"; upstream's paper
+    path drops empty answers from the denominator);
   * a judge call that fails three times is recorded as "judge_error" and reported as ungraded.
 Differences in "per-mode" only: the substring rule is not used (it accepts "6" for an ideal of
 "166"); numbers are compared as numbers and never as normalised strings (normalising drops "-"
@@ -129,9 +130,7 @@ def judge_record(profile: Profile, model: str | None, temperature: float | None)
             deviations.append(f"judge {model} is not this profile's default ({default.model})")
         if temperature != default.temperature:
             said = "provider default" if temperature is None else f"{temperature:g}"
-            want = (
-                "provider default" if default.temperature is None else f"{default.temperature:g}"
-            )
+            want = "provider default" if default.temperature is None else f"{default.temperature:g}"
             deviations.append(f"judge temperature {said}; this profile's default is {want}")
     return {
         "model": model,
@@ -139,6 +138,8 @@ def judge_record(profile: Profile, model: str | None, temperature: float | None)
         "profile_default": {"model": default.model, "temperature": default.temperature},
         "deviations": deviations,
     }
+
+
 # Methods decided by code alone. `correct_strict` in a grade counts only these.
 DETERMINISTIC = frozenset({"exact", "numeric", "range", "letter", "empty", "partial"})
 
@@ -202,7 +203,9 @@ async def _ask(judge: Judge | None, prompt: str) -> str | None:
     return None
 
 
-def scale_ambiguous(value: float, predicted: str, ideal: str, fits: Callable[[float], bool]) -> bool:
+def scale_ambiguous(
+    value: float, predicted: str, ideal: str, fits: Callable[[float], bool]
+) -> bool:
     """Could `value` be the ideal on another scale? True if 100 times or a hundredth of it fits,
     or exactly one of the two texts carries a percent sign."""
     return fits(value * 100) or fits(value / 100) or (("%" in predicted) != ("%" in ideal))
@@ -267,7 +270,9 @@ async def grade_open(
             return result(True, "range", note=note)
         if scale_ambiguous(ours, predicted, "", lambda v: low <= v <= high):
             return await judged(
-                OPEN_ENDED_RANGE_GRADING_PROMPT, "llm_range", "; ".join(n for n in (SCALE_NOTE, note) if n)
+                OPEN_ENDED_RANGE_GRADING_PROMPT,
+                "llm_range",
+                "; ".join(n for n in (SCALE_NOTE, note) if n),
             )
         return result(False, "range", note=note)
     if ours is not None and theirs is not None:

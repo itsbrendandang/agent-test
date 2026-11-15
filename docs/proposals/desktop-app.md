@@ -31,14 +31,14 @@ start runs on an engine that someone started from a checkout.
 |---|---|
 | Command | `cd dashboard && PATH=/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH nice npx tauri build --bundles app,dmg` (on a Mac, `npm run desktop:build` does the same) |
 | Time | 1 min 4 s with dependencies already compiled (frontend build, 40 s Rust link, bundling). A first build from nothing compiles the 458 crates in Cargo.lock and was not timed. |
-| App | `dashboard/src-tauri/target/release/bundle/macos/Drug Board.app`, 7.3 MB |
-| Disk image | `dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg`, 5,745,492 bytes (5.5 MB) |
+| App | `dashboard/src-tauri/target/release/bundle/macos/AI Scientist Bot.app`, 7.3 MB |
+| Disk image | `dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg`, 5,745,492 bytes (5.5 MB) |
 | Architecture | arm64 only (Apple Silicon). Minimum macOS 11. |
 | Signature | Ad-hoc (`"signingIdentity": "-"` in `tauri.conf.json`). No Developer ID: `security find-identity -v -p codesigning` reports 0 valid identities. Not notarised. `spctl` rejects it, as expected. |
 | In git | No. `dashboard/src-tauri/target/` is ignored. |
 
 The disk image changes on every build, so record its checksum when publishing:
-`shasum -a 256 "dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg"`.
+`shasum -a 256 "dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg"`.
 
 Why ad-hoc and not fully unsigned: a build made with `--no-sign` has a signature on the binary
 but none on the bundle (`codesign --verify` fails with "code has no resources but signature
@@ -67,9 +67,9 @@ people with access to the repository can download from it. Do not commit the ima
 
 ```sh
 gh release create desktop-v0.1.0 \
-  "dashboard/src-tauri/target/release/bundle/dmg/Drug Board_0.1.0_aarch64.dmg#Drug Board 0.1.0 for Apple Silicon (unsigned)" \
+  "dashboard/src-tauri/target/release/bundle/dmg/AI Scientist Bot_0.1.0_aarch64.dmg#AI Scientist Bot 0.1.0 for Apple Silicon (unsigned)" \
   --repo itsbrendandang/agent-test \
-  --title "Drug Board desktop 0.1.0" \
+  --title "AI Scientist Bot desktop 0.1.0" \
   --prerelease \
   --notes "Window only: needs the engine running on 127.0.0.1:8787 (docs/running.md). Apple Silicon. Not signed by an identified developer: see docs/proposals/desktop-app.md, section 1, for how to open it."
 ```
@@ -78,12 +78,12 @@ This creates a tag on the default branch's current commit. It was not run.
 
 ### What a person downloading it sees
 
-1. Downloads the .dmg in a browser, opens it, drags Drug Board to Applications.
-2. Opens it. macOS 15 and later show: **"Drug Board" Not Opened. Apple could not verify "Drug
+1. Downloads the .dmg in a browser, opens it, drags AI Scientist Bot to Applications.
+2. Opens it. macOS 15 and later show: **"AI Scientist Bot" Not Opened. Apple could not verify "Drug
    Board" is free of malware that may harm your Mac or compromise your privacy.** The buttons are
    Done and Move to Trash. Choose Done.
 3. The supported way to open it: System Settings, Privacy & Security, scroll to Security, where
-   it says "Drug Board" was blocked to protect your Mac. Click **Open Anyway**, confirm, and
+   it says "AI Scientist Bot" was blocked to protect your Mac. Click **Open Anyway**, confirm, and
    enter the password or use Touch ID. The button is offered for about an hour after step 2.
    This is needed once. On macOS 14 and earlier: Control-click the app, Open, then Open.
 4. The window opens. If the engine is not running on port 8787, each view says the engine is
@@ -200,7 +200,7 @@ writing there breaks the signature, fails outright when the app runs from a read
 (macOS runs a freshly downloaded app that way until it is moved), and is lost on every update.
 The engine needs one new variable, for example `DRUG_BOARD_HOME`, with read-only material still
 found from `ROOT` and everything written going to
-`~/Library/Application Support/com.brendandang.drugboard/`. About ten places use `ROOT` or a
+`~/Library/Application Support/com.brendandang.aiscientistbot/`. About ten places use `ROOT` or a
 path derived from it. `bixv1/store.ts` already does this with `BIXV1_RUNS_DIR`.
 
 **Keys and `.env`.** There is no `.env` in a download. The app reads the keychain in Rust and

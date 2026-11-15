@@ -70,11 +70,11 @@ test("rounds: a replay after a crash runs the same round again instead of refusi
 const claim = (text: string, kind: Claim["kind"] = "literature", source = "https://a.example/paper"): Claim => ({ kind, text, source })
 
 function claimDeps(over: Partial<ClaimDeps> = {}) {
-  const calls = { jev: 0, computed: 0, literature: 0, saved: 0, events: [] as string[] }
+  const calls = { firstPass: 0, computed: 0, literature: 0, saved: 0, events: [] as string[] }
   const deps: ClaimDeps = {
     state: { ledger: [], escalations: 0, checkerUsd: 0 },
     maxEscalations: 12,
-    jevCheck: async (claims) => { calls.jev++; return claims.map((c) => (c.includes("unsure") ? { verdict: "escalate" as const } : { verdict: "verified" as const, p: 0.9 })) },
+    firstPass: async (_member, claims) => { calls.firstPass++; return claims.map((c) => (c.includes("unsure") ? { verdict: "escalate" as const } : { verdict: "verified" as const, quote: "evidence text", checkedBy: "openai/gpt-5-mini" })) },
     computedCheck: async () => { calls.computed++; return { verdict: "verified", note: "recomputed", usd: 0.2 } },
     literatureCheck: async () => { calls.literature++; return { verdict: "contradicted", note: "the paper says otherwise", usd: 0.1 } },
     evidenceFor: (source) => (source === "https://a.example/paper" || source === "brief" ? "evidence text" : undefined),
@@ -90,7 +90,7 @@ test("claims: a ruling already in the ledger is reused on replay; no checker is 
   const claims = [claim("A is potent"), claim("B is unsure"), claim("logP is 3.1", "computed", "calc"), claim("not in pool", "literature", "https://other.example")]
   const first = await checkClaims(deps, 1, "tox", claims)
   assert.deepEqual(first, ["[verified] logP is 3.1", "[verified] A is potent", "[contradicted] B is unsure", "[unsupported] not in pool"])
-  assert.deepEqual([calls.jev, calls.computed, calls.literature], [1, 1, 1])
+  assert.deepEqual([calls.firstPass, calls.computed, calls.literature], [1, 1, 1])
   assert.equal(deps.state.escalations, 2)
   assert.ok(Math.abs(deps.state.checkerUsd - 0.3) < 1e-9)
   assert.equal(deps.state.ledger.length, 4)
@@ -98,7 +98,7 @@ test("claims: a ruling already in the ledger is reused on replay; no checker is 
   // The process dies and the round is replayed with the same reply.
   const again = await checkClaims(deps, 1, "tox", claims)
   assert.deepEqual([...again].sort(), [...first].sort())
-  assert.deepEqual([calls.jev, calls.computed, calls.literature], [1, 1, 1], "no checker was called a second time")
+  assert.deepEqual([calls.firstPass, calls.computed, calls.literature], [1, 1, 1], "no checker was called a second time")
   assert.equal(deps.state.escalations, 2, "escalations are not counted twice")
   assert.ok(Math.abs(deps.state.checkerUsd - 0.3) < 1e-9)
   assert.equal(deps.state.ledger.length, 4, "no duplicate ledger rows")
@@ -107,7 +107,7 @@ test("claims: a ruling already in the ledger is reused on replay; no checker is 
   const half = claimDeps()
   await checkClaims(half.deps, 1, "tox", [claim("A is potent")])
   await checkClaims(half.deps, 1, "tox", [claim("A is potent"), claim("C is selective")])
-  assert.equal(half.calls.jev, 2)
+  assert.equal(half.calls.firstPass, 2)
   assert.equal(half.deps.state.ledger.length, 2)
   // The same claim in another round or by another member is a new ruling.
   await checkClaims(half.deps, 2, "tox", [claim("A is potent")])
@@ -218,7 +218,7 @@ test("checker child: runs in an empty scratch folder, without the engine's secre
     assert.equal(existsSync(seen.cwd), false, "the scratch folder is removed")
     assert.deepEqual(seen.argv.slice(-2), ["--allowedTools", "Read Write"])
     assert.ok(seen.argv.includes("--restricted"))
-    for (const name of ["BOARD_TEST_DATABASE_URL", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!seen.env.includes(name), name)
+    for (const name of ["BOARD_TEST_DATABASE_URL", "OPENAI_API_KEY", "EXA_API_KEY", "PAST_API_KEY"]) assert.ok(!seen.env.includes(name), name)
     assert.ok(seen.env.includes("PATH"))
     assert.match(seen.prompt, /Claim: logP is 3\.4\. Source: calc\./)
     await sleep(150)

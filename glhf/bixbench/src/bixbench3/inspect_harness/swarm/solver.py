@@ -573,13 +573,16 @@ def seconds_for(
     kind = kind_of(title)
     left = plan.seconds - elapsed
     hold = plan.time_reserves["finish"] + plan.time_reserves["report"]
-    review_owed = float(sum(plan.time_floors[k] for k in later if k in REVIEW_KINDS))
+    review_floors = float(sum(plan.time_floors[k] for k in later if k in REVIEW_KINDS))
+    others_owed = sum(plan.time_floors[k] for k in later if k not in REVIEW_KINDS)
+    available = left - hold - others_owed - review_floors
     if kind in TIME_TARGET and "critique" in later:
         # Before review: leave room for one round to start, not only the review floors. With
-        # the floors alone, floors of the early phases could eat the round on a short run.
-        review_owed = max(review_owed, review_room(plan.seconds))
-    others_owed = sum(plan.time_floors[k] for k in later if k not in REVIEW_KINDS)
-    available = left - hold - others_owed - review_owed
+        # the floors alone, the early phases could take 76% of a short run and review, which
+        # starts only with min_review_seconds() left, never ran. The extra room yields to this
+        # phase's own floor, so a late run still gets its first pass.
+        roomy = left - hold - others_owed - max(review_floors, review_room(plan.seconds))
+        available = max(roomy, min(float(plan.time_floors[kind]), available))
     want: float | None = None  # the last working phase takes all that is not protected
     if kind in TIME_TARGET and later:
         want = plan.seconds * _cumulative(TIME_TARGET, kind) - elapsed

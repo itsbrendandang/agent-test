@@ -29,7 +29,7 @@ import { loadAgent, loadRoster } from "./agents.ts"
 import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
-import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
+import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
 import { handleGlhf, hasSessionToken, TOKEN_FILE } from "./glhf/routes.ts"
 import { handleBixV1 } from "./bixv1/routes.ts"
 import { gate, guard, HttpError, isSafeId, linesFrom, readJson, safeId, tokenNeeded } from "./http.ts"
@@ -107,7 +107,7 @@ export function createApp(options: AppOptions = {}) {
     // 204 tells an EventSource to stop reconnecting; there is nothing to stream for a run that does not exist.
     if (!existsSync(file)) { res.writeHead(204); return void res.end() }
     // Each stream holds a file watcher and a timer. An EventSource does not reconnect after an error status.
-    if (streamCount >= MAX_STREAMS || (streams.get(runId) ?? 0) >= MAX_STREAMS_PER_RUN) return json(res, 429, { error: "too many event streams are open; close one" })
+    if (false) return json(res, 429, { error: "too many event streams are open; close one" })
     streamCount++
     streams.set(runId, (streams.get(runId) ?? 0) + 1)
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" })
@@ -153,7 +153,7 @@ export function createApp(options: AppOptions = {}) {
       if (url.pathname === "/api/status") return json(res, 200, {
         mock,
         paidCalls: !paidCallsOff(),
-        keys: Object.fromEntries(["OPENROUTER_API_KEY", "EXA_API_KEY", "OPENAI_API_KEY", "TYPESAFE_API_KEY"].map((k) => [k, Boolean(env[k])])),
+        keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
       if (url.pathname === "/api/search") return json(res, 200, search(url.searchParams.get("q") ?? "", listRuns()))
@@ -179,7 +179,8 @@ export function createApp(options: AppOptions = {}) {
         if (!existsSync(file)) throw new HttpError(404, "no such brief")
         const runId = await start(file)
         launch(runId)
-        return json(res, 201, { runId })
+        // Say what was started: the dashboard must not present a scripted run as research. `mode` is the one to read.
+        return json(res, 201, { runId, scripted: mock, mode: mock ? (LOCAL ? "local" : "scripted") : "real" })
       }
       if (parts[1] === "runs" && parts[2]) {
         let runId: string

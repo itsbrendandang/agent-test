@@ -146,7 +146,6 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   linkForce?.strength?.((l) => (STRENGTH[linkNode(l).kind] ?? 0.7))
 
   const wake = () => {
-    console.info('[g3] wake', new Error().stack?.split('\n')[2]?.trim())
     if (destroyed || forced) return
     if (asleep) { graph.resumeAnimation(); asleep = false }
     clearTimeout(sleepTimer)
@@ -155,7 +154,7 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   const trySleep = () => {
     if (destroyed || asleep) return
     if (!settled) { sleepTimer = setTimeout(trySleep, IDLE_MS); return }
-    console.info('[g3] sleep'); graph.pauseAnimation(); asleep = true
+    graph.pauseAnimation(); asleep = true
   }
   const settle = () => {
     settled = true

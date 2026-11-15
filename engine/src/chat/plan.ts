@@ -199,12 +199,13 @@ export function derive(ctx: PlanContext, effort: Effort, agents: PlanAgent[], me
   if (mock) warnings.push("Scripted mode: the board's models are scripted. Its replies are fixed text written in advance, not research, and its search returns fixture papers.")
   else {
     if (searchers.length && !env.EXA_API_KEY) warnings.push("No EXA_API_KEY is set: members with the search tool get fixture papers, not live search results.")
-    warnings.push("Board models are called through OpenRouter (board/config.yaml), whichever provider wrote this plan.")
+    warnings.push("Board models are called directly at Anthropic and OpenAI (board/config.yaml), whichever provider wrote this plan.")
   }
   if (!overridesApplied()) warnings.push(`Not applied yet: a board run today uses every member in board/config.yaml (${members.length}), each on its own model tier, with the config's limits ($${cap}, ${config.meeting.max_minutes} min, ${config.meeting.max_rounds} rounds) and no cap on searches. This plan's agents, limits, model tier and search cap are saved with the run (overrides.json) but board.ts does not read them.`)
+  else warnings.push("This plan's agents and limits are applied to the run. Its model tier and search cap are not: each agent runs on its own model tier and searches are not counted.")
   return {
     search: { exa: !mock && Boolean(env.EXA_API_KEY) && searchers.length > 0 },
-    models: mock ? { lead: "scripted", members: "scripted", checker: "scripted" } : { lead: config.models.lead, members: tiers.join(", "), checker: config.checkers.jev.model },
+    models: mock ? { lead: "scripted", members: "scripted", checker: "scripted" } : { lead: config.models.lead, members: tiers.join(", "), checker: `${config.models.cheap} / ${config.checkers.first_pass.alt}` },
     limits: { ...effort.limits },
     estimate: mock
       ? { usd: 0, basis: `Scripted models call no API, so this run costs nothing. With real models the ${effort.label} level would be capped at $${effort.limits.maxUsd}.` }

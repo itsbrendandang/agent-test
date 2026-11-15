@@ -1,6 +1,6 @@
 // Loading runs for the graph. Reads only; the engine is never changed from here. Streams and timers stop when the
 // view unmounts and while the browser tab is hidden.
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { ENGINE, get, type BoardEvent, type RosterMember, type RunSummary } from "@/board/api"
 import { settled, type GlhfRun, type RunDetail } from "@/swarm/api"
 import type { RunKind } from "./types"
@@ -69,7 +69,8 @@ export function useBoardRun(id: string | undefined): Loaded<{ events: BoardEvent
     return () => source.close()
   }, [id, visible, ended, nudge])
   const mine = got?.id === id ? got : undefined
-  return { data: mine ? { events: mine.events, roster } : undefined, error: error || (Boolean(id) && typeof EventSource === "undefined"), loading: Boolean(id) && !mine && !error && typeof EventSource !== "undefined", reload: useCallback(() => { setGot(undefined); setError(false); setNudge((n) => n + 1) }, []) }
+  const data = useMemo(() => (mine ? { events: mine.events, roster } : undefined), [mine, roster])
+  return { data, error: error || (Boolean(id) && typeof EventSource === "undefined"), loading: Boolean(id) && !mine && !error && typeof EventSource !== "undefined", reload: useCallback(() => { setGot(undefined); setError(false); setNudge((n) => n + 1) }, []) }
 }
 
 /** A swarm run: read once, then every 2 seconds while it is live and the tab is visible. */

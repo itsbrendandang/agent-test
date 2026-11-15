@@ -31,13 +31,14 @@ export class BadRequest extends Error {
 
 /**
  * The hard stop of a local run, as a multiple of its maxTokens. maxTokens is the budget the solvers plan by; the
- * limit that ends the run whatever the solver does is Inspect's token_limit, which the harness sets to twice that
- * (glhf/bixbench/src/bixbench3/inspect_harness/tasks.py, `token_limit=max_tokens * 2`). Keep the two in step.
+ * limit that ends the run whatever the solver does is Inspect's token_limit, which the harness sets to
+ * TOKEN_BACKSTOP times that (glhf/bixbench/src/bixbench3/inspect_harness/tasks.py). Keep the two in step: a test
+ * reads the Python constant and compares. Inspect checks after each model call, so the last call can go past it.
  */
-export const HARD_STOP = 2
+export const HARD_STOP = 1.15
 /** The most a run can spend, in tokens: nothing for the scripted model, and unknown here for a cloud run (0). */
 export const mostTokens = (request: Pick<RunRequest, "mode" | "model" | "maxTokens" | "roleModels">) =>
-  request.mode !== "local" || (request.model === "mock" && !Object.keys(request.roleModels ?? {}).length) ? 0 : (request.maxTokens ?? 0) * HARD_STOP
+  request.mode !== "local" || (request.model === "mock" && !Object.keys(request.roleModels ?? {}).length) ? 0 : Math.floor((request.maxTokens ?? 0) * HARD_STOP)
 
 /** Tokens all local runs of one day may use together. GLHF_DAILY_TOKENS replaces it (0 refuses every run that can spend). */
 export const DAILY_TOKENS = 20_000_000
@@ -190,7 +191,7 @@ export function checkRequest(body: Partial<RunRequest>, trust: Trust): RunReques
   // A real model spends money until something stops it. maxTokens is what the solver plans by (it winds down as the
   // budget runs out, checking after each model call); the stop that does not depend on the solver is HARD_STOP
   // times that. So the message names both. (The cloud runner has its own limit.)
-  if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad(`maxTokens is required for a real model: it is the token budget the run plans by. It is not a hard limit: the run is cut off only at ${HARD_STOP} x maxTokens, so count on up to that being spent`, "maxTokens")
+  if (body.model !== "mock" && body.mode === "local" && (body.maxTokens === undefined || body.maxTokens === null)) bad(`maxTokens is required for a real model: it is the token budget the run plans by. It is not a hard limit: the run is cut off only once ${HARD_STOP} x maxTokens is passed (checked after each model call), so count on that much being spent`, "maxTokens")
   if ((body.exa || body.memory) && !known) bad(`exa and memory are not open to unknown callers: ${cli}`, body.exa ? "exa" : "memory")
   const request: RunRequest = { mode: body.mode!, task: body.task ?? "demo", solver: body.solver!, model: body.model!, roleModels }
   if (body.effort) request.effort = body.effort

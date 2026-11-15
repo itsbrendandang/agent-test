@@ -131,7 +131,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board" | "Age
                     {t.reply.runs.map((r) => (
                       <li key={`${r.kind}:${r.id}`}>
                         <button type="button" className="exp-hit card-surface" onClick={() => openRun(r.kind, r.id)}>
-                          <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
+                          <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
                           <span className="muted small run-id" title={r.id}>{r.id}</span>
                           {r.why && <span className="exp-match small">{r.why}</span>}
                         </button>

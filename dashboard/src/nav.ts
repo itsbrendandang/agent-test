@@ -1,3 +1,6 @@
+/** The product's name as people read it. As a slug it is "ai-scientist-bot". */
+export const PRODUCT = "AI Scientist Bot"
+
 // The views of the app, in the order of the rail. Home is first and is what opens when the address names no view.
 export const VIEWS = ["Home", "Runs", "Compare", "Board", "Agents", "Graph", "Settings"] as const
 export type View = (typeof VIEWS)[number]

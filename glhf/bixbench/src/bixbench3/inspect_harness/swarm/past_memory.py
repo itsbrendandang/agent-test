@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from ... import paid
-from .memory import lesson_rejection
+from .memory import canonical_id, lesson_rejection
 
 API = "https://api.past.dev/api/v1"
 IDENTITY = "glhf-swarm"
@@ -71,27 +71,52 @@ async def remember(task_id: str, lessons: str, context: Sequence[str] = ()) -> s
 
 
 _TASK = re.compile(r"(?<![A-Za-z])task ([\w.-]+)", re.IGNORECASE)
-_SOURCE = re.compile(r"^glhf-lessons-(.+)-\d{8}T\d{6}Z$")
+_SOURCE = re.compile(r"glhf-lessons-(.+?)-\d{8}T\d{6}Z", re.IGNORECASE)
+_LABEL = "GLHF swarm lessons, task "
+
+
+def _label_tasks(label: str) -> set[str]:
+    """The writing task and its context from a label written by `remember`, split on the
+    separators it wrote, so an id with a space, a slash or a final dot is read whole."""
+    if not label.startswith(_LABEL):
+        return set(_TASK.findall(label))
+    head, _, context = label[len(_LABEL) :].partition(_CONTEXT)
+    found = {head.strip()}
+    for item in context.split(", task "):
+        found.add(item.strip().removeprefix("task ").strip())
+    return {t for t in found if t}
+
+
+def _strings(value: Any) -> list[str]:
+    """Every string in a recalled item except its text, whatever the shape."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [s for k, v in value.items() if k != "content" for s in _strings(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in _strings(v)]
+    return []
 
 
 def tasks_of(result: dict[str, Any]) -> set[str]:
     """Every task a recalled item names: in its text, its source ids and its labels (which carry
-    the writing task and that run's context)."""
-    found = set(_TASK.findall(str(result.get("content", ""))))
-    for source in result.get("sources") or []:
-        if not isinstance(source, dict):
-            continue
-        match = _SOURCE.match(str(source.get("sourceId", "")))
-        if match:
-            found.add(match.group(1))
-        found |= set(_TASK.findall(str(source.get("label", ""))))
-    return {t.rstrip(".:,;") for t in found}
+    the writing task and that run's context). Source ids and labels are looked for in every
+    field of the item, as past.dev does not promise where they are."""
+    found = {t.rstrip(".:,;") for t in _TASK.findall(str(result.get("content", "")))}
+    for text in _strings(result):
+        found |= set(_SOURCE.findall(text))
+        if _LABEL in text:
+            found |= _label_tasks(text[text.index(_LABEL) :])
+    return {t for t in found if t}
 
 
 def from_task(result: dict[str, Any], task_id: str) -> bool:
-    """True when a recalled item was built from a run on `task_id`, or from a run that had read
-    that task's lessons (by source id, label or text)."""
-    return str(task_id) in tasks_of(result)
+    """True when a recalled item must be kept from a run on `task_id`: it was built from a run
+    on that task, or from a run that had read that task's lessons (by source id, label or
+    text), or it names no task at all. Without provenance nothing shows that the item is not
+    this task's own lesson, so it is treated as if it were (fail closed)."""
+    tasks = tasks_of(result)
+    return not tasks or canonical_id(task_id) in {canonical_id(t) for t in tasks}
 
 
 async def recall_with_sources(
@@ -99,6 +124,8 @@ async def recall_with_sources(
 ) -> tuple[str, set[str]]:
     """Lessons from runs on other tasks, as past.dev returns them, filtered, and the tasks they
     came from. Empty if none."""
+    if task_id is None or not str(task_id).strip():
+        return "", set()  # a reader that does not say which task it is gets nothing
     paid.refuse_paid("recalling lessons from past.dev")
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
@@ -112,7 +139,7 @@ async def recall_with_sources(
     sources: set[str] = set()
     size = 0
     for result in results:
-        if task_id is not None and from_task(result, str(task_id)):
+        if not isinstance(result, dict) or from_task(result, str(task_id)):
             continue
         for line in str(result.get("content", "")).splitlines():
             line = line.strip()

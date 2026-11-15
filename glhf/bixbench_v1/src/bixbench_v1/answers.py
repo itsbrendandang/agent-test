@@ -12,6 +12,11 @@ route. This ledger records both derivations and computes every status in code:
   disputed          they did not agree and nobody resolved it; the first derivation is reported
                     and flagged
   unchecked         one derivation only (always the case for the single agent)
+  specification-sensitive
+                    would be `unchecked` or `replicated`, but a role recorded, with its answer,
+                    a result it obtained under another defensible reading of the question, and
+                    that result differs from its answer by more than `compare` tolerates: the
+                    answer depends on a choice the question may not settle
   missing           no derivation
 
 No model sets a status. A model supplies answers and, in a resolution, which derivation to keep;
@@ -31,16 +36,22 @@ from .text import normalise, parse_number, round_significant, significant_digits
 
 Comparison = Literal["agree", "differ", "unclear"]
 Keep = Literal["A", "B", "both", "neither"]
-Status = Literal["replicated", "reconciled", "disputed", "unchecked", "missing"]
+Status = Literal[
+    "replicated", "reconciled", "disputed", "unchecked", "specification-sensitive", "missing"
+]
+SENSITIVE: Status = "specification-sensitive"
 RELATIVE_TOLERANCE = 0.01  # non-integer answers within 1% agree; see `compare`
 
 
 def compare(a: str, b: str) -> Comparison:
-    """Do two answers to the same question agree? Decided by code, never by a model."""
-    if normalise(a) and normalise(a) == normalise(b):
-        return "agree"
+    """Do two answers to the same question agree? Decided by code, never by a model.
+
+    Two numbers are compared as numbers only: normalising drops "-" and ".", which would make
+    -4.96, 4.96 and 49.6 the same answer."""
     x, y = parse_number(a), parse_number(b)
     if x is None or y is None:
+        if normalise(a) and normalise(a) == normalise(b):
+            return "agree"
         # One or both are text. Different text may still mean the same thing: not decidable here.
         return "unclear"
     if x == y:
@@ -63,6 +74,11 @@ def _has_fraction(*texts: str) -> bool:
     return any("." in t or "e" in t.lower() for t in texts)
 
 
+def alternative_value(alternative: str) -> str:
+    """The value of a recorded alternative: the text before the first "|"."""
+    return alternative.split("|", 1)[0].strip()
+
+
 @dataclass
 class Derivation:
     id: str
@@ -72,6 +88,9 @@ class Derivation:
     route: str
     evidence: str
     superseded_by: str | None = None  # the same role replaced it; not a review outcome
+    # Results the role itself obtained under other defensible readings, "value | what differs".
+    alternatives: list[str] = field(default_factory=list)
+    forced: bool = False  # recorded in the forced final turn at the budget limit
 
 
 @dataclass
@@ -111,7 +130,14 @@ class AnswerLedger:
 
     # Recording ----------------------------------------------------------------------------
     def submit(
-        self, question_id: str, answer: str, route: str, evidence: str, by: str
+        self,
+        question_id: str,
+        answer: str,
+        route: str,
+        evidence: str,
+        by: str,
+        alternatives: list[str] | None = None,
+        forced: bool = False,
     ) -> Derivation:
         if question_id not in self.questions:
             raise ValueError(f"unknown question {question_id}; known: {', '.join(self.questions)}")
@@ -124,6 +150,8 @@ class AnswerLedger:
             answer.strip(),
             route.strip(),
             evidence.strip(),
+            alternatives=[a.strip() for a in alternatives or [] if alternative_value(a)],
+            forced=forced,
         )
         old = self.current(question_id, by)
         if old is not None:
@@ -156,6 +184,19 @@ class AnswerLedger:
         if first is None or second is None:
             return None
         return compare(first.answer, second.answer)
+
+    def sensitive(self, question_id: str) -> list[str]:
+        """Alternatives a role recorded with its standing answer that differ from that answer
+        by more than `compare` tolerates (integers must match; other numbers within 1% or one
+        the other rounded). Text alternatives cannot be compared by code and do not count."""
+        found: list[str] = []
+        for derivation in self.pair(question_id):
+            if derivation is None:
+                continue
+            for alternative in derivation.alternatives:
+                if compare(derivation.answer, alternative_value(alternative)) == "differ":
+                    found.append(f"{derivation.by}: {alternative}")
+        return found
 
     def unanswered(self, by: str) -> list[str]:
         return [q for q in self.questions if self.current(q, by) is None]
@@ -193,6 +234,28 @@ class AnswerLedger:
 
     # Verdicts (code only) -----------------------------------------------------------------
     def final(self, question_id: str) -> Final:
+        """The reported answer and its status. `specification-sensitive` replaces `unchecked`
+        and `replicated` when a role's own recorded alternative differs; a reconciled or
+        disputed answer keeps its status and gets the note."""
+        final = self._checked(question_id)
+        notes = [final.note] if final.note else []
+        if any(d is not None and d.forced for d in self.pair(question_id)) and (
+            final.status == "unchecked"
+        ):
+            notes.append("forced estimate made at the budget limit")
+        sensitive = self.sensitive(question_id)
+        if sensitive:
+            if final.status in ("unchecked", "replicated"):
+                final.status = SENSITIVE
+            notes.append(
+                "specification-sensitive: a recorded alternative result differs from the "
+                "answer (" + "; ".join(sensitive) + ")"
+            )
+        final.note = "; ".join(notes)
+        return final
+
+    def _checked(self, question_id: str) -> Final:
+        """How far the answer was checked: the status before specification sensitivity."""
         first, second = self.pair(question_id)
         ids = [d.id for d in (first, second) if d is not None]
         if first is None and second is None:
@@ -221,7 +284,7 @@ class AnswerLedger:
         """replicated, upheld, rejected, disputed, unchecked or superseded."""
         if derivation.superseded_by is not None:
             return "superseded"
-        final = self.final(derivation.question_id)
+        final = self._checked(derivation.question_id)
         if derivation.id not in final.derivations or final.status == "unchecked":
             return "unchecked"
         if final.status in ("replicated", "disputed"):
@@ -313,6 +376,10 @@ class AnswerLedger:
                 "disputed",
             ),
             ("Unchecked answers (one derivation only)", "unchecked"),
+            (
+                "Specification-sensitive answers (a role's own alternative result differs)",
+                SENSITIVE,
+            ),
             ("Missing answers", "missing"),
         ]
         lines = [

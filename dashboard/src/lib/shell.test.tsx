@@ -7,10 +7,10 @@ import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
 describe("StatusLine", () => {
   it.each([
-    [{ engine: "online", paid: "off" }, "Engine online · Paid calls off: scripted runs only"],
-    [{ engine: "online", paid: "on" }, "Engine online · Paid calls on"],
-    [{ engine: "offline", paid: "unknown" }, "Engine offline · Paid calls: not known"],
-    [{ engine: "unknown", paid: "unknown" }, "Engine: checking · Paid calls: not known"],
+    [{ engine: "online", paid: "off" }, "AI Scientist Bot · Engine online · Paid calls off: scripted runs only"],
+    [{ engine: "online", paid: "on" }, "AI Scientist Bot · Engine online · Paid calls on"],
+    [{ engine: "offline", paid: "unknown" }, "AI Scientist Bot · Engine offline · Paid calls: not known"],
+    [{ engine: "unknown", paid: "unknown" }, "AI Scientist Bot · Engine: checking · Paid calls: not known"],
   ] as const)("says in plain words what the engine can do: %j", (shell, text) => {
     render(<StatusLine shell={shell as Shell} onOpenSettings={() => {}} />)
     expect(screen.getByRole("status", { name: "Status" })).toHaveTextContent(text)

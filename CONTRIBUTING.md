@@ -9,8 +9,8 @@ git clone https://github.com/itsbrendandang/agent-test.git
 cd agent-test
 ```
 
-The GitHub repository is named `agent-test`. Some older text calls the project `drug-board`.
-Both names mean this repository.
+The GitHub repository is named `agent-test`. Some older text calls the project `drug-board` or Drug Board; the product is now called AI Scientist Bot.
+All these names mean this repository.
 
 ## Quick start with Docker only
 

@@ -34,7 +34,7 @@ const isAnswer = (x: unknown): x is Answer => {
 }
 
 // Two ways to find an experiment. Ask: a question in plain words, answered by a model from an index of every
-// run, with the runs it used. Search: over swarm runs (task, model, claims, problems, reports) and drug board
+// run, with the runs it used. Search: over swarm runs (task, model, claims, problems, reports) and board reviews
 // runs (brief, memo, checked claims). The engine does the matching; every word must appear.
 export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
   const [query, setQuery] = useState(() => sessionStorage.getItem("experiments.q") ?? "")
@@ -84,7 +84,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
     setAsked({ state: "idle" }); setQuestion("")
     document.getElementById("experiment-ask")?.focus()
   }
-  const scope = kind === "swarm" ? "swarm runs only" : kind === "board" ? "drug board runs only" : ""
+  const scope = kind === "swarm" ? "swarm runs only" : kind === "board" ? "board reviews only" : ""
 
   const shown = (hits ?? []).filter((h) => kind === "all" || h.kind === kind)
   // Scripted or real is read from each run itself: a swarm run's own model, a board review's own run.started event.
@@ -150,7 +150,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
                   {asked.result.runs.map((r) => (
                     <li key={`${r.kind}:${r.id}`}>
                       <button type="button" className="exp-hit card-surface" onClick={() => open(r)}>
-                        <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "drug board"}</span></span>
+                        <span className="exp-head"><b>{r.title}</b><span className="pill exp-kind">{r.kind === "swarm" ? "swarm run" : "board review"}</span></span>
                         <span className="muted small run-id" title={r.id}>{r.id}</span>
                         {r.why && <span className="exp-match small">{r.why}</span>}
                       </button>
@@ -169,7 +169,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
         <div role="group" aria-label="Kind of experiment" className="exp-kinds">
           {(["all", "swarm", "board"] as const).map((k) => (
             <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
-              {k === "all" ? "All" : k === "swarm" ? "Swarm runs" : "Drug board"}
+              {k === "all" ? "All" : k === "swarm" ? "Swarm runs" : "Board reviews"}
             </button>
           ))}
         </div>
@@ -184,7 +184,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
               <span className="exp-head">
                 <b>{mark(h.title)}</b>
                 <StatusPill state={runState(h.status, h.kind !== "swarm" || h.score !== undefined)} />
-                <span className="pill exp-kind">{h.kind === "swarm" ? "swarm run" : "drug board"}</span>
+                <span className="pill exp-kind">{h.kind === "swarm" ? "swarm run" : "board review"}</span>
                 <ModeLabel scripted={h.kind === "swarm" ? swarmScripted(swarmRuns[h.id]) : boardFlags[h.id]} demo={h.kind === "swarm" && swarmRuns[h.id]?.task === "demo"} />
                 {h.score !== undefined && <span className="exp-score" title="Score from the grader, out of 1">{fmtScore(h.score)}</span>}
               </span>
@@ -198,7 +198,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Compare" | "Board"
       </ul>
       {hits && shown.length === 0 && !error && (query.trim()
         ? <p className="empty-note">No experiments match. Every word has to appear in the run. Try fewer words, or ask a question in the box above.</p>
-        : <p className="empty-note">No {kind === "swarm" ? "swarm runs" : kind === "board" ? "drug board reviews" : "experiments"} yet. Start a run in the Swarm view, or convene the board in the Board view. Finished runs appear here.</p>)}
+        : <p className="empty-note">No {kind === "swarm" ? "swarm runs" : kind === "board" ? "board reviews" : "experiments"} yet. Start a run in the Compare view, or convene the board in the Board view. Finished runs appear here.</p>)}
     </div>
   )
 }

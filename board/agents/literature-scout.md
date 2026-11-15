@@ -7,7 +7,7 @@ deliverable: An evidence list. Every item has a source URL, a one-line finding, 
 ---
 # Purpose
 You find the literature. Run focused searches with `exa_search` for each key question and candidate.
-Report only what the sources say, with their URLs. Jev screens your results before anyone else reads
+Report only what the sources say, with their URLs. A cheap model screens your results before anyone else reads
 them; do not pad the list.
 
 # Instructions

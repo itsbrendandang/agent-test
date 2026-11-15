@@ -5,14 +5,18 @@ scripted model in a real sandbox, are in test_swarm_e2e.py."""
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from conftest import Synthetic
 from inspect_ai.model import ChatMessageAssistant, ChatMessageTool, ChatMessageUser
 from inspect_ai.tool import ToolCall
 
-from bixbench_v1 import roles
+from bixbench_v1 import cli, roles
 from bixbench_v1.answers import AnswerLedger
 from bixbench_v1.runner import run_capsule
 from bixbench_v1.solvers import (
@@ -32,6 +36,7 @@ from bixbench_v1.solvers import (
     printed_matches,
     question_records,
     review_text,
+    single_reserve,
     swarm_budget_mode,
     work_log,
 )
@@ -260,3 +265,86 @@ def test_the_recorded_value_must_be_what_the_reconcilers_script_printed() -> Non
     assert printed_matches("18", "17.96") and printed_matches("CDKN1A", "top gene: CDKN1A")
     assert not printed_matches("5", "4") and not printed_matches("1.07", "1.25")
     assert not printed_matches("4", "") and not printed_matches("TP53", "top gene: CDKN1A")
+
+
+# E. The brief is the same for both solvers ----------------------------------------------------
+def test_both_solvers_get_the_same_answer_contract_and_tool_notes() -> None:
+    single = roles.rules("/home/deriv_a/work", multiple_choice=False)
+    analyst = roles.rules("/home/deriv_a/work", multiple_choice=False)
+    critic = roles.rules("/home/deriv_b/work", multiple_choice=False)
+    assert single == analyst == critic.replace("deriv_b", "deriv_a")
+    for text in (single, critic, roles.FORCED_FINAL, roles.FORCED_FINAL_SINGLE):
+        # A question about an effect, impact or significance is not answered by a bare number.
+        assert roles.CONCLUSION_RULE in text
+    assert "effect, impact, relationship or significance" in roles.CONCLUSION_RULE
+    assert "conclusion in a few words followed by the value" in roles.CONCLUSION_RULE
+    for text in (single, critic):
+        # The python tool keeps no state between calls: said plainly, to both.
+        assert "python tool starts a NEW interpreter on every call" in text
+        assert "NameError" in text and "bash_session" in text
+        # Both are told about the forced final turn, and both may record alternatives.
+        assert "you get one last turn" in text and "alternatives (optional)" in text
+    assert "you get one last turn" not in roles.rules("/root/reconcile", False, answering=False)
+    # The forced turns differ only in the line the two submit_answer tools differ in.
+    with_method, with_route = (
+        roles.FORCED_FINAL.splitlines(),
+        roles.FORCED_FINAL_SINGLE.splitlines(),
+    )
+    assert [line for line in with_method if line not in with_route] == [
+        "- method: one line, data=...; subset=...; procedure=...; tool=..., describing the computation",
+        '  in the log that the value comes from, or "estimate: no finished computation" if there is none.',
+    ]
+    # Multiple choice: the answer is a letter, so the conclusion exception is not offered.
+    assert roles.CONCLUSION_RULE not in roles.rules("/w", multiple_choice=True)
+
+
+def test_the_single_agent_has_the_swarm_derivations_final_reserve() -> None:
+    policy = BudgetPolicy()
+    assert single_reserve(400_000) == policy.final_reserve == 15_000
+    assert plan_budget(400_000, 2).final_reserve == single_reserve(400_000)
+    assert single_reserve(2_500) == 1_250  # a toy budget smaller than two reserves
+    assert single_reserve(400_000, BudgetPolicy(final_reserve=3_500)) == 3_500
+
+
+def test_the_command_line_has_a_swarm_budget_option(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: list[Any] = []
+
+    def run_capsule(capsule: Any, **arguments: Any) -> Any:
+        seen.append((arguments["solver"], arguments["swarm_budget"], arguments["repeat"]))
+        raise RuntimeError("stop here")
+
+    capsule = SimpleNamespace(key="syn-1_x", questions=[SimpleNamespace(question_id="q1")])
+    monkeypatch.setattr(cli, "run_capsule", run_capsule)
+    monkeypatch.setattr(cli, "_selected", lambda arguments: [capsule])
+    monkeypatch.setattr(cli, "load_env", lambda path: [])
+    monkeypatch.setattr(cli, "_write_report", lambda out, profile: None)
+    monkeypatch.delenv(SWARM_BUDGET_ENV, raising=False)
+    base = ["bixbench-v1", "run", "--capsules", "syn-1", "--max-tokens", "400000"]
+
+    def spent(*extra: str) -> int:
+        out = tmp_path / f"out{len(list(tmp_path.iterdir()))}"
+        monkeypatch.setattr(sys, "argv", [*base, "--out", str(out), *extra])
+        assert cli.main() == 0
+        return int(json.loads((out / "budget.json").read_text())["spent"])
+
+    # A run that fails is charged its worst case, which depends on the swarm's budget mode.
+    assert spent() == 2 * 500_000
+    assert seen == [("single", "equal", 0), ("glhf", "equal", 0)]
+    seen.clear()
+    assert spent("--swarm-budget", "extended") == 2 * int(900_000 * 1.25)
+    assert seen == [("single", "extended", 0), ("glhf", "extended", 0)]
+    # The option wins over the environment variable; without it the variable still applies.
+    monkeypatch.setenv(SWARM_BUDGET_ENV, "extended")
+    seen.clear()
+    spent("--swarm-budget", "equal", "--solvers", "glhf", "--repeats", "2")
+    assert seen == [("glhf", "equal", 0), ("glhf", "equal", 1)]
+    seen.clear()
+    spent("--solvers", "glhf")
+    assert seen == [("glhf", "extended", 0)]
+    monkeypatch.setattr(
+        sys, "argv", [*base, "--out", str(tmp_path / "x"), "--swarm-budget", "double"]
+    )
+    with pytest.raises(SystemExit):
+        cli.main()

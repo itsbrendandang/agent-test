@@ -1,4 +1,4 @@
-// Escalation checkers. Only claims Jev left between its thresholds (or computed claims, which Jev
+// Escalation checkers. Only claims the first pass (triage.ts) could not settle (or computed claims, which a cheap model
 // should not do math on) reach these, so OpenAI credits and Claude Code time go to the hard cases.
 import { spawn } from "node:child_process"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -32,13 +32,25 @@ function ruling(text: string, usd: number): Ruling {
     : { verdict: "unsupported", note: `checker gave no clear verdict: ${text.slice(0, 240)}`, usd }
 }
 
+/**
+ * Can the Claude Code checker re-execute a computed claim? Only without --restricted AND with Bash among its tools.
+ * The default command is restricted: the child can read and reason but not run code, so "recomputing" a number
+ * means a model doing arithmetic in its head. That is not a re-execution, so a computed claim is then recorded as
+ * unchecked, with this reason, and no process is started and no escalation is used.
+ */
+export const computedCanRun = (config: BoardConfig): boolean =>
+  !/(^|\s)--restricted(\s|$)/.test(config.checkers.claude_code_cmd) && /\bBash\b/.test(config.checkers.claude_code_tools ?? "Read Write")
+export const NOT_RERUN = "computed claim not re-executed: the Claude Code checker runs --restricted and cannot run code (see checkers.claude_code_cmd and claude_code_tools in board/config.yaml)"
+
 const ANSWER_FORMAT = "The first line of your reply must be exactly `VERDICT: verified`, `VERDICT: unsupported` or `VERDICT: contradicted`, with nothing else on that line."
 const timeoutMs = (config: BoardConfig) => (config.checkers.timeout_seconds ?? 180) * 1000
 
 /** OpenAI reads the evidence and rules on a contested literature claim. */
 export async function openaiCheck(models: Models, config: BoardConfig, claim: string, evidence: string, mock = MOCK): Promise<Ruling> {
-  if (mock || !process.env.OPENAI_API_KEY) return { verdict: "unsupported", note: "mock: evidence mentions the topic but not the number", usd: 0 }
+  if (mock) return { verdict: "unsupported", note: "mock: evidence mentions the topic but not the number", usd: 0 } // scripted run: labelled "mock:", and the run itself is marked scripted
   refusePaid("the OpenAI checker") // before the try: a refusal is an error, not a "checker failed" ruling
+  // A real run with no key must stop, not rule "unsupported" on invented grounds.
+  if (!process.env.OPENAI_API_KEY?.trim()) throw new Error("the OpenAI checker: OPENAI_API_KEY is not set. A real run does not substitute a scripted ruling.")
   const model = models.getModel("openai", config.checkers.openai_model)
   if (!model) throw new Error(`OpenAI model ${config.checkers.openai_model} is not available`)
   try {

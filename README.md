@@ -1,4 +1,4 @@
-# GLHF: AI scientist swarm
+# AI Scientist Bot (GLHF): AI scientist swarm
 
 Team GLHF, hackathon Track 3 (AI Scientist Swarms).
 

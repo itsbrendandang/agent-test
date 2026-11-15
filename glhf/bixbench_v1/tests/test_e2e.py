@@ -8,6 +8,7 @@ The image is python:3.12-slim (small); the official BixBench image is used for r
 from __future__ import annotations
 
 import json
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -17,7 +18,7 @@ from conftest import SENTINELS, UUID, Synthetic, docker_running
 from inspect_ai.log import read_eval_log
 from inspect_ai.model import ModelOutput, ModelUsage
 
-from bixbench_v1 import cli, staging
+from bixbench_v1 import cli, runner, staging
 from bixbench_v1.runner import MOCK, grade_run, run_capsule
 
 pytestmark = pytest.mark.skipif(not docker_running(), reason="Docker is not running")
@@ -79,6 +80,33 @@ ANALYST_FILES = (
     "notes.txt", "scratch_a.txt", "answer_is_five.txt", "shm_a.txt", "a_dir", "inner.txt", "leak_a.txt",
 )  # fmt: skip
 DONE = call("submit", answer="done")
+SERVER = (
+    "import socket\n"
+    "s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+    "s.bind(('127.0.0.1', 8124)); s.listen(5)\n"
+    "while True:\n"
+    "    c, _ = s.accept(); c.sendall(b'A-ANSWER q1 is five'); c.close()\n"
+)
+# What a non-compliant analyst leaves behind that is not a file its user owns on a swept
+# filesystem: a server renamed to look like Inspect's tool process, a queue on the separate
+# /dev/mqueue mount, and world-readable System V shared memory and message queue.
+ATTACK_SHELL = (
+    "cd / && (setsid nohup bash -c 'exec -a inspect-sandbox-tools python3 /home/deriv_a/tmp/srv.py' "
+    ">/dev/null 2>&1 &) ; sleep 2; "
+    "touch /dev/mqueue/A-ANSWER_q1_is_five && chmod 666 /dev/mqueue/A-ANSWER_q1_is_five; "
+    "ipcmk -M 4096 -p 0666; ipcmk -Q -p 0666; "
+    "echo ATTACK mqueue $(ls /dev/mqueue); "
+    "echo ATTACK sysv $(($(cat /proc/sysvipc/shm /proc/sysvipc/msg | wc -l) - 2))"
+)
+ATTACK = call(
+    "python",
+    code=(
+        "import socket, subprocess\n"
+        f"open('/home/deriv_a/tmp/srv.py', 'w').write({SERVER!r})\n"
+        f"print(subprocess.run(['bash', '-c', {ATTACK_SHELL!r}], capture_output=True, text=True).stdout)\n"
+        "print('ATTACK server says', socket.create_connection(('127.0.0.1', 8124), timeout=5).recv(100))\n"
+    ),
+)
 PROBE = (
     "import os, socket, subprocess\n"
     "print('WHOAMI', subprocess.run(['id', '-un'], capture_output=True, text=True).stdout.strip())\n"
@@ -117,6 +145,16 @@ PROBE = (
     "    seen += [os.path.join(folder, n) for n in dirs + files if n in names]\n"
     "print('ANALYST_PATHS', seen)\n"
     "print('OUTPUTS', os.listdir('/outputs'), 'WORK', os.listdir(os.path.expanduser('~/work')))\n"
+    # The three channels the red-team used past the file sweep: a process of the analyst's
+    # serving on loopback under Inspect's own process name, a POSIX message queue, SysV IPC.
+    "try:\n"
+    "    print('LOOPBACK open', socket.create_connection(('127.0.0.1', 8124), timeout=3).recv(100))\n"
+    "except OSError as error:\n"
+    "    print('LOOPBACK closed', type(error).__name__)\n"
+    "print('MQUEUE', os.listdir('/dev/mqueue'))\n"
+    "print('SYSV', sum(len(open('/proc/sysvipc/' + k).read().splitlines()) - 1 for k in ('shm', 'msg', 'sem')))\n"
+    "print('MOUNTS', [l.split()[3] for l in open('/proc/self/mountinfo') if l.split()[4] in ('/data', '/outputs')], 'ENDMOUNTS')\n"
+    "print('MOUNTINFO', open('/proc/self/mountinfo').read(), 'ENDMOUNTINFO')\n"
     "print('DATA', sorted(os.listdir('/data')), 'ENV', sorted(k for k in os.environ if 'API' in k or 'TOKEN' in k))\n"
 )
 
@@ -130,6 +168,7 @@ SWARM_SCRIPT = [
         "mkdir /tmp/a_dir; echo x > /tmp/a_dir/inner.txt; echo five > /outputs/leak_a.txt; "
         "chmod -R a+rX ~ /tmp/a_dir; chmod a+r /tmp/scratch_a.txt; id -un"
     ),
+    ATTACK,
     sanswer(1, "5", PANDAS, route="summed column a"),  # wrong on purpose
     sanswer(
         2, "3.0", "data=counts.csv column b; subset=all rows; procedure=mean; tool=pandas.mean"
@@ -236,6 +275,25 @@ def test_swarm_blind_critic_reconciliation_and_boundary(
     # name alone can carry an answer), not in /outputs; and it starts in an empty directory.
     assert "ANALYST_PATHS []" in transcript and "OUTPUTS [] WORK []" in transcript
     assert summary["blind_check"] == {"checked": True, "visible_to_critic": []}
+    # The analyst's attack worked while it ran (so the checks below mean something)...
+    assert "ATTACK server says b'A-ANSWER q1 is five'" in transcript
+    assert "ATTACK mqueue A-ANSWER_q1_is_five" in transcript and "ATTACK sysv 2" in transcript
+    # ...and none of it is there for the critic: the disguised server was killed (by uid, not
+    # by name), the message queue and the System V objects are gone.
+    assert "LOOPBACK closed ConnectionRefusedError" in transcript
+    assert "MQUEUE []" in transcript and "SYSV 0" in transcript
+    # The host paths behind /data and /outputs (readable in /proc/self/mountinfo) are neutral:
+    # no capsule uuid, no run folder, and nothing that names the solver or the model.
+    mountinfo = transcript.split("MOUNTINFO", 1)[1].split("ENDMOUNTINFO", 1)[0]
+    assert "/data" in mountinfo and "/outputs" in mountinfo
+    assert UUID not in mountinfo and "CapsuleData" not in mountinfo
+    assert f"{out.name}/outputs" not in mountinfo and "glhf" not in mountinfo
+    assert "/mounts/" in transcript.split("MOUNTS", 1)[1].split("ENDMOUNTS", 1)[0]
+    # The run wrote into the neutral folder; its outputs are in the run folder and the neutral
+    # folder is gone. Nothing was passed through the process environment.
+    assert (out / "outputs" / "answers.json").exists()
+    assert not list((synthetic.staged.parent / "mounts").iterdir())
+    assert not [k for k in os.environ if k in ("BIXBENCH_V1_DATA_DIR", "BIXBENCH_V1_OUTPUTS_DIR")]
     # The critic's task holds the questions and nothing the analyst produced: no route (as it
     # did before), no method, no answer, no path. The reconciler, as root, can read the note.
     messages = [str(m.content) for m in log.samples[0].messages]
@@ -290,7 +348,7 @@ def test_swarm_blind_critic_reconciliation_and_boundary(
     judge = RecordingJudge()
     graded = grade_run(out, synthetic.capsule, judge, "fake", ("per-mode", "official"))
     grades = {g["question_id"]: g for g in graded["profiles"]["per-mode"]["grades"]}
-    assert (grades["syn-1-q1"]["correct"], grades["syn-1-q1"]["method"]) == (True, "exact")
+    assert (grades["syn-1-q1"]["correct"], grades["syn-1-q1"]["method"]) == (True, "numeric")
     assert (grades["syn-1-q2"]["correct"], grades["syn-1-q2"]["method"]) == (True, "range")
     assert (grades["syn-1-q3"]["correct"], grades["syn-1-q3"]["method"]) == (False, "llm")
     assert graded["profiles"]["per-mode"]["summary"]["correct"] == 2
@@ -370,18 +428,136 @@ def test_answers_recorded_before_the_token_budget_ends_still_count(
     script = [answer(1, "4"), answer(2, "3"), answer(3, "x"), DONE]
     for output in script:  # every model call costs 1,000 tokens
         output.usage = ModelUsage(input_tokens=900, output_tokens=100, total_tokens=1000)
-    summary = run(synthetic, tmp_path / "run", "single", script, max_tokens=2500)
+    policy = {"final_reserve": 0}  # no forced turn here: this is about the limit alone
+    summary = run(
+        synthetic, tmp_path / "run", "single", script, max_tokens=2500, budget_policy=policy
+    )
     assert summary["status"] == "done", summary["error"]
     finished = [p for p in summary["phases"] if p["kind"] == "phase.finished"]
     assert [p["limit"] for p in finished] == ["token"] and finished[0]["tokens"] == 3000
-    # Limits are checked after each call: the third call went over, so its answer never ran.
-    assert summary["answer_statuses"] == {
-        "syn-1-q1": "unchecked",
-        "syn-1-q2": "unchecked",
-        "syn-1-q3": "missing",
-    }
+    # Limits are checked after each call. The third call went over; the answer it submitted
+    # was produced inside the budget and is recorded before the limit takes effect.
+    assert summary["answer_statuses"] == dict.fromkeys(
+        ["syn-1-q1", "syn-1-q2", "syn-1-q3"], "unchecked"
+    )
+    ledger = json.loads((tmp_path / "run" / "outputs" / "glhf" / "ledger.json").read_text())
+    pending = [e for e in ledger["events"] if e["kind"] == "pending_submits.executed"]
+    assert [e["questions"] for e in pending] == [["syn-1-q3"]]
     assert summary["total_tokens"] == 3000
     assert (tmp_path / "run" / "outputs" / "METHODS.md").exists()
+
+
+def test_only_submit_answer_runs_past_a_limit(synthetic: Synthetic, tmp_path: Path) -> None:
+    # The call that crosses the limit asks for a shell command AND an answer: the answer is
+    # recorded, the command is not run.
+    crossing = answer(2, "3")
+    crossing.message.tool_calls = [
+        *shell("touch /outputs/ran_past_the_limit").message.tool_calls,  # type: ignore[misc]
+        *crossing.message.tool_calls,  # type: ignore[misc]
+    ]
+    script = [answer(1, "4"), crossing, DONE]
+    for output in script:
+        output.usage = ModelUsage(input_tokens=900, output_tokens=100, total_tokens=1000)
+    out = tmp_path / "run"
+    summary = run(
+        # The second call ends at 2,000: over this limit, under the task's hard backstop.
+        synthetic, out, "single", script, max_tokens=1800, budget_policy={"final_reserve": 0},
+        question_ids=["syn-1-q1", "syn-1-q2"],
+    )  # fmt: skip
+    assert summary["status"] == "done", summary["error"]
+    assert summary["answer_statuses"] == {"syn-1-q1": "unchecked", "syn-1-q2": "unchecked"}
+    assert not (out / "outputs" / "ran_past_the_limit").exists()
+
+
+def test_the_single_agent_gets_the_same_forced_final_turn(
+    synthetic: Synthetic, tmp_path: Path
+) -> None:
+    # Budget 9,000 with the swarm derivation's reserve of 3,500: it works up to 5,500, as the
+    # analyst does in test_swarm_e2e with the same numbers. Every call costs 1,000.
+    script = [
+        shell("echo CANDIDATE sum of a is 4"),
+        answer(1, "4"),
+        shell("echo CANDIDATE mean of b is 3"),
+        shell("echo still thinking"),
+        shell("echo still thinking"),
+        shell("echo this call goes over the limit and never runs"),
+        # its forced final turn: no tools but submit_answer
+        answer(2, "3", route="mean of b from the log"),
+        answer(3, "two genes", route="estimate: no finished computation"),
+    ]
+    for output in script:
+        output.usage = ModelUsage(input_tokens=900, output_tokens=100, total_tokens=1000)
+    out = tmp_path / "run"
+    summary = run(
+        synthetic, out, "single", script, max_tokens=9000, budget_policy={"final_reserve": 3500}
+    )
+    assert summary["status"] == "done", summary["error"]
+    started = next(p for p in summary["phases"] if p["kind"] == "phase.started")
+    finished = next(p for p in summary["phases"] if p["kind"] == "phase.finished")
+    assert (started["tokens_allowed"], started["tokens_working"]) == (9000, 5500)
+    assert finished["limit"] == "token" and finished["forced_answers"] == ["syn-1-q2", "syn-1-q3"]
+    assert finished["unanswered"] == [] and finished["tokens"] == 8000 <= 9000
+    assert summary["budget"]["forced_answers"] == {"single": ["syn-1-q2", "syn-1-q3"]}
+    # Without the turn q2 and q3 were "missing" (and graded incorrect).
+    assert summary["answer_statuses"] == dict.fromkeys(
+        ["syn-1-q1", "syn-1-q2", "syn-1-q3"], "unchecked"
+    )
+    answers = json.loads((out / "outputs" / "answers.json").read_text())["answers"]
+    assert answers["syn-1-q1"]["note"] == ""
+    assert "forced estimate" in answers["syn-1-q2"]["note"]
+    log = read_eval_log(str(next((out / "logs").glob("*.eval"))))
+    assert log.samples is not None
+    messages = [str(m.content) for m in log.samples[0].messages]
+    forced = messages[messages.index("=== GLHF forced final turn: single ===") + 1]
+    assert (
+        "CANDIDATE mean of b is 3" in forced
+        and "Record an answer for: syn-1-q2, syn-1-q3" in forced
+    )
+    assert "## Question syn-1-q1" not in forced  # only what is unanswered
+    ledger = json.loads((out / "outputs" / "glhf" / "ledger.json").read_text())
+    assert [e["kind"] for e in ledger["events"]].count("answer.forced") == 2
+    graded = grade_run(out, synthetic.capsule, None)
+    rows = {g["question_id"]: g for g in graded["profiles"]["per-mode"]["grades"]}
+    assert rows["syn-1-q2"]["correct"] and rows["syn-1-q2"]["method"] == "range"
+
+
+def test_multiple_choice_run_keeps_its_salt_on_the_host(
+    synthetic: Synthetic, tmp_path: Path
+) -> None:
+    def letters(out: Path) -> dict[str, str]:
+        script = [
+            shell("env; cat /proc/1/environ | tr '\\0' '\\n'; ls -la /outputs /data"),
+            *[answer(n, "A") for n in (1, 2, 3)],
+            DONE,
+        ]
+        summary = run(synthetic, out, "single", script, answer_mode="mcq")
+        assert summary["status"] == "done", summary["error"]
+        salt = runner.read_salt(out)
+        assert salt and len(salt) >= 32
+        # The salt is in the run folder and nowhere the solver or a reader of the logs can
+        # look: not the eval log, not run.json, not the outputs, not the environment.
+        assert salt not in _eval_text(next((out / "logs").glob("*.eval")))
+        assert salt not in (out / "run.json").read_text()
+        for path in (out / "outputs").rglob("*"):
+            assert path.is_dir() or salt.encode() not in path.read_bytes(), path
+        assert salt not in "\x00".join(os.environ.values())
+        assert "shuffle_salt" not in _eval_text(next((out / "logs").glob("*.eval")))
+        # Grading rebuilds the key from the folder's salt, and writes no ideal or key letter.
+        graded = grade_run(out, synthetic.capsule, None, profiles=("per-mode", "official"))
+        assert graded["profiles"]["official"]["judge"]["letter_match"] is True
+        key = runner.key_for(synthetic.capsule, json.loads((out / "run.json").read_text()), out)
+        for grade in graded["profiles"]["per-mode"]["grades"]:
+            assert grade["method"] == "letter"
+            assert grade["correct"] is (key[grade["question_id"]].correct_letter == "A")
+        return {q: str(entry.correct_letter) for q, entry in key.items()}
+
+    first, second = letters(tmp_path / "one"), letters(tmp_path / "two")
+    assert runner.read_salt(tmp_path / "one") != runner.read_salt(tmp_path / "two")
+    # Same seed, same questions, two runs: with 4 options and 3 questions the letters agree by
+    # chance 1 time in 64; with the unsalted shuffle they agreed always.
+    assert first != second or runner.read_salt(tmp_path / "one") != runner.read_salt(
+        tmp_path / "two"
+    )
 
 
 def test_a_tampered_staging_stops_the_run_before_any_container(
@@ -428,7 +604,13 @@ def test_cli_runs_both_solvers_with_the_scripted_model_and_respects_the_cap(
     assert "skip" in printed
     report = json.loads((out / "report.json").read_text())
     assert set(report["solvers"]) == {"single", "glhf"} and report["scripted_model"] is True
-    assert report["paired"]["n"] == 3
+    # No judge: the free-text question is ungraded on both sides and leaves the paired test.
+    assert (report["paired"]["n"], report["paired"]["pairs_dropped_ungraded"]) == (2, 1)
     assert report["solvers"]["glhf"]["by_status"]["reconciled"]["n"] == 1
     assert SENTINELS["ideal"] not in (out / "report.json").read_text()
-    assert "| syn-1_11111111 | syn-1-q1 | str_verifier |" in (out / "report.md").read_text()
+    text = (out / "report.md").read_text()
+    assert "| syn-1_11111111 | syn-1-q1 | 0 | str_verifier |" in text
+    assert "- Comparable to published: no" in text and "scripted mock model" in text
+    grade = json.loads((out / "syn-1_11111111" / "single" / "grade.json").read_text())
+    assert grade["judge_model"] is None
+    assert "no judge" in grade["profiles"]["per-mode"]["judge"]["deviations"][0]

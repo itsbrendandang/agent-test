@@ -28,8 +28,12 @@ const tempConfig = (): BoardConfig => {
 
 test("origin: dashboard allowed, other pages forbidden, none for CLI", () => {
   assert.equal(originState(req({ origin: "http://127.0.0.1:5317" }), {}), "allowed")
-  assert.equal(originState(req({ origin: "http://localhost:5173" }), {}), "allowed")
-  assert.equal(originState(req({ origin: "tauri://localhost" }), {}), "allowed")
+  assert.equal(originState(req({ origin: "http://localhost:5317" }), {}), "allowed")
+  // Vite's default ports are any other project's dev server: not the dashboard unless configured.
+  for (const port of [5173, 4173]) for (const host of ["localhost", "127.0.0.1"]) assert.equal(originState(req({ origin: `http://${host}:${port}` }), {}), "forbidden", `${host}:${port}`)
+  assert.equal(originState(req({ origin: "http://localhost:5173" }), { DASHBOARD_ORIGINS: "http://localhost:5173" }), "allowed", "DASHBOARD_ORIGINS adds one")
+  // The built desktop app: tauri://localhost on macOS and Linux, http(s)://tauri.localhost on Windows.
+  for (const origin of ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]) assert.equal(originState(req({ origin }), {}), "allowed", origin)
   assert.equal(originState(req({ origin: "https://evil.example" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "http://localhost:9999" }), {}), "forbidden")
   assert.equal(originState(req({ origin: "null" }), {}), "forbidden")
@@ -103,9 +107,9 @@ test("verdict: only a first line of the form VERDICT: word counts", () => {
 test("checker child gets only the variables on the allow-list", () => {
   const env = checkerEnv({
     PATH: "/bin", HOME: "/h", LANG: "C", TMPDIR: "/t", ANTHROPIC_API_KEY: "f", CLAUDE_CODE_OAUTH_TOKEN: "g",
-    OPENAI_API_KEY: "a", OPENROUTER_API_KEY: "b", EXA_API_KEY: "c", PAST_API_KEY: "d", HF_TOKEN: "e",
+    OPENAI_API_KEY: "a", EXA_API_KEY: "c", PAST_API_KEY: "d", HF_TOKEN: "e",
     // names a deny-list of KEY|TOKEN|SECRET|PASSWORD let through
-    GH_PAT: "x", DATABASE_URL: "postgres://u:p@h/db", GOOGLE_APPLICATION_CREDENTIALS: "/k.json", OPENROUTER_AUTH: "y", AWS_PROFILE: "prod", SOMETHING_NEW: "z",
+    GH_PAT: "x", DATABASE_URL: "postgres://u:p@h/db", GOOGLE_APPLICATION_CREDENTIALS: "/k.json", GATEWAY_AUTH: "y", AWS_PROFILE: "prod", SOMETHING_NEW: "z",
   })
   assert.deepEqual(Object.keys(env).sort(), ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "HOME", "LANG", "PATH", "TMPDIR"])
 })
@@ -217,10 +221,10 @@ test("rememberRun: keeps the user's text, dedupes, and replaces a note when the 
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, "tox.md"), "# tox expertise\n\nMy own note: always check QT data.\n")
   const ledger = [
-    { member: "tox", claim: "A is safe", verdict: "verified", checker: "jev" },
-    { member: "tox", claim: "A is  safe", verdict: "verified", checker: "jev" },
+    { member: "tox", claim: "A is safe", verdict: "verified", checker: "first-pass" },
+    { member: "tox", claim: "A is  safe", verdict: "verified", checker: "first-pass" },
     { member: "tox", claim: "B has no hERG risk", verdict: "contradicted", checker: "openai", note: "paper shows 2 uM" },
-    { member: "tox", claim: "C maybe", verdict: "unsupported", checker: "jev" },
+    { member: "tox", claim: "C maybe", verdict: "unsupported", checker: "first-pass" },
   ]
   assert.equal(rememberRun(config, "r1", ledger, dir), 2)
   assert.equal(rememberRun(config, "r2", ledger, dir), 0)
@@ -236,7 +240,7 @@ test("rememberRun: keeps the user's text, dedupes, and replaces a note when the 
   assert.match(text, /My own note: always check QT data\./)
   // Within one run the last ruling on a claim wins.
   assert.equal(rememberRun(config, "r4", [
-    { member: "chem", claim: "D", verdict: "verified", checker: "jev" },
+    { member: "chem", claim: "D", verdict: "verified", checker: "first-pass" },
     { member: "chem", claim: "D", verdict: "contradicted", checker: "openai", note: "round 2" },
   ], dir), 1)
   assert.match(readFileSync(join(dir, "chem.md"), "utf8"), /- \[contradicted by openai, run r4\] D \(why: round 2\)/)

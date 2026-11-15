@@ -6,7 +6,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname } from "node:path"
 
 export type Verdict = "verified" | "unsupported" | "contradicted" | "unchecked"
-export type Checker = "jev" | "openai" | "claude-code"
+/** Who ruled on a claim. "first-pass" is the cheap direct-API model (triage.ts). "jev" only appears in runs recorded before Jev was removed; it means the same first stage. */
+export type Checker = "first-pass" | "jev" | "openai" | "claude-code"
 
 export type BoardEvent =
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
@@ -15,7 +16,7 @@ export type BoardEvent =
   | { type: "round.started"; round: number; message: string; final: boolean }
   | { type: "member.replied"; round: number; member: string; text: string; usd: number }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[] }
-  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string }
+  | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string }
   | { type: "constraint"; reason: "time" | "budget" | "rounds"; detail: string }
   | { type: "memo.written"; path: string; decision: string }
   | { type: "run.finished"; usd: number; minutes: number }

@@ -29,9 +29,7 @@ export function GraphScreen() {
   const swarm = useSwarmRun(current?.kind === "swarm" ? current.id : undefined)
   const source = current?.kind === "board" ? board : swarm
 
-  console.info('[g3] render', Date.now()%100000, list.runs?.length, board.data?.events.length, current?.id)
   const full = useMemo<GraphModel | undefined>(() => {
-    console.info('[g3] full recomputed')
     if (!current) return undefined
     if (current.kind === "board") return board.data ? capGraph(buildBoardGraph({ runId: current.id, ...board.data })) : undefined
     return swarm.data ? capGraph(buildSwarmGraph(swarm.data)) : undefined

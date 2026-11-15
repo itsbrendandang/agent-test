@@ -26,8 +26,14 @@ WRAP_UP = (
 TOKEN_SEMANTICS = {
     "single": "90% of max_tokens for the analysis; if that is used up, one continuation with the "
     "rest (at least 10%) to write METHODS.md. Limits are checked after each model call.",
-    "glhf": "phases are skipped once max_tokens minus a 10% reserve is spent; the reporter always "
-    "runs with the rest (at least 10%). Limits are checked after each model call.",
+    "glhf": "a budget plan made before the first role runs: every phase has a floor, a target "
+    "share and what earlier phases left unused, and may not touch the floors of the phases "
+    "still owed nor the reserves (overshoot 5%, finisher, reporter at least 10%). If max_tokens "
+    "cannot cover the floors, a smaller plan drops phases up front and says so; a phase left "
+    "with less than its floor is skipped; the reporter always runs. A role that hits its limit "
+    "gets one short final turn without tools, paid from its own slice. Limits are checked after "
+    "each model call, so a role can pass its limit by one call: that is paid from the overshoot "
+    "reserve.",
 }
 
 

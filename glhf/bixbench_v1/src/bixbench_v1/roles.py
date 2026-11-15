@@ -35,6 +35,11 @@ Rules:
   the closest valid offline route and say so.
 - Answer from the data only, by running code. Never answer from memory of a paper or from what
   seems plausible.
+- The python tool starts a NEW interpreter on every call: no variable, import or loaded table
+  survives from one call to the next, so a later call that uses a name from an earlier one
+  fails with NameError. Put everything a step needs in the one call, or write scripts and save
+  intermediate results as files in {work} and load them again. bash_session, by contrast, is
+  one shell that keeps its working directory and environment between calls.
 - Follow every method detail the question states (tool, test, thresholds, filters, the direction
   of a comparison, rounding). Read each file's structure before using it: column meanings,
   identifier types, sample groups, missing values.
@@ -46,13 +51,27 @@ ANSWERING = """
   - answer: exactly what the question asks for and nothing else. A number is digits only, rounded
     as the question asks, with no units or words (a percent sign only if the question asks for a
     percentage); a gene, pathway or group by its name as written in the data; otherwise the
-    shortest phrase that answers the question.{letter_rule}
+    shortest phrase that answers the question.
+    {conclusion_rule}{letter_rule}
   - route: one or two lines on how you derived it (inputs, tool, parameters). Do not put the
     resulting value in the route.
   - evidence: the script path and the output line that shows the value.
+  - alternatives (optional): if the question leaves a choice open (which samples, which test,
+    which direction, which filter) and you computed the result under more than one defensible
+    reading, give your answer for the reading the wording supports best and list the other
+    results here, each as "value | what was different". Record them even when they are
+    inconvenient; code flags an answer whose alternatives differ, it does not replace it.
 - Before finishing, re-read each question and check that your answer follows its stated method,
   rounding and format. Then call submit with a one-line summary.
 """.strip()
+
+# The same sentence for the single agent, both swarm derivations and every forced final turn.
+CONCLUSION_RULE = (
+    "Exception: when the question asks what the effect, impact, relationship or significance "
+    "of something is (not for a value alone), a bare number does not answer it: give the "
+    "conclusion in a few words followed by the value that supports it, for example "
+    '"no significant effect (p = 0.41)" or "increases severity (OR 1.52)".'
+)
 
 LETTER_RULE = "\n    These are multiple-choice questions: the answer is the letter of one option, nothing else."
 
@@ -64,7 +83,14 @@ ANALYST = (
     "the ones that matter."
 )
 
-# For the two swarm derivations only (the single agent's brief is unchanged).
+# For every solver: the single agent gets the same forced final turn as a swarm derivation.
+FINAL_TURN = """
+- If your budget ends before every question is answered you get one last turn, without tools,
+  to record your best answer for the rest from the work you have done. So keep your outputs
+  short and informative: print the candidate value for each question as soon as you have one.
+""".strip()
+
+# For the two swarm derivations only.
 METHOD_LINE = """
 - submit_answer also takes `method`: ONE line that stands on its own for that question (never
   "same as above"), in this form:
@@ -72,9 +98,6 @@ METHOD_LINE = """
     formula, with its settings>; tool=<package.function>
   State what you actually ran. Do not put the resulting value in it. Code compares your method
   line with the other analyst's: an agreement reached by the same method counts for less.
-- If your budget ends before every question is answered you get one last turn, without tools,
-  to record your best answer for the rest from the work you have done. So keep your outputs
-  short and informative: print the candidate value for each question as soon as you have one.
 """.strip()
 
 CRITIC = """
@@ -90,19 +113,39 @@ neither of you can see the other's work; code compares the answers afterwards. S
   column a threshold applies to, and rounding.
 """.strip()
 
-FORCED_FINAL = """
+_FORCED_FINAL = """
 You were answering questions about a dataset by running code, and your budget has ended. You
 cannot run anything more. Below are the questions you have not answered and the end of your own
 work log. For EACH listed question call submit_answer once, now:
 - answer: the value your log's outputs support best, in the format the question asks for
-  (a number as digits only, rounded as the question asks). If the log shows several candidate
-  values, take the one whose computation follows the question's wording most closely. If the log
-  holds no computed value for a question, give your best estimate from what the log shows of
-  the data. Never leave a listed question without an answer.
-- method: one line, data=...; subset=...; procedure=...; tool=..., describing the computation
-  in the log that the value comes from, or "estimate: no finished computation" if there is none.
-- evidence: the log line that shows the value.
+  (a number as digits only, rounded as the question asks).
+  {conclusion_rule}
+  If the log shows several candidate values, take the one whose computation follows the
+  question's wording most closely. If the log holds no computed value for a question, give your
+  best estimate from what the log shows of the data. Never leave a listed question without an
+  answer.
+{method_line}- evidence: the log line that shows the value.
 """.strip()
+
+_FORCED_METHOD = """- method: one line, data=...; subset=...; procedure=...; tool=..., describing the computation
+  in the log that the value comes from, or "estimate: no finished computation" if there is none.
+"""
+_FORCED_ROUTE = """- route: one line on the computation in the log that the value comes from, or "estimate: no
+  finished computation" if there is none.
+"""
+
+
+def forced_final(with_method: bool) -> str:
+    """Instructions for the forced final turn: the swarm derivations' (with the method line
+    their submit_answer requires) and the single agent's (with a route). Otherwise identical."""
+    return _FORCED_FINAL.format(
+        conclusion_rule=CONCLUSION_RULE,
+        method_line=_FORCED_METHOD if with_method else _FORCED_ROUTE,
+    )
+
+
+FORCED_FINAL = forced_final(with_method=True)
+FORCED_FINAL_SINGLE = forced_final(with_method=False)
 
 RECONCILER = f"""
 Your role: RECONCILER in a small team. Two analysts, A and B, answered the same questions
@@ -138,7 +181,11 @@ def rules(work: str, multiple_choice: bool, answering: bool = True) -> str:
     reconciler records resolutions, not answers)."""
     text = RULES.format(work=work)
     if answering:
-        text += "\n" + ANSWERING.format(letter_rule=LETTER_RULE if multiple_choice else "")
+        text += "\n" + ANSWERING.format(
+            conclusion_rule="" if multiple_choice else CONCLUSION_RULE,
+            letter_rule=LETTER_RULE if multiple_choice else "",
+        )
+        text += "\n" + FINAL_TURN
     return text
 
 

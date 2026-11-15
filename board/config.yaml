@@ -1,6 +1,8 @@
 # Drug Candidate Board: brief in, memo out.
-# Every model goes through OpenRouter (one key, one bill). Set DRUG_BOARD_MOCK=1 to run with scripted
-# models and no keys at all.
+# Every model is called directly at its vendor: Anthropic (ANTHROPIC_API_KEY) or OpenAI (OPENAI_API_KEY).
+# Paid calls must be allowed (NO_PAID_CALLS=0) and the key of every tier below must be set, or a run is refused
+# at its start with the tier and the key named. DRUG_BOARD_MOCK=1 (or paid calls off) runs with scripted
+# models and no keys at all. A run is never silently made scripted.
 
 meeting:
   max_minutes: 15          # wall clock for one deliberation; the lead is told to wrap up after this
@@ -10,7 +12,9 @@ meeting:
   lead_turns: 20           # model calls the lead may make in one run
   member_turns: 6          # model calls each board member may make per question
   max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
-  fallback_usd_per_mtok: 15 # price assumed per million tokens when a model reports tokens but no cost
+  max_searches: 20         # Exa searches per run (as in the swarm); a member that asks for more is told the budget is used up
+  exa_usd_per_search: 0.007 # price assumed per search until Exa's response states one: measured once (2 live searches, $0.014), a small sample. Counted against max_usd and daily_usd
+  exa_ceiling_usd: 40      # lifetime Exa spend the engine will allow, from board/runs/.exa-ledger.jsonl. The account holds $50 and is not topped up; the rest is room for searches made outside the engine
 
 memory:
   enabled: true            # after each run, add each member's checked claims to board/expertise/<member>.md
@@ -38,17 +42,39 @@ paths:
   expertise: board/expertise # per-agent notes that persist across runs
   runs: board/runs           # one directory per run: session.sqlite, events.jsonl, memo.md
 
-models:                      # OpenRouter IDs; "~" aliases follow the newest model of a family
-  lead: "~anthropic/claude-opus-latest"
-  strong: "~anthropic/claude-sonnet-latest"
-  cheap: "~google/gemini-flash-latest"
-  rival: "~openai/gpt-mini-latest"      # a second vendor, so the Skeptic does not share the lead's blind spots
+# Model ids are "<vendor>/<model>": anthropic/... or openai/... (the ids the chat catalog already uses).
+# PRICES: cost accounting uses the prices bundled with @earendil-works/pi-ai 1.5.2 (dist/providers/data/*.json), read
+# offline. ASSUMPTION: they were not checked against the vendors' live price pages (that needs a network call).
+# Per million tokens, input / output, in that catalog: claude-sonnet-5-5 $2 / $10, claude-haiku-5-5 $0.10 / $0.50
+# (above 100K input tokens $0.50 / $2.50), gpt-5-mini $0.25 / $2, gpt-4o-mini $0.15 / $0.60, gpt-5.5 $5 / $30,
+# claude-opus-5-5 $4 / $20.
+# PROVEN on this account by earlier real use: claude-sonnet-5-5 and gpt-4o only. UNPROVEN (in the catalog, never called
+# from here): claude-haiku-5-5, gpt-5-mini, gpt-4o-mini, and gpt-5.5 / claude-opus-5-5 if you switch to them.
+models:
+  # lead: the Lead Scientist frames the question and writes the memo. Sonnet-class by default because it is the
+  # biggest line of spend. To raise it: lead: "anthropic/claude-opus-5-5" (about 2x the price per token).
+  lead: "anthropic/claude-sonnet-5-5"
+  strong: "anthropic/claude-sonnet-5-5"  # the members that reason about chemistry, targets and toxicity
+  cheap: "anthropic/claude-haiku-5-5"    # search-driven members, and the first-pass checker for claims made by an OpenAI member
+  # rival: the Skeptic. It MUST stay on a different vendor from `lead`: that is what stops it sharing the lead's
+  # blind spots. Change lead and rival together, never to the same vendor. A stronger option: "openai/gpt-5.5".
+  rival: "openai/gpt-5-mini"
+
+local_models:                # Ollama names, used instead of `models` when DRUG_BOARD_LOCAL_MODEL=1 (docs/local-model.md).
+  lead: "qwen2.5:14b"        # Served from this machine: free, private, no key. One model for every tier keeps
+  strong: "qwen2.5:14b"      # a single 15 GB model in memory; a second model here is loaded beside it.
+  cheap: "qwen2.5:14b"       # In a local run Exa, the first-pass and escalation checkers stay scripted: nothing is fact-checked.
+  rival: "qwen2.5:14b"
 
 checkers:
-  jev:
-    model: "typesafe/jev-1.14"          # via OpenRouter; or provider "typesafe" with TYPESAFE_API_KEY
-    yes: 0.7                            # Noul above this reads as yes
-    no: 0.3                             # below this reads as no; in between escalates
+  # First pass over every claim and every search result: a cheap model answers in strict JSON and must quote the
+  # source passage; code accepts "verified" only if that quote is in the source (triage.ts). The model that checks a
+  # claim is never from the same vendor as the member who made it: the cheap tier (models.cheap, Anthropic) checks
+  # OpenAI members' claims, and `alt` below checks everyone else's. Anything the first pass cannot settle escalates.
+  first_pass:
+    alt: "openai/gpt-4o-mini"           # the cheap model of the other vendor (must not share a vendor with models.cheap). Chosen because
+                                        # it has no reasoning mode, so no hidden reasoning tokens can be billed. Proven fallback: "openai/gpt-4o" (about 15x the price)
+    max_source_chars: 12000             # evidence text sent per check
   escalate:
     literature: openai                  # contested literature claims: OpenAI reads the source
     computed: claude-code               # contested computed claims: Claude Code reruns them

@@ -82,7 +82,7 @@ def bixbench3_cases(
         # The token budget is enforced by the solvers (see the docstring). This is a backstop
         # only, in case a solver's own limit fails: close to the budget, so a failure cannot
         # double the bill, and above it by more than a role's last call can overshoot.
-        token_limit=int(max_tokens * TOKEN_BACKSTOP) if max_tokens else None,
+        token_limit=round(max_tokens * TOKEN_BACKSTOP) if max_tokens else None,
         config=GenerateConfig(seed=seed) if seed is not None else GenerateConfig(),
         metadata={
             "effort": effort,
