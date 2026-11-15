@@ -157,11 +157,11 @@ export const PRICES: Record<string, Record<string, [number, number]>> = {
   openai: { "gpt-4o-mini": [0.15, 0.6], "gpt-5-mini": [0.25, 2] },
 }
 
-export function fakeModels(script: Script, calls: Call[], prices = PRICES): Models {
+export function fakeModels(script: Script, calls: Call[], prices = PRICES, reasoning = false): Models {
   const models = createModels()
   const counts: Partial<Record<Role, number>> = {}
   for (const [provider, list] of Object.entries(prices)) {
-    const faux = fauxProvider({ provider, tokensPerSecond: 1e9, models: Object.entries(list).map(([id, [input, output]]) => ({ id, cost: { input, output, cacheRead: 0, cacheWrite: 0 } })) })
+    const faux = fauxProvider({ provider, tokensPerSecond: 1e9, models: Object.entries(list).map(([id, [input, output]]) => ({ id, reasoning, cost: { input, output, cacheRead: 0, cacheWrite: 0 } })) })
     const textOf = (content: unknown) => (typeof content === "string" ? content : Array.isArray(content) ? content.map((c: { text?: string }) => c.text ?? "").join("") : "")
     faux.setResponses(Array.from({ length: 400 }, () => async (context: { messages: { role: string; content: unknown }[] }, options: Call["options"] | undefined, _state: unknown, model: { id: string }) => {
       const system = textOf(context.messages.find((m) => m.role === "system")?.content) // pi-ai carries the system prompt as the transcript's system message
@@ -189,6 +189,8 @@ export interface EngineOptions {
   research?: Record<string, unknown>
   meeting?: Partial<BoardConfig["meeting"]>
   prices?: typeof PRICES
+  /** The fake models support reasoning (a thinking level is sent). Default: they do not. */
+  reasoning?: boolean
   /** A last change to the config (model tiers, checkers). */
   config?: (config: BoardConfig) => BoardConfig
   token?: string
@@ -209,7 +211,7 @@ export async function engine(options: EngineOptions = {}) {
   const network: Net = { requests: [], exa: [() => jsonResponse({ results: EXA_RESULTS, costDollars: { total: 0.005 } })], europepmc: () => jsonResponse(EUROPEPMC) }
   net = network
   const token = options.token ?? "session-token"
-  const models = fakeModels(script, calls, options.prices)
+  const models = fakeModels(script, calls, options.prices, options.reasoning)
   const research = createResearch({
     config, env, hasToken: (req) => req.headers["x-glhf-token"] === token, tokenFile: "glhf/runs/.token",
     mock: () => options.demo === true || (env.NO_PAID_CALLS ?? "").trim() !== "0",
