@@ -40,7 +40,7 @@ const NOTE_TYPES = new Set([
 ])
 const NOTE_KINDS = new Set(["search", "fetch", "sources"])
 /** Event types whose text is an agent's reasoning or plan, not a draft, a list or a record. */
-const THOUGHT_TYPES = new Set(["opening", "lead.framed", "round.started", "member.replied", "agent.call", "claim.checked", "hypothesis.checked", "statement.checked", "review.note", "issue.raised"])
+const THOUGHT_TYPES = new Set(["opening", "lead.framed", "round.started", "member.replied", "claim.checked", "hypothesis.checked", "statement.checked", "review.note", "issue.raised"])
 const STEP_AGENT: Record<string, string> = { prepare: "planner", hypothesize: "planner", search: "searcher", fetch: "searcher", evaluate: "relevance", write: "writer", check: "checker", review: "critic", revise: "writer", save: "engine" }
 export function sourceLink(url: unknown, title?: unknown): LogSource[] {
   if (typeof url !== "string") return []

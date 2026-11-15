@@ -49,8 +49,9 @@ describe("group chat thread", () => {
       { key: "w", type: "answer.written", markdown: "## Answer\nSemaglutide lowers the risk." },
       { key: "t", type: "test.registered", agent: "planner", name: "Shape", claim: "C1", method: "Compare columns." },
       { key: "s", type: "selection", criteria: "Kept relevant results.", selected: [{ n: 1, why: "On topic." }] },
+      { key: "c", type: "agent.call", agent: "experimenter", mode: "pilot", claim_id: "C2", outcome: "error", note: "RuntimeError: the pilot script stopped." },
     ], "answer")
-    expect(rows.map((r) => !!r.thought)).toEqual([true, false, false, false])
+    expect(rows.map((r) => !!r.thought)).toEqual([true, false, false, false, false])
     expect(splitMessage(rows[1].text)).toEqual({ say: "Wrote the draft.", more: "## Answer\nSemaglutide lowers the risk." })
   })
 })
