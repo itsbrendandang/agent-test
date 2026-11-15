@@ -20,7 +20,7 @@ The two levels on this page are `quick` and `standard`. The third level, `deep`,
 flowchart LR
     q(["Your question"]) --> prepare["Prepare<br/>plan the queries"]
     prepare --> exa["Web search (Exa)<br/>opens every answer"]
-    exa --> more["At the same time:<br/>PubMed and preprints (Europe PMC),<br/>more web searches,<br/>public databases (standard)"]
+    exa --> more["At the same time:<br/>the literature (Europe PMC, OpenAlex,<br/>Semantic Scholar, arXiv),<br/>more web searches,<br/>public databases (standard)"]
     more --> screen["Screen each result<br/>for relevance"]
     screen --> number["Number the kept sources<br/>[1] .. [n] (code)"]
     number --> write["Write the draft<br/>from the numbered sources only"]
@@ -38,7 +38,7 @@ flowchart LR
 |---|---|---|
 | Prepare | cheap model (`models.cheap`) | Writes 1 to 3 web queries, 1 to 3 literature queries and one opening sentence. If its reply cannot be read, the question's own words are searched. |
 | Web search | Exa (paid) | Always the first search. `quick`: exactly 1. `standard`: up to 3. |
-| Literature search | Europe PMC (free) | PubMed abstracts and preprints. Runs after the first web search, at the same time as the other searches. |
+| Literature search | Europe PMC, OpenAlex, Semantic Scholar, arXiv (all free, no key) | Abstracts of papers and preprints. One literature query asks the four at the same time (`engine/src/search/scholarly.ts`). Each source has its own time limit (12 s); a source that fails is skipped and named, and the others are still used. A paper found twice (same DOI or same title) is listed once, Europe PMC's copy first. At most 12 papers go on to screening. Each kept paper names the index it came from. A free `SEMANTIC_SCHOLAR_API_KEY` in `.env` only raises Semantic Scholar's rate limit; it is not needed. Runs after the first web search, at the same time as the other searches. |
 | Database lookups | public databases (free) | `standard` only, up to 2: ClinicalTrials.gov, ChEMBL, openFDA, Open Targets, UniProt, PubChem (`engine/src/sources/`). |
 | Screen | cheap model | The board's own first pass (`engine/src/board/triage.ts`): is the result about the question, does it report findings, what kind of study is it. |
 | Number | code | Kept sources become `[1]..[n]`, the most relevant first. The order comes from the plan, not from which reply arrived first. |
@@ -75,7 +75,7 @@ On the short path, at both levels:
 | Step | Short path |
 |---|---|
 | Hypotheses, method specialists | Not run. |
-| Searches | One web search. PubMed is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
+| Searches | One web search. The literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv) is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
 | Number | At most 3 sources. |
 | Write | At most 120 words and 1,000 output tokens, with the least thinking the model allows. |
 | Statement checker | Runs once on every cited sentence, as in the full flow. |
@@ -117,7 +117,7 @@ answer and the app say so.
    plain factual question it may answer "no hypotheses needed"; then the answer runs as described above.
 2. **Each hypothesis has its own investigator.** The investigators work at the same time. Investigator 1 works
    on H1, investigator 2 on H2, and so on. An investigator does its hypothesis's searches (its web search with
-   Exa first, then its literature search with Europe PMC, and a database lookup when it planned one and the
+   Exa first, then its literature search (Europe PMC, OpenAlex, Semantic Scholar, arXiv), and a database lookup when it planned one and the
    level has room), the screening of what they find (against the hypothesis itself), and then the draft of its
    own section. It is given only its own hypothesis and the sources its own searches found. Every step in the
    event log names who did it (`agent`: `planner`, `investigator-1`, `writer`, `checker`, `critic`). **No limit is raised for this.** Each hypothesis uses one

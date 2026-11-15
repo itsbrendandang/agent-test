@@ -15,6 +15,7 @@ import { Hypotheses } from "./Hypotheses"
 import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
 import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
+import { searchPlace } from "./providers"
 import { copyText, foldAnswer, oncePractice, ownLines, preparation, sourceCounts, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
 import { Working } from "./Working"
 
@@ -130,7 +131,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
-      <Activity steps={s.steps} working={working} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
+      <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
       {lost && working && (
         <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
@@ -263,7 +264,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
             </ol>
           )}
           {failedSteps.map((st) => <p key={st.step} className="muted small" data-notrun="">{stepLine(st)}</p>)}
-          {notRun.map((x, i) => <p key={i} className="muted small" data-notrun="">The search of {providerPlace(x.provider)} did not run{x.reason ? `: ${x.reason}` : "."} The answer was written without it.</p>)}
+          {notRun.map((x, i) => <p key={i} className="muted small" data-notrun="">The search of {searchPlace(x.provider)} did not run{x.reason ? `: ${x.reason}` : "."} The answer was written without it.</p>)}
         </section>
       )}
 

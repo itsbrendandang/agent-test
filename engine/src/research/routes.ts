@@ -29,7 +29,7 @@ import { spentToday } from "../board/board.ts"
 import type { BoardConfig } from "../config.ts"
 import { exaSearch, type SearchResult } from "../search/exa.ts"
 import { gate, HttpError, linesFrom, readJson } from "../http.ts"
-import { literatureLive } from "../search/literature.ts"
+import { scholarlyLive } from "../search/scholarly.ts"
 import { checkTierPrices, gateProvider } from "../models.ts"
 import { PaidCallsOff, paidCallsOff, refusePaid } from "../paid/paid.ts"
 import { missingKeys } from "../providers.ts"
@@ -58,7 +58,7 @@ export interface ResearchDeps {
   mock: () => boolean
   /** Tests: the models of a real answer (fakes). Default: the gated Anthropic and OpenAI providers of models.ts. */
   models?: () => Models
-  /** Tests: stand-ins for the searches. Defaults: exa.ts, literature.ts, and sources/ when it is there. */
+  /** Tests: stand-ins for the searches. Defaults: exa.ts, scholarly.ts (literature), and sources/ when it is there. */
   exa?: (query: string, objective: string) => Promise<SearchResult>
   literature?: (query: string) => Promise<SearchResult>
   database?: (source: Database, query: string) => Promise<SearchResult>
@@ -206,7 +206,7 @@ export function createResearch(deps: ResearchDeps) {
             pipeline = {
               ...shared, brain, firstPass: () => new FirstPass(models, config, false), writerModel: brain.names.writer,
               exa: deps.exa ?? ((query, objective) => exaSearch(query, objective, false, env, config.meeting.exa_highlight_chars)),
-              literature: deps.literature ?? ((query) => literatureLive(query)),
+              literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv: free, no key needed
               database: deps.database ?? (limits.levels[record.effort].databaseLookups ? await databaseLookup() : undefined),
               paidOff: () => paidCallsOff(env),
             }

@@ -15,7 +15,7 @@ import { identifierOf, MARK_GLYPH, MARK_WORD, markOf } from "./marks"
 import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState, type ResearchEvent } from "./model"
 import { tabsOf, type InspectorTab } from "./inspectorState"
 import { ProviderCredit } from "./ProviderCredit"
-import { PROVIDERS } from "./providers"
+import { PROVIDERS, searchPlace } from "./providers"
 
 // The Lab draws the whole scene: loaded only when its tab is opened.
 const LabTab = lazy(() => import("./LabTab"))
@@ -166,12 +166,12 @@ function Status({ state: s }: { state: AnswerState }) {
         {(s.finished?.seconds ?? s.seconds) !== undefined && <><dt>Time</dt><dd className="mono">{seconds((s.finished?.seconds ?? s.seconds!) * 1000)}{s.caps ? ` of at most ${seconds(s.caps.maxSeconds * 1000)}` : ""}</dd></>}
         {s.mode === "demo" ? <><dt>Spent</dt><dd>Nothing: a practice answer</dd></>
           : <><dt>Spent</dt><dd className="mono">{spent !== undefined ? `Spent: ${money(spent)}` : "reported when the answer ends"}{s.caps ? ` · Run limit: ${money(s.caps.maxUsd)}` : ""}</dd></>}
-        {ran.length > 0 && <><dt>Searches</dt><dd>{ran.length} ran: {[...new Set(ran.map((x) => PROVIDERS[x.provider ?? ""]?.place ?? x.provider ?? "search"))].join(", ")}</dd></>}
+        {ran.length > 0 && <><dt>Searches</dt><dd>{ran.length} ran: {[...new Set(ran.map((x) => x.provider ? searchPlace(x.provider) : "search"))].join(", ")}</dd></>}
         {s.models && Object.keys(s.models).length > 0 && s.mode !== "demo" && <><dt>Models</dt><dd className="mono inspector-models">{Object.entries(s.models).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}
         {s.error && <><dt>What went wrong</dt><dd data-found="false">{s.error}</dd></>}
         {s.finished?.stopped && <><dt>Ended early</dt><dd>{s.finished.stopped === "cap" ? "at its spending limit" : s.finished.stopped === "time" ? "at its time limit" : "the app was switched to Demo"}</dd></>}
       </dl>
-      <Activity steps={s.steps} working={working} totalSeconds={s.finished?.seconds ?? s.seconds} defaultOpen />
+      <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} defaultOpen />
     </section>
   )
 }
