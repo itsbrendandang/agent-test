@@ -75,9 +75,27 @@ The "answerer" is who answers the questions:
 |---|---|---|
 | `oracle` | always picks the correct answer | ~100% (proves scoring works) |
 | `random` | guesses | ~25% |
-| `swarm` | **your real agents** | the real number — not wired up yet |
+| `claude` | **your model (Claude)** answers each question | the real number |
+| `openai` | **your model (GPT)** answers each question | the real number |
+| `swarm` | the full Docker/Modal agent swarm | real number — needs wiring in `swarm_answers()` |
 
-To get a real score, fill in `swarm_answers()` in `eval_adapter.py`.
+### Test with your model (Claude or GPT)
+
+1. Put your key in a `.env` file at the repo root (it is gitignored — never committed):
+   ```bash
+   cp .env.example .env     # then edit .env and paste your key:
+   # ANTHROPIC_API_KEY=sk-ant-...
+   # OPENAI_API_KEY=sk-...
+   ```
+2. Run:
+   ```bash
+   python3 glhf/scripts/eval_adapter.py sciq --limit 20 --answerer claude
+   python3 glhf/scripts/eval_adapter.py sciq --limit 20 --answerer openai
+   python3 glhf/scripts/eval_adapter.py sciq --answerer claude --model claude-3-5-haiku-20241022
+   ```
+
+This is the quick "one model call per question" test. The full multi-agent swarm
+is wired via `swarm_answers()` in `eval_adapter.py`.
 
 Available question sets: `sciq`, `gpqa`, `pubmedqa`, `lab-bench`, `bixbench`
 (`python3 glhf/scripts/fetch_eval_data.py --list`).
