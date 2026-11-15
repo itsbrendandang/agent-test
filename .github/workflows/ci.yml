@@ -1,4 +1,4 @@
-# Continuous integration for the Bit Crew / GLHF repository.
+# Continuous integration for the AI Scientist Bot / GLHF repository.
 #
 # Runs on every pull request and on every push to main. It uses NO secrets: nothing here reads
 # `secrets.*`, the provider keys are set to empty strings, and DRUG_BOARD_MOCK / NO_PAID_CALLS keep
