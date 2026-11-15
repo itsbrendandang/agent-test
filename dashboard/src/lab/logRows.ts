@@ -2,6 +2,15 @@ import { hasWords } from "@/lib/format"
 import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
 import type { Provenance, RunKind } from "./model"
+import { claimsOrder, claimsTimeline } from "./claims"
+
+export function swarmLogEvents(events: readonly LabEvent[], notes: readonly LabEvent[] = [], seenAt: readonly (number | undefined)[] = [], runId?: string): LabEvent[] {
+  const ordered = claimsOrder(events, runId).events
+  return claimsTimeline(ordered, notes, seenAt)
+    .map((item, index) => ({ event: (item.event ?? item.note)!, at: num((item.event ?? item.note)?.ts) !== undefined ? Math.round(num((item.event ?? item.note)!.ts)! * 1000) : num((item.event ?? item.note)?.at) ?? item.at, index }))
+    .sort((a, b) => a.at - b.at || a.index - b.index)
+    .map((item) => item.event)
+}
 
 export interface LogSource { title: string; url: string }
 export interface EventRow {
