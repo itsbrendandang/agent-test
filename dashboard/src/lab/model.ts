@@ -21,7 +21,7 @@ export const ROOM = { width: 450, height: 214, back: 58 } as const
  * the same rooms in one column beside the corridor, for a narrow screen, so the lab never needs a sideways scroll.
  * Everything on the map is placed in these units. A room's door is at the bottom of its corridor side.
  */
-export interface LabLayout { id: "wide" | "tall"; width: number; height: number; corridorX: number; at: Record<RoomId, { x: number; y: number; door: "left" | "right" }> }
+export interface LabLayout { id: "wide" | "tall" | "grid"; width: number; height: number; corridorX: number; corridorY?: number; at: Record<RoomId, { x: number; y: number; door: "left" | "right" }> }
 const column = (ids: RoomId[], x: number, door: "left" | "right") => Object.fromEntries(ids.map((id, i) => [id, { x, y: 16 + i * 230, door }]))
 export const WIDE: LabLayout = {
   id: "wide", width: 1000, height: 706, corridorX: 500,
@@ -30,6 +30,10 @@ export const WIDE: LabLayout = {
 export const TALL: LabLayout = {
   id: "tall", width: 546, height: 1396, corridorX: 500,
   at: column(["discovery", "planning", "bench", "review", "quality", "report"], 20, "right") as LabLayout["at"],
+}
+export const GRID: LabLayout = {
+  id: "grid", width: 1540, height: 530, corridorX: 500, corridorY: 266,
+  at: Object.fromEntries(ROOMS.map((room, i) => [room.id, { x: 20 + i % 3 * 510, y: i < 3 ? 16 : 300, door: "right" }])) as LabLayout["at"],
 }
 /** Anh's map, for code that asks for "the" map. */
 export const MAP = WIDE

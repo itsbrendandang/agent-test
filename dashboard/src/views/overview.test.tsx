@@ -70,7 +70,7 @@ describe("the Agent Lab under the question box", () => {
   const lab = () => document.querySelector(".ov-lab") as HTMLElement
   it("is idle until a question is sent; Send starts the answer on this page and the lab follows that answer", async () => {
     const onOpen = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
-    await screen.findByText("Your research team is ready")
+    await screen.findByText("Let's research together!")
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
     expect(lab().querySelector(".lab-both")).toBeTruthy() // the same lab as the Agent Lab page, not a look-alike
     expect(screen.queryByRole("region", { name: /hERG/ })).toBeNull()
@@ -101,7 +101,7 @@ describe("the Agent Lab under the question box", () => {
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
     const onOpen = show({}, { "POST /api/research": { status: 404, body: { error: "not found" } } })
-    await screen.findByText("Your research team is ready")
+    await screen.findByText("Let's research together!")
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home"))
@@ -111,7 +111,7 @@ describe("the Agent Lab under the question box", () => {
 
   it("a refusal is said on the page and nothing is started", async () => {
     show({}, { "POST /api/research": { status: 429, body: { error: "too many", field: "rate" } } })
-    await screen.findByText("Your research team is ready")
+    await screen.findByText("Let's research together!")
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     expect((await screen.findByRole("alert")).textContent).toContain("Too many questions in a short time.")
@@ -123,7 +123,7 @@ describe("the Agent Lab under the question box", () => {
 describe("the welcome on the home page", () => {
   it("a starter question fills the box and the team perks up; the agents are named in text", async () => {
     show({})
-    await screen.findByText("Your research team is ready")
+    await screen.findByText("Let's research together!")
     const box = screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
     const ask = screen.getByRole("button", { name: /^Send/ }) as HTMLButtonElement
     expect(ask.disabled).toBe(true)
