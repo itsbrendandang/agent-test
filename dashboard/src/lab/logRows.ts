@@ -2,6 +2,15 @@ import { hasWords } from "@/lib/format"
 import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
 import type { Provenance, RunKind } from "./model"
+import { claimsOrder, claimsTimeline } from "./claims"
+
+export function swarmLogEvents(events: readonly LabEvent[], notes: readonly LabEvent[] = [], seenAt: readonly (number | undefined)[] = [], runId?: string): LabEvent[] {
+  const ordered = claimsOrder(events, runId).events
+  return claimsTimeline(ordered, notes, seenAt)
+    .map((item, index) => ({ event: (item.event ?? item.note)!, at: num((item.event ?? item.note)?.ts) !== undefined ? Math.round(num((item.event ?? item.note)!.ts)! * 1000) : num((item.event ?? item.note)?.at) ?? item.at, index }))
+    .sort((a, b) => a.at - b.at || a.index - b.index)
+    .map((item) => item.event)
+}
 
 export interface LogSource { title: string; url: string }
 export interface EventRow {
@@ -98,6 +107,15 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "phase.started": text = `Started the ${str(e.phase) ?? "recorded"} phase.`; break
       case "phase.finished": text = join(`Finished the ${str(e.phase) ?? "recorded"} phase.`, num(e.tokens) !== undefined ? `${num(e.tokens)} tokens recorded.` : ""); break
       case "claim.added": text = `Recorded statement ${str(e.claim_id) ?? str(e.claim) ?? ""}: ${str(e.text) ?? ""}`; break
+      case "claim.transition":
+      case "claim.illegal_transition":
+        agentId = "engine"
+        text = join(`${type === "claim.illegal_transition" ? "Refused an illegal move of" : "Moved"} claim ${str(e.claim_id) ?? "(id not recorded)"} from ${str(e.from) ?? "(state not recorded)"} to ${str(e.to) ?? "(state not recorded)"}.`, e.reason)
+        break
+      case "agent.call":
+        text = join(`Ended ${str(e.mode) ?? "(mode not recorded)"} call on claim ${str(e.claim_id) ?? "(id not recorded)"}.`, str(e.role) ? `Role: ${str(e.role)}.` : "", str(e.outcome) ? `Outcome: ${str(e.outcome)}.` : "", num(e.attempt) !== undefined ? `Attempt: ${num(e.attempt)}.` : "", str(e.model) ? `Model: ${str(e.model)}.` : "", e.note)
+        break
+      case "claim.error": kind = "error"; text = join(`A call on claim ${str(e.claim_id) ?? "(id not recorded)"} did not finish.`, e.error); break
       case "issue.raised": text = join(`Raised ${str(e.severity) ?? "an"} issue ${str(e.issue) ?? "(id not recorded)"}:`, e.problem); break
       case "issue.resolved": text = `Updated issue ${str(e.issue) ?? "(id not recorded)"}: ${str(e.status) ?? "status not recorded"}.`; break
       case "test.registered": text = join(`Registered test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, e.method, str(e.test_null) ? `Null hypothesis: ${str(e.test_null)}` : "", e.script_path); break
