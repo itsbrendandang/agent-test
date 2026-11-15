@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { loadConfig, type BoardConfig } from "../src/config.ts"
 import { dayStamp, researchRoot, researchSpentToday } from "../src/research/spend.ts"
-import { hasNumber } from "../src/triage.ts"
+import { hasNumber } from "../src/board/triage.ts"
 
 const tempConfig = (): BoardConfig => {
   const base = loadConfig(), dir = mkdtempSync(join(tmpdir(), "spend-"))
