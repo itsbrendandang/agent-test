@@ -1,10 +1,11 @@
 // The Overview page: the question box with the Agent Lab under it (idle until a question is sent from this page), and
 // one line of counts from the engine's three lists, in which a practice run is never counted as research.
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { forgetScripted } from "@/lib/scripted"
 import { routes } from "@/test/engine"
+import { HomeView } from "./HomeView"
 import { OverviewView } from "./OverviewView"
 
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
@@ -71,7 +72,7 @@ describe("Overview", () => {
 
 describe("the Agent Lab under the question box", () => {
   const lab = () => document.querySelector(".ov-lab") as HTMLElement
-  it("is idle until a question is sent; Send shows the agents at work, then a TL;DR and a button to Research, never the full answer", async () => {
+  it("is idle until a question is sent; Send starts the answer on this page, the lab follows it, and the answer itself is only in Research", async () => {
     const onOpen = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
     await screen.findByText("Let's research together!")
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
@@ -80,19 +81,11 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Is hERG a risk for KRAS G12C inhibitors?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is working on your question."))
-    expect(onOpen).not.toHaveBeenCalled() // the page stays while the team works
+    expect(onOpen).not.toHaveBeenCalled() // the page stays: no jump to Research
     expect(sessionStorage.getItem("open.ask")).toBeNull()
-    // Above the lab: the question and the agents at work with Stop. No activity list, no answer text.
-    const card = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" }).closest("section") as HTMLElement
-    expect(card.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(card.querySelector(".agents-working")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy()
-    expect(screen.queryByRole("button", { name: /View activity/ })).toBeNull()
-    // The question opens its Research chat early.
-    await userEvent.click(screen.getByRole("button", { name: "Is hERG a risk for KRAS G12C inhibitors?" }))
-    expect(onOpen).toHaveBeenLastCalledWith("Home")
-    expect(JSON.parse(sessionStorage.getItem("open.answer") ?? "null")).toEqual({ id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?" })
-    sessionStorage.removeItem("open.answer"); onOpen.mockClear()
+    const answer = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })
+    // The answer's card is above the lab, so it is in view without scrolling past the lab.
+    expect(answer.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
     // The same answer is Research's conversation, with its thread, so Research shows it and continues it.
     expect(JSON.parse(sessionStorage.getItem("home.chat") ?? "null")).toEqual([
@@ -112,18 +105,27 @@ describe("the Agent Lab under the question box", () => {
     // When the answer ends, the line says so and the counts are read again.
     const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
     const before = reads()
-    await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "**hERG** blocking is a known risk for this class [1]. Dofetilide-like QT effects were seen in two trials [2]." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
+    await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
     await waitFor(() => expect(reads()).toBeGreaterThan(before))
-    // The finished answer is not printed here: a TL;DR (its first sentence, plain), and a button to the rest in Research.
-    expect(card.querySelector(".ov-answer-status")?.textContent).toBe("hERG blocking is a known risk for this class.")
-    expect(document.body.textContent).not.toContain("Dofetilide")
-    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
+    // The card keeps its place and says the answer is ready; the answer itself is never written here.
+    const card = answer.closest("section") as HTMLElement
+    await waitFor(() => expect(card.querySelector(".agents-line")?.textContent).toBe("The answer is ready."))
+    expect(document.body.textContent).not.toMatch(/blocking is a known risk/i)
     expect(onOpen).not.toHaveBeenCalled() // no jump to Research by itself
-    await userEvent.click(screen.getByRole("button", { name: "Read more and follow up in Research" }))
-    expect(onOpen).toHaveBeenLastCalledWith("Home")
-    expect(JSON.parse(sessionStorage.getItem("open.answer") ?? "null")).toEqual({ id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?" })
-    sessionStorage.removeItem("open.answer")
+    // One click opens the question's chat in Research: the whole answer, and the box for a follow-up.
+    await userEvent.click(screen.getByRole("button", { name: "See the answer and follow up in Research" }))
+    expect(onOpen).toHaveBeenCalledWith("Home")
+    cleanup(); streams.length = 0
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(streams.some((x) => /\/api\/research\/a-20261115000000-0000abcd\/events/.test(x.url))).toBe(true))
+    await feed([
+      { seq: 1, at: 1, type: "research.started", id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", mode: "demo" },
+      { seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." },
+      { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: {}, searches: {} },
+    ])
+    expect(await screen.findByText(/blocking is a known risk for this class/i)).toBeTruthy()
+    expect(screen.getByRole("textbox", { name: "Ask a research question" })).toBeTruthy()
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
