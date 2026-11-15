@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Loaders Gallery</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --card: #141416;
+    --card-line: #232327;
+    --ink: #e9e9ea;
+    --muted: #8a8a90;
+    --dot-off: #3a3a40;
+    --dot-on: #f3ead3;
+    --accent: #d9b773;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 56px 32px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  header h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 60ch; }
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 16px 32px 80px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-line);
+    border-radius: 12px;
+    aspect-ratio: 5 / 4;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .stage {
+    flex: 1;
+    display: grid;
+    place-items: center;
+  }
+  .label {
+    border-top: 1px solid var(--card-line);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* ---------- dot grid base (3x3) ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 10px);
+    grid-template-rows: repeat(3, 10px);
+    gap: 7px;
+  }
+  .grid i {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--dot-off);
+    display: block;
+  }
+
+  /* dot-pulse: all breathe together */
+  .dot-pulse i { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ background: var(--dot-off);} 50%{ background: var(--dot-on);} }
+
+  /* dot-linear-cascade: left-to-right sweep by column */
+  .dot-cascade i { animation: cascade 1.4s ease-in-out infinite; }
+  .dot-cascade i:nth-child(3n+1){ animation-delay: 0s; }
+  .dot-cascade i:nth-child(3n+2){ animation-delay: .18s; }
+  .dot-cascade i:nth-child(3n+3){ animation-delay: .36s; }
+  @keyframes cascade { 0%,70%,100%{ background: var(--dot-off);} 35%{ background: var(--dot-on);} }
+
+  /* dot-snake-3x3: travels along a snake path */
+  .dot-snake i { animation: snake 1.6s linear infinite; }
+  .dot-snake i:nth-child(1){ animation-delay: 0.00s; }
+  .dot-snake i:nth-child(2){ animation-delay: 0.18s; }
+  .dot-snake i:nth-child(3){ animation-delay: 0.36s; }
+  .dot-snake i:nth-child(6){ animation-delay: 0.54s; }
+  .dot-snake i:nth-child(5){ animation-delay: 0.72s; }
+  .dot-snake i:nth-child(4){ animation-delay: 0.90s; }
+  .dot-snake i:nth-child(7){ animation-delay: 1.08s; }
+  .dot-snake i:nth-child(8){ animation-delay: 1.26s; }
+  .dot-snake i:nth-child(9){ animation-delay: 1.44s; }
+  @keyframes snake { 0%,60%,100%{ background: var(--dot-off);} 20%{ background: var(--dot-on);} }
+
+  /* dot-center-burst: center lights first, ripples out */
+  .dot-burst i { animation: burst 1.5s ease-out infinite; }
+  .dot-burst i:nth-child(5){ animation-delay: 0s; }
+  .dot-burst i:nth-child(2),.dot-burst i:nth-child(4),
+  .dot-burst i:nth-child(6),.dot-burst i:nth-child(8){ animation-delay: .2s; }
+  .dot-burst i:nth-child(1),.dot-burst i:nth-child(3),
+  .dot-burst i:nth-child(7),.dot-burst i:nth-child(9){ animation-delay: .4s; }
+  @keyframes burst { 0%,55%,100%{ background: var(--dot-off);} 25%{ background: var(--dot-on);} }
+
+  /* dot-diagonal-meteor: diagonal wave top-left to bottom-right */
+  .dot-meteor i { animation: meteor 1.6s ease-in-out infinite; }
+  .dot-meteor i:nth-child(1){ animation-delay: 0s; }
+  .dot-meteor i:nth-child(2),.dot-meteor i:nth-child(4){ animation-delay: .15s; }
+  .dot-meteor i:nth-child(3),.dot-meteor i:nth-child(5),.dot-meteor i:nth-child(7){ animation-delay: .3s; }
+  .dot-meteor i:nth-child(6),.dot-meteor i:nth-child(8){ animation-delay: .45s; }
+  .dot-meteor i:nth-child(9){ animation-delay: .6s; }
+  @keyframes meteor { 0%,65%,100%{ background: var(--dot-off);} 30%{ background: var(--dot-on);} }
+
+  /* --- NEW: dot-ring-rotate (outer 8 dots chase, center steady) --- */
+  .dot-ring i { animation: ring 1.4s linear infinite; }
+  .dot-ring i:nth-child(1){ animation-delay: 0.00s; }
+  .dot-ring i:nth-child(2){ animation-delay: 0.15s; }
+  .dot-ring i:nth-child(3){ animation-delay: 0.30s; }
+  .dot-ring i:nth-child(6){ animation-delay: 0.45s; }
+  .dot-ring i:nth-child(9){ animation-delay: 0.60s; }
+  .dot-ring i:nth-child(8){ animation-delay: 0.75s; }
+  .dot-ring i:nth-child(7){ animation-delay: 0.90s; }
+  .dot-ring i:nth-child(4){ animation-delay: 1.05s; }
+  .dot-ring i:nth-child(5){ background: var(--accent); animation: none; } /* steady core */
+  @keyframes ring { 0%,70%,100%{ background: var(--dot-off);} 30%{ background: var(--dot-on);} }
+
+  /* --- NEW: dot-checker-flip (alternating checkerboard) --- */
+  .dot-checker i:nth-child(odd){ animation: flipA 1.2s ease-in-out infinite; }
+  .dot-checker i:nth-child(even){ animation: flipB 1.2s ease-in-out infinite; }
+  @keyframes flipA { 0%,100%{ background: var(--dot-on);} 50%{ background: var(--dot-off);} }
+  @keyframes flipB { 0%,100%{ background: var(--dot-off);} 50%{ background: var(--dot-on);} }
+
+  /* --- NEW: dot-column-wave (vertical sine by row) --- */
+  .dot-wave i { animation: wave 1.3s ease-in-out infinite; }
+  .dot-wave i:nth-child(-n+3){ animation-delay: 0s; }
+  .dot-wave i:nth-child(n+4):nth-child(-n+6){ animation-delay: .18s; }
+  .dot-wave i:nth-child(n+7){ animation-delay: .36s; }
+  @keyframes wave { 0%,70%,100%{ background: var(--dot-off);} 35%{ background: var(--dot-on);} }
+
+  /* ---------- atom loader ---------- */
+  .atom {
+    position: relative;
+    width: 110px; height: 110px;
+  }
+  .atom .nucleus {
+    position: absolute; inset: 0; margin: auto;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--dot-on);
+    box-shadow: 0 0 10px 2px rgba(243,234,211,.5);
+  }
+  .atom .orbit {
+    position: absolute; inset: 0;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    opacity: .55;
+  }
+  .atom .orbit.o1 { transform: rotate(0deg); }
+  .atom .orbit.o2 { transform: rotate(60deg); }
+  .atom .orbit.o3 { transform: rotate(120deg); }
+  .atom .electron {
+    position: absolute; top: 50%; left: 50%;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px 2px rgba(217,183,115,.6);
+    margin: -4.5px 0 0 -4.5px;
+  }
+  .atom .e1 { animation: spin1 1.6s linear infinite; }
+  .atom .e2 { animation: spin2 1.9s linear infinite; }
+  .atom .e3 { animation: spin3 2.2s linear infinite; }
+  @keyframes spin1 { from{ transform: rotate(0deg) translateX(53px) rotate(0deg);} to{ transform: rotate(360deg) translateX(53px) rotate(-360deg);} }
+  @keyframes spin2 { from{ transform: rotate(120deg) translateX(53px) rotate(-120deg);} to{ transform: rotate(480deg) translateX(53px) rotate(-480deg);} }
+  @keyframes spin3 { from{ transform: rotate(240deg) translateX(53px) rotate(-240deg);} to{ transform: rotate(600deg) translateX(53px) rotate(-600deg);} }
+
+  /* --- NEW: orbit-ring (single ring with a comet dot) --- */
+  .comet { position: relative; width: 90px; height: 90px; }
+  .comet .track { position:absolute; inset:0; border:2px solid var(--card-line); border-radius:50%; }
+  .comet .spin { position:absolute; inset:0; animation: rot 1.1s linear infinite; }
+  .comet .head { position:absolute; top:-4px; left:50%; width:10px; height:10px; margin-left:-5px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px 2px rgba(217,183,115,.6); }
+  @keyframes rot { to { transform: rotate(360deg);} }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Loaders Gallery</h1>
+    <p>A self-contained set of animated loaders in the app's dark palette. Pure HTML/CSS — open this
+      file in a browser. Not wired into the dashboard; it is a reference you can copy from.
+      Honors <code>prefers-reduced-motion</code>.</p>
+  </header>
+
+  <main>
+    <!-- existing styles, rebuilt -->
+    <div class="card"><div class="stage"><div class="grid dot-pulse"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-pulse</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-cascade"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-linear-cascade</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-snake"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-snake-3×3</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-burst"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-center-burst</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-meteor"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-diagonal-meteor</div></div>
+
+    <div class="card"><div class="stage">
+      <div class="atom">
+        <div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div>
+        <div class="nucleus"></div>
+        <div class="electron e1"></div><div class="electron e2"></div><div class="electron e3"></div>
+      </div>
+    </div><div class="label">atom-loader</div></div>
+
+    <!-- NEW additions -->
+    <div class="card"><div class="stage"><div class="grid dot-ring"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-ring-rotate ✦ new</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-checker"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-checker-flip ✦ new</div></div>
+    <div class="card"><div class="stage"><div class="grid dot-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="label">dot-column-wave ✦ new</div></div>
+    <div class="card"><div class="stage"><div class="comet"><div class="track"></div><div class="spin"><div class="head"></div></div></div></div><div class="label">orbit-comet ✦ new</div></div>
+  </main>
+</body>
+</html>
