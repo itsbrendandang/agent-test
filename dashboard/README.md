@@ -55,9 +55,10 @@ view adds one. See "How the screens connect" in the main README.
 | Benchmarks | `Benchmarks` | `BenchmarksView.tsx`, `src/overview/Benchmarks.tsx` | Our benchmark results beside the record to beat. |
 | Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), Usage and limits (spend today and the limits, `src/overview/Credits.tsx`), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
-Overview, Research and Saved research are the primary places: ask, read, find again. Two quieter groups follow, each
-with a heading: "How it works" (Agent Log, Team review, Graph, Agents) and "Evaluation" (Benchmarks, Compare). The
-groups are `PRIMARY` and `GROUPS` in `src/nav.ts`.
+Overview, Research and Saved research are the primary places: ask, read, find again. One quieter group follows,
+with a heading: "How it works" (Agent Log, Team review, Graph, Agents). The groups are `PRIMARY` and `GROUPS` in
+`src/nav.ts`. Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`,
+`#Compare`, `#Compare/<id>`).
 Settings has one entry, at the foot of the navigation.
 
 ## The shell

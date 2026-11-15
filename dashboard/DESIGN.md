@@ -18,8 +18,10 @@ Every view has the same three parts (`src/App.tsx`).
 
 - **The navigation** (`src/components/AppSidebar.tsx`, on the shadcn sidebar in `src/components/ui/sidebar.tsx`).
   - Three places carry the everyday work: Overview, Research, Saved research (ask, read, find again).
-  - Two quieter groups follow, each with a heading: "How it works" (Agent Log, Team review, Graph, Agents) and
-    "Evaluation" (Benchmarks, Compare). `PRIMARY` and `GROUPS` in `src/nav.ts`.
+  - One quieter group follows, with a heading: "How it works" (Agent Log, Team review, Graph, Agents). `PRIMARY` and
+    `GROUPS` in `src/nav.ts`.
+  - Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`, `#Compare`,
+    `#Compare/<id>`).
   - Settings is at the foot, once. The characters sit above it on a wide window.
   - On a wide window the sidebar folds to icons. The choice is remembered (`shell.sidebar`).
   - Under 768 px it is a drawer. The menu button in the header opens it. Choosing a place closes it.

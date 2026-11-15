@@ -22,15 +22,15 @@ export const ABOUT: Record<View, string> = {
   Lab: "The full event log of a run, with agent filters and downloads.",
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
+/** The views the navigation lists. Benchmarks and Compare open only by their address. */
+export type Listed = Exclude<View, "Benchmarks" | "Compare" | "Settings">
 /** The everyday loop, as in a search tool: ask, read the answer, find it again. These get the weight. */
-export const PRIMARY: readonly View[] = ["Overview", "Home", "Runs"]
-/** The quieter groups under the main one: how an answer was made, then the benchmark views. Each has a heading. */
-export const GROUPS: readonly { id: string; label: string; views: readonly View[] }[] = [
+export const PRIMARY: readonly Listed[] = ["Overview", "Home", "Runs"]
+/** The quieter group under the main one: how an answer was made. It has a heading. Benchmarks and Compare are not in
+ *  the navigation: they open only by their address (#Benchmarks, #Compare, #Compare/<run id>). */
+export const GROUPS: readonly { id: string; label: string; views: readonly Listed[] }[] = [
   { id: "how", label: "How it works", views: ["Lab", "Board", "Graph", "Agents"] },
-  { id: "eval", label: "Evaluation", views: ["Benchmarks", "Compare"] },
 ]
-/** Every view in the quieter groups, in order. */
-export const MORE: readonly View[] = GROUPS.flatMap((g) => g.views)
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }

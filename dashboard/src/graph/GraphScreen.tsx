@@ -168,7 +168,7 @@ export function GraphScreen() {
   if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading runs…</Loading></div>
   if (!current) {
     return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
-      <p className="graph-empty card-surface">No runs yet. Start one in {LABEL.Board} or {LABEL.Compare}, and its graph appears here.</p></div>
+      <p className="graph-empty card-surface">No runs yet. Start one in {LABEL.Board}, and its graph appears here.</p></div>
   }
 
   const status = full?.status

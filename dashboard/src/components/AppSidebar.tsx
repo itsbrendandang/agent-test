@@ -1,7 +1,7 @@
 // The navigation: a compact sidebar on a wide window, a drawer on a narrow one (the shadcn Sidebar does both).
-// Three places carry the everyday loop (ask, read, find again). Two quieter groups follow, each with a heading:
-// "How it works" (how an answer was made) and "Evaluation" (the benchmark views). At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
-import { Gavel, GitCompareArrows, LayoutDashboard, Trophy, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
+// Three places carry the everyday loop (ask, read, find again). One quieter group follows, with a heading:
+// "How it works" (how an answer was made). Benchmarks and Compare are not listed; they open by address. At the foot is the profile row: it opens the menu that leads to Settings, which is Settings' one entry.
+import { Gavel, LayoutDashboard, ListChecks, MessagesSquare, ScrollText, Settings, Share2, Users, X } from "lucide-react"
 import { Mark } from "@/components/Buddy"
 import { ProfileMenu } from "@/components/ProfileMenu"
 import { SideCrew } from "@/components/SideCrew"
@@ -10,16 +10,16 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar"
 import type { PaidState } from "@/lib/paid"
-import { ABOUT, GROUPS, LABEL, PRIMARY, PRODUCT, type View } from "@/nav"
+import { ABOUT, GROUPS, LABEL, PRIMARY, PRODUCT, type Listed, type View } from "@/nav"
 
-const ICON: Record<View, typeof Settings> = {
-  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Compare: GitCompareArrows, Benchmarks: Trophy, Board: Gavel, Agents: Users, Graph: Share2, Lab: ScrollText, Settings,
+const ICON: Record<Listed, typeof Settings> = {
+  Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Board: Gavel, Agents: Users, Graph: Share2, Lab: ScrollText,
 }
 
 export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View) => void; /** The mode of the next run, for the profile row. */ paid: PaidState }) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const go = (next: View) => { onGo(next); if (isMobile) setOpenMobile(false) } // choosing a place closes the drawer
-  const item = (v: View, quiet?: boolean) => {
+  const item = (v: Listed, quiet?: boolean) => {
     const Icon = ICON[v]
     return (
       <SidebarMenuItem key={v}>

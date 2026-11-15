@@ -1,18 +1,17 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_VIEW, GROUPS, initialView, LABEL, MORE, PRIMARY, runOfHash, viewOfHash, VIEWS } from "./nav"
+import { DEFAULT_VIEW, GROUPS, initialView, LABEL, PRIMARY, runOfHash, viewOfHash, VIEWS } from "./nav"
 
 describe("navigation", () => {
   it("keeps the view keys (they are addresses), with Overview first and Home still the key of Research", () => {
     expect(VIEWS).toEqual(["Overview", "Home", "Runs", "Compare", "Benchmarks", "Board", "Agents", "Graph", "Lab", "Settings"])
   })
-  it("renames on screen only: Overview, Research, Saved research first; then How it works and Evaluation; Settings once", () => {
+  it("renames on screen only: Overview, Research, Saved research first; then How it works; Settings once; Benchmarks and Compare by address only", () => {
     expect(PRIMARY.map((v) => LABEL[v])).toEqual(["Overview", "Research", "Saved research"])
     expect(LABEL.Lab).toBe("Agent Log") // the label only: the key and the address stay "Lab"
     expect(GROUPS.map((g) => [g.label, g.views.map((v) => LABEL[v])])).toEqual([
       ["How it works", ["Agent Log", "Team review", "Graph", "Agents"]],
-      ["Evaluation", ["Benchmarks", "Compare"]],
     ])
-    expect([...PRIMARY, ...MORE, "Settings"].sort()).toEqual([...VIEWS].sort()) // every view is reachable, none twice
+    expect([...PRIMARY, ...GROUPS.flatMap((g) => g.views), "Settings", "Benchmarks", "Compare"].sort()).toEqual([...VIEWS].sort()) // every view is reachable, none twice
   })
   it("opens Overview when the address names no view and nothing is remembered", () => {
     expect(DEFAULT_VIEW).toBe("Overview")

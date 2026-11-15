@@ -45,6 +45,18 @@ describe("Usage and limits (moved here from the Overview)", () => {
     expect(usage.textContent).toContain("Demo mode: nothing can be spent.")
     expect(usage.textContent).toContain("Not knownSpent today")
   })
+  it("reads the engine again after the Demo / Real switch, so the line matches the new mode", async () => {
+    keepToken("t".repeat(48))
+    let on = false
+    await show({ paidCalls: () => on, table: { "GET /api/paid": () => ({ status: 200, body: { ...PAID, paid: on } }), "POST /api/paid": () => { on = true; return { status: 200, body: { ...PAID, paid: true, source: "switch", board: "real" } } } } })
+    const usage = screen.getByRole("region", { name: "Usage and limits" })
+    expect(usage.textContent).toContain("Demo mode: nothing can be spent.")
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("radio", { name: "Real" }))
+    await user.click(await screen.findByRole("checkbox", { name: "I understand this costs money" }))
+    await user.click(screen.getByRole("button", { name: "Switch to Real" }))
+    await waitFor(() => expect(screen.getByRole("region", { name: "Usage and limits" }).textContent).toContain("Real mode is on. Runs stay inside these limits."))
+  })
 })
 
 describe("structure", () => {

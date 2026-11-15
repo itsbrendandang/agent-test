@@ -109,21 +109,21 @@ the key, so a typo cannot switch the limit off.
 
 ## What is in the app
 
-The sidebar has three groups. **Overview, Research, Saved research** come first: ask, read, find again.
-**How it works** holds Agent Log, Team review, Graph and Agents. **Evaluation** holds Benchmarks and Compare.
-Settings opens from the profile row at the foot.
+The sidebar has two groups. **Overview, Research, Saved research** come first: ask, read, find again.
+**How it works** holds Agent Log, Team review, Graph and Agents. Settings opens from the profile row at the foot.
+Benchmarks and Compare are not in the sidebar. They open only by their address (`#Benchmarks`, `#Compare`).
 
 | Screen | What it is for |
 |---|---|
 | Overview | Ask in the "Let's research together!" question box. The answer is written right under the box. Below it, follow the six-room Agent Lab and its activity panel. The answer is also the conversation in Research, so a follow-up there continues it. One quiet line counts research and practice apart. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
-| Compare | A team of nine agents against one agent alone, on the same task. |
+| Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
 | Graph | One run as a picture of who said what. |
 | Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab stays on Overview. |
-| Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
+| Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
 
 ### How the screens connect
@@ -324,7 +324,7 @@ A first report, in words. Charts and a fuller scope come later.
 | BixBench v1.5 | A pilot: 3 datasets, 8 questions, `anthropic/claude-sonnet-5-5`. | One agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). |
 | BixBench v1.5 | 20 datasets, 82 questions, an open model (Qwen3.6 35B) served on Modal, same token limit for both. | One agent: 15 of 82. Swarm: 19 of 82. No difference detected (exact p = 0.29). 42 of the 82 answers were not graded, because no judge model was used; they count as wrong, so both scores are lower bounds. |
 
-The Benchmarks screen in the app shows these rows with their intervals, tokens and time.
+The Benchmarks screen in the app (address `#Benchmarks`) shows these rows with their intervals, tokens and time.
 
 Eight questions are far too few to tell the two apart. The pilot also used an older swarm; it
 has changed since, and the changes were tested with a scripted model only, not a real one. We

@@ -3,6 +3,7 @@
 // at Anthropic, OpenAI or Exa: no provider tells the engine that, so it is not shown.
 import { useEffect, useState } from "react"
 import { readEngine } from "@/lib/engine"
+import { PAID_CHANGED } from "@/lib/paidSwitch"
 import "@/design/overview.css"
 
 type Rec = Record<string, unknown>
@@ -11,11 +12,14 @@ const usd = (v: number | undefined) => (v === undefined ? "Not known" : `$${v.to
 
 export function Credits() {
   const [paid, setPaid] = useState<Rec | null>()
+  const [reread, setReread] = useState(0)
   useEffect(() => {
     let stopped = false
     readEngine<Rec>("/api/paid").then((reply) => { if (!stopped) setPaid(reply && typeof reply === "object" ? reply : null) }, () => { if (!stopped) setPaid(null) })
-    return () => { stopped = true }
-  }, [])
+    const next = () => setReread((n) => n + 1)
+    window.addEventListener(PAID_CHANGED, next)
+    return () => { stopped = true; window.removeEventListener(PAID_CHANGED, next) }
+  }, [reread])
   if (paid === undefined) return null
   const caps = (paid?.caps && typeof paid.caps === "object" ? paid.caps : {}) as Rec
   const real = paid?.paid === true
