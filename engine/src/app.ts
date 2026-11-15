@@ -16,6 +16,7 @@
 //                                MAX_STREAMS_PER_RUN streams on one run or MAX_STREAMS in total)
 //   GET  /api/runs/:id/memo      the memo (Markdown)
 //   GET  /api/search?q=          keyword search over all runs and saved research answers
+//   GET  /api/trending           "Try asking": biology questions from Google's trending searches (search/trending.ts; free, kept an hour)
 //   /api/research/*              a direct, sourced answer to one question (see research/routes.ts)
 //   POST /api/ask {question}     a small model answers from the run records (see ask.ts). Needs the dashboard's
 //                                Origin or the token; the model is asked only for a token holder
@@ -40,6 +41,7 @@ import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
 import { search } from "./search/search.ts"
+import { createTrending } from "./search/trending.ts"
 import { exampleBoards, exampleHits, handleExample } from "./examples.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -62,6 +64,8 @@ export interface AppOptions {
   env?: NodeJS.ProcessEnv
   /** Options for POST /api/ask (tests: a fake fetch and key). */
   ask?: import("./search/ask.ts").AskOptions
+  /** Options for GET /api/trending (tests: a fake fetch). */
+  trending?: import("./search/trending.ts").TrendingOptions
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -110,6 +114,7 @@ export function createApp(options: AppOptions = {}) {
 
   const trust = { hasToken, env, tokenFile: TOKEN_FILE }
   const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow }) // the direct, sourced answer (research/routes.ts)
+  const trending = createTrending(options.trending) // "Try asking" questions; read on first use, not at startup
   /**
    * May this request start or resume a board run? With scripted models anyone local may (it costs nothing). With
    * real models only a holder of the token: false, with 403 or the 401 that asks for the token sent, otherwise.
@@ -179,6 +184,7 @@ export function createApp(options: AppOptions = {}) {
         keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
+      if (url.pathname === "/api/trending" && req.method === "GET") return json(res, 200, await trending.get())
       if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? ""), ...exampleHits(url.searchParams.get("q") ?? "", env)].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")
       if (url.pathname === "/api/token") return hasToken(req) ? json(res, 200, { ok: true }) : json(res, 401, tokenNeeded("this", TOKEN_FILE))
       if (url.pathname === "/api/ask") { // AI search over experiments

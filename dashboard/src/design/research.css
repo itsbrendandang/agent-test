@@ -36,6 +36,7 @@
 .search-optionsb { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); }
 .search-start { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 6px; }
 .search-examples { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; white-space: normal; }
+.try-asking { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
 .search-examples .btn { height: auto; border-radius: 999px; padding: 8px 14px; font-size: 13px; white-space: normal; text-align: left; color: var(--text); }
 .search-demo { font-size: 13px; line-height: 1.5; color: var(--dark-muted, #55504a); text-align: center; max-width: 60ch; }
 .search-more { text-align: center; font-size: 12px; flex-shrink: 0; }

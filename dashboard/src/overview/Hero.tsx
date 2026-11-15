@@ -3,7 +3,8 @@
 // they are not a picture of work being done. Real work is shown in Agent Lab, where nothing moves without an event.
 // Pressing the send button starts the answer on this page (the same engine call, token prompt and limits as Research),
 // or, when the page gives no `onAsk`, hands the question to Research. The line under the box says what that may
-// cost before the press. A starter question only fills the box.
+// cost before the press. A starter question only fills the box: biology questions trending on Google now
+// (research/trending.ts), else the fixed STARTERS.
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { agentIdentity } from "@/lab/identity"
 import { Mascot } from "@/lab/Mascot"
@@ -15,6 +16,7 @@ import type { Catalog, EffortId } from "@/home/api"
 import { effortInEffect } from "@/home/chat"
 import { AskBox } from "@/research/AskBox"
 import { answerLimitLine } from "@/research/limitLine"
+import { tryAskingNote, useTryAsking } from "@/research/trending"
 import "@/design/overview.css"
 
 /** Who greets you, with one plain line each: the jobs a question passes through. */
@@ -41,6 +43,10 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
     return () => { stopped = true }
   }, [])
   const limit = answerLimitLine(catalog, effort)
+  // Biology questions from what is trending on Google now (or curated ones); the fixed starters when the engine is not there.
+  const trending = useTryAsking()
+  const starters = trending?.items.slice(0, 3) ?? STARTERS
+  const note = tryAskingNote(trending)
   const eager = focused || text.trim().length > 0
   const ask = (asked: string) => {
     const question = asked.trim()
@@ -68,9 +74,9 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
       <AskBox id="ov-ask-box" textareaRef={box} rows={2} value={text} onChange={setText} onSubmit={(asked) => ask(asked)} onFocusChange={setFocused}
         efforts={catalog?.efforts ?? []} effort={catalog ? effortInEffect(catalog, effort) : effort} onEffort={setEffort} name="overview-effort" />
       <p className="ov-hero-note">Press Send and the team starts: they search, check each other and write it up while you do other things. {limit}</p>
-      <div className="ov-row-label">Try asking</div>
+      <div className="ov-row-label">Try asking{note && <small>{note}</small>}</div>
       <div className="ov-starters" role="group" aria-label="Example questions">
-        {STARTERS.map((starter) => (
+        {starters.map((starter) => (
           <button type="button" key={starter.question} aria-label={starter.question} onClick={() => { setText(starter.question); box.current?.focus() }}>
             <b>{starter.topic}</b><span>{starter.question}</span>
           </button>
