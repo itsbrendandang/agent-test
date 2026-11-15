@@ -8,7 +8,8 @@
     "serve": "node src/server.ts",
     "typecheck": "tsc --noEmit",
     "preflight": "node src/preflight-cli.ts",
-    "test": "PAID_SWITCH_LOCKED=1 node --test \"test/*.test.ts\""
+    "test": "PAID_SWITCH_LOCKED=1 node --test \"test/*.test.ts\"",
+    "lint": "oxlint src test"
   },
   "dependencies": {
     "@earendil-works/chord": "^1.5.2",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "oxlint": "^1.93.0",
     "typescript": "^7.0.2"
   }
 }

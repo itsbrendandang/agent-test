@@ -14,13 +14,13 @@ documents are in `docs/`.
 - `npm run check`: the health report. Merge-conflict markers, type checks, engine tests (one file
   at a time, with a time limit) and dashboard tests. It forces paid calls off. Run it before
   committing. `-- --fast`: markers and type checks only. `-- --all`: adds the Python suites.
-- `npm test`: harness tests, type checks and engine tests in one go. It hangs today (one engine
-  test file does not exit); use `npm run check`. Neither runs the adapter tests unless you pass
-  `--all`: `cd glhf/bixbench_v1 && uv run pytest -q tests`.
+- `npm test`: harness tests, type checks and engine tests in one go. `npm run check` gives a
+  shorter report and a time limit per engine test file. `npm test` does not run the adapter
+  tests, and `npm run check` runs them only with `--all`: `cd glhf/bixbench_v1 && uv run pytest -q tests`.
 - One engine test file: `cd engine && PAID_SWITCH_LOCKED=1 node --test test/<name>.test.ts`.
 - `npm run engine` (port 8787) and `npm run dashboard` (port 5317).
 - Harness only: `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests`.
-- Engine only: `npm run test:engine`. Type checks only: `npm run typecheck`.
+- Engine only: `npm run test:engine`. Type checks only: `npm run typecheck`. Engine lint: `npm --prefix engine run lint`.
 - Lessons that wait for approval (run from `glhf/bixbench`):
   `uv run python -m bixbench3.inspect_harness.swarm.memory list`.
 

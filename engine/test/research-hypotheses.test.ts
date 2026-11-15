@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 
 process.env.NO_PAID_CALLS = "1"
-const { DEFAULTS, engine, jsonResponse, paidAllowed, sourcesIn, containsKey } = await import("./fixtures/research/harness.ts")
+const { engine, jsonResponse, paidAllowed, sourcesIn, containsKey } = await import("./fixtures/research/harness.ts")
 const { markOf, missingOf, numberSources, readHypotheses, readStances } = await import("../src/research/pipeline.ts")
 const { hypothesesSystem, STANCE, stanceUser, writerSystem } = await import("../src/research/prompts.ts")
 const { citedSentences, sentencesOf, withoutRepeats } = await import("../src/research/text.ts")

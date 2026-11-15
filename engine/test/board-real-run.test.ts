@@ -2,7 +2,7 @@
 // real providers behind a faked network, keys are fake). NO_PAID_CALLS is 1 except inside the one test that needs
 // paid-allowed logic (restored after it).
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs"
+import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -25,7 +25,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
 const board = await import("../src/board/board.ts")
 const { startRun, runBoard, loadState, evidenceBlock, memberInput, replyPhases, summarize, providerOf } = board
 const { loadConfig } = await import("../src/config.ts")
-const { loadAgent, loadRoster } = await import("../src/board/agents.ts")
+const { loadRoster } = await import("../src/board/agents.ts")
 const { shortSummary } = await import("../src/board/claims.ts")
 const { EventLog } = await import("../src/events.ts")
 const { runPreflight, WORST_CASE } = await import("../src/paid/preflight.ts")

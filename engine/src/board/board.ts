@@ -39,7 +39,7 @@ import { type Checker, EventLog, type EvidenceItem, SEARCH_PROVIDERS, type Searc
 import { exaSearch, OBJECTIVE_DESCRIPTION, type SearchResult } from "../search/exa.ts"
 import { DEFAULT_MAX_LITERATURE_SEARCHES, literatureLive, literatureOnce } from "../search/literature.ts"
 import { databaseLive, databaseOnce, type DatabaseSource, DEFAULT_MAX_DATABASE_SEARCHES, QUERY_DESCRIPTION, SOURCE_DESCRIPTION, SOURCES } from "../sources/index.ts"
-import { exaAssumed, maxSearches, reserveSearch, settleSearch } from "../paid/exaledger.ts"
+import { maxSearches, reserveSearch, settleSearch } from "../paid/exaledger.ts"
 import { researchSpentToday } from "../research/spend.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "../models.ts"
@@ -627,7 +627,6 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     }),
     replay: "safe",
     execute: async (args, api) => {
-      const member = memberOf(api)
       const out = await searchOnce({ state, config, mock, search: (q, o) => exaSearch(q, o, mock, process.env, config.meeting.exa_highlight_chars), capReached: async () => (await spend()) >= config.meeting.max_usd, paidOff: () => paidCallsOff() }, api.callId, args)
       if (out.refused) {
         if (out.limit) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })

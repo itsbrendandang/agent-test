@@ -6,7 +6,7 @@
 # added to a workflow. Do not add a key to this file; real-model runs do not belong in CI.
 #
 # Commands are the ones in CONTRIBUTING.md section 5, split so a failure names the part:
-#   engine     npm ci, tsc --noEmit, node --test          (engine/)
+#   engine     npm ci, tsc --noEmit, oxlint, node --test  (engine/)
 #   dashboard  npm ci, tsc -b, vite build, oxlint         (dashboard/)
 #   swarm      uv sync, ruff, mypy, pytest unit + e2e     (glhf/bixbench/)
 #   adapter    uv sync, ruff, mypy, pytest                (glhf/bixbench_v1/)
@@ -82,6 +82,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Type check (tsc --noEmit)
         run: npx tsc --noEmit
+      - name: Lint (oxlint)
+        run: npm run lint
       - name: Tests (node --test)
         run: npm test
 

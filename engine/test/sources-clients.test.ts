@@ -19,7 +19,6 @@ interface Exchange { name: string; url: string; method: string; post?: unknown; 
 // The fixtures are read as text and parsed the way the clients parse an answer, so numbers keep the service's digits.
 const fixtures = (source: DatabaseSource): Exchange[] => parseJson(readFileSync(join(import.meta.dirname, "fixtures/sources", `${source}.json`), "utf8")) as Exchange[]
 const raw = (source: DatabaseSource) => readFileSync(join(import.meta.dirname, "fixtures/sources", `${source}.json`), "utf8")
-const body = (source: DatabaseSource, name: string, nth = 0) => fixtures(source).filter((e) => e.name === name)[nth].body as Record<string, any>
 
 /** A fake service: answers only the requests the fixtures hold (same address, same method, same body), and records them. */
 function service(source: DatabaseSource, extra: Exchange[] = []) {
