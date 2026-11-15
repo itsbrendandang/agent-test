@@ -1,6 +1,7 @@
-// The Overview: the question box, then the Agent Lab. A question asked here shows only a loading bar while it is
-// researched (a click opens its Research chat early); when it ends, its Research chat opens by itself. The answer is
-// never written on this page: Research shows it and continues it. The team is idle at its desks until a question is
+// The Overview: the question box, then the Agent Lab. A question asked here shows the agents at work (the engine's
+// current step) with Stop while it is researched; when it ends, a short TL;DR (the answer's first sentence, as plain
+// text) and a button to read more and follow up in Research. The full answer is never written on this page: Research
+// shows it and continues it. The team is idle at its desks until a question is
 // sent from this page; then the lab follows that answer's own events (nothing moves without one). One quiet line
 // keeps the counts: a practice run is counted apart and is never added to research.
 // Spend and limits are in Settings (Usage and limits), not on this page.
@@ -18,8 +19,23 @@ import { startConversation } from "@/home/chat"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
 import { ResearchAnswer } from "@/research/Answer"
-import { ResearchRefused, startResearch, useResearchEvents, useSeenEvents } from "@/research/api"
+import { cancelResearch, ResearchRefused, startResearch, useResearchEvents, useSeenEvents } from "@/research/api"
+import { AgentsWorking } from "@/research/AgentsWorking"
+import { foldAnswer, progressLine } from "@/research/model"
 import "@/design/overview.css"
+
+/** The answer's first sentence as plain text (no citations, links, pictures or marks), at most about two lines. */
+function tldrOf(markdown: string): string {
+  const text = markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // pictures
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links: their words
+    .replace(/\s*\[\d+(?:[,\s\u2013-]+\d+)*\]/g, "") // citation numbers
+    .replace(/^\s*(?:#{1,6}|[-*+>]|\d+\.)\s+/gm, "") // headings, lists, quotes
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ").trim()
+  const first = /^.*?[.!?](?=\s|$)/.exec(text)?.[0] ?? text
+  return first.length > 220 ? `${first.slice(0, 219).trimEnd()}…` : first
+}
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
 function useRuns() {
@@ -69,8 +85,9 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
   // An answer that ended is counted at once: the line of counts is read again.
   useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-  // A question asked here that ended (ready, failed or stopped): its Research chat opens, where the answer and follow-ups are.
-  useEffect(() => { if (ended && asked && !asked.example && asked.kind !== "board") { setOpenAnswer(asked.id, asked.question); onOpen("Home") } }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const answer = useMemo(() => foldAnswer(own), [own])
+  const [stop, setStop] = useState<{ id: string; said: string }>() // the engine's reply to "Stop", for that answer
+  const stopping = asked && stop?.id === asked.id ? stop.said : undefined
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
     : lab.status === "done" ? "The team finished your question. The answer is in the Research chat."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
@@ -100,12 +117,19 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <Hero onOpen={onOpen} onAsk={ask} />
       {refused && <p className="newrun-error" role="alert">{refused}</p>}
 
-      {/* The answer comes first, so it is in view without scrolling past the lab. Once it ends, one line and the link to its chat. */}
+      {/* Above the lab, so it is in view without scrolling. The agents while it runs; then a TL;DR, never the full answer. */}
       {asked && asked.kind !== "board" && !asked.example && (
-        <button type="button" className="ov-card ov-loading" onClick={openChat} aria-label={`Researching: ${asked.question}. Open in Research`}>
-          <span className="ov-loading-label">{asked.question}</span>
-          <span className="ov-loading-bar" role="progressbar" aria-label="Researching" />
-        </button>
+        <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
+          <h2 id="ov-answer-title"><button type="button" className="ov-link ov-answer-open" onClick={openChat}>{asked.question}</button></h2>
+          {!ended
+            ? <div className="ov-answer-working">
+                <AgentsWorking>{progressLine(answer)}</AgentsWorking>
+                <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { const id = asked.id; setStop({ id, said: "" }); void cancelResearch(id).then((said) => setStop({ id, said })) }}>Stop</button>
+                {stopping && <span className="muted small" role="status">{stopping}</span>}
+              </div>
+            : <p className="ov-answer-status" role="status">{lab.status === "done" ? (tldrOf(answer.markdown) || "The answer is ready.") : lab.status === "failed" ? "The answer could not be finished." : "The answer was stopped."}</p>}
+          {ended && <button type="button" className="btn" onClick={openChat}>Read more and follow up in Research</button>}
+        </section>
       )}
       {asked && asked.kind !== "board" && asked.example && (
         <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">

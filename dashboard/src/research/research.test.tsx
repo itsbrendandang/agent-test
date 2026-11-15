@@ -859,7 +859,7 @@ describe("a question answered on the Overview is Research's conversation", () =>
     await user.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
     expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "standard" })
-    await screen.findByRole("button", { name: "Researching: Does drug A protect the heart?. Open in Research" }) // only a loading bar on the Overview
+    await screen.findByRole("heading", { name: "Does drug A protect the heart?" }) // the agents at work on the Overview, not the answer
     await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-ov-1/events"))).toBe(true))
     await feed([{ seq: 1, at: 1, run: "a-ov-1", type: "research.started", id: "a-ov-1", question: "Does drug A protect the heart?", mode: "demo" } as unknown as ResearchEvent])
     overview.unmount()

@@ -144,13 +144,9 @@
 .ov-lab #ov-lab-title { font-weight: 650; color: var(--text); }
 .ov-answer { min-width: 0; }
 .ov-answer-open { font-weight: inherit; text-align: left; }
-.ov-answer-status { color: var(--text-muted); }
-.ov-loading { width: 100%; text-align: left; font: inherit; color: var(--text); cursor: pointer; gap: var(--space-2); padding-block: var(--space-3); }
-.ov-loading-label { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-loading-bar { position: relative; display: block; height: 4px; border-radius: 2px; background: var(--neutral-bg); overflow: hidden; }
-.ov-loading-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; border-radius: 2px; background: var(--text-muted); animation: ov-loading 1.4s ease-in-out infinite; }
-@keyframes ov-loading { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-@media (prefers-reduced-motion: reduce) { .ov-loading-bar::after { animation: none; width: 100%; opacity: 0.4; } }
+.ov-answer-status { color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ov-answer-working { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.ov-answer > .btn { align-self: flex-start; }
 .ov-counts { font-size: 13px; color: var(--text-muted); }
 .ov-counts b { color: var(--text); font-weight: 650; }
 /* Under the question box the lab keeps one screen's height: its side panel (and the activity list in it) scrolls. */

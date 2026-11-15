@@ -135,7 +135,7 @@ Benchmarks and Compare are not in the sidebar. They open only by their address (
 
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. While the team researches, only a loading bar shows under the box (a click opens its Research chat early). When it ends, its chat opens in Research, where the answer is and a follow-up continues it. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and practice apart. |
+| Overview | Ask in the "Let's research together!" question box. While the team researches, the agents and their current step show under the box, with Stop. When it ends, a short TL;DR (the first sentence) and "Read more and follow up in Research" open its chat in Research, where the full answer is and a follow-up continues it. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and practice apart. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. While the answer is made, the Agent Lab sits beside it (above it on a narrow screen); when the answer is done the Lab folds into one line. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
