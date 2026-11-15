@@ -75,18 +75,41 @@ test("a question that asks for a protocol searches the published lab protocols; 
   } finally { await e.close() }
 })
 
-test("when the planner writes no protocol query but the question asks for an SOP, code adds one from the literature query", async () => {
-  const e = await engine({ script: { plan: () => PLAN(), screen } })
-  e.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
-  e.net.europepmc = pmc
+test("when the planner writes no protocol query, none runs, even for an SOP question; only an unreadable planner reply lets code add one", async () => {
+  const sop = "Is there an SOP for mouse hepatocyte isolation?"
+  const planned = await engine({ script: { plan: () => PLAN(), screen } })
+  planned.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
+  planned.net.europepmc = pmc
   try {
-    const { record } = await paidAllowed(() => e.answer({ question: "Is there an SOP for mouse hepatocyte isolation?", effort: "standard" }))
+    const { record } = await paidAllowed(() => planned.answer({ question: sop, effort: "standard" }))
     assert.equal(record.status, "done")
-    const line = record.searches.find((s) => s.provider === "protocols")
-    assert.equal(line?.query, "primary mouse hepatocyte isolation collagenase perfusion")
+    assert.ok(!record.searches.some((s) => s.provider === "protocols"))
+  } finally { await planned.close() }
+  const unread = await engine({ script: { plan: () => "not a plan", screen } })
+  unread.net.exa = [() => jsonResponse({ results: PAGES, costDollars: { total: 0.005 } })]
+  unread.net.europepmc = pmc
+  try {
+    const { record } = await paidAllowed(() => unread.answer({ question: sop, effort: "standard" }))
+    assert.equal(record.status, "done")
+    assert.ok(record.searches.some((s) => s.provider === "protocols"))
     assert.ok(record.sources.some((s) => s.provider === "protocols" && s.note === "protocol"))
-  } finally { await e.close() }
+  } finally { await unread.close() }
 })
+
+for (const question of ["What is the Kyoto Protocol?", "What is the TCP protocol?"]) {
+  test(`"${question}" searches no protocol and keeps the short path`, async () => {
+    const simple = JSON.stringify({ key_question: question, medical: false, simple: true, researchable: true, web: [{ query: question, objective: "Encyclopedia pages first." }], literature: [question.replace(/[?]/g, "")], protocols: [] })
+    const e = await engine({ script: { plan: () => simple, screen: (call: { user: string }) => JSON.stringify({ items: [...call.user.matchAll(/<passage i="(\d+)">/g)].map((p) => ({ i: Number(p[1]), answers_question: "yes", reports_results: "yes", study_type: "review" })) }) } })
+    e.net.exa = [() => jsonResponse({ results: [{ url: "https://www.example-encyclopedia.org/p", title: question, highlights: [`${question.replace(/^What is the |\?$/g, "")} is a well known agreement or standard.`] }], costDollars: { total: 0.005 } })]
+    try {
+      const { record, events } = await paidAllowed(() => e.answer({ question, effort: "standard" }))
+      assert.equal(record.status, "done")
+      assert.equal(record.short, true)
+      assert.ok(!record.searches.some((s) => s.provider === "protocols"))
+      assert.ok(!of(events, "step.started").some((s) => s.step.startsWith("search:protocols")))
+    } finally { await e.close() }
+  })
+}
 
 test("with hypotheses, the protocol search still runs beside their searches, and its protocols are numbered after theirs", async () => {
   const hypotheses = [
@@ -161,20 +184,20 @@ test("a protocol search is stored like every outside step: after a restart it is
 
 test("which questions ask for a lab protocol", () => {
   for (const q of ["What is the protocol for western blot transfer?", "Is there an SOP for cryopreserving PBMCs?", "Standard operating procedure for autoclave validation", "How do I extract RNA from mouse liver with TRIzol?", "How can we isolate primary hepatocytes?", "How to stain organoids for confocal microscopy?", "Step-by-step CRISPR knockout in HEK293 cells"]) assert.ok(looksProtocol(q), q)
-  for (const q of ["What is the powerhouse of the cell?", "Does semaglutide lower cardiovascular risk?", "How do I lower my blood pressure?", "How can I prepare for an exam?", "Why do cells divide?"]) assert.ok(!looksProtocol(q), q)
+  for (const q of ["What is the powerhouse of the cell?", "Does semaglutide lower cardiovascular risk?", "How do I lower my blood pressure?", "How can I prepare for an exam?", "Why do cells divide?", "What is the Kyoto Protocol?", "What is the TCP protocol?", "How do I get rid of mice in my house?", "What is the best way to label my files?"]) assert.ok(!looksProtocol(q), q)
 })
 
-test("the plan's protocol queries: read from the planner, cut to the limit, added by code for a protocol question, never on the short path", () => {
+test("the plan's protocol queries: read from the planner, cut to the limit, added by code only when the planner's reply could not be read, never on the short path", () => {
   const level = LIMITS.levels.quick
   const read = readPlan(JSON.stringify({ web: [{ query: "hepatocyte isolation" }], literature: ["hepatocyte isolation"], protocols: ["hepatocyte isolation \"mouse\"", "x", "collagenase (perfusion) AND liver", "third one here"] }), Q, level)
   assert.deepEqual(read.protocols, ["hepatocyte isolation mouse", "collagenase perfusion liver"].slice(0, MAX_PROTOCOL_QUERIES))
-  assert.deepEqual(withProtocols(read, Q, { queries: 1 }).protocols, ["hepatocyte isolation mouse"], "no more protocol queries than literature queries")
-  // The planner wrote none: a protocol question gets one from its first literature query, any other question none.
+  assert.deepEqual(withProtocols(read, Q, { queries: 1 }).protocols, ["hepatocyte isolation mouse"], "no more protocol queries than the level's literature query limit")
+  // The planner wrote none: none run, even for a protocol question. The planner decides.
   const none = { ...read, protocols: [] }
-  assert.deepEqual(withProtocols(none, Q, level).protocols, ["hepatocyte isolation"])
-  assert.deepEqual(withProtocols(none, "Does semaglutide lower cardiovascular risk?", level).protocols, [])
-  // The fallback plan (the planner's reply could not be read) still searches protocols for a protocol question.
+  assert.deepEqual(withProtocols(none, Q, level).protocols, [])
+  // The fallback plan (the planner's reply could not be read): code searches protocols for a protocol question only.
   assert.deepEqual(withProtocols(fallbackPlan(Q), Q, level).protocols.length, 1)
+  assert.deepEqual(withProtocols(fallbackPlan("What is the Kyoto Protocol?"), "What is the Kyoto Protocol?", level).protocols, [])
   // A question with protocol searches never takes the short path.
   assert.equal(shortPath({ ...read, simple: true }, false), false)
   assert.equal(shortPath({ ...read, protocols: [], simple: true }, false), true)

@@ -315,12 +315,13 @@ export const MAX_PROTOCOL_QUERIES = 2
 
 /**
  * The plan with its protocol searches settled by code: the planner's protocol queries (at most MAX_PROTOCOL_QUERIES,
- * and no more than the level's literature queries); and when it wrote none but the question asks for a lab protocol, an
- * SOP or how to do a lab method (text.ts looksProtocol), one made from its first literature query.
+ * and no more than the level's literature query limit). The planner decides: when it wrote none, none run. Only when its
+ * reply could not be read (the fallback plan) does code decide, with one query made from the first literature query
+ * for a question that asks for a lab protocol, an SOP or how to do a lab method (text.ts looksProtocol).
  */
 export function withProtocols(plan: Plan, question: string, level: Pick<Level, "queries">): Plan {
   const max = Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries))
-  const protocols = plan.protocols.length ? plan.protocols.slice(0, max) : looksProtocol(question) && plan.literature[0] ? [plan.literature[0]] : []
+  const protocols = plan.protocols.length ? plan.protocols.slice(0, max) : plan.fallback && looksProtocol(question) && plan.literature[0] ? [plan.literature[0]] : []
   return { ...plan, protocols }
 }
 
