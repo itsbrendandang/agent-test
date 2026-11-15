@@ -61,6 +61,7 @@ const CHECKERS: Record<string, { id: string; label: string; what: string }> = {
   jev: { id: "first-pass", label: "First check", what: "A cheaper model, from another vendor than the team members', reads the statement against its source (called Jev in older runs)." },
   openai: { id: "openai", label: "Second, more careful check (OpenAI)", what: "Looks again at the statements the first check could not settle." },
   "claude-code": { id: "claude-code", label: "Second, more careful check (Claude Code)", what: "Recalculates a calculated statement by running code." },
+  "source-check": { id: "source-check", label: "Checked against the linked record", what: "Built-in example only: each statement was compared by hand with the public record it links to, on the date the example was made. No model checked it." },
 }
 const checkerOf = (raw: string) => CHECKERS[raw] ?? { id: raw, label: `${raw} check`, what: "A checker named in the run." }
 
@@ -111,9 +112,13 @@ export function statsOf(nodes: readonly GraphNode[]): Stats {
 
 // ── Board ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface BoardInput { runId: string; events: BoardEvent[]; roster?: RosterMember[] }
+export interface BoardInput {
+  runId: string; events: readonly BoardEvent[]; roster?: RosterMember[]
+  /** The Graph view's built-in example: drawn in lanes by round, with no clock and no cost beyond $0. */
+  example?: { retrievedOn: string }
+}
 
-export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): GraphModel {
+export function buildBoardGraph({ runId, events, roster = [], example }: BoardInput): GraphModel {
   const b = new Builder()
   const rosterOf = (name: string) => roster.find((m) => m.name === name)
   // Events in the order they happened: by their own timestamp, ties by their place in the list.
@@ -131,6 +136,9 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
   const steps: Step[] = []
   const pendingSources: { claim: string; source: string; order: number }[] = []
   let prevRound: number | undefined
+  /** The round each source was first kept in, and each round's subject: the lanes of the example. */
+  const sourceRound = new Map<string, number>()
+  const roundTitle = new Map<number, string>()
   const briefNode = (order: number) => b.node("source:brief", "source", "The brief", order, {
     facts: [{ label: "What it is", value: `The brief the board was given${started ? ` (${started.brief})` : ""}. Statements of kind "brief" are checked against the brief.` }],
   })
@@ -146,7 +154,7 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
 
   sorted.forEach((e, idx) => {
     const order = idx + 1
-    const at = t0 !== undefined && num(e.at) !== undefined ? e.at - t0 : undefined
+    const at = !example && t0 !== undefined && num(e.at) !== undefined ? e.at - t0 : undefined
     let label = "Something was recorded."
     let involved: string[] = []
     switch (e.type) {
@@ -154,9 +162,11 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
       case "run.resumed": label = "The run was resumed."; break
       case "round.started": {
         const p = round(e.round, order)
-        p.facts = [{ label: "Round", value: String(e.round) }, { label: "Final positions", value: e.final ? "yes" : "no" }]
+        const title = str(e.title)
+        if (title) { roundTitle.set(e.round, title); p.label = clip(oneLine(`Round ${e.round}: ${title}`), 80) }
+        p.facts = [{ label: "Round", value: String(e.round) }, ...(title ? [{ label: "Subject", value: title }] : []), { label: "Final positions", value: e.final ? "yes" : "no" }]
         p.text = e.message
-        marks.push({ label: `Round ${e.round}`, order })
+        marks.push({ label: title ? `${e.round}. ${title}` : `Round ${e.round}`, order })
         if (prevRound === undefined) b.link("next", "run", p.id, order); else b.link("next", `phase:${prevRound}`, p.id, order)
         prevRound = e.round
         label = `Round ${e.round} opens. The lead's instruction: ${quote(firstSentence(e.message, 160), 170)}`
@@ -195,6 +205,14 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
               ...(num((item as { relevance?: unknown }).relevance) !== undefined ? [{ label: "Relevance score", value: fmt(num((item as { relevance?: unknown }).relevance), 2) }] : []),
             ],
           })
+          const notice = (item as { notice?: unknown }).notice as { type?: unknown; url?: unknown; date?: unknown; what?: unknown } | undefined
+          if (notice && typeof notice === "object" && str(notice.what) && !s.flag) {
+            const type = notice.type === "retraction" || notice.type === "expression of concern" ? notice.type : "correction"
+            s.flag = { type, what: str(notice.what), url: safeUrl(str(notice.url)), date: str(notice.date) || undefined }
+            s.attention = type === "retraction" ? 2 : 1
+            s.facts.push({ label: "Published notice", value: `${type}${s.flag.date ? ` (${s.flag.date})` : ""}` }, { label: "What was wrong", value: s.flag.what }, ...(s.flag.url ? [{ label: "Notice", value: s.flag.url }] : []))
+          }
+          if (prevRound !== undefined && !sourceRound.has(s.id)) sourceRound.set(s.id, prevRound)
           b.link("retrieved", a.id, s.id, order)
           bump(s, "retrievals"); s.activity.push({ label: "Kept after screening", text: `${a.label}, for the search "${e.query}"` })
           ids.push(s.id)
@@ -235,7 +253,9 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
         break
       }
       case "run.finished":
-        status = "done"; finishedFact = [{ label: "Cost", value: `$${e.usd.toFixed(2)}` }, { label: "Took", value: `${fmt(e.minutes, 2)} minutes` }]
+        status = "done"
+        if (example) { finishedFact = [{ label: "Cost", value: "$0: no model was called" }]; label = "The record ends. No model was called and nothing was paid."; involved = ["run"]; break }
+        finishedFact = [{ label: "Cost", value: `$${e.usd.toFixed(2)}` }, { label: "Took", value: `${fmt(e.minutes, 2)} minutes` }]
         label = `The run ends. It took ${fmt(e.minutes, 2)} minutes and cost $${e.usd.toFixed(2)}.`; involved = ["run"]
         break
       case "run.failed": status = "failed"; finishedFact = [{ label: "Error", value: e.error }]; label = `The run failed: ${clip(oneLine(e.error), 160)}`; involved = ["run"]; break
@@ -280,7 +300,19 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
     if (n.kind === "phase") n.facts.push({ label: "Replies", value: String(n.count.replies ?? 0) })
     if (n.kind === "source" && n.id !== "source:brief") n.facts.push({ label: "Kept by", value: plural(n.count.retrievals ?? 0, "search", "searches") })
   }
-  run.facts.push(...finishedFact, ...(scripted === false ? [{ label: "Made with", value: REAL }] : []))
+  run.facts.push(...finishedFact, ...(scripted === false && !example ? [{ label: "Made with", value: REAL }] : []))
+  if (example) run.facts.push({ label: "Made with", value: `a built-in example, assembled by hand from public records retrieved on ${example.retrievedOn}` })
+  // The example's lanes: each round, and what happened in it, in its own column. Team members and checkers work across rounds, so they have none.
+  const lanes = example ? [...roundTitle.keys()].sort((x, y) => x - y) : []
+  const laneOf = (r: number | undefined) => { const i = r === undefined ? -1 : lanes.indexOf(r); return i < 0 ? undefined : i }
+  if (lanes.length) {
+    for (const n of b.nodes.values()) {
+      if (n.kind === "phase") n.lane = laneOf(n.round ?? Number(n.id.slice("phase:".length)))
+      else if (n.kind === "claim") n.lane = laneOf(Math.min(...(n.rounds ?? [])))
+      else if (n.kind === "source") n.lane = laneOf(sourceRound.get(n.id))
+      else if (n.kind === "artifact") n.lane = lanes.length - 1
+    }
+  }
   for (const c of constraints) run.facts.push({ label: "Wrap-up", value: c })
 
   const notes = [
@@ -290,10 +322,12 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
     "The data does not record who a team member replied to, so replies are shown per round, not person to person.",
   ]
   if (scripted === undefined) notes.push("This run's record does not say whether it is a practice run or a real one.")
+  if (example) notes.unshift(`This is a built-in example, not a run. It was assembled by hand from public records retrieved on ${example.retrievedOn}, in the format of a finished review. No model wrote or checked it; the team roles show who does each part in a real review. Every statement links to the record it was checked against.`)
   const { nodes, links } = b.finish()
   return {
-    kind: "board", runId, title: started?.title || runId, nodes, links, scripted, demo: false, single: false, status, steps, marks,
+    kind: "board", runId, title: started?.title || runId, nodes, links, scripted: example ? undefined : scripted, demo: false, single: false, status, steps, marks,
     maxOrder: Math.max(sorted.length, ...nodes.map((n) => n.order)), notes, totals: statsOf(nodes), hidden: 0,
+    ...(lanes.length ? { lanes: lanes.map((r) => roundTitle.get(r) ?? `Round ${r}`) } : {}), ...(example ? { example } : {}),
   }
 }
 

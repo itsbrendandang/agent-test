@@ -34,7 +34,7 @@ describe("first visit", () => {
     expect(box).toHaveAttribute("placeholder", "Ask a research question…")
     expect(headline.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // the box comes right after the headline
     const examples = within(screen.getByRole("group", { name: "Example questions" })).getAllByRole("button")
-    expect(examples).toHaveLength(3)
+    expect(examples).toHaveLength(4) // the cancer-drug example first, then three
     for (const e of examples) expect(e.textContent!.length).toBeLessThanOrEqual(60)
     expect(box.compareDocumentPosition(examples[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const user = userEvent.setup()

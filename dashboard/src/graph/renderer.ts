@@ -12,7 +12,7 @@ import {
 } from "three"
 import SpriteText from "three-spritetext"
 import { colourOf, LINK_DISTANCE, palette, shapeOf, sizeOf, type Palette, type Shape } from "../design/graph"
-import { GLYPH, type GraphLink, type GraphNode } from "./types"
+import { FLAG, GLYPH, type GraphLink, type GraphNode } from "./types"
 
 export interface Style {
   selected: string | null
@@ -57,10 +57,18 @@ const MAX_LABELS = 100
 const SWEEP_MS = 350
 
 interface Sim extends NodeObject { id: string; node: GraphNode; body?: Mesh; halo?: Mesh; label?: SpriteText; holder?: Group }
+/** Space between two lanes, and the height of the row of lane headers (the rounds). */
+const LANE_GAP = 85
+const LANE_TOP = 95
+/** Where lane i sits, with the lanes centred on the middle of the picture. */
+const laneX = (lane: number, lanes: number) => (lane - (lanes - 1) / 2) * LANE_GAP
+
 interface SimLink { source: string; target: string; link: GraphLink }
 
 const labelText = (n: GraphNode) => {
-  const text = n.label.length > 34 ? `${n.label.slice(0, 33)}…` : n.label
+  const max = n.kind === "phase" && n.lane !== undefined ? 48 : 34
+  const text = n.label.length > max ? `${n.label.slice(0, max - 1)}…` : n.label
+  if (n.flag) return `${FLAG} ${text}`
   return n.verdict && (n.kind === "claim" || n.kind === "test") ? `${GLYPH[n.verdict.cls]} ${text}` : text
 }
 const idOf = (end: unknown) => (typeof end === "string" ? end : (end as Sim).id)
@@ -94,7 +102,8 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   }
   const dimLevel = () => (style.selected !== null ? 0.12 : 0.3)
 
-  const priority = (s: Sim) => s.node.kind === "run" || s.node.kind === "agent" || (style.emphasis && s.node.attention === 2)
+  // Lane headers (the stages of the example) and flagged sources are always labelled: they are how the picture is read.
+  const priority = (s: Sim) => s.node.kind === "run" || s.node.kind === "agent" || (style.emphasis && s.node.attention === 2) || (s.node.kind === "phase" && s.node.lane !== undefined) || s.node.flag !== undefined
   const create = (s: Sim) => {
     const n = s.node
     const holder = new Group()
@@ -106,10 +115,11 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   }
   const ensureLabel = (s: Sim) => {
     if (s.label || !s.holder) return s.label
-    const big = s.node.kind === "agent" || s.node.kind === "run"
-    const t = new SpriteText(labelText(s.node), big ? 5.5 : 4.2, s.node.attention === 2 ? pal.verdict.fails : pal.label)
+    const big = s.node.kind === "agent" || s.node.kind === "run" || (s.node.kind === "phase" && s.node.lane !== undefined)
+    const header = s.node.kind === "phase" && s.node.lane !== undefined
+    const t = new SpriteText(labelText(s.node), header ? 8 : big ? 5.5 : 4.2, s.node.attention === 2 ? pal.verdict.fails : pal.label)
     t.fontFace = '"Geist Variable", ui-sans-serif, system-ui, sans-serif'
-    t.fontWeight = s.node.kind === "agent" || s.node.kind === "run" ? "600" : "400"
+    t.fontWeight = big ? "600" : "400"
     t.material.depthWrite = false
     t.backgroundColor = pal.labelBg
     t.padding = 1.2
@@ -218,7 +228,18 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   // A light pull towards the middle keeps loosely connected nodes (a checker that ruled on two claims) from drifting far
   // away, which would make the whole graph small after the camera fits it.
   let pulled: Sim[] = []
-  const gravity = Object.assign((alpha: number) => { for (const n of pulled) { const k = 0.06 * alpha; n.vx = (n.vx ?? 0) - (n.x ?? 0) * k; n.vy = (n.vy ?? 0) - (n.y ?? 0) * k; n.vz = (n.vz ?? 0) - (n.z ?? 0) * k } }, { initialize: (nodes: Sim[]) => { pulled = nodes } })
+  let laneCount = 0
+  // With lanes, a node that has one is pulled towards its lane's column instead of the middle, so the stages read left to right.
+  const gravity = Object.assign((alpha: number) => {
+    for (const n of pulled) {
+      const k = 0.06 * alpha, lane = laneCount ? n.node.lane : undefined
+      n.vx = (n.vx ?? 0) - ((n.x ?? 0) - (lane === undefined ? 0 : laneX(lane, laneCount))) * (lane === undefined ? k : 0.25 * alpha)
+      // In a lane, the pull to the middle is weaker, so a stage's statements and sources spread down its column, and the
+      // picture is kept nearly flat, so the stages read left to right from the front.
+      const ky = lane === undefined ? k : k * 0.3, kz = laneCount ? 0.2 * alpha : k
+      n.vy = (n.vy ?? 0) - (n.y ?? 0) * ky; n.vz = (n.vz ?? 0) - (n.z ?? 0) * kz
+    }
+  }, { initialize: (nodes: Sim[]) => { pulled = nodes } })
   graph.d3Force("gravity", gravity as never)
   const linkForce = graph.d3Force("link") as { distance?: (f: (l: unknown) => number) => void; strength?: (f: (l: unknown) => number) => void } | undefined
   const kindOf = (l: unknown) => (l as SimLink).link.kind
@@ -238,7 +259,8 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
   function idle() {
     if (destroyed || asleep) return
     if (!settled) { sleepTimer = setTimeout(idle, IDLE_MS); return }
-    if (o.reducedMotion || drifting) return sleep()
+    // A picture in lanes is read from the front: it never drifts round.
+    if (o.reducedMotion || drifting || laneCount > 0) return sleep()
     drifting = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.45
     driftTimer = setTimeout(sleep, DRIFT_MS)
   }
@@ -275,6 +297,16 @@ export function createRenderer(el: HTMLElement, o: RenderOptions): Renderer {
         return s
       })
       for (const id of [...sims.keys()]) if (!keep.has(id)) sims.delete(id)
+      // Lane headers (rounds) are pinned in a row along the top. Everything else in a lane keeps to its column (statements
+      // on its left half, sources on its right) and finds its own height; team members and checkers float between.
+      laneCount = Math.max(0, ...nodes.map((x) => (x.lane ?? -1) + 1))
+      for (const s of list) {
+        const lane = laneCount > 0 ? s.node.lane : undefined
+        const head = lane !== undefined && s.node.kind === "phase"
+        s.fx = lane === undefined ? undefined : laneX(lane, laneCount) + (s.node.kind === "claim" ? -LANE_GAP / 6 : s.node.kind === "source" ? LANE_GAP / 6 : 0)
+        s.fy = head ? LANE_TOP : undefined
+        s.fz = head ? 0 : undefined
+      }
       adjacent.clear(); degree.clear()
       for (const l of links) {
         for (const [a, b] of [[l.source, l.target], [l.target, l.source]] as const) {

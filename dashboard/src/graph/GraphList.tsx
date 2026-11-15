@@ -1,7 +1,7 @@
 // The same graph as a table, for people who cannot use the 3D canvas: keyboard, screen reader, no WebGL. It shows
 // the nodes that are visible under the current filters and step, in the same order, and marks the selected one.
 import { useMemo } from "react"
-import type { GraphLink, GraphNode, RunKind } from "./types"
+import { FLAG, type GraphLink, type GraphNode, type RunKind } from "./types"
 import { VerdictPill } from "./VerdictPill"
 import { kindLabel } from "./words"
 
@@ -34,7 +34,7 @@ export function GraphList({ nodes, links, selected, onSelect, order, runKind }: 
             return (
               <tr key={n.id} data-selected={n.id === selected || undefined} data-attention={n.attention || undefined}>
                 <td>{kindLabel(n.kind, runKind)}</td>
-                <td>{n.verdict && (n.kind === "claim" || n.kind === "test") ? <VerdictPill verdict={n.verdict} technical={false} /> : <span className="muted">–</span>}</td>
+                <td>{n.verdict && (n.kind === "claim" || n.kind === "test") ? <VerdictPill verdict={n.verdict} technical={false} /> : n.flag ? <span className="pill" data-kind={n.flag.type === "retraction" ? "danger" : "warning"}>{FLAG} {n.flag.type === "retraction" ? "retracted" : n.flag.type === "correction" ? "corrected" : "concern"}</span> : <span className="muted">–</span>}</td>
                 <th scope="row">
                   <button type="button" className="graph-linkbtn" aria-pressed={n.id === selected} onClick={() => onSelect(n.id)}>{cut(n.label, 110)}</button>
                 </th>
