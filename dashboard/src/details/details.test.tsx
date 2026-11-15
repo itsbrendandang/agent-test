@@ -43,7 +43,7 @@ describe("identifiers", () => {
     expect(findIdentifiers("CMP-0423 binds KRAS at 95 nM; P01116 alone; IC50 10.5/2; https://example.org/mock/kras")).toEqual([])
   })
   it("does not read a database's name with a year, or a ChEMBL release name, as a record", () => {
-    expect(findIdentifiers("PubChem 2023 update: improved access to chemical data; ChEMBL33 and ChEMBL34 releases")).toEqual([])
+    expect(findIdentifiers("PubChem 2023 update: improved access to chemical data; ChEMBL33 and ChEMBL34 releases; CID 35 eV; CID 30")).toEqual([])
   })
   it("a DOI inside a publisher's address ends before the query, the page format and the version", () => {
     const ids = findIdentifiers("https://www.science.org/doi/10.1126/science.abc1234?af=R", "https://www.biorxiv.org/content/10.1101/2024.01.01.123456v1.full.pdf", "https://doi.org/10.1126/science.abc1234")
@@ -165,6 +165,7 @@ describe("the panels on screen", () => {
     await waitFor(() => expect(within(panel).getByText("Inspect the dataset before any research begins.")).toBeInTheDocument())
     expect(panel).toHaveTextContent("practice: no model (a real run would use anthropic/claude-haiku-5-5)")
     expect(panel).toHaveTextContent("web search (Exa), literature search, database look-up")
+    expect(within(panel).getAllByText(/From the engine's current settings, not from this run/).length).toBeGreaterThan(0)
     expect(panel).toHaveTextContent("3,120")
     expect(panel).toHaveTextContent("$0 (practice run: a scripted model, no money spent)")
     expect(panel).toHaveTextContent("“sotorasib CHEMBL4535757 trial”")

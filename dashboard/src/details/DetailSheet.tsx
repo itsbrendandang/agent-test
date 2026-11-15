@@ -152,6 +152,7 @@ function AgentBody({ p, facts, run, member, who, onOpen }: { p: AgentProfile; fa
   const job = BOARD_JOB[p.id] ?? (run.kind === "answer" ? RESEARCH_JOB[p.id] : undefined) ?? CHECKER_JOB[p.id]
   const specialist = p.roster?.source === "specialist"
   const tools = member?.tools ?? (specialist ? [] : undefined)
+  const current = member && !run.live ? <p className="muted small">From the engine's current settings, not from this run: the run did not record them, and they may have changed since.</p> : null
   const usageWhy = p.usage ? undefined
     : run.kind !== "board" ? "This kind of run does not record tokens per agent."
       : checker ? "Checkers are counted in the run's total only, not per checker."
@@ -175,6 +176,7 @@ function AgentBody({ p, facts, run, member, who, onOpen }: { p: AgentProfile; fa
           {member?.modes && <><dt>Roles it plays</dt><dd>{Object.values(member.modes).join(", ")}</dd></>}
         </dl>
         {!job && !member?.purpose && !p.roster?.why && <Unknown>The run does not record a job for this agent.</Unknown>}
+        {member && (member.purpose || member.deliverable || member.modes) && current}
       </Section>
 
       <Section title="Model and tools">
@@ -183,6 +185,7 @@ function AgentBody({ p, facts, run, member, who, onOpen }: { p: AgentProfile; fa
           <dd>{member ? <>{TIER_WORD[member.model] ?? member.model}: <code>{run.practice ? `practice: no model (a real run would use ${member.modelId})` : member.modelId}</code></> : p.model ? <code>{p.model}</code> : checker ? "A checker; its model, when the run recorded one, is on each ruling." : "Not recorded for this agent."}</dd>
           <dt>Tools</dt><dd>{tools === undefined ? "Not recorded for this agent." : tools.length ? tools.map((t) => TOOL_WORD[t] ?? t).join(", ") : specialist ? "None: reads method notes and runs nothing" : "None"}</dd>
         </dl>
+        {current}
       </Section>
 
       <Section title="Spend and tokens">

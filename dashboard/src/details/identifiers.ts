@@ -87,7 +87,7 @@ function fromText(text: string): Identifier[] {
   all(/\bPMID:?\s*(\d{1,9})\b/gi, (m) => make("pmid", m[1], "paper"))
   all(/\b(PMC\d{5,9})\b/g, (m) => make("pmcid", m[1], "paper"))
   all(new RegExp(`\\bUniProt(?:KB)?(?:\\s+accession)?[:\\s]\\s*(${UNIPROT})\\b`, "g"), (m) => make("uniprot", m[1], "target"))
-  all(/\bPubChem\s+CID:?\s*(\d{1,12})\b|\bCID:?\s*(\d{2,12})\b/g, (m) => make("pubchem", m[1] ?? m[2], "drug"))
+  all(/\bPubChem\s+CID:?\s*(\d{1,12})\b/g, (m) => make("pubchem", m[1], "drug"))
   all(/\b(ENSG\d{11})\b/g, (m) => make("ensembl", m[1], "target"))
   all(/\b(EFO_\d{7}|MONDO_\d{7})\b/g, (m) => make(m[1].startsWith("EFO") ? "efo" : "mondo", m[1], "disease"))
   all(/\barXiv:\s*(\d{4}\.\d{4,5})\b/gi, (m) => make("arxiv", m[1], "paper"))
