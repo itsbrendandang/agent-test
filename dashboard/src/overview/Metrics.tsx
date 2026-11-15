@@ -1,4 +1,5 @@
-// The home page's numbers, from what the engine recorded and nothing else. Example runs are never counted; spend today and the limits are the engine's own figures (GET /api/paid); the rest is counted from
+// The home page's numbers, from what the engine recorded and nothing else. Example runs are never counted; spend
+// today and the limits are the engine's own figures (GET /api/paid); the rest is counted from
 // the run lists for research runs or for practice runs, never the two mixed. A number with nothing behind it says so.
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
