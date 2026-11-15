@@ -1,7 +1,7 @@
 // The Overview: the question box, then the Agent Lab. The answer is not written on this page. A question asked here
 // shows one short line that the agents are thinking, then the person is sent to Research, where the answer is written
-// and follow-ups continue its thread (it is Research's conversation). The team is idle at its desks until a question is sent from this page; then the lab follows that
-// answer's own events (nothing moves without one). One quiet line
+// and follow-ups continue its thread (it is Research's conversation); the live Agent Lab of that answer is on Research
+// too. The lab here is idle at its desks, except for an example opened by its address. One quiet line
 // keeps the counts: a practice run is counted apart and is never added to research.
 // Spend and limits are in Settings (Usage and limits), not on this page.
 import { useEffect, useMemo, useState } from "react"
@@ -73,9 +73,6 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const { events } = useResearchEvents(asked?.kind === "board" ? undefined : asked?.id) // the lab follows the answer's events; the answer itself is not shown here
   const board = useLabEvents(asked?.kind === "board" ? "board" : undefined, asked?.kind === "board" ? asked.id : undefined)
   const lab = useMemo(() => (asked ? asked.kind === "board" ? boardLab(board.events, asked.id) : answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events, board.events])
-  const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
-  // An answer that ended is counted at once: the line of counts is read again.
-  useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
     : lab.status === "done" ? "The team finished your question. The answer is in Research."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."

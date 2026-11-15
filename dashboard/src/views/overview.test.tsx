@@ -1,6 +1,6 @@
 // The Overview page: the question box with the Agent Lab under it (idle until a question is sent from this page), and
 // one line of counts from the engine's three lists, in which a practice run is never counted as research.
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { forgetScripted } from "@/lib/scripted"
@@ -96,24 +96,6 @@ describe("the Agent Lab under the question box", () => {
       { id: 1, role: "user", content: "Is hERG a risk for KRAS G12C inhibitors?" },
       { id: 2, role: "assistant", content: "", research: { id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", thread: "t-1" } },
     ])
-    // The answer's own events move the lab: a specialist the engine added joins as a visitor, then works.
-    const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
-    const feed = (events: object[]) => act(() => { for (const stream of streams.filter((x) => /\/api\/research\//.test(x.url))) for (const e of events) stream.onmessage?.({ data: JSON.stringify(e) }) })
-    await waitFor(() => expect(streams.some((x) => /\/api\/research\/a-20261115000000-0000abcd\/events/.test(x.url))).toBe(true))
-    await feed([
-      { seq: 1, at: 1, type: "research.started", id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", mode: "demo" },
-      { seq: 2, at: 2, type: "specialists", items: [who] },
-      { seq: 3, at: 3, type: "step.started", step: "specialist:toxicologist", kind: "write", label: "Toxicologist: reading 3 sources with its method notes", agent: "specialist:toxicologist" },
-    ])
-    await waitFor(() => expect(lab().textContent).toContain("Toxicologist"))
-    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull() // the answer's events move the lab, never an answer here
-    // When the answer ends, the line says so and the counts are read again.
-    const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
-    const before = reads()
-    await feed([{ seq: 4, at: 4, type: "answer.written", markdown: "hERG blocking is a known risk for this class." }, { seq: 5, at: 5, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
-    await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
-    await waitFor(() => expect(reads()).toBeGreaterThan(before))
-    expect(document.body.textContent).not.toContain("hERG blocking is a known risk") // the answer text is in Research, never here
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
