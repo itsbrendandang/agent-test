@@ -34,8 +34,14 @@ export interface BoardConfig {
   research?: Record<string, unknown>
 }
 
-export function loadConfig(file = resolve(ROOT, "board/config.yaml")): BoardConfig {
-  return parse(readFileSync(file, "utf8")) as BoardConfig
+/**
+ * DRUG_BOARD_RUNS_DIR (optional, an absolute path) replaces `paths.runs`: where reviews, research answers and the Exa
+ * spend record are kept. For a test engine, so that its practice runs never land in a person's saved research.
+ */
+export function loadConfig(file = resolve(ROOT, "board/config.yaml"), env: NodeJS.ProcessEnv = process.env): BoardConfig {
+  const config = parse(readFileSync(file, "utf8")) as BoardConfig
+  if (env.DRUG_BOARD_RUNS_DIR) config.paths = { ...config.paths, runs: resolve(env.DRUG_BOARD_RUNS_DIR) }
+  return config
 }
 
 export const path = (config: BoardConfig, key: keyof BoardConfig["paths"], ...rest: string[]) =>

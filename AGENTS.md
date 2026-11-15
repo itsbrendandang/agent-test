@@ -58,7 +58,9 @@ documents are in `docs/`.
 - **A running engine may be someone's live engine.** The engine on `127.0.0.1:8787` may be in Real
   mode with a person's keys. Do not send it a `POST`, do not restart it and do not stop it. For
   your own tests start your own engine on another port with paid calls off and locked:
-  `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1 DRUG_BOARD_PORT=8811 GLHF_RUNS_DIR=/tmp/<you>/glhf node engine/src/server.ts`.
+  `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1 DRUG_BOARD_PORT=8811 DRUG_BOARD_RUNS_DIR=/tmp/<you>/board GLHF_RUNS_DIR=/tmp/<you>/glhf node engine/src/server.ts`.
+  The two `*_RUNS_DIR` variables keep your practice runs out of that person's saved research. Tests write to a
+  temporary folder, never to `board/runs/` or `glhf/runs/`.
 - **Shared files.** `board/config.yaml`, `board/agents/*.md`, `engine/src/board.ts`,
   `engine/src/agents.ts`, `engine/src/app.ts`, `engine/src/mock.ts` and `package.json` are edited
   by several people and agents. Re-read the file right before you edit it, keep the edit small,
