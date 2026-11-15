@@ -3,10 +3,11 @@ import { EngineOffline } from "@/components/Shared"
 import { Provenance } from "@/components/Provenance"
 import { readEngine, problemOf, type Problem } from "@/lib/engine"
 import { plainWhen } from "@/lib/format"
-import { provenanceOf, PROVENANCE_WORD } from "@/lib/provenance"
+import { provenanceOf } from "@/lib/provenance"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { answerLab, answerOrder, boardLab, boardOrder, swarmLab, type LabEvent } from "@/lab/adapter"
 import { EventLog } from "@/lab/EventLog"
+import { RunPicker } from "@/lab/RunPicker"
 import { eventRows, swarmLogEvents } from "@/lab/logRows"
 import { KIND_WORD, type LabModel, type RunKind } from "@/lab/model"
 import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
@@ -56,13 +57,13 @@ function RunLog({ run, picker }: { run: RunRef; picker: ReactNode }) {
   const provenance = full.provenance ?? run.provenance
   return (
     <>
-      <div className="lab-bar">
-        {picker}
-        <span className="lab-kind">{KIND_WORD[run.kind]}</span>
-        <Provenance kind={provenance} />
-        {(run.startedAt || full.startedAt) ? <span className="lab-when">Started {plainWhen(run.startedAt || full.startedAt)}</span> : null}
-      </div>
+      {picker}
       <header className="event-log-heading">
+        <div className="lab-run-meta">
+          <span className="lab-kind">{KIND_WORD[run.kind]}</span>
+          <Provenance kind={provenance} />
+          {(run.startedAt || full.startedAt) ? <span className="lab-when">Started {plainWhen(run.startedAt || full.startedAt)}</span> : null}
+        </div>
         <h2>{full.title ?? run.title}</h2>
         <p>{provenance === "practice" ? "Practice run · scripted example, not real research. " : ""}Every recorded event, oldest first. {run.live && connection !== "ended" ? "New events appear as the team works." : "Stored events from this run."}</p>
       </header>
@@ -102,24 +103,8 @@ export function LabView() {
     setChosen(next)
     if (window.location.hash.startsWith("#Lab")) window.history.replaceState(null, "", next ? labHash(next.kind, next.id) : "#Lab")
   }
-  const key = target && `${target.kind}/${target.id}`
 
-  const picker = known.length > 0 && (
-    <>
-      <label className="lab-picker">
-        <span className="sr-only">Run shown in the Agent Log</span>
-        <select value={key ?? ""} onChange={(e) => pick(e.target.value)} title="Show the full event log for this run.">
-          {target && !known.some((r) => `${r.kind}/${r.id}` === key) && <option value={key}>{target.title}</option>}
-          {known.map((r) => (
-            <option key={`${r.kind}/${r.id}`} value={`${r.kind}/${r.id}`}>
-              {r.title.length > 80 ? `${r.title.slice(0, 79)}…` : r.title} · {KIND_WORD[r.kind]} · {plainWhen(r.startedAt)}{r.provenance ? ` · ${PROVENANCE_WORD[r.provenance]}` : ""}{r.status ? ` · ${r.status}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="button" className="btn" aria-pressed={!chosen} onClick={() => pick(chosen ? "" : key ?? "")} title="Follow: always show the run in progress, else the newest run. Press again to stay on this run.">Follow newest</button>
-    </>
-  )
+  const picker = known.length > 0 && <RunPicker runs={known} target={target} following={!chosen} onPick={pick} />
 
   return (
     <div className="page lab-page" data-wide>
