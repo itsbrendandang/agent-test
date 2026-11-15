@@ -1,6 +1,6 @@
 # Proposal: memory (past.dev) for every agent, and one store for what agents find
 
-Status: a plan. Nothing in it is built. Written 15 November after the owner said: past.dev
+Status: a plan with its two decisions made (see Part 1). Nothing in it is built. Written 15 November after the owner said: past.dev
 should be used, and asked whether to build a database.
 
 ## Where we are
@@ -40,11 +40,12 @@ research pipeline and the team review at their planning step, a "Memory" section
 approve or reject, tests with a fake past.dev. About one day. What cannot be tested without the
 payer: a live call from the engine.
 
-Decisions needed:
+Decided by the owner on 15 November:
 
-- May the **question text** be sent to past.dev as the recall query? Without it recall is weak.
-  It is the one piece of user text that would leave the machine to a new third party.
-- One shared memory for the three of us, or one per person?
+- **The question text may be sent to past.dev as the recall query.** It is the only user text
+  that leaves the machine for memory. Nothing else of the conversation is sent for recall.
+- **One shared memory for the three of us** (Brendan, Anh, Josh), not one per person. So an
+  approved entry is visible to all three, and each entry records who approved it.
 
 ## Part 2: the database
 
