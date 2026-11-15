@@ -98,6 +98,14 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "phase.started": text = `Started the ${str(e.phase) ?? "recorded"} phase.`; break
       case "phase.finished": text = join(`Finished the ${str(e.phase) ?? "recorded"} phase.`, num(e.tokens) !== undefined ? `${num(e.tokens)} tokens recorded.` : ""); break
       case "claim.added": text = `Recorded statement ${str(e.claim_id) ?? str(e.claim) ?? ""}: ${str(e.text) ?? ""}`; break
+      case "issue.raised": text = join(`Raised ${str(e.severity) ?? "an"} issue ${str(e.issue) ?? "(id not recorded)"}:`, e.problem); break
+      case "issue.resolved": text = `Updated issue ${str(e.issue) ?? "(id not recorded)"}: ${str(e.status) ?? "status not recorded"}.`; break
+      case "test.registered": text = join(`Registered test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, e.method, str(e.test_null) ? `Null hypothesis: ${str(e.test_null)}` : "", e.script_path); break
+      case "test.executed":
+      case "test.recorded": {
+        text = join(`${type === "test.executed" ? "Ran" : "Recorded"} test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, str(e.status) ? `Status: ${str(e.status)}.` : "", num(e.exit_code) !== undefined ? `Exit code: ${num(e.exit_code)}.` : "", e.detail, num(e.p) !== undefined ? `p = ${num(e.p)}.` : "", typeof e.contradicts === "boolean" ? `Contradicts the statement: ${e.contradicts ? "yes" : "no"}.` : "", num(e.e) !== undefined ? `e = ${num(e.e)}.` : "", str(e.verdict_at_the_time) ? `Verdict at the time: ${str(e.verdict_at_the_time)}.` : "")
+        break
+      }
       default: text = join(`${readableName(type.replaceAll(".", " "))}.`, e.message, e.summary, e.text, e.note, e.error)
     }
     const agent = agentId === "engine" ? "Engine" : titles.get(agentId) ?? agentIdentity(agentId.replace(/^specialist:/, "")).label

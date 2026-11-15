@@ -66,4 +66,22 @@ describe("full event log", () => {
     const rows = eventRows([{ kind: "claim.added", seq: 1, ts: 10.5, by: "planner", claim_id: "C1", text: "Recorded claim" }], "swarm")
     expect(rows[0]).toMatchObject({ at: 10500, agentId: "planner", text: "Recorded statement C1: Recorded claim" })
   })
+  it("preserves swarm issues, test registration, execution and recorded verdict details", () => {
+    const rows = eventRows([
+      { kind: "issue.raised", issue: "I1", severity: "blocking", problem: "Missing samples", by: "critic" },
+      { kind: "issue.resolved", issue: "I1", status: "wontfix", by: "planner" },
+      { kind: "test.registered", claim: "C1", name: "Shape check", method: "Compare every column", test_null: "Columns disagree", script_path: "check.py", by: "experimenter" },
+      { kind: "test.executed", claim: "C1", name: "Shape check", status: "ok", exit_code: 0, detail: "All columns present", p: 0, contradicts: false },
+      { kind: "test.recorded", claim: "C1", name: "Shape check", p: 0.01, contradicts: true, e: 0, verdict_at_the_time: "refuted", by: "harness" },
+    ], "swarm")
+    expect(rows[0]).toMatchObject({ agentId: "critic", text: "Raised blocking issue I1: Missing samples" })
+    expect(rows[1]).toMatchObject({ agentId: "planner", text: "Updated issue I1: wontfix." })
+    expect(rows[2].text).toBe("Registered test Shape check for statement C1. Compare every column Null hypothesis: Columns disagree check.py")
+    expect(rows[3].text).toBe("Ran test Shape check for statement C1. Status: ok. Exit code: 0. All columns present p = 0. Contradicts the statement: no.")
+    expect(rows[4]).toMatchObject({ agentId: "harness", text: "Recorded test Shape check for statement C1. p = 0.01. Contradicts the statement: yes. e = 0. Verdict at the time: refuted." })
+    const sparse = eventRows([{ kind: "test.executed", status: "failed", detail: "Script missing", p: null, contradicts: null }, { kind: "issue.raised" }, { kind: "test.recorded", e: NaN }], "swarm")
+    expect(sparse[0].text).toContain("Status: failed. Script missing")
+    expect(sparse.every((r) => !r.text.includes("p =") && !r.text.includes("e =") && !r.text.includes("Contradicts the statement:"))).toBe(true)
+    expect(sparse[1].text).toContain("id not recorded")
+  })
 })
