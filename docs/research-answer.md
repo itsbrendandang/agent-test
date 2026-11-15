@@ -122,8 +122,9 @@ answer and the app say so.
 The rule for mixed evidence is deliberately plain: code does not weigh one study against another, so evidence
 on both sides is shown as "the sources disagree", with the source numbers on each side. One checked sentence
 from one abstract is enough for Supported or Contradicted; the note of every mark gives the counts ("2 checked
-statements from 2 sources for it; none against it"), so a thin mark can be seen to be thin. A mark says what
-these sources report. It does not say the hypothesis is true.
+statements from 2 sources for it; none against it"). A Supported or Contradicted mark that rests on one source
+only is flagged `thin: true`: the mark reads "Supported: one source only", the note says "a thin mark", and
+"What is missing" lists it. A mark says what these sources report. It does not say the hypothesis is true.
 
 ## Method specialists
 
@@ -157,7 +158,8 @@ In the events: `specialists` (name, title, agent, why, methods), and steps named
 In the events: `hypotheses` (id, text, supportIf, contradictIf, origin; `cut` for what was set aside), a
 `hypothesis` tag on each search and screening step, `hypotheses` on each source, `hypothesis` and `side` on each
 statement, and one `hypothesis.checked` per hypothesis (the mark, the source numbers for and against, the
-statement indexes, the investigator, and `testedBy`). The record holds the same under `hypotheses`.
+statement indexes, the investigator, `mixed` and `thin` when they hold, and `testedBy`). The record holds the
+same under `hypotheses`.
 
 `testedBy` says what a mark rests on. Today it is always `{kind: "sources"}`: published sources. The field
 leaves room for a later `{kind: "swarm", run: "<id>"}`: a hypothesis tested on data by a swarm run. That link is

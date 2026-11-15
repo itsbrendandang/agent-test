@@ -121,7 +121,8 @@ def role_script(
     Story: the first pass leaves the first artifact with a header and no rows; the critic
     raises that and registers a test script for the claim that the first pass was complete; the
     relevance judge passes the test and the harness runs it: it contradicts, the claim is
-    refuted; the reviser fixes the artifact; in the second review the critic registers a test
+    refuted, and code raises a major issue for the refutation; the reviser fixes the artifact
+    and resolves both issues; in the second review the critic registers a test
     for the other claim, the judge passes it, the harness runs it and the claim is supported;
     the reporter writes METHODS.md. No role types a p-value. `relevance_scores` are the judge's
     scores in rounds 1 and 2 (a score under 0.8 in round 2 leaves the claim unsupported).
@@ -246,6 +247,13 @@ def role_script(
                 issue_id="I1",
                 status="fixed",
                 resolution="Reran the counting script; rows present.",
+            ),
+            # I2: raised by code because the row-count test refuted C2 (the same empty file).
+            _call(
+                "resolve_issue",
+                issue_id="I2",
+                status="fixed",
+                resolution="The refutation was right: the first pass had no rows. Rows restored.",
             ),
             _done("fixed"),
         ],
