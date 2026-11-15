@@ -3,7 +3,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { LITERATURE_HOSTS, mergePapers, openAlexAbstract, parseArxiv, parseOpenAlex, parseSemanticScholar, scholarlyLive, titleKey } from "../src/search/scholarly.ts"
-import { numberSources, providerOf, READ_LIMIT, usable } from "../src/research/pipeline.ts"
+import { numberSources, providerOf, READ_LIMIT, selectionOf, usable } from "../src/research/pipeline.ts"
 
 const ABSTRACT = "Semaglutide reduced major adverse cardiovascular events by 20% in adults with obesity and no diabetes."
 
@@ -80,7 +80,7 @@ test("the four sources are merged: each paper once (by DOI or title), Europe PMC
   assert.deepEqual(result.notices, [])
   // Only HTTPS, only the four allowed hosts, one request each, redirects refused.
   assert.deepEqual(calls.map((c) => c.url.hostname).sort(), Object.values(LITERATURE_HOSTS).sort())
-  for (const c of calls.filter((c) => c.url.hostname !== LITERATURE_HOSTS.europepmc)) assert.equal(c.init?.redirect, "error")
+  for (const c of calls) assert.equal(c.init?.redirect, "error")
   assert.equal(calls.find((c) => c.url.hostname === LITERATURE_HOSTS.arxiv)?.url.searchParams.get("search_query"), "all:semaglutide AND all:cardiovascular AND all:obesity")
 })
 
@@ -134,4 +134,30 @@ test("an answer's numbered sources name the index a paper came from, with its ye
   assert.equal(READ_LIMIT.arxiv, "Only the abstract was read.")
   // A web result never takes a paper index's name.
   assert.equal(providerOf({ url: "https://x.org", title: "t", text: "x", provider: "openalex" }, "exa"), "exa")
+})
+
+test("a source that sends more than the size limit is skipped, Europe PMC too", async () => {
+  const huge = () => new Response("x".repeat(4_000_001), { status: 200 })
+  const { fetchFn } = fakeNet({ [LITERATURE_HOSTS.europepmc]: huge, [LITERATURE_HOSTS.openalex]: huge })
+  const result = await scholarlyLive("semaglutide cardiovascular obesity", { fetchFn })
+  assert.deepEqual(result.items.map((i) => i.provider), ["semanticscholar", "arxiv", "semanticscholar", "arxiv"], "the sources still take turns; the arXiv copy of the trial stays, as Europe PMC sent nothing usable")
+  assert.deepEqual(result.notices, ["Skipped because it could not be used: Europe PMC (sent too much); OpenAlex (sent too much)."])
+})
+
+test("one paper found by two searches, under its PubMed address and its DOI address, is numbered once", async () => {
+  // Search 1: Europe PMC finds the trial (PubMed address). Search 2: only OpenAlex finds it (DOI address, no DOI match possible).
+  const first = usable((await scholarlyLive("semaglutide obesity", { fetchFn: fakeNet({ [LITERATURE_HOSTS.openalex]: () => json({ results: [] }), [LITERATURE_HOSTS.semanticscholar]: () => json({ data: [] }), [LITERATURE_HOSTS.arxiv]: () => new Response("<feed></feed>") }).fetchFn })).items, "europepmc")
+  const openAlexCopy = { results: [{ id: "https://openalex.org/W9", doi: "https://doi.org/10.9999/other.copy", title: "Semaglutide and Cardiovascular Outcomes in Obesity without Diabetes", publication_year: 2023, type: "article", abstract_inverted_index: { Semaglutide: [0], reduced: [1], major: [2], adverse: [3], cardiovascular: [4], events: [5], by: [6], "20%": [7], in: [8], "adults.": [9] } }] }
+  const second = usable((await scholarlyLive("cardiovascular outcomes trial", { fetchFn: fakeNet({ [LITERATURE_HOSTS.europepmc]: () => json({ resultList: { result: [] } }), [LITERATURE_HOSTS.openalex]: () => json(openAlexCopy), [LITERATURE_HOSTS.semanticscholar]: () => json({ data: [] }), [LITERATURE_HOSTS.arxiv]: () => new Response("<feed></feed>") }).fetchFn })).items, "europepmc")
+  assert.deepEqual(first.map((i) => i.url), ["https://pubmed.ncbi.nlm.nih.gov/37952131/"])
+  assert.deepEqual(second.map((i) => i.url), ["https://doi.org/10.9999/other.copy"])
+  const pool = [...first.map((item) => ({ item, provider: "europepmc" as const, order: 1_000 })), ...second.map((item) => ({ item, provider: "europepmc" as const, order: 2_000 }))]
+  const sources = numberSources(pool, 10)
+  assert.deepEqual(sources.map((s) => [s.n, s.url, s.provider]), [[1, "https://pubmed.ncbi.nlm.nih.gov/37952131/", "europepmc"]])
+  const copy = second[0]
+  const selection = selectionOf(sources, [{ title: copy.title, url: copy.url, provider: "openalex", reason: "Screened as not about the question." }], 10, "standard")
+  assert.deepEqual(selection.notSelected, [], "the second copy is not listed as not selected either")
+  // Two web pages with the same title are still two sources: only papers are compared by title.
+  const page = (url: string) => ({ item: { url, title: "Semaglutide and cardiovascular outcomes", text: "x" }, provider: "exa" as const })
+  assert.equal(numberSources([page("https://a.org/1"), page("https://b.org/1")], 10).length, 2)
 })

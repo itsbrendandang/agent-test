@@ -40,7 +40,7 @@ import type { Model, Models, ThinkingLevel } from "@earendil-works/pi-ai"
 import type { BoardConfig } from "../config.ts"
 import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "../search/exa.ts"
-import { MAX_MERGED } from "../search/scholarly.ts"
+import { MAX_MERGED, titleKey } from "../search/scholarly.ts"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../paid/exaledger.ts"
@@ -554,13 +554,19 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
 
 const urlKey = (url: string) => { try { const u = new URL(url); return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}` } catch { return url } }
 
-/** A search's items as they may be kept: a safe address, a title and some text; plain text, cut. Everything else is left out. */
 /** The indexes the literature search (scholarly.ts) also searches: a paper found there keeps its own name as its provider. */
 export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv"]
 const isPaperIndex = (value: unknown): value is Provider => (PAPER_INDEXES as readonly unknown[]).includes(value)
+const isPaper = (provider: Provider) => provider === "europepmc" || isPaperIndex(provider)
 /** Where a found item came from: the index of a literature search's paper, else the search that found it. */
 export const providerOf = (item: EvidenceItem, search: Provider): Provider => (search === "europepmc" && isPaperIndex(item.provider) ? item.provider : search)
+/** The keys a source is known by: its address and, for a paper, its title as scholarly.ts merges by, so one paper found under a PubMed and a DOI address is one source. */
+export const sourceKeys = (item: { url: string; title: string }, provider: Provider): string[] => {
+  const title = isPaper(provider) ? titleKey(item.title) : ""
+  return title.length >= 12 ? [urlKey(item.url), `title:${title}`] : [urlKey(item.url)]
+}
 
+/** A search's items as they may be kept: a safe address, a title and some text; plain text, cut. Everything else is left out. */
 export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[] {
   const out: EvidenceItem[] = []
   for (const item of items) {
@@ -568,7 +574,7 @@ export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[
     const title = oneLine(withoutInlineTags(String(item.title ?? "")), MAX_TITLE_CHARS), text = plainBlock(withoutInlineTags(String(item.text ?? "")), MAX_SOURCE_CHARS)
     if (!title || text.length < 40) continue // nothing a statement could be checked against
     const image = imageUrl(item.image) // a picture the search returned with the page; never fetched by the engine
-    out.push({ url: item.url, title, text, provider: (provider === "europepmc" && isPaperIndex(item.provider) ? item.provider : provider) as EvidenceItem["provider"], ...(image ? { image } : {}) })
+    out.push({ url: item.url, title, text, provider: providerOf(item, provider) as EvidenceItem["provider"], ...(image ? { image } : {}) })
   }
   return out
 }
@@ -608,8 +614,8 @@ export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only 
  */
 export function selectionOf(sources: StoredSource[], notSelected: Selection["notSelected"], max: number, effort: string, results = sources.length + notSelected.length): Selection {
   // An address is listed once: not again when a second search found it too, and not as "not selected" when it was selected.
-  const taken = new Set(sources.map((s) => urlKey(s.url)))
-  const others = notSelected.filter((s) => { const key = urlKey(s.url); if (taken.has(key)) return false; taken.add(key); return true })
+  const taken = new Set(sources.flatMap((s) => sourceKeys(s, s.provider)))
+  const others = notSelected.filter((s) => { const keys = sourceKeys(s, s.provider); if (keys.some((k) => taken.has(k))) return false; for (const k of keys) taken.add(k); return true })
   return {
     counts: { results, unique: sources.length + others.length, selected: sources.length },
     criteria: `Kept: results that the screening model judged to help answer the question and that report findings of their own, or are reviews. At most ${max} are numbered at the ${effort} level, the most relevant first, with the searches taking turns so that one search cannot fill the list. "Relevant" is the screening model's yes, partly or no. It is not a calibrated score.`,
@@ -630,12 +636,13 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
 export function numberSources(candidates: Candidate[], max: number, hypotheses: string[] = []): StoredSource[] {
   // Each address once. One that several hypotheses' searches found serves each of them.
   const byKey = new Map<string, Candidate & { serves: string[] }>()
+  const unique: (Candidate & { serves: string[] })[] = []
   for (const c of [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-    const key = urlKey(c.item.url), first = byKey.get(key)
-    if (!first) byKey.set(key, { ...c, serves: c.hypothesis ? [c.hypothesis] : [] })
-    else if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
+    const keys = sourceKeys(c.item, c.provider), first = keys.map((k) => byKey.get(k)).find(Boolean)
+    if (!first) { const entry = { ...c, serves: c.hypothesis ? [c.hypothesis] : [] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
+    for (const k of keys) if (!byKey.has(k)) byKey.set(k, first)
+    if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
   }
-  const unique = [...byKey.values()]
   const tier = (c: Candidate) => (c.item.relevance === 1 ? 0 : c.item.relevance === 0.5 ? 2 : 1) // screened "yes", not screened, screened "partly"
   /** The most relevant first; inside one relevance level the searches take turns. */
   const inOrder = (list: (Candidate & { serves: string[] })[]) => {
@@ -658,7 +665,7 @@ export function numberSources(candidates: Candidate[], max: number, hypotheses: 
   return ordered.slice(0, max).map((c, i) => {
     const note = noteOf(c.item, c.provider)
     const provider = providerOf(c.item, c.provider)
-    const year = provider === "europepmc" || isPaperIndex(provider) ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts and scholarly.ts write "(Journal, 2025)" at the end of a title
+    const year = isPaper(provider) ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts and scholarly.ts write "(Journal, 2025)" at the end of a title
     const serves = hypotheses.filter((id) => c.serves.includes(id))
     return { n: i + 1, url: c.item.url, title: c.item.title, provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), ...(c.item.image ? { image: c.item.image } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
   })
@@ -1001,10 +1008,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const counter = new Map<Provider, number>()
     let slotNumber = 1_000 // searches that belong to no hypothesis come after those that do
     const line = (l: SearchLine & { slot: number }) => { lines.push(l); record.searches = [...lines].sort((a, b) => a.slot - b.slot).map(({ slot: _slot, ...rest }) => rest); save() }
-    const keysOf = () => new Set(pool.map((c) => urlKey(c.item.url)))
+    const keysOf = () => new Set(pool.flatMap((c) => sourceKeys(c.item, c.provider)))
     /** Screen one search's results and add what is kept to the pool. */
     const evaluate = async (provider: Provider, i: number, place: number, query: string, found: EvidenceItem[], known: Set<string>, tag?: Tag) => {
-      const fresh = found.filter((item) => !known.has(urlKey(item.url)))
+      const fresh = found.filter((item) => !sourceKeys(item, provider).some((k) => known.has(k)))
       const order = (item: EvidenceItem) => place * 1_000 + found.indexOf(item)
       const hypothesis = tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}
       const agent = tag?.hypothesis ? investigatorOf(tag.hypothesis.id) : "searcher"
@@ -1023,13 +1030,13 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           const record_ = (DATABASES as readonly string[]).includes(provider)
           screened = screened.map((s) => (record_ && !s.keep && s.item.relevance !== 0 ? { ...s, keep: true } : s))
           screened.forEach((s, at) => {
-            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); tag?.chain?.add(urlKey(s.item.url)); kept++ }
+            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); for (const k of sourceKeys(s.item, provider)) tag?.chain?.add(k); kept++ }
             else notSelected.push({ title: s.item.title, url: s.item.url, provider: providerOf(s.item, provider), order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
           })
           end(step, "completed", { found: fresh.length, kept: screened.filter((s) => s.keep).length, summary: `${screened.filter((s) => s.keep).length} of ${fresh.length} kept.` })
         } catch (error) {
           if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) { endFor(step, stop.reason, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) }) } throw stop ?? error }
-          for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); tag?.chain?.add(urlKey(item.url)); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
+          for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); for (const k of sourceKeys(item, provider)) tag?.chain?.add(k); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
           notes.push(`The results of one ${providerName(provider)} search could not be screened for relevance and were kept as found.`)
           end(step, "failed", { found: fresh.length, kept: fresh.length, error: `The screening did not answer (${error.message}).`, consequence: "These results were kept without screening, so some may be off the question." })
         }
@@ -1065,7 +1072,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         return line({ provider, query, ran: false, found: 0, kept: 0, reason: scrub(why, env, 300), slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
       }
       const found = usable(result.items, provider)
-      result.items.forEach((item, at) => { if (item && safeUrl(item.url) && !found.some((f) => f.url === item.url)) notSelected.push({ title: oneLine(item.title, MAX_TITLE_CHARS) || item.url, url: item.url, provider, order: place * 1_000 + at, reason: "No text came back for it, so nothing could be checked against it." }) })
+      result.items.forEach((item, at) => { if (item && safeUrl(item.url) && !found.some((f) => f.url === item.url)) notSelected.push({ title: oneLine(item.title, MAX_TITLE_CHARS) || item.url, url: item.url, provider: providerOf(item, provider), order: place * 1_000 + at, reason: "No text came back for it, so nothing could be checked against it." }) })
       const said = result.notices.map((n) => oneLine(n, 200)).filter(Boolean)[0]
       if (!found.length) {
         end(step, "empty", { found: 0, summary: said ?? "The search ran and found nothing." })
@@ -1139,7 +1146,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       // A follow-up may list sources of the answer before it again, when they pass screening for the new question.
       const last = deps.earlier.filter((r) => r.mode === "real" && r.status === "done").at(-1)
       const known = keysOf()
-      const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !known.has(urlKey(s.url)) && safeUrl(s.url) && s.text?.length >= 40)
+      const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !sourceKeys(s, s.provider).some((k) => known.has(k)) && safeUrl(s.url) && s.text?.length >= 40)
       const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text, ...(imageUrl(s.image) ? { image: s.image } : {}) }))
       const rescreening = { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }
       if (again.length && !allow(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)), "screen:earlier", rescreening)) {
@@ -1159,13 +1166,13 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
 
     // ── sources and the selection ────────────────────────────────────────────────────────────────
     sources = numberSources(pool, sourcesKept(), tested.map((h) => h.id))
-    const numbered = new Set(sources.map((s) => urlKey(s.url)))
+    const numbered = new Set(sources.flatMap((s) => sourceKeys(s, s.provider)))
     const seen = new Set<string>()
     for (const c of [...pool].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-      const key = urlKey(c.item.url)
-      if (numbered.has(key) || seen.has(key)) continue
-      seen.add(key)
-      notSelected.push({ title: c.item.title, url: c.item.url, provider: c.provider, order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${sourcesKept()} sources are numbered at the ${levelName()} level and more relevant ones came first.` })
+      const keys = sourceKeys(c.item, c.provider)
+      if (keys.some((k) => numbered.has(k) || seen.has(k))) continue
+      for (const k of keys) seen.add(k)
+      notSelected.push({ title: c.item.title, url: c.item.url, provider: providerOf(c.item, c.provider), order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${sourcesKept()} sources are numbered at the ${levelName()} level and more relevant ones came first.` })
     }
     record.sources = sources
     record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), sourcesKept(), levelName(), lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)

@@ -19,7 +19,7 @@
 //   (a paid model step) reads about as much as before.
 import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "./exa.ts"
-import { cleanDoi, europePmcPapers, type FoundPaper, plainText } from "./literature.ts"
+import { cleanDoi, europePmcPapers, type FoundPaper, plainText, readCapped } from "./literature.ts"
 
 export const SCHOLARLY_SOURCES = ["europepmc", "openalex", "semanticscholar", "arxiv"] as const
 export type ScholarlySource = (typeof SCHOLARLY_SOURCES)[number]
@@ -41,7 +41,7 @@ export const MAX_MERGED = 12
 /** Time limit of one source, in milliseconds. Europe PMC also keeps literature.ts's 15 s limit on each request. */
 export const SOURCE_TIMEOUT_MS = 12_000
 const MAX_ABSTRACT_CHARS = 3000
-const MAX_BODY_CHARS = 4_000_000
+const MAX_BODY_BYTES = 4_000_000
 const USER_AGENT = "ai-scientist-bot/0.1 (research answer literature search; +https://github.com/itsbrendandang/agent-test)"
 
 export interface ScholarlyOptions {
@@ -49,7 +49,6 @@ export interface ScholarlyOptions {
   /** Read for the optional Semantic Scholar key only. */
   env?: Record<string, string | undefined>
   timeoutMs?: number
-  sources?: readonly ScholarlySource[]
 }
 
 /** A source that could not be used. The message says why, without the source's name. */
@@ -61,8 +60,8 @@ async function get(source: ScholarlySource, url: string, fetchFn: typeof fetch, 
   if (u.protocol !== "https:" || u.hostname !== LITERATURE_HOSTS[source]) throw new SourceFailed("address not allowed")
   const res = await fetchFn(url, { headers: { "user-agent": USER_AGENT, ...headers }, redirect: "error", signal })
   if (!res.ok) throw new SourceFailed(`answered ${res.status}`)
-  const text = await res.text()
-  if (text.length > MAX_BODY_CHARS) throw new SourceFailed("sent too much")
+  const text = await readCapped(res, MAX_BODY_BYTES)
+  if (text === undefined) throw new SourceFailed("sent too much")
   return text
 }
 
@@ -215,9 +214,9 @@ function inTime<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promi
  */
 export async function scholarlyLive(query: string, options: ScholarlyOptions = {}): Promise<SearchResult> {
   const fetchFn = options.fetchFn ?? fetch, env = options.env ?? {}, ms = options.timeoutMs ?? SOURCE_TIMEOUT_MS
-  const sources = options.sources ?? SCHOLARLY_SOURCES
+  const sources = SCHOLARLY_SOURCES
   const run = (source: ScholarlySource, signal: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> => {
-    if (source === "europepmc") return europePmcPapers(query, fetchFn, signal)
+    if (source === "europepmc") return europePmcPapers(query, fetchFn, signal, MAX_BODY_BYTES)
     const work = source === "openalex" ? openAlex(query, fetchFn, signal) : source === "semanticscholar" ? semanticScholar(query, fetchFn, signal, env) : arxiv(query, fetchFn, signal)
     return work.then((papers) => ({ papers, notices: [] }))
   }
@@ -239,7 +238,7 @@ export async function scholarlyLive(query: string, options: ScholarlyOptions = {
 /** A short reason without a key: only the message of our own errors, a fixed phrase for anything else. */
 function reason(error: unknown): string {
   if (error instanceof SourceFailed) return error.message
-  if (error instanceof Error && /^Europe PMC answered \d+$/.test(error.message)) return error.message.replace("Europe PMC ", "")
+  if (error instanceof Error && /^Europe PMC (answered \d+|sent too much)$/.test(error.message)) return error.message.replace("Europe PMC ", "")
   if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) return "it ran out of time"
   return "it could not be reached"
 }

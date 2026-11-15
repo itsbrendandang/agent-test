@@ -82,15 +82,35 @@ export async function literatureLive(query: string, fetchFn: typeof fetch = fetc
   return { items: papers.map((p) => p.item), notices }
 }
 
-/** literatureLive, with each paper's DOI kept (scholarly.ts). `signal` (optional) ends the search early. */
-export async function europePmcPapers(query: string, fetchFn: typeof fetch = fetch, signal?: AbortSignal): Promise<{ papers: FoundPaper[]; notices: string[] }> {
+/** A response's body as text, read no further than `maxBytes`; undefined when it is longer. */
+export async function readCapped(res: Response, maxBytes: number): Promise<string | undefined> {
+  if (Number(res.headers.get("content-length") ?? 0) > maxBytes) { await res.body?.cancel(); return undefined }
+  if (!res.body) return ""
+  const reader = res.body.getReader(), decoder = new TextDecoder()
+  let size = 0, text = ""
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return text + decoder.decode()
+    size += value.byteLength
+    if (size > maxBytes) { await reader.cancel(); return undefined }
+    text += decoder.decode(value, { stream: true })
+  }
+}
+
+/**
+ * literatureLive, with each paper's DOI kept (scholarly.ts). `signal` (optional) ends the search early; `maxBytes`
+ * (optional) refuses redirects and a body longer than that.
+ */
+export async function europePmcPapers(query: string, fetchFn: typeof fetch = fetch, signal?: AbortSignal, maxBytes?: number): Promise<{ papers: FoundPaper[]; notices: string[] }> {
   const notices: string[] = []
   for (const q of retryQueries(query)) {
     const url = `${LITERATURE_URL}?${new URLSearchParams({ query: q, resultType: "core", format: "json", pageSize: String(MAX_RESULTS) })}` // no `sort`: relevance is the default, and sort=RELEVANCE is answered with 503
     const timeout = AbortSignal.timeout(15_000)
-    const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
+    const res = await fetchFn(url, { headers: { accept: "application/json" }, signal: signal ? AbortSignal.any([signal, timeout]) : timeout, ...(maxBytes ? { redirect: "error" as const } : {}) })
     if (!res.ok) throw new Error(`Europe PMC answered ${res.status}`)
-    const papers = parseEuropePmcPapers(await res.json())
+    const body = maxBytes ? await readCapped(res, maxBytes) : undefined
+    if (maxBytes && body === undefined) throw new Error("Europe PMC sent too much")
+    const papers = parseEuropePmcPapers(body === undefined ? await res.json() : JSON.parse(body))
     if (papers.length) {
       if (q !== query.trim().split(/\s+/).join(" ")) notices.push(`Nothing was found for the full query; these are the results for "${q}".`)
       return { papers, notices }
