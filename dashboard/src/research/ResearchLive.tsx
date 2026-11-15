@@ -29,6 +29,19 @@ const ENDS = new Set(["research.finished", "research.failed", "research.cancelle
 const STATUS_WORD = { empty: "Not started", waiting: "Waiting to start", running: "Team at work", done: "Answer finished", failed: "Answer failed", cancelled: "Answer stopped" } as const
 const STATUS_GLYPH = { empty: "", waiting: "…", running: "●", done: "✓", failed: "✕", cancelled: "■" } as const
 
+/**
+ * How many teammates the engine has reported doing something: a step, a walk. A teammate with a role in answers but no
+ * step yet stays idle at its desk. Counted before the answer's end, which sends every teammate back to its desk (or
+ * marks it done) whether it worked or not. A method specialist took part once a step of its own started, unless the
+ * engine ended that step without asking it.
+ */
+function tookPart(ordered: LabEvent[], answer: string | undefined): number {
+  const worked = answerLab(ordered.filter((e) => !ENDS.has(String(e.type))), answer)
+  const notAsked = new Set(ordered.filter((e) => e.type === "step.finished" && str(e.summary)?.startsWith("Not asked")).map((e) => e.step))
+  const guests = new Set(ordered.filter((e) => e.type === "step.started" && !notAsked.has(e.step) && worked.visitors.some((v) => v.id === e.agent)).map((e) => e.agent)).size
+  return CHARACTERS.filter((c) => { const a = worked.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + guests
+}
+
 function useReducedMotion(): boolean {
   const query = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : undefined)
   const [reduced, setReduced] = useState(() => !!query()?.matches)
@@ -73,15 +86,8 @@ export function ResearchLive({ answer, fresh = false, children }: Props) {
   // The replay's present, in engine time: the time of the last event shown. A live run is watched at "now".
   const clock = playing && first !== undefined && count > 0 ? first + timeline.offsets[count - 1] : undefined
 
-  // Who the engine has reported doing something: a step, a walk. A teammate with a role in answers but no step yet stays idle at its desk.
-  // Counted before the answer's end, which sends every teammate back to its desk (or marks it done) whether it worked or not.
-  const worked = useMemo(() => answerLab(ordered.filter((e) => !ENDS.has(String(e.type))), answer), [ordered, answer])
-  // A method specialist took part once a step of its own started, unless the engine ended that step without asking it.
-  const guests = useMemo(() => {
-    const notAsked = new Set(ordered.filter((e) => e.type === "step.finished" && str(e.summary)?.startsWith("Not asked")).map((e) => e.step))
-    return new Set(ordered.filter((e) => e.type === "step.started" && !notAsked.has(e.step) && worked.visitors.some((v) => v.id === e.agent)).map((e) => e.agent)).size
-  }, [ordered, worked])
-  const took = CHARACTERS.filter((c) => { const a = worked.characters[c.id]; return a.inRun && (a.state !== "idle" || a.trips.length > 0) }).length + guests
+  const took = useMemo(() => tookPart(ordered, answer), [ordered, answer])
+  const shownTook = useMemo(() => (playing ? tookPart(ordered.slice(0, count), answer) : took), [playing, ordered, count, answer, took])
   const has = !!answer && took > 0 // before the first step there is nobody to show: the answer says it is starting
   const live = full.status === "running" || full.status === "waiting"
   const finished = full.status === "done" || full.status === "failed" || full.status === "cancelled"
@@ -126,7 +132,7 @@ export function ResearchLive({ answer, fresh = false, children }: Props) {
               <span className="research-lab-title">Agent Lab</span>
               <span className="research-lab-status" data-status={status}>
                 {playing && "Replay: "}{STATUS_GLYPH[status] && <span aria-hidden="true">{STATUS_GLYPH[status]} </span>}{STATUS_WORD[status]}
-                <span className="muted"> · {plural(took, "teammate")} {finished ? "took part" : "on it"}</span>
+                <span className="muted"> · {plural(shownTook, "teammate")} {status === "done" || status === "failed" || status === "cancelled" ? "took part" : "on it"}</span>
               </span>
               {!open && latest && <span className="research-lab-latest muted small" title={latest}>{clip(latest, 120)}</span>}
               <span className="research-lab-actions">

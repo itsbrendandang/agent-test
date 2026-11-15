@@ -300,6 +300,25 @@ describe("LabScene", () => {
     expect(at(320)).toBe("wide")
   })
 
+  it("the compact map hides the names on the plates when narrow, and keeps each plate a named button", () => {
+    const at = (width: number, layout: "compact" | "auto" | "wide" = "compact") => {
+      const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+      const view = render(<LabScene model={emptyLab()} layout={layout} />)
+      const tags = document.querySelector(".lab-scene")?.getAttribute("data-tags")
+      const plates = screen.getAllByRole("button", { name: /^Inspect / }).map((b) => b.getAttribute("aria-label"))
+      view.unmount(); spy.mockRestore()
+      return { tags, plates }
+    }
+    const narrow = at(390)
+    expect(narrow.tags).toBe("hidden")
+    expect(narrow.plates).toHaveLength(12)
+    for (const c of CHARACTERS) expect(narrow.plates.some((l) => l?.startsWith(`Inspect ${c.name}`))).toBe(true)
+    expect(at(520).tags).toBeNull()
+    expect(at(900).tags).toBeNull()
+    expect(at(390, "auto").tags).toBeNull()
+    expect(at(390, "wide").tags).toBeNull()
+  })
+
   it("lights a room's equipment only while the model says a teammate of it is working or fetching", () => {
     const room = (id: string) => document.querySelector(`.lab-room[data-room="${id}"]`)!
     const label = (name: string) => screen.getByText(name).closest(".lab-room-name")!

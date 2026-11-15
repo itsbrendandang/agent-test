@@ -88,6 +88,9 @@ const textWidth = (text: string) => text.length * 7 + 16
 
 interface Nodes { walker: HTMLElement | null; art: HTMLElement | null; flip: HTMLElement | null; held: HTMLElement | null; chip: HTMLElement | null }
 
+/** Below this width the compact map has no room for the teammates' names on their plates: each plate keeps its dot and its label for a screen reader. */
+export const COMPACT_TAGS_MIN = 480
+
 export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, layout: wanted = "auto", footer, className = "" }: LabSceneProps) {
   const reduced = useReducedMotion()
   const canAnimate = typeof requestAnimationFrame === "function"
@@ -100,6 +103,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const scale = useRef(1) // px for one map unit
   const layout: LabLayout = wanted === "tall" || (wanted === "auto" && sceneWidth < 600) ? TALL
     : (wanted === "auto" && sceneWidth < 800) || (wanted === "compact" && sceneWidth < 560) ? WIDE : GRID
+  const tagless = wanted === "compact" && sceneWidth < COMPACT_TAGS_MIN
   const sim = useMemo(() => createSim(layout), [layout]) // one simulation a map; it is changed in place, outside React
 
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})
@@ -267,7 +271,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const done = (room: RoomId) => { const mine = CHARACTERS.filter((c) => c.room === room && model.characters[c.id].inRun); return mine.length > 0 && mine.every((c) => model.characters[c.id].state === "done") }
 
   return (
-    <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} aria-label="Agent Lab">
+    <section ref={root} className={`lab-scene ${className}`} data-compact={compact || undefined} data-status={model.status} data-layout={layout.id} data-tags={tagless ? "hidden" : undefined} aria-label="Agent Lab">
       <div className="lab-viewport">
         <span className="lab-badge" data-status={model.status}>{STATUS_GLYPH[model.status] && <span aria-hidden="true">{STATUS_GLYPH[model.status]} </span>}{STATUS[model.status]}</span>
         <div ref={lab} className="lab" data-still={still || undefined} data-paused={paused || undefined} style={{ "--lab-w": layout.width, "--lab-h": layout.height } as CSSProperties}>
@@ -296,7 +300,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
               <button key={c.id} type="button" className="lab-plate" style={place(home.x, home.y + PLATE_DY)} ref={(el) => { if (el) plates.current.set(c.id, el); else plates.current.delete(c.id) }}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
                 aria-pressed={selected === c.id} aria-label={`Inspect ${told}`} title={told} onClick={() => onSelect?.(c.id)}>
-                <i aria-hidden="true" />{captionOf(a)}
+                <i aria-hidden="true" /><span className="lab-plate-name">{captionOf(a)}</span>
               </button>
             )
           })}

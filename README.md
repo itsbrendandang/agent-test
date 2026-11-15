@@ -254,7 +254,8 @@ it. A mark that rests on one source only says so ("one source only").
 ![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
 
 **Research's live Agent Lab.** While an answer is made, the conversation is on the left and the
-Agent Lab is on the right. A narrow screen puts the Lab above the conversation. The Lab uses the same
+Agent Lab is on the right. A narrow screen puts the Lab above the conversation. When the Lab is narrower than 480 px, the
+agents' name tags are hidden so they do not overlap; click an agent's dot to see its name. The Lab uses the same
 scene as the Overview. Agents move only for steps the engine reports. Agents with no step stay at
 their desks. Click an agent to see what it is doing. "Hide the lab" folds it into one line. The
 browser remembers this choice for the next answer. When the answer is done, the Lab folds by itself.
@@ -265,7 +266,7 @@ nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
 
 ![Research with a Demo answer on the left and its Agent Lab replaying on the right](docs/images/research-lab.png)
 
-![A narrow screen: the Agent Lab, opened again after the answer, above the conversation](docs/images/research-lab-narrow.png)
+![A narrow screen: the Agent Lab, opened again after the answer, above the conversation (taken before name tags were hidden on narrow Labs)](docs/images/research-lab-narrow.png)
 
 **Team review.** The decision first, then how many statements were checked and how each one did.
 

@@ -167,6 +167,19 @@ describe("a practice answer, over in a blink", () => {
     expect(within(lab()!).getByRole("button", { name: "Replay" })).toBeInTheDocument()
   })
 
+  it("while replayed, the bar counts the teammates of the moment shown, not the finished answer's", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await page(DEMO, true)
+    const bar = () => document.querySelector(".research-lab-status")!.textContent ?? ""
+    const during = bar().match(/(\d+) teammates? (on it|took part)/)
+    expect(bar()).toMatch(/^Replay: /)
+    expect(during?.[2]).toBe("on it")
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    const after = bar().match(/(\d+) teammates? (on it|took part)/)
+    expect(after?.[2]).toBe("took part")
+    expect(Number(during?.[1])).toBeLessThan(Number(after?.[1]))
+  })
+
   it("restored (not started on this visit), it is not replayed by itself", async () => {
     await page(DEMO, false)
     expect(scene()).toBeNull()
