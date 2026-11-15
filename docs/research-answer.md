@@ -66,7 +66,7 @@ Code (not a model) lists the proteins of an answer as `proteins` in the record a
 (`engine/src/structure/proteins.ts`). It looks in three places: the answer's UniProt sources (accession, protein, gene,
 organism with its strain, length); an amino-acid sequence or a UniProt accession written in the question or the
 answer (one run of letters, blocks of ten, or FASTA; a UniProt FASTA header gives the name and organism); and a test
-protein the question names. At most 8 are listed. An answer saved before the field gets them worked out when it is read.
+protein, when the question is that test protein's own question (its chip). Other questions never get a test protein. At most 8 are listed. An answer saved before the field gets them worked out when it is read.
 Nothing is fetched while the answer is made.
 
 On the Search screen the inspector then has a **Structure** tab. Opening a protein calls
@@ -76,7 +76,8 @@ DB's model when it has a UniProt accession. The reply always names the model, an
 The 3D view (3Dmol.js) colours each residue by the model's confidence (pLDDT), with a legend. These services are free
 and need no key, so no paid switch is involved. Only HTTPS to `api.esmatlas.com`, `alphafold.ebi.ac.uk` and
 `rest.uniprot.org`, with a time limit and a size limit. A good result is kept in `board/runs/.structures/` under a
-hash of what was asked; a failure is not kept on disk.
+hash of what was asked; a failure is not kept on disk. An ESMFold failure is remembered in memory for 10 minutes, so
+the same sequence is not sent again at once. "Try again" sends `retry=1`, which asks ESMFold anyway.
 
 ## The short path for a plain factual question
 
@@ -357,7 +358,7 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 | `GET /api/research/threads` | One line per thread, newest first. |
 | `GET /api/research/:id/artifacts` and `.../artifacts/:name` | The registered result files; one of them as a download. |
 | `GET /api/search?q=` | Saved answers are found here as `kind: "answer"`, next to the runs. |
-| `GET /api/structure?test=<id>`, `?accession=<UniProt>`, `?sequence=<letters>[&accession=]`, `&prefer=alphafold` | One protein's predicted structure: `{model, modelLabel, link, uniprot?, accession?, length, meanPlddt, pdb, cached, note?}`. `422` for a sequence over 400 amino acids with no accession. |
+| `GET /api/structure?test=<id>`, `?accession=<UniProt>`, `?sequence=<letters>[&accession=]`, `&prefer=alphafold`, `&retry=1` | One protein's predicted structure: `{model, modelLabel, link, uniprot?, accession?, length, meanPlddt, pdb, cached, note?}`. `422` for a sequence over 400 amino acids with no accession. |
 | `GET /api/structure/tests` | The built-in test proteins, with their sequences. |
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they

@@ -80,7 +80,7 @@ export function StructureView({ protein }: { protein: Protein }) {
   const [done, setDone] = useState<{ ask: string; error?: string; retry?: boolean; structure?: Structure }>()
   useEffect(() => {
     const abort = new AbortController()
-    fetchStructure(protein, prefer, abort.signal).then((structure) => setDone({ ask, structure }), (error: unknown) => {
+    fetchStructure(protein, prefer, abort.signal, again > 0).then((structure) => setDone({ ask, structure }), (error: unknown) => {
       if (!abort.signal.aborted) setDone({ ask, error: error instanceof StructureFailed ? error.message : "The structure could not be fetched.", retry: !(error instanceof StructureFailed) || error.retry })
     })
     return () => abort.abort()

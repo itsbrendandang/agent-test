@@ -65,6 +65,7 @@ describe("the structure request", () => {
     expect(structureQuery({ ...KRAS, key: "test:gfp", sequence: "MSK" })).toBe("test=gfp")
     expect(structureQuery(THIO)).toBe(`sequence=${THIO.sequence}&accession=P0AA25`)
     expect(structureQuery(KRAS, "alphafold")).toBe("accession=P01116&prefer=alphafold")
+    expect(structureQuery(THIO, undefined, true)).toBe(`sequence=${THIO.sequence}&accession=P0AA25&retry=1`)
   })
   it("reads only a structure with atoms from one of the two models, and only the services' own links", () => {
     expect(readStructure({ ...ESM, model: "other" })).toBeUndefined()

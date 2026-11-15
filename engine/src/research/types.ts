@@ -320,7 +320,7 @@ export interface ResearchRecord {
   error?: string
   /**
    * The proteins of this answer, found by code (structure/proteins.ts): its UniProt sources, sequences and accessions the
-   * question or the answer writes, test proteins the question names. The Structure tab lists them. Absent in older
+   * question or the answer writes, the test protein whose own question was asked. The Structure tab lists them. Absent in older
    * records: GET /api/research/:id works them out from the record.
    */
   proteins?: Protein[]

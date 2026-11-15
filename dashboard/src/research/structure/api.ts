@@ -15,8 +15,8 @@ export interface TestProtein {
   uniprotLength: number; range?: [number, number]; mutation?: string; length: number; sequence: string; question: string; about: string
 }
 
-/** What to ask the engine for, for one protein: a test protein by id, a sequence (with its accession for the fallback), or an accession. */
-export function structureQuery(p: Protein, prefer?: Model): string {
+/** What to ask the engine for, for one protein: a test protein by id, a sequence (with its accession for the fallback), or an accession. `retry`: a person asked again, so a recent ESMFold failure is not reused. */
+export function structureQuery(p: Protein, prefer?: Model, retry = false): string {
   const q = new URLSearchParams()
   if (p.key.startsWith("test:")) q.set("test", p.key.slice(5))
   else {
@@ -24,6 +24,7 @@ export function structureQuery(p: Protein, prefer?: Model): string {
     if (p.accession) q.set("accession", p.accession)
   }
   if (prefer) q.set("prefer", prefer)
+  if (retry) q.set("retry", "1")
   return q.toString()
 }
 
@@ -49,9 +50,9 @@ export class StructureFailed extends Error {
 }
 
 /** One structure. Rejects with StructureFailed and a plain message. */
-export async function fetchStructure(p: Protein, prefer?: Model, signal?: AbortSignal): Promise<Structure> {
+export async function fetchStructure(p: Protein, prefer?: Model, signal?: AbortSignal, retry = false): Promise<Structure> {
   let r: Response
-  try { r = await tracked(fetch(`${ENGINE}/api/structure?${structureQuery(p, prefer)}`, { signal })) }
+  try { r = await tracked(fetch(`${ENGINE}/api/structure?${structureQuery(p, prefer, retry)}`, { signal })) }
   catch (error) {
     if (signal?.aborted) throw error
     throw new StructureFailed("The app's engine isn't running, so the structure could not be fetched. Start it with: npm start.")

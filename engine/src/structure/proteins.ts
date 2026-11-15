@@ -5,7 +5,7 @@
 //     "Escherichia coli (strain K12)"), and the length when UniProt gave it;
 //   - an amino-acid sequence written in the question or the answer (one line or blocks of letters, or FASTA; a UniProt
 //     FASTA header gives the accession, name and organism), and a UniProt accession written in either;
-//   - a test protein (test-proteins.json) the question names: "Show the structure of GFP".
+//   - a test protein (test-proteins.json) whose own question is the question asked (a chip on the empty Research page).
 // The result is kept on the record as `proteins` (an older record has none: GET /api/research/:id works it out from the
 // record, so stored answers show the tab too). No network, no model, no cost.
 import { createHash } from "node:crypto"
@@ -34,7 +34,7 @@ export interface Protein {
 export interface TestProtein {
   id: string; name: string; /** A short name for a chip: "GFP (Aequorea victoria)". */ label: string; gene: string; organism: string; accession: string; entry: string
   uniprotLength: number; crc64: string; range?: [number, number]; mutation?: string
-  length: number; sequence: string; aliases: string[]; question: string; about: string
+  length: number; sequence: string; question: string; about: string
 }
 
 /** The most proteins one answer lists. */
@@ -113,7 +113,12 @@ export function sequencesIn(text: string): Found[] {
     rest.push(line)
   }
   // A run of capitals, maybe split into blocks by spaces or line breaks (numbers between blocks, as in a GenBank listing, are allowed).
-  for (const m of rest.join("\n").matchAll(/\b[A-Z]{10,}(?:[ \t]*\d*[ \t]*\n?[ \t]*\d*[ \t]*[A-Z]{1,})*\b/g)) add(((s) => (s ? { sequence: s } : undefined))(asSequence(m[0].replace(/[\s\d]+/g, ""))))
+  const all = rest.join("\n")
+  for (const m of all.matchAll(/[A-Z]{10,}(?:(?:[ \t\d]*\n[ \t\d]*|[ \t\d]+)[A-Z]+)*/g)) {
+    const end = m.index + m[0].length
+    if (/\w/.test(all[m.index - 1] ?? "") || /\w/.test(all[end] ?? "")) continue
+    add(((s) => (s ? { sequence: s } : undefined))(asSequence(m[0].replace(/[\s\d]+/g, ""))))
+  }
   return out
 }
 
@@ -123,10 +128,10 @@ export function accessionsIn(text: string): string[] {
   return [...new Set([...text.matchAll(/\b[A-Z][0-9][A-Z0-9]{3,8}\b/g)].map((m) => m[0]).filter((a) => isAccession(a) && (any || /^[OPQ]/.test(a))))]
 }
 
-/** The test proteins a text names, by their aliases (whole words, any case). */
-export function testsNamedIn(text: string): TestProtein[] {
-  const t = ` ${text.toLowerCase().replace(/[^a-z0-9-]+/g, " ")} `
-  return testProteins().filter((p) => p.aliases.some((a) => t.includes(` ${a.toLowerCase().replace(/[^a-z0-9-]+/g, " ")} `)))
+/** The test protein whose own question (its chip) is this question, any case and spacing. */
+export function testAskedIn(question: string): TestProtein | undefined {
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase()
+  return testProteins().find((p) => norm(p.question) === norm(question))
 }
 
 interface SourceLike { n: number; url: string; title: string; provider: string; text?: string }
@@ -168,7 +173,8 @@ export function proteinsOf(record: RecordLike): Protein[] {
     n++
     push({ key: `seq:${hash(f.sequence)}`, name: f.name ?? `Sequence ${n} from the ${from}`, ...(f.accession ? { accession: f.accession } : {}), ...(f.gene ? { gene: f.gene } : {}), ...(f.organism ? { organism: f.organism } : {}), length: f.sequence.length, sequence: f.sequence, from })
   }
-  for (const t of testsNamedIn(record.question ?? "")) push(fromTest(t))
+  const test = testAskedIn(record.question ?? "")
+  if (test) push(fromTest(test))
   for (const [from, text] of texts) for (const a of accessionsIn(text)) push({ key: `uniprot:${a}`, name: `UniProt ${a}`, accession: a, from })
   return out
 }

@@ -9,7 +9,7 @@ import { test } from "node:test"
 
 process.env.NO_PAID_CALLS = "1"
 const { DEFAULTS, engine, paidAllowed } = await import("./fixtures/research/harness.ts")
-const { accessionsIn, AMINO, fromSource, isAccession, MAX_PROTEINS, proteinsOf, sequencesIn, testProteins, testsNamedIn } = await import("../src/structure/proteins.ts")
+const { accessionsIn, AMINO, fromSource, isAccession, MAX_PROTEINS, proteinsOf, sequencesIn, testAskedIn, testProteins } = await import("../src/structure/proteins.ts")
 const { cleanPdb, createFolder, ESMFOLD_URL, HOSTS, MAX_ESMFOLD, MODEL_LABEL } = await import("../src/structure/fold.ts")
 const { createApp } = await import("../src/app.ts")
 const { loadConfig } = await import("../src/config.ts")
@@ -69,28 +69,43 @@ test("sequences written in a text: FASTA with UniProt's header, one run, blocks 
     "ATGCGTACGTAGCTAGCTAGCTAGCTAGCATCGATCGATCGTAGCTAGCTAG", "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG AGAIN AND AGAIN",
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "MSDKIIHLTDDSFDTDVLKADG",
   ]) assert.deepEqual(sequencesIn(none), [], none)
+  assert.deepEqual(sequencesIn(`x${THIOREDOXIN}`), [], "glued to a word before")
+})
+
+test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
+  for (const tail of ["a", "1", "_"]) {
+    const started = performance.now()
+    assert.deepEqual(sequencesIn(`${"MKTAYIAKQRQISFVKSHFSRQ".repeat(20)}${tail}`), [], tail)
+    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}${tail}`), [], `blocks glued to ${tail}`)
+    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")} ${tail}`).map((f) => f.sequence), [THIOREDOXIN], `blocks, then ${tail}`)
+    assert.ok(performance.now() - started < 500, `${tail}: ${Math.round(performance.now() - started)} ms`)
+  }
 })
 
 test("accessions in a text, and the test proteins a question names", () => {
   assert.deepEqual(accessionsIn("KRAS (P01116) and Q9UQ13; A2BC19 may be a code, H1N1 is a virus"), ["P01116", "Q9UQ13"], "without the word UniProt only P/O/Q accessions")
   assert.deepEqual(accessionsIn("UniProt H1N1 and C57BL6"), [], "not the accession pattern")
   assert.deepEqual(accessionsIn("UniProt entry A2BC19"), ["A2BC19"])
-  assert.deepEqual(testsNamedIn("Show the structure of GFP from Aequorea victoria").map((t) => t.id), ["gfp"])
-  assert.deepEqual(testsNamedIn("How does KRAS G12C fold?").map((t) => t.id), ["kras-g12c"])
-  assert.deepEqual(testsNamedIn("What is the best treatment for KRAS-mutant lung cancer?").map((t) => t.id), [], "KRAS alone is not the G12C variant")
-  assert.deepEqual(testsNamedIn("Does semaglutide lower the risk of stroke?"), [])
+  assert.equal(testAskedIn("Show the structure of GFP from Aequorea victoria")?.id, "gfp")
+  assert.equal(testAskedIn("  show the structure of KRAS   G12C ")?.id, "kras-g12c", "any case and spacing")
+  for (const real of ["What does KRAS do?", "KRAS inhibitors in pancreatic cancer", "How does KRAS G12C fold?", "What causes insulin resistance?", "How does the spike protein bind ACE2?", "Show the structure of GFP. Also fold it", "Does semaglutide lower the risk of stroke?"])
+    assert.equal(testAskedIn(real), undefined, real)
 })
 
 test("proteinsOf: sources first, then sequences, test proteins and accessions; one entry per protein; at most MAX_PROTEINS", () => {
   const kras = { n: 1, url: "https://www.uniprot.org/uniprotkb/P01116/entry#function", title: "GTPase KRas (KRAS): function (UniProt P01116)", provider: "uniprot", text: UNIPROT_TEXT }
   const out = proteinsOf({ question: `Show the structure of GFP. Also fold ${THIOREDOXIN}`, answer: { markdown: "GFP is UniProt P42212; KRAS is P01116 [1]." }, sources: [kras, { ...kras, n: 2, url: "https://www.uniprot.org/uniprotkb/P01116/variant-viewer" }] })
-  assert.deepEqual(out.map((p) => [p.key, p.from, p.length]), [["uniprot:P01116", "source", 189], [out[1].key, "question", 109], ["test:gfp", "test", 238]], "two sources of one entry, and the accessions already listed, give no second entry")
+  assert.deepEqual(out.map((p) => [p.key, p.from, p.length]), [["uniprot:P01116", "source", 189], [out[1].key, "question", 109], ["uniprot:P42212", "answer", undefined]], "two sources of one entry, and the accessions already listed, give no second entry; naming GFP gives no test protein")
   assert.match(out[1].key, /^seq:[0-9a-f]{12}$/)
   assert.equal(out[1].name, "Sequence 1 from the question")
-  assert.equal(out[2].organism, "Aequorea victoria (Water jellyfish)")
+  const chip = proteinsOf({ question: "Show the structure of GFP from Aequorea victoria" })
+  assert.deepEqual(chip.map((p) => [p.key, p.from, p.length, p.organism]), [["test:gfp", "test", 238, "Aequorea victoria (Water jellyfish)"]])
   // A test protein of the same entry as a source gives the source its sequence; a variant stays apart.
-  const merged = proteinsOf({ question: "Show the structure of thioredoxin, and of KRAS G12C", sources: [{ n: 1, url: "https://www.uniprot.org/uniprotkb/P0AA25/entry#function", title: "t", provider: "uniprot", text: ECOLI_TEXT }, kras] })
-  assert.deepEqual(merged.map((p) => [p.key, Boolean(p.sequence), p.note]), [["uniprot:P0AA25", true, undefined], ["uniprot:P01116", false, undefined], ["test:kras-g12c", true, "G12C variant"]])
+  const thio = { n: 1, url: "https://www.uniprot.org/uniprotkb/P0AA25/entry#function", title: "t", provider: "uniprot", text: ECOLI_TEXT }
+  assert.deepEqual(proteinsOf({ question: "Show the structure of thioredoxin from E. coli K-12", sources: [thio] }).map((p) => [p.key, Boolean(p.sequence), p.note]), [["uniprot:P0AA25", true, undefined]])
+  assert.deepEqual(proteinsOf({ question: "Show the structure of KRAS G12C", sources: [kras] }).map((p) => [p.key, Boolean(p.sequence), p.note]), [["uniprot:P01116", false, undefined], ["test:kras-g12c", true, "G12C variant"]])
+  for (const question of ["What does KRAS do?", "What causes insulin resistance?", "How does the spike protein bind ACE2?", "What does ubiquitin do?"])
+    assert.ok(!proteinsOf({ question, sources: [kras] }).some((p) => p.from === "test"), question)
   const many = proteinsOf({ question: Array.from({ length: 12 }, (_, i) => `P0${String(1000 + i)}`).join(" ") })
   assert.equal(many.length, MAX_PROTEINS)
   assert.deepEqual(proteinsOf({ question: "Does semaglutide lower the risk of stroke?", sources: [{ n: 1, url: "https://example.org/a", title: "a", provider: "exa", text: "no proteins" }] }), [])
@@ -110,7 +125,7 @@ test("the test proteins: 5 to 8 real UniProt entries, short enough for ESMFold, 
     if (t.range) assert.ok(t.range[0] >= 1 && t.range[1] <= t.uniprotLength && t.range[1] - t.range[0] + 1 === t.length, t.id)
     else assert.equal(t.length, t.uniprotLength, `${t.id}: the whole entry`)
     if (t.mutation) { const [, from, at, to] = /^([A-Z])(\d+)([A-Z])$/.exec(t.mutation)!; assert.equal(t.sequence[Number(at) - 1], to, t.id); assert.notEqual(from, to) }
-    assert.deepEqual(testsNamedIn(t.question).map((x) => x.id), [t.id], `${t.id}: its question names it, and only it`)
+    assert.equal(testAskedIn(t.question)?.id, t.id, `${t.id}: its question gives it`)
   }
 })
 
@@ -164,6 +179,8 @@ test("too long for ESMFold: AlphaFold DB with an accession (and it says why), a 
   const esmCalls = net.sent.filter((r) => r.url === ESMFOLD_URL).length
   await assert.rejects(folder.structure({ sequence: THIOREDOXIN }), /ESMFold answered 504/)
   assert.equal(net.sent.filter((r) => r.url === ESMFOLD_URL).length, esmCalls, "a recent failure is remembered in memory: ESMFold is not asked again at once")
+  await assert.rejects(folder.structure({ sequence: THIOREDOXIN, retry: true }), /ESMFold answered 504/)
+  assert.equal(net.sent.filter((r) => r.url === ESMFOLD_URL).length, esmCalls + 1, "a person asking again reaches ESMFold")
   const forced = await folder.structure({ accession: "P0AA25", prefer: "alphafold" })
   assert.equal(forced.model, "alphafold")
 })

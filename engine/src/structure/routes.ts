@@ -5,6 +5,7 @@
 //   GET /api/structure?accession=<UniProt>           the structure of a UniProt entry (its sequence is read from UniProt)
 //   GET /api/structure?sequence=<residues>[&accession=]   the structure of a sequence (the accession allows AlphaFold DB as a fallback)
 //       &prefer=alphafold                            AlphaFold DB's model instead of an ESMFold prediction
+//       &retry=1                                     a person asked again: ESMFold is asked even after a recent failure
 //
 // Free and keyless (no paid switch is involved), only read, and open to local callers like the other reads. A structure is
 // fetched only when a person opens one, and kept on disk afterwards (fold.ts).
@@ -19,8 +20,8 @@ export interface StructureOptions { fetch?: FoldDeps["fetch"]; now?: FoldDeps["n
 /** Where kept structures live: board/runs/.structures/ (DRUG_BOARD_RUNS_DIR moves it with the rest). */
 export const structureDir = (config: BoardConfig): string => path(config, "runs", ".structures")
 
-/** A test protein as the dashboard lists it: no search aliases. */
-export const testList = () => testProteins().map(({ aliases: _a, ...t }) => ({ ...t, uniprot: `https://www.uniprot.org/uniprotkb/${t.accession}/entry` }))
+/** A test protein as the dashboard lists it. */
+export const testList = () => testProteins().map((t) => ({ ...t, uniprot: `https://www.uniprot.org/uniprotkb/${t.accession}/entry` }))
 
 export function createStructure(config: BoardConfig, options: StructureOptions = {}) {
   const folder = createFolder({ dir: options.dir ?? structureDir(config), fetch: options.fetch, now: options.now })
@@ -44,7 +45,7 @@ export function createStructure(config: BoardConfig, options: StructureOptions =
       sequence = t.sequence; accession = t.accession
     }
     try {
-      json(res, 200, await folder.structure({ sequence, accession, ...(prefer ? { prefer: prefer as Model } : {}) }))
+      json(res, 200, await folder.structure({ sequence, accession, ...(prefer ? { prefer: prefer as Model } : {}), ...(q.get("retry") === "1" ? { retry: true } : {}) }))
     } catch (error) {
       if (error instanceof StructureError) return json(res, error.status, { error: error.message })
       throw error

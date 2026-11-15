@@ -23,7 +23,7 @@ export const ESMFOLD_URL = "https://api.esmatlas.com/foldSequence/v1/pdb/"
 export const MAX_ESMFOLD = 400
 export const TIMEOUT_MS = { esmfold: 30_000, alphafold: 20_000, uniprot: 15_000 } as const
 export const MAX_BYTES = 8_000_000
-/** How long ESMFold's failure on one sequence is remembered (in memory only): meanwhile that sequence goes straight to AlphaFold DB, or gets the same error. */
+/** How long ESMFold's failure on one sequence is remembered (in memory only): meanwhile that sequence goes straight to AlphaFold DB, or gets the same error, unless a person asks again (`retry`). */
 export const FAILURE_MS = 10 * 60_000
 /** Folds or downloads at once in this process; more are refused (429) rather than queued. */
 export const MAX_IN_FLIGHT = 2
@@ -42,6 +42,8 @@ export interface StructureAsk {
   accession?: string
   /** "alphafold": skip ESMFold. Default: ESMFold when the sequence fits, else AlphaFold DB. */
   prefer?: Model
+  /** A person asked again ("Try again"): ESMFold is asked even if it failed on this sequence a moment ago. */
+  retry?: boolean
 }
 
 export interface Structure {
@@ -154,12 +156,12 @@ export function createFolder(deps: FoldDeps) {
   }
 
   const failed = new Map<string, { at: number; error: StructureError }>() // ESMFold's recent failures, by sequence key
-  async function esmfold(sequence: string, accession?: string): Promise<Structure> {
+  async function esmfold(sequence: string, accession?: string, retry = false): Promise<Structure> {
     const key = keyOf(["esmfold", sequence])
     const hit = kept(key)
     if (hit) return hit
     const recent = failed.get(key)
-    if (recent && now() - recent.at < FAILURE_MS) throw recent.error
+    if (recent && !retry && now() - recent.at < FAILURE_MS) throw recent.error
     let pdb: string, residues: number, meanPlddt: number
     try {
       const r = await get("esmfold", ESMFOLD_URL, { method: "POST", body: sequence, headers: { "content-type": "text/plain" } }, "text/plain, chemical/x-pdb, */*")
@@ -220,7 +222,7 @@ export function createFolder(deps: FoldDeps) {
       const long = sequence.length > MAX_ESMFOLD
       if (long && !accession) throw new StructureError(422, `ESMFold's free API folds at most ${MAX_ESMFOLD} amino acids, and this sequence has ${sequence.length}. With a UniProt accession, AlphaFold DB's model could be shown instead.`)
       if (long) return { ...(await alphafold(accession!)), note: `AlphaFold DB's model is shown because this protein has ${sequence.length} amino acids, and ESMFold's free API folds at most ${MAX_ESMFOLD}.` }
-      try { return await esmfold(sequence, accession) } catch (error) {
+      try { return await esmfold(sequence, accession, ask.retry === true) } catch (error) {
         if (!accession || (error instanceof StructureError && error.status === 400)) throw error
         const why = error instanceof Error ? error.message : "ESMFold failed"
         const af = await alphafold(accession)
