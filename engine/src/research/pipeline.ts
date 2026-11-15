@@ -2,7 +2,7 @@
 //
 //   prepare   a cheap model writes the queries and the opening sentence (a fixed fallback when its reply cannot be read)
 //   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC,
-//             OpenAlex, Semantic Scholar and arXiv at once, merged: search/scholarly.ts),
+//             OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv at once, merged: search/scholarly.ts),
 //             further web searches and, at the standard level, database lookups
 //   evaluate  each search's results are screened by the board's first pass (triage.ts)
 //   sources   what was kept is numbered [1]..[n]; the selection says why each was kept and why the others were not

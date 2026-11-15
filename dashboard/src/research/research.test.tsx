@@ -75,7 +75,7 @@ describe("what the events add up to", () => {
     expect(progressLine(foldAnswer([]))).toBe("Starting…")
     expect(at(1)).toBe("Searching the web…")
     expect(at(2)).toBe("Found 10 in the web, kept 2.")
-    expect(at(3)).toBe("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)…")
+    expect(at(3)).toBe("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)…")
     expect(at(5)).toBe("Kept 4 sources. Writing…")
     expect(at(8)).toBe("Writing…")
     expect(at(10)).toBe("Two reviewers are checking the answer…")
@@ -144,7 +144,7 @@ describe("the answer on the page", () => {
   })
   it("while it works: an honest progress line, and a draft is not shown as checked", async () => {
     const { container } = await show(REAL.filter((e) => (e.seq ?? 0) <= 3))
-    expect(screen.getByRole("status")).toHaveTextContent("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)…")
+    expect(screen.getByRole("status")).toHaveTextContent("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)…")
     await feed(REAL.filter((e) => (e.seq ?? 0) > 3 && (e.seq ?? 0) <= 7))
     expect(screen.getByRole("status")).toHaveTextContent("Writing…")
     expect(container).toHaveTextContent("Still being written. It has not been checked yet.")
@@ -498,7 +498,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
     const [failed, empty, writing, checking] = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
     expect(failed).toHaveTextContent("✕"); expect(failed).toHaveTextContent("failed"); expect(failed).toHaveTextContent("0.1s") // never shown as done
     expect(empty).toHaveTextContent("○"); expect(empty).toHaveTextContent("found nothing"); expect(empty).toHaveTextContent("0.8s")
-    expect(empty).toHaveTextContent("the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)") // one literature step asks all four indexes
+    expect(empty).toHaveTextContent("the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)") // one literature step asks all six sources
     expect(writing).toHaveTextContent("…"); expect(checking).toHaveTextContent("2/6") // a count only where the engine has one
     expect(screen.queryByText("Expand all")).toBeNull() // fewer than six rows
     await user.click(within(failed).getByRole("button", { name: /Searching the web/ }))

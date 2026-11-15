@@ -25,7 +25,7 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `engine/src/` | The backend (TypeScript, run directly by Node.js, no build step). | In use. |
 | `engine/src/board/board.ts`, `agents.ts`, `claims.ts`, `triage.ts`, `checkers.ts`, `mock.ts` | The team review: rounds, members, statements, checks, and the fixed replies of a practice run. | In use. |
 | `engine/src/search/exa.ts`, `exaledger.ts`, `literature.ts` | The scout's searches: Exa (paid, with a spend record and a ceiling) and Europe PMC (free). | In use. |
-| `engine/src/search/scholarly.ts` | The research answer's literature search: Europe PMC, OpenAlex, Semantic Scholar and arXiv (free), merged. | In use. |
+| `engine/src/search/scholarly.ts` | The research answer's literature search: Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv (free), merged. | In use. |
 | `engine/src/chat/` | The chat on the Search screen: catalogue, plans, routes. | In use. |
 | `engine/src/research/`, `engine/src/sources/` | A direct answer with numbered sources, and searches of public databases. | Being built. Not complete in `main`. |
 | `engine/src/glhf/` | The run tracker for swarm runs: start, follow, cancel, grade. | In use. |

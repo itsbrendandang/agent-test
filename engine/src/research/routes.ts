@@ -208,7 +208,7 @@ export function createResearch(deps: ResearchDeps) {
             pipeline = {
               ...shared, brain, firstPass: () => new FirstPass(models, config, false), writerModel: brain.names.writer,
               exa: deps.exa ?? ((query, objective) => exaSearch(query, objective, false, env, config.meeting.exa_highlight_chars)),
-              literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv: free, no key needed
+              literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: free, no key needed
               database: deps.database ?? (limits.levels[record.effort].databaseLookups ? await databaseLookup() : undefined),
               paidOff: () => paidCallsOff(env),
             }
