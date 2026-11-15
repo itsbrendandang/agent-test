@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { test } from "node:test"
-import { applyOverrides, runDir } from "../src/board/board.ts"
+import { applyOverrides, OverridesUnreadable, runDir } from "../src/board/board.ts"
 import { loadConfig } from "../src/config.ts"
 
 function setup(overrides?: unknown) {
@@ -29,8 +29,16 @@ test("overrides narrow members and limits and never widen them", () => {
   assert.equal(got.meeting.max_rounds, 1)
 })
 
-test("a broken or hostile overrides file changes nothing", () => {
-  for (const bad of ["{not json", { board: [], meeting: { max_usd: -1, max_rounds: "9" } }, { board: ["nobody"] }]) {
+test("an overrides file that cannot be read refuses the run instead of falling back to the config's wider limits", () => {
+  // A plan's narrower members and caps are in this file. Skipping it would run the plan on the whole config.
+  for (const bad of ["{not json", '{"meeting": {"max_usd": 0.', "[]", "null", ""]) {
+    const config = setup(bad)
+    assert.throws(() => applyOverrides(config, "r1"), (e: Error) => e instanceof OverridesUnreadable && /run r1: overrides\.json/.test(e.message), JSON.stringify(bad))
+  }
+})
+
+test("a hostile overrides file changes nothing", () => {
+  for (const bad of [{ board: [], meeting: { max_usd: -1, max_rounds: "9" } }, { board: ["nobody"] }]) {
     const config = setup(bad)
     const got = applyOverrides(config, "r1")
     assert.deepEqual(got.board, config.board)

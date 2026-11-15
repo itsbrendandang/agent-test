@@ -22,7 +22,7 @@
 //   reports tokens but no cost is charged at meeting.fallback_usd_per_mtok and the run is marked
 //   costEstimated, so an unpriced model still reaches the budget.
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { bool, map, obj, oneOf, opt, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
@@ -44,6 +44,7 @@ import { researchSpentToday } from "../research/spend.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "../models.ts"
 import { holder, take } from "../runlock.ts"
+import { writeWhole } from "../fsx.ts"
 
 const ctx = BACKGROUND_CONTEXT
 
@@ -512,7 +513,7 @@ export function rememberRun(config: BoardConfig, runId: string, ledger: { member
     }
     if (!changed) continue
     const kept = notes.slice(-(config.memory.max_notes ?? 40))
-    writeFileSync(file, `${head}\n\n${MEMORY_MARK}\n\nClaims you made that a checker verified or contradicted. A verified claim still needs a source in the new run. Do not repeat a contradicted one.\n\n${kept.join("\n")}\n`)
+    writeWhole(file, `${head}\n\n${MEMORY_MARK}\n\nClaims you made that a checker verified or contradicted. A verified claim still needs a source in the new run. Do not repeat a contradicted one.\n\n${kept.join("\n")}\n`)
     written += changed
   }
   return written
@@ -531,7 +532,7 @@ export async function startRun(briefFile: string, options: { config?: BoardConfi
   const runId = newRunDir(config, `${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}-${brief.id}`)
   const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, firstPassUsd: 0, usd: 0, mock }
   saveState(config, state)
-  if (options.maxUsd !== undefined && options.maxUsd < config.meeting.max_usd) writeFileSync(`${runDir(config, runId)}/overrides.json`, JSON.stringify({ meeting: { max_usd: options.maxUsd } }))
+  if (options.maxUsd !== undefined && options.maxUsd < config.meeting.max_usd) writeWhole(`${runDir(config, runId)}/overrides.json`, JSON.stringify({ meeting: { max_usd: options.maxUsd } }))
   new EventLog(`${runDir(config, runId)}/events.jsonl`).emit("run", { type: "run.started", runId, brief: brief.id, title: brief.title, mock })
   return runId
 }
@@ -568,13 +569,21 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void, o
 /** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
 export const RUN_OVERRIDES = true
 
-/** A run started from a chat plan carries its own members and limits. They can only narrow the config, never widen it. */
+/** A run's overrides.json exists and cannot be read: its plan's limits are unknown, so the run does not start. */
+export class OverridesUnreadable extends Error {}
+
+/**
+ * A run started from a chat plan carries its own members and limits. They can only narrow the config, never widen it.
+ * A file that exists but cannot be read is refused (OverridesUnreadable), not skipped: skipping it would run the plan on
+ * the config's wider members and caps. A value that cannot narrow (not a number, an unknown member) is ignored.
+ */
 export function applyOverrides(config: BoardConfig, runId: string): BoardConfig {
   const file = `${runDir(config, runId)}/overrides.json`
   if (!existsSync(file)) return config
+  const refuse = (why: string) => new OverridesUnreadable(`run ${runId}: overrides.json ${why}, so the limits its plan set are unknown and the run is not started. Fix the file (or start a new run from the plan).`)
   let raw: unknown
-  try { raw = JSON.parse(readFileSync(file, "utf8")) } catch { return config }
-  if (!raw || typeof raw !== "object") return config
+  try { raw = JSON.parse(readFileSync(file, "utf8")) } catch (error) { throw refuse(`cannot be read (${error instanceof Error ? error.message : String(error)})`) }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw refuse("is not a JSON object")
   const o = raw as { board?: unknown; meeting?: Record<string, unknown> }
   const names = Array.isArray(o.board) ? o.board.filter((n): n is string => typeof n === "string") : null
   const board = names ? config.board.filter((n) => names.includes(n)) : config.board
@@ -759,8 +768,8 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
       const missing = missingMemoSections(args.memo)
       if (missing.length) return { output: [{ type: "text", text: `Memo not saved. Missing or empty "## " sections: ${missing.join(", ")}. Write them from the board's record, then call write_memo again.` }] }
       const dir = runDir(config, runId)
-      writeFileSync(`${dir}/memo.md`, args.memo)
-      writeFileSync(`${dir}/verification_ledger.json`, JSON.stringify(state.ledger, null, 2))
+      writeWhole(`${dir}/verification_ledger.json`, JSON.stringify(state.ledger, null, 2))
+      writeWhole(`${dir}/memo.md`, args.memo) // last: the memo is what marks the run as written (runLocked checks for it)
       log.emit("memo", { type: "memo.written", path: `${dir}/memo.md`, decision: args.decision })
       return { output: [{ type: "text", text: "Memo saved." }], control: { terminate: true } }
     },
@@ -922,8 +931,9 @@ async function answerText(api: ToolExecutionApi, entryId: EntryId): Promise<stri
   return message.content.map((c: { type: string; text?: string }) => (c.type === "text" ? c.text ?? "" : "")).join("")
 }
 
+/** In one step (writeWhole): a cut run.json would hide the run from the list, stop its resume and drop its spend from the daily cap. */
 function saveState(config: BoardConfig, state: RunState) {
-  writeFileSync(`${runDir(config, state.runId)}/run.json`, JSON.stringify(state, null, 2))
+  writeWhole(`${runDir(config, state.runId)}/run.json`, JSON.stringify(state, null, 2))
 }
 
 export function loadState(config: BoardConfig, runId: string): RunState {
