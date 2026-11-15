@@ -28,7 +28,7 @@ is exactly `0`.
 
 | Variable | Default | Meaning | Code |
 |---|---|---|---|
-| `NO_PAID_CALLS` | not set, which means **no paid calls** | `0` allows paid calls: real models, cloud runs, Exa, the drug board's models and checkers, the model behind Ask. Any other value, or no value, refuses them. Only the person who pays sets it. The engine reads it at start. | `engine/src/paid/paid.ts` (the only place that reads it) |
+| `NO_PAID_CALLS` | not set, which means **no paid calls** | `0` allows paid calls: real models, cloud runs, Exa, the drug board's models and checkers, the model behind Ask, analyses on Modal (`ANALYSIS_BACKEND=modal`). Any other value, or no value, refuses them. Only the person who pays sets it. The engine reads it at start. | `engine/src/paid/paid.ts` (the only place that reads it) |
 
 `.env.example` has the line as a comment (`# NO_PAID_CALLS=0`), so a copy of that file keeps
 paid calls off.
@@ -76,8 +76,10 @@ Set these in `.env` or in your shell. All are optional.
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/search/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
+| `RESEARCH_PREVIEW` | not set, which means **off** | `1` turns on direct answers on the Research screen in Real mode (`POST /api/research`). Off: in Real mode the request answers 503 `{preview: false}`, and the Research screen makes a team-review plan instead and says that direct answers are off. Demo answers need no switch. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say whether it is on. | `engine/src/research/preview.ts` |
 | `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | not set | Both set: the engine also writes its records to a Supabase database, in the background. See [database.md](database.md). Never commit the key. | `engine/src/db/supabase.ts` |
 
 ### Run tracker
 
@@ -91,6 +93,8 @@ Set these in `.env` or in your shell. All are optional.
 | `GLHF_BIXBENCH3_CMD` | `uv run bixbench3` | The command for cloud runs. Tests can replace it. |
 | `GLHF_BIXBENCH3_RUNS` | `glhf/bixbench/runs` | Where the cloud runner writes run manifests. |
 | `GLHF_LOCAL_CMD` | `uv run python -m bixbench3.glhf_local` | The command for local runs. The arguments stay the same. Tests replace it with a stand-in script. |
+| `GLHF_LOCAL_MODAL_CMD` | `uv run --project glhf/bixbench_v1 --group modal python -m bixbench3.glhf_local` (or `GLHF_LOCAL_CMD` when that is set) | The command for local runs whose analyses run on Modal. |
+| `GLHF_MODAL_CLEANUP_CMD` | `uv run --project glhf/bixbench_v1 --group modal python -m bixbench_v1.glhf_modal` | The command that terminates the Modal sandboxes a stopped run left (`terminate --run-dir DIR` is added). Tests replace it. |
 | `GLHF_CANCEL_GRACE_MS` | `5000` | On cancel, the time between SIGTERM and SIGKILL for the runner and the processes it started. |
 | `GLHF_RUNS_DIR` | `glhf/runs` | Folder for run folders, the tracker's database (`tracker.sqlite`), the tracker lock and the token file. Tests use a temporary folder, so they do not touch real runs. Read in `engine/src/glhf/store.ts`. |
 
@@ -98,6 +102,54 @@ All others are read in `engine/src/glhf/task.ts`.
 
 If you set `GLHF_RUNS_DIR`, set it for the engine and for the CLI. The CLI reads the token
 and the run records from the same folder.
+
+### Where the swarm's analyses run: `ANALYSIS_BACKEND`
+
+A local swarm run (and its single-agent baseline) runs all of its analysis code in one sandbox:
+every command the roles run (bash, Python, R), the shape checks, and the registered tests that
+the harness runs to decide a claim's verdict. The research answers and the team review run no
+code, so this is the only place where the engine runs analyses.
+
+| Variable | Default | Meaning | Code |
+|---|---|---|---|
+| `ANALYSIS_BACKEND` | `local` | `local`: a Docker container on this machine. `modal`: a Modal sandbox. Any other value is refused when a run starts, with the reason. | `engine/src/glhf/modal.ts` |
+| `GLHF_MODAL_MAX_USD` | `2` | The most one Modal run may cost, in US dollars. It must be a positive number. | `engine/src/glhf/modal.ts` |
+| `GLHF_MODAL_CANCEL_INT_MS` | `90000` | On cancel of a Modal run, the time between SIGINT and SIGTERM. The runner needs it to copy `/outputs` back and terminate its sandboxes. | `engine/src/glhf/task.ts` |
+
+With `modal`:
+
+- The sandbox is the one from PR #32 (`glhf/bixbench_v1/src/bixbench_v1/glhf_modal.py`). It
+  uses the checked R/conda image `bixbench-v1-env:amd64-1`, and every sandbox is refused unless
+  its packages match `modal_env/expected-env.json`. It has no network, a fixed size (4 cores,
+  16 GiB) and a timeout (the run's time limit plus 10 minutes).
+- Only the regular files of the case's `data/` folder are uploaded, each an accepted data type.
+  The grader, the prompt and the run folder are never uploaded. Only `/outputs` comes back;
+  `workspace/` stays empty on this machine.
+- Each registered test records where it ran. The `test.executed` event and the test's `run`
+  in the ledger have `backend` (`docker` or `modal`) and `sandbox_id`. The run's `settings`
+  event has `analysis_backend`, `run.json` has `settings.sandbox` and `settings.modal`, and the
+  engine's record has `settings.analysisBackend` and `modal` (cost). The Compare screen and
+  the Agent Log show it.
+- It is a paid call, also for a practice run with the scripted model. While paid calls are off
+  the engine refuses the run with the reason. It never runs the analyses on this machine
+  instead. Over HTTP it needs the session token.
+- Cost. Per run: the runner refuses a run whose worst case (the sandbox alive until its
+  timeout) is above `GLHF_MODAL_MAX_USD`. Per day: Modal runs count against
+  `meeting.daily_usd` in `board/config.yaml`, together with answers and team reviews. A
+  running Modal run counts at its whole cap. The cost is read from
+  `<run folder>/modal_ledger.jsonl`; it is an estimate from Modal's prices, and Modal's own
+  bill is the authority.
+- If Modal cannot be used (no `modal` group, no login, a Modal error), the run fails with the
+  reason. Sandboxes are always terminated: by the runner, also after an error or Ctrl+C, and
+  after a cancel the engine terminates any sandbox left with the run's tag
+  (`python -m bixbench_v1.glhf_modal terminate`).
+- A run on Modal is compared only with runs on Modal (`pairKey` in
+  `engine/src/glhf/scoreboard.ts`): another machine and another image.
+
+Set up once: `modal token new`, then in `glhf/bixbench_v1`:
+`uv sync --group modal --python 3.12`. The engine starts the runner as
+`uv run --project glhf/bixbench_v1 --group modal python -m bixbench3.glhf_local ... --sandbox modal`.
+`npm run doctor` shows what is missing.
 
 ### BixBench v1
 
@@ -119,7 +171,8 @@ and the run records from the same folder.
 | `PORT`, `DASHBOARD_DIR` | `5317`, `/srv/dashboard` | Used by the dashboard container only. | `docker/serve.mjs` |
 
 The local sandbox has no network and holds only Python 3.12. It has no bioinformatics tools.
-It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtime image.
+It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtime image. With
+`ANALYSIS_BACKEND=modal` the sandbox is a Modal sandbox with R and conda instead (see above).
 
 ## Drug board: `board/config.yaml`
 
@@ -128,7 +181,7 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `meeting.max_minutes` | 15 | Time for one run. After this the lead is told to finish. |
 | `meeting.max_usd` | 5 | Spend limit for one run, all agents and checkers together. |
 | `meeting.max_rounds` | 4 | Rounds before final positions are forced. |
-| `meeting.daily_usd` | 20 | Limit for all runs started today. Past it, starts and resumes are refused. |
+| `meeting.daily_usd` | 20 | Limit for all runs started today: team reviews, research answers and swarm runs whose analyses run on Modal. Past it, starts and resumes are refused. |
 | `meeting.lead_turns` | 20 | Model calls the lead may make in one run. |
 | `meeting.member_turns` | 6 | Model calls each member may make per question. |
 | `meeting.max_escalations` | 12 | OpenAI and Claude Code checks per run. |
@@ -150,4 +203,11 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `checkers.claude_code_tools` | `Read Write` | Tools the checker may use without asking. It runs in an empty temporary folder. Its environment holds only a fixed list of variables (`CHILD_ENV` in `engine/src/board/checkers.ts`), so other providers' keys are not passed. |
 | `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
 | (warning for the two keys above) | | The checker is not in a container. It runs as your user. If you remove `--restricted` or add `Bash(python3:*)` to the tools, code that it writes can read any file you can read (also `.env`) and use the network. Do that only inside a container. The `--restricted` mode was not tested with a live call. |
-| `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |
+| `board` | 7 member names | Members and their speaking order. Remove a line to leave a member out. |
+
+The engine checks this file each time it reads it (`checkConfig` in `engine/src/config.ts`). `max_minutes`,
+`max_usd`, `max_rounds` and `daily_usd` must be numbers of 0 or more. The other `meeting` limits may be left out,
+but when present they must be numbers of 0 or more too. `board` must be a list of names that includes `scout`
+and `evidence-verifier`.
+Otherwise the engine stops with an error that names the file and the key (`$5` or `20 dollars` is refused, not
+read as no limit).

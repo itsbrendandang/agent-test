@@ -4,7 +4,7 @@
 // input-method choice (Japanese, Chinese, Korean) does not send, and the text is capped at the engine's limit.
 // What sending does is the caller's (`onSubmit`).
 import type { ReactNode, Ref } from "react"
-import "./research.css"
+import "../design/research.css"
 import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input"
 import type { Effort, EffortId } from "@/home/api"
 import { MAX_MESSAGE } from "@/home/chat"

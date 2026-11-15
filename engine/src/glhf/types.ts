@@ -9,6 +9,11 @@ export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "don
 export const settled = (phase: GlhfPhase) => phase === "done" || phase === "failed" || phase === "cancelled"
 export type Solver = "single" | "glhf"
 export type Mode = "local" | "cloud"
+/**
+ * Where a local run's analyses execute (every command the roles run and every registered test): "local" is a Docker
+ * container on this machine, "modal" a Modal sandbox (ANALYSIS_BACKEND, see modal.ts). Cloud runs run theirs on their VM.
+ */
+export type AnalysisBackend = "local" | "modal"
 export type Usage = Record<string, { input_tokens: number; output_tokens: number; total_tokens: number }>
 
 /** The settings that decide whether two runs can be compared. Copied from the request when a run starts. */
@@ -24,6 +29,8 @@ export interface RunSettings {
   effort?: string
   /** A short fingerprint of the case directory, when the run did not use the built-in demo case. */
   caseId?: string
+  /** "modal" when the analyses ran in a Modal sandbox (another machine and image: not comparable with a local run). Absent: on this machine. */
+  analysisBackend?: AnalysisBackend
 }
 
 export interface GlhfRun {
@@ -59,6 +66,8 @@ export interface GlhfRun {
   pairedWith?: string
   /** Something to keep in mind when reading this run, such as "started although <id> failed: ...". Kept to the end. */
   note?: string
+  /** Runs on Modal, once settled: what their sandboxes cost by the run's cost ledger (an estimate; Modal's bill is the authority), and how many there were. */
+  modal?: { usd: number; sandboxes: number; maxUsd: number }
 }
 
 /** POST /api/glhf/runs body, and the input of the durable task. JSON only (it is stored in the task). */
@@ -86,16 +95,20 @@ export interface RunRequest {
   seed?: number
   /** Start only when this run is settled. Set by the tracker for the second run of a pair, never by a caller. */
   after?: string
+  /** "modal" when the analyses run in a Modal sandbox (ANALYSIS_BACKEND=modal, local runs; billed, needs the token). Set by the tracker, never by a caller. */
+  analysisBackend?: AnalysisBackend
+  /** Modal runs: the most this run may cost on Modal, in USD (GLHF_MODAL_MAX_USD when the run was started). Set by the tracker, never by a caller. */
+  modalMaxUsd?: number
 }
 
 /**
  * POST /api/glhf/runs body: a RunRequest, where `solvers` may replace `solver`. Two solvers start a matched pair of
  * local runs, one after the other in the order given, with the same task, model, time limit, token budget and seed.
  */
-export type StartBody = Partial<Omit<RunRequest, "after">> & { solvers?: Solver[] }
+export type StartBody = Partial<Omit<RunRequest, "after" | "analysisBackend" | "modalMaxUsd">> & { solvers?: Solver[] }
 
 /** A field of the New-run form that a refusal is about, so the form can show the message next to the right input. */
-export type Field = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver"
+export type Field = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver" | "analysisBackend"
 
 export const MAX_SEED = 2 ** 31 - 1
 

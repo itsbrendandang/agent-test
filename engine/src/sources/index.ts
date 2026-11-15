@@ -28,6 +28,12 @@ export { createHttp, isSource, MAX_ITEMS, MAX_QUERY_CHARS, MAX_TEXT_CHARS, MIN_G
 export type { DatabaseSource, Http, SourceResult } from "./shared.ts"
 
 export const DEFAULT_MAX_DATABASE_SEARCHES = 20
+/**
+ * The most time one lookup may take, waits included. Each request has its own 15-second limit, but a lookup sends up to
+ * four, one after another, and waits its turn behind other lookups to the same service. Past this time the member is
+ * told and the run goes on; the lookup sends nothing more.
+ */
+export const LOOKUP_TIMEOUT_MS = 45_000
 
 const CLIENTS: Record<DatabaseSource, (query: string, http: Http) => Promise<SourceResult>> = {
   chembl: chemblSearch, clinicaltrials: clinicalTrialsSearch, openfda: openFdaSearch, opentargets: openTargetsSearch, uniprot: uniprotSearch, pubchem: pubchemSearch,
@@ -69,18 +75,24 @@ literature search, for facts that live in a registry or a curated database, not 
 /**
  * One live lookup in one database. Returns the records as evidence items (no more than MAX_ITEMS, with no provider
  * set: the caller labels them) and notes for the reader. An empty result is not an error. Throws ServiceError when
- * the service does not answer or its answer cannot be used. `http` is replaced in tests; the default reaches the network.
+ * the service does not answer or its answer cannot be used, or when the lookup takes longer than `timeoutMs`. `http`
+ * is replaced in tests; the default reaches the network (and keeps answers for a few minutes, see shared.ts).
  */
-export async function databaseLive(source: DatabaseSource, query: string, http: Http = liveHttp): Promise<SourceResult> {
+export async function databaseLive(source: DatabaseSource, query: string, http: Http = liveHttp, timeoutMs = LOOKUP_TIMEOUT_MS): Promise<SourceResult> {
   if (!isSource(source)) throw new ServiceError(`Unknown database "${String(source).slice(0, 40)}"`)
   const q = plainQuery(query)
   if (!q) return { items: [], notices: [`Write a query of 1 to ${MAX_QUERY_CHARS} characters. Nothing was looked up.`] }
+  const deadline = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { deadline.abort(); reject(new ServiceError(`${serviceName(source)} did not finish in ${Math.round(timeoutMs / 1000)} seconds`)) }, timeoutMs)
+  })
   let result: SourceResult
-  try { result = await CLIENTS[source](q, limited(http)) } catch (error) {
+  try { result = await Promise.race([CLIENTS[source](q, limited(http, undefined, deadline.signal)), late]) } catch (error) {
     if (error instanceof ServiceError) throw error
     // A client that trips over an answer it did not expect must not stop a run: it is reported as the service's failure.
     throw new ServiceError(`${serviceName(source)} sent an answer this lookup could not read`)
-  }
+  } finally { clearTimeout(timer) }
   return { items: result.items.slice(0, MAX_ITEMS), notices: result.notices }
 }
 

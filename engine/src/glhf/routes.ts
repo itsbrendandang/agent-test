@@ -10,7 +10,8 @@
 //   POST /api/glhf/runs          start a run. Needs the dashboard's Origin or the session token (403 without), also
 //                                for the scripted demo. Anything that can spend or touches shared state needs the
 //                                TOKEN (needsToken below): a real model, role models, Exa, memory, cloud, a case
-//                                directory. The Origin alone gets 401 {error, field: "token", needsToken: true}.
+//                                directory, analyses on Modal (ANALYSIS_BACKEND=modal).
+//                                The Origin alone gets 401 {error, field: "token", needsToken: true}.
 //                                With NO_PAID_CALLS on, what is paid is refused first (400), whoever asks.
 //                                Body: a RunRequest; `solvers: ["glhf", "single"]` instead of `solver` starts a
 //                                matched pair, the second when the first is settled. Answers 201 {id, ids}.
@@ -29,6 +30,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { allowedOrigin, type Caller, gate, type GateOptions, HttpError, type Need, readJson } from "../http.ts"
 import { childEnv, paidCallsOff } from "../paid/paid.ts"
 import { statusBody } from "./doctor.ts"
+import { analysisBackend } from "./modal.ts"
 import { scoreboard } from "./scoreboard.ts"
 import { BIXBENCH, listRuns, runDetail, runDir, RUNS, safeId } from "./store.ts"
 import { BadRequest, CannotCancel, checkStart, LocalBusy, NoSuchRun, openTracker, type Tracker, TrackerBusy } from "./tracker.ts"
@@ -124,22 +126,30 @@ export const requireTrust = (req: IncomingMessage, res: ServerResponse, need: Ne
   gate(req, res, need, what, { hasToken: hasSessionToken, tokenFile: TOKEN_FILE, ...options })
 
 const has = (value: unknown) => value !== undefined && value !== null && value !== false && value !== "" && value !== 0
+/** Would this body run its analyses on Modal: a local run while ANALYSIS_BACKEND is modal (or not readable)? */
+function asksModal(b: Record<string, unknown>): boolean {
+  if (b.mode === "cloud") return false
+  try { return analysisBackend() === "modal" } catch { return true } // a bad setting is refused by checkStart; until then, the stricter rule
+}
+
 /**
  * Does starting this need the token? Yes for all but the plain scripted run: a real model (anything that is not
- * exactly "mock"), role models, Exa, shared memory, a cloud run, a case directory. A body this misses is still
- * not started: the caller is then checked as an unknown one (checkStart with no trust), who gets the demo only.
+ * exactly "mock"), role models, Exa, shared memory, a cloud run, a case directory, analyses on Modal (billed by
+ * Modal, also with the scripted model). A body this misses is still not started: the caller is then checked as an
+ * unknown one (checkStart with no trust), who gets the demo only.
  */
 export function needsToken(body: unknown): boolean {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return false // refused as a bad request
   const b = body as Record<string, unknown>
   const roleModels = b.roleModels
   return (typeof b.model === "string" && b.model !== "mock") || b.mode === "cloud" || has(b.exa) || has(b.memory) || has(b.caseDir)
-    || (typeof roleModels === "object" && roleModels !== null && Object.keys(roleModels).length > 0)
+    || (typeof roleModels === "object" && roleModels !== null && Object.keys(roleModels).length > 0) || asksModal(b)
 }
 
-/** Is this a run only a token holder may stop? Everything but a scripted local run without Exa and memory. */
+/** Is this a run only a token holder may stop? Everything but a scripted local run without Exa, memory and Modal. */
 export const paidRun = (run: GlhfRun): boolean =>
   run.model !== "mock" || run.mode !== "local" || Object.keys(run.roleModels ?? {}).length > 0 || Boolean(run.settings?.exa) || Boolean(run.settings?.memory)
+  || run.settings?.analysisBackend === "modal"
 
 export interface GlhfOptions { /** Reads the roles from the solver code. Tests replace it. */ loadRoles?: RolesLoader }
 
@@ -162,7 +172,7 @@ export async function handleGlhf(req: IncomingMessage, res: ServerResponse, part
         // The switch first: with paid calls off, what is paid is refused as such (400), whoever asks. Checked with
         // full trust so that the refusal is about the switch and not about the caller.
         if (paidCallsOff()) checkStart(body, true)
-        if (!requireTrust(req, res, "spend", "a run with a real model, Exa, memory, the cloud or a case directory")) return
+        if (!requireTrust(req, res, "spend", "a run with a real model, Exa, memory, the cloud, a case directory or analyses on Modal")) return
       }
       // Past this point a caller without the token has asked for the plain scripted run only.
       const requests = checkStart(body, { token: hasToken(req), origin: false })

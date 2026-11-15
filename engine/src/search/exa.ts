@@ -27,17 +27,25 @@ export interface SearchResult {
 }
 
 interface ExaResponse {
-  results: { url: string; title?: string | null; highlights?: string[]; publishedDate?: string }[]
+  /** `image`: a picture of the page (its og:image), which Exa returns with some results in the same response. */
+  results: { url: string; title?: string | null; highlights?: string[]; publishedDate?: string; image?: string | null }[]
   notices?: { code: string; message: string }[]
   costDollars?: unknown
   warnings?: { code: string; message: string }[]
 }
 
-/** One live Exa search. Throws on a non-2xx response. */
-export async function exaLive(query: string, objective: string, apiKey: string, highlightChars?: number): Promise<SearchResult> {
+/**
+ * How long one Exa request may take, the response body included. Without a limit a connection that never answers holds
+ * a board round open with no end: the round waits for every member, and max_minutes is checked only between rounds.
+ */
+export const EXA_TIMEOUT_MS = 30_000
+
+/** One live Exa search. Throws on a non-2xx response, and after `timeoutMs` (a TimeoutError). */
+export async function exaLive(query: string, objective: string, apiKey: string, highlightChars?: number, timeoutMs = EXA_TIMEOUT_MS): Promise<SearchResult> {
   refusePaid("Exa search (api.exa.ai)")
   const res = await fetch("https://api.exa.ai/search", {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { "content-type": "application/json", "x-api-key": apiKey },
     // Bare highlights (Exa's recommendation) unless the board asks for a size: highlights are what a claim is checked against.
     body: JSON.stringify({ query, objective, type: "auto", contents: { highlights: highlightChars ? { maxCharacters: highlightChars } : true } }),
@@ -47,7 +55,7 @@ export async function exaLive(query: string, objective: string, apiKey: string, 
   // Warnings are about our request and are for developers; they never go to a model.
   for (const w of body.warnings ?? []) console.warn(`exa warning ${w.code}: ${w.message}`)
   return {
-    items: body.results.map((r) => ({ url: r.url, title: r.title || r.url, text: (r.highlights ?? []).join("\n") })),
+    items: body.results.map((r) => ({ url: r.url, title: r.title || r.url, text: (r.highlights ?? []).join("\n"), ...(typeof r.image === "string" && r.image ? { image: r.image } : {}) })),
     notices: (body.notices ?? []).map((n) => n.message),
     costUsd: reportedCost(body.costDollars),
   }

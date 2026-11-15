@@ -153,7 +153,7 @@ describe("a row", () => {
   it("filters by kind with plain names", async () => {
     show(false)
     await rowOf("a-live")
-    expect(within(screen.getByRole("group", { name: "Kind of record" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["All", "Answers", "Team reviews", "Benchmark runs"])
+    expect(within(screen.getByRole("group", { name: "Kind of record" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["All", "Answers", "Team reviews", "Benchmark runs", "Examples"])
     await userEvent.setup().click(screen.getByRole("button", { name: "Answers" }))
     await waitFor(() => expect([...document.querySelectorAll('ul[aria-label="Saved research"] > li')].map((li) => li.getAttribute("data-record"))).toEqual(["answer:a-live", "answer:a-demo"]))
   })

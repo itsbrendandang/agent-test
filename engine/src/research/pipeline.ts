@@ -1,8 +1,10 @@
 // One research answer, from the question to the reviewed text. docs/research-answer.md describes it in plain words.
 //
 //   prepare   a cheap model writes the queries and the opening sentence (a fixed fallback when its reply cannot be read)
-//   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC),
-//             further web searches and, at the standard level, database lookups
+//   search    one Exa web search opens every answer; then, at the same time, the free literature search (Europe PMC,
+//             OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv at once, merged: search/scholarly.ts),
+//             further web searches, for a question about a lab method the published lab protocols (protocol
+//             journals and protocols.io: search/protocols.ts) and, at the standard level, database lookups
 //   evaluate  each search's results are screened by the board's first pass (triage.ts)
 //   sources   what was kept is numbered [1]..[n]; the selection says why each was kept and why the others were not
 //   write     the strong model writes a draft from the numbered sources only
@@ -10,6 +12,9 @@
 //             sentence against each source it cites, with the board's quote rule) and the critic (the whole draft)
 //   revise    ONE revision by the writer; every cited sentence it changed or added is checked again
 //   save      the record and the result files (answer.md, sources.json, sources.csv) are written and registered
+//
+// A plain factual question ("What is a cell?") takes the SHORT PATH (`shortPath`): one search, a short draft with the
+// least thinking, one round of statement checks; no hypotheses, specialists, critic or revision.
 //
 // Every stage is a STEP in the event log: step.started, then step.finished with a status and the measured time. A step
 // that failed or could not run is still written, with a plain error and what it means for the reader.
@@ -36,6 +41,8 @@ import type { Model, Models, ThinkingLevel } from "@earendil-works/pi-ai"
 import type { BoardConfig } from "../config.ts"
 import type { EvidenceItem } from "../events.ts"
 import type { SearchResult } from "../search/exa.ts"
+import { MAX_MERGED, titleKey } from "../search/scholarly.ts"
+import { isProtocolTitle, MAX_PROTOCOLS } from "../search/protocols.ts"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../paid/exaledger.ts"
@@ -47,7 +54,7 @@ import { answerNotes, specialistRoom, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
-import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
+import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, looksProtocol, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, imageUrl, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
 import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
 export const DATABASES = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"] as const
@@ -59,11 +66,15 @@ export interface Plan {
   medical: boolean
   web: { query: string; objective: string }[]
   literature: string[]
+  /** Searches of published lab protocols (search/protocols.ts). Empty unless the question is about a lab method (`withProtocols`). */
+  protocols: string[]
   databases: { source: Database; query: string }[]
   /** The one sentence that says what will be done. Checked by code; a code-built sentence when the planner's is not usable. */
   opening: string
   /** True when the planner's reply could not be used and the queries were made from the question's own words. */
   fallback: boolean
+  /** The planner judged it a plain factual question with one settled answer ("What is a cell?"). Code decides whether the short path is taken (`shortPath`). */
+  simple: boolean
 }
 
 export const DEFAULT_OBJECTIVE = "Reports of original research and official sources that answer the question rank first; leave out marketing pages and news without data. Pull the reported findings with their numbers and units."
@@ -80,9 +91,11 @@ export interface Brain {
   /** Worst-case dollars of one call of each step, given the size of its input in characters. */
   /** The model a method specialist runs on: the level's tier (cheap at quick, strong at standard). */
   specialistModel: string
-  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
+  /** `short`: a short-path draft (`SHORT`), priced at its smaller output cap. Only the "write" step uses it. */
+  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number, short?: boolean): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
-  write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<Reply>
+  /** `short`: the short path for a plain factual question (`SHORT`): fewer output tokens and the least thinking the model has. */
+  write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void, short?: boolean): Promise<Reply>
   critique(system: string, user: string, signal: AbortSignal): Promise<Reply>
   revise(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** The critic again, after the revision: does the revised text resolve each of its notes. */
@@ -125,6 +138,8 @@ export interface PipelineDeps {
   exa: (query: string, objective: string) => Promise<SearchResult>
   /** One free literature search (literature.ts). */
   literature: (query: string) => Promise<SearchResult>
+  /** One free search of published lab protocols (protocols.ts). Absent: no protocol is searched. */
+  protocols?: (query: string) => Promise<SearchResult>
   /** One database lookup (sources/), when that module is there. */
   database?: (source: Database, query: string) => Promise<SearchResult>
   /** The method specialists whose notes fit a question, best first (specialists.ts: matchSpecialists). Absent: no answer gets one. */
@@ -241,10 +256,11 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     checkerIndependent: checker.independent,
     criticIndependent: critic.independent,
     specialistModel: specialist.qualified,
-    worstCase(step, inputChars) {
+    worstCase(step, inputChars, short) {
       switch (step) {
         case "plan": return price(planner, inputChars, PLAN_TOKENS)
-        case "write": case "revise": return price(writer, inputChars, level.maxOutputTokens)
+        case "write": return price(writer, inputChars, short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens)
+        case "revise": return price(writer, inputChars, level.maxOutputTokens)
         case "section": return price(writer, inputChars, sectionTokens(level))
         case "specialist": return price(specialist, inputChars, sectionTokens(level))
         case "critic": return price(critic.model, inputChars, CRITIC_TOKENS)
@@ -256,7 +272,7 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
       }
     },
     plan: (system, user, signal) => ask(planner, "the query planner", system, user, PLAN_TOKENS, "quiet", signal),
-    write: (system, user, signal, onDelta) => ask(writer, "the writer", system, user, level.maxOutputTokens, "low", signal, onDelta),
+    write: (system, user, signal, onDelta, short) => ask(writer, "the writer", system, user, short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens, short ? "quiet" : "low", signal, onDelta),
     critique: (system, user, signal) => ask(critic.model, "the critic", system, user, CRITIC_TOKENS, "low", signal),
     revise: (system, user, signal) => ask(writer, "the writer (revision)", system, user, level.maxOutputTokens, "low", signal),
     rejudge: (system, user, signal) => ask(critic.model, "the critic (second look)", system, user, REJUDGE_TOKENS, "low", signal),
@@ -274,13 +290,46 @@ const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typ
 /** The plan when the planner's reply cannot be used: the question itself for the web search, its main words for the literature. */
 export function fallbackPlan(question: string): Plan {
   const keywords = keywordsOf(question)
-  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], databases: [], opening: openingFallback(false), fallback: true }
+  return { keyQuestion: oneLine(question, 600), medical: looksMedical(question), web: [{ query: oneLine(question, MAX_QUERY_CHARS), objective: DEFAULT_OBJECTIVE }], literature: keywords.split(" ").length >= 2 ? [keywords] : [oneLine(question, 120)], protocols: [], databases: [], opening: openingFallback(false), fallback: true, simple: false }
+}
+
+/**
+ * The short path for a plain factual question ("What is a cell?"): one search, a short answer written with the least
+ * thinking, one round of statement checks. No hypotheses, no method specialists, no further searches, no critic, no
+ * revision. Harder questions are not touched.
+ */
+export const SHORT = { words: 120, outputTokens: 1_000, sourcesKept: 3 } as const
+export const SHORT_OPENING = "This is a plain factual question, so I'll keep it short: one search, a short answer from what it finds, and a check of each statement against its source."
+
+/**
+ * Whether an answer takes the short path. The planner's word that the question is simple decides, with two exclusions
+ * that code adds: the plan was read (not the fallback), and the question is not about health (a medical answer always
+ * gets the full review). Not in a demo answer.
+ */
+export function shortPath(plan: Plan, medical: boolean): boolean {
+  return plan.simple && !plan.fallback && !medical && !plan.protocols.length
+}
+
+/** Protocol queries one answer runs, at most. */
+export const MAX_PROTOCOL_QUERIES = 2
+
+/**
+ * The plan with its protocol searches settled by code: the planner's protocol queries (at most MAX_PROTOCOL_QUERIES,
+ * and no more than the level's literature query limit). The planner decides: when it wrote none, none run. Only when its
+ * reply could not be read (the fallback plan) does code decide, with one query made from the first literature query
+ * for a question that asks for a lab protocol, an SOP or how to do a lab method (text.ts looksProtocol).
+ */
+export function withProtocols(plan: Plan, question: string, level: Pick<Level, "queries">): Plan {
+  const max = Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries))
+  if (plan.protocols.length) return { ...plan, protocols: plan.protocols.slice(0, max) }
+  if (plan.fallback && looksProtocol(question) && plan.literature[0]) return { ...plan, protocols: [plan.literature[0]], opening: openingFallback(plan.databases.length > 0, true) }
+  return plan
 }
 
 export const MAX_OPENING_CHARS = 240
 /** The opening sentence built by code from what the level runs. */
-export const openingFallback = (databases: boolean): string =>
-  `I'll search the web and PubMed${databases ? ", look in public databases," : ""} for this question, screen what comes back, write an answer from the kept sources, and check each statement against its source.`
+export const openingFallback = (databases: boolean, protocols = false): string =>
+  `I'll search the web${protocols ? ", PubMed and published lab protocols" : " and PubMed"}${databases ? ", look in public databases," : ""} for this question, screen what comes back, write an answer from the kept sources, and check each statement against its source.`
 
 // Words for work this pipeline never does. An opening that uses one is not shown: it would promise a step that does not run.
 const NOT_DONE = /\b(experiments?|simulat\w*|analy[sz]e the data|run (?:the |an? )?(?:analysis|code|model|pipeline)|download\w*|full[- ]text|full papers?|whole papers?|team|board|specialists?|agents?|datasets?|email|call|contact)\b/i
@@ -318,13 +367,15 @@ export function readPlan(text: string, question: string, level: Level): Plan {
     const query = line(d.query, 200)
     return query.length >= 2 ? [{ source: d.source as Database, query }] : []
   }).slice(0, level.databaseLookups)
+  const protocols = [...new Set((Array.isArray(body.protocols) ? body.protocols : []).map((q) => line(q, 120).replace(/["()]/g, " ").replace(/\b(AND|OR|NOT)\b/g, " ").replace(/\s+/g, " ").trim()).filter((q) => q.length >= 3))].slice(0, MAX_PROTOCOL_QUERIES)
   if (!web.length && !literature.length) return base
   const withDatabases = databases.length > 0
   return {
-    opening: readOpening(body.opening, withDatabases) ?? openingFallback(withDatabases),
+    opening: readOpening(body.opening, withDatabases) ?? openingFallback(withDatabases, protocols.length > 0),
     keyQuestion: line(body.key_question, 600) || base.keyQuestion,
     medical: body.medical === true || base.medical,
-    web: web.length ? web : base.web, literature: literature.length ? literature : base.literature, databases, fallback: false,
+    web: web.length ? web : base.web, literature: literature.length ? literature : base.literature, protocols, databases, fallback: false,
+    simple: body.simple === true,
   }
 }
 
@@ -432,10 +483,11 @@ export function readStances(text: string, n: number): Map<number, Stance> | unde
  *   both                    -> unsupported   (Insufficient evidence), with mixed: the sources disagree
  *   neither                 -> unsupported   (Insufficient evidence)
  *   none, and statements filed under it whose direction could not be judged -> unchecked (Not checked)
- * One checked statement from one source is enough for a mark; the counts are in the note, so a thin mark is seen as thin.
+ * One checked statement from one source is enough for a mark; the counts are in the note, and a Supported or
+ * Contradicted mark that rests on one source only is flagged `thin` (said in the note and under "What is missing").
  * "Tested" means checked against published sources. It is not an experiment.
  */
-export function markOf(id: string, statements: Statement[]): Required<Pick<Hypothesis, "verdict" | "for" | "against" | "forStatements" | "againstStatements" | "note">> & { mixed?: boolean } {
+export function markOf(id: string, statements: Statement[]): Required<Pick<Hypothesis, "verdict" | "for" | "against" | "forStatements" | "againstStatements" | "note">> & { mixed?: boolean; thin?: boolean } {
   const filed = statements.filter((s) => s.hypothesis === id && s.side)
   const passed = filed.filter((s) => s.verdict === "verified")
   const pro = passed.filter((s) => s.side === "for" && s.stance === "supports"), con = passed.filter((s) => s.side === "against" && s.stance === "contradicts")
@@ -446,8 +498,10 @@ export function markOf(id: string, statements: Statement[]): Required<Pick<Hypot
   const dropped = filed.length - pro.length - con.length
   const rest = dropped > 0 ? ` ${plural(dropped, "statement")} filed under it ${dropped === 1 ? "is" : "are"} not counted (not checked, not found in the source, or not pointing that way).` : ""
   if (pro.length && con.length) return { ...base, verdict: "unsupported", mixed: true, note: `The sources disagree: ${said(pro)} for it, ${said(con)} against it.${rest}` }
-  if (pro.length) return { ...base, verdict: "verified", note: `${said(pro)} for it; none against it.${rest}` }
-  if (con.length) return { ...base, verdict: "contradicted", note: `${said(con)} against it; none for it.${rest}` }
+  // A Supported or Contradicted mark that rests on one source only is thin: flagged, and said in the note.
+  const thin = (list: Statement[]) => (numbers(list).length === 1 ? { flag: { thin: true }, words: " It rests on one source only: a thin mark." } : { flag: {}, words: "" })
+  if (pro.length) return { ...base, verdict: "verified", ...thin(pro).flag, note: `${said(pro)} for it; none against it.${thin(pro).words}${rest}` }
+  if (con.length) return { ...base, verdict: "contradicted", ...thin(con).flag, note: `${said(con)} against it; none for it.${thin(con).words}${rest}` }
   if (unjudged.length) return { ...base, verdict: "unchecked", note: `${plural(unjudged.length, "statement")} filed under it passed the quote check, but which way ${unjudged.length === 1 ? "it points" : "they point"} was not judged.` }
   return { ...base, verdict: "unsupported", note: `No checked statement for or against it.${rest}` }
 }
@@ -523,6 +577,19 @@ export function buildRecommendations(o: { proposed: string[]; sources: number; s
 
 const urlKey = (url: string) => { try { const u = new URL(url); return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}` } catch { return url } }
 
+/** The indexes the literature search (scholarly.ts) also searches: a paper found there keeps its own name as its provider. */
+export const PAPER_INDEXES: readonly Provider[] = ["openalex", "semanticscholar", "arxiv", "crossref", "biorxiv"]
+const isPaperIndex = (value: unknown): value is Provider => (PAPER_INDEXES as readonly unknown[]).includes(value)
+/** A paper or a published protocol: cited like a paper, merged by title, with its year. */
+const isPaper = (provider: Provider) => provider === "europepmc" || provider === "protocols" || isPaperIndex(provider)
+/** Where a found item came from: the index of a literature search's paper, else the search that found it. */
+export const providerOf = (item: EvidenceItem, search: Provider): Provider => (search === "europepmc" && isPaperIndex(item.provider) ? item.provider : search)
+/** The keys a source is known by: its address and, for a paper, its title as scholarly.ts merges by, so one paper found under a PubMed and a DOI address is one source. */
+export const sourceKeys = (item: { url: string; title: string }, provider: Provider): string[] => {
+  const title = isPaper(provider) ? titleKey(item.title) : ""
+  return title.length >= 12 ? [urlKey(item.url), `title:${title}`] : [urlKey(item.url)]
+}
+
 /** A search's items as they may be kept: a safe address, a title and some text; plain text, cut. Everything else is left out. */
 export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[] {
   const out: EvidenceItem[] = []
@@ -530,7 +597,8 @@ export function usable(items: EvidenceItem[], provider: Provider): EvidenceItem[
     if (!item || !safeUrl(item.url)) continue
     const title = oneLine(withoutInlineTags(String(item.title ?? "")), MAX_TITLE_CHARS), text = plainBlock(withoutInlineTags(String(item.text ?? "")), MAX_SOURCE_CHARS)
     if (!title || text.length < 40) continue // nothing a statement could be checked against
-    out.push({ url: item.url, title, text, provider: provider as EvidenceItem["provider"] })
+    const image = imageUrl(item.image) // a picture the search returned with the page; never fetched by the engine
+    out.push({ url: item.url, title, text, provider: providerOf(item, provider) as EvidenceItem["provider"], ...(image ? { image } : {}) })
   }
   return out
 }
@@ -539,6 +607,7 @@ const STUDY_LABEL: Record<string, string> = { clinical: "clinical", in_vitro: "i
 export function noteOf(item: EvidenceItem, provider: Provider): string | undefined {
   const labels: string[] = []
   if (provider === "fixture") labels.push("example source")
+  if (provider === "protocols" || isProtocolTitle(item.title)) labels.push("protocol") // a published lab protocol, whichever search found it
   if (/\[preprint\]|\(preprint\b/i.test(item.title)) labels.push("preprint")
   if (/\[review\]/i.test(item.title) || item.studyType === "review") labels.push("review")
   const study = item.studyType && item.studyType !== "review" ? STUDY_LABEL[item.studyType] : undefined
@@ -561,7 +630,7 @@ export function exaSpentBy(config: BoardConfig, id: string): number {
   return Math.max(0, usd)
 }
 
-export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
+export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only the abstract was read.", openalex: "Only the abstract was read.", semanticscholar: "Only the abstract was read.", arxiv: "Only the abstract was read.", crossref: "Only the abstract was read.", biorxiv: "Only the abstract was read.", protocols: "Only the abstract of the protocol was read, not its steps.", exa: "Only excerpts of the page were read.", fixture: "An example source, not a real one." }
 
 /**
  * Why each numbered source was selected and what limits it, and why the others were not: assembled by code from what
@@ -570,15 +639,15 @@ export const READ_LIMIT: Partial<Record<Provider, string>> = { europepmc: "Only 
  */
 export function selectionOf(sources: StoredSource[], notSelected: Selection["notSelected"], max: number, effort: string, results = sources.length + notSelected.length): Selection {
   // An address is listed once: not again when a second search found it too, and not as "not selected" when it was selected.
-  const taken = new Set(sources.map((s) => urlKey(s.url)))
-  const others = notSelected.filter((s) => { const key = urlKey(s.url); if (taken.has(key)) return false; taken.add(key); return true })
+  const taken = new Set(sources.flatMap((s) => sourceKeys(s, s.provider)))
+  const others = notSelected.filter((s) => { const keys = sourceKeys(s, s.provider); if (keys.some((k) => taken.has(k))) return false; for (const k of keys) taken.add(k); return true })
   return {
     counts: { results, unique: sources.length + others.length, selected: sources.length },
     criteria: `Kept: results that the screening model judged to help answer the question and that report findings of their own, or are reviews. At most ${max} are numbered at the ${effort} level, the most relevant first, with the searches taking turns so that one search cannot fill the list. "Relevant" is the screening model's yes, partly or no. It is not a calibrated score.`,
     selected: sources.map((s) => {
       const judged = s.relevance === 1 ? "Screened as answering the question" : s.relevance === 0.5 ? "Screened as partly answering the question" : "Not screened; kept as found"
       const study = s.studyType ? `; study type: ${STUDY_LABEL[s.studyType] ?? s.studyType}` : ""
-      const limits = [/preprint/.test(s.note ?? "") && "A preprint: not peer reviewed.", /review/.test(s.note ?? "") && "A review: it summarises other studies.", READ_LIMIT[s.provider] ?? "A database record, not a paper."].filter(Boolean).join(" ")
+      const limits = [/preprint/.test(s.note ?? "") && "A preprint: not peer reviewed.", /review/.test(s.note ?? "") && "A review: it summarises other studies.", /protocol/.test(s.note ?? "") && "A protocol: it describes a method, not findings.", READ_LIMIT[s.provider] ?? "A database record, not a paper."].filter(Boolean).join(" ")
       return { n: s.n, why: `${s.earlier ? "Listed again from the earlier answer in this thread. " : ""}${judged}${study}.`, ...(limits ? { limitation: limits } : {}) }
     }),
     notSelected: others.slice(0, 40),
@@ -588,16 +657,19 @@ export function selectionOf(sources: StoredSource[], notSelected: Selection["not
 /**
  * The numbered sources: the candidates that passed screening, each address once, the most relevant first, the
  * providers taking turns inside one relevance level (so web pages cannot push every paper out), cut to `max`.
+ * A lab protocol belongs to no one hypothesis's search, so it serves every hypothesis.
  */
 export function numberSources(candidates: Candidate[], max: number, hypotheses: string[] = []): StoredSource[] {
   // Each address once. One that several hypotheses' searches found serves each of them.
   const byKey = new Map<string, Candidate & { serves: string[] }>()
+  const unique: (Candidate & { serves: string[] })[] = []
+  const servesOf = (c: Candidate): string[] => (c.hypothesis ? [c.hypothesis] : c.provider === "protocols" ? hypotheses : [])
   for (const c of [...candidates].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-    const key = urlKey(c.item.url), first = byKey.get(key)
-    if (!first) byKey.set(key, { ...c, serves: c.hypothesis ? [c.hypothesis] : [] })
-    else if (c.hypothesis && !first.serves.includes(c.hypothesis)) first.serves.push(c.hypothesis)
+    const keys = sourceKeys(c.item, c.provider), first = keys.map((k) => byKey.get(k)).find(Boolean)
+    if (!first) { const entry = { ...c, serves: [...servesOf(c)] }; unique.push(entry); for (const k of keys) byKey.set(k, entry); continue }
+    for (const k of keys) if (!byKey.has(k)) byKey.set(k, first)
+    for (const id of servesOf(c)) if (!first.serves.includes(id)) first.serves.push(id)
   }
-  const unique = [...byKey.values()]
   const tier = (c: Candidate) => (c.item.relevance === 1 ? 0 : c.item.relevance === 0.5 ? 2 : 1) // screened "yes", not screened, screened "partly"
   /** The most relevant first; inside one relevance level the searches take turns. */
   const inOrder = (list: (Candidate & { serves: string[] })[]) => {
@@ -619,9 +691,10 @@ export function numberSources(candidates: Candidate[], max: number, hypotheses: 
   }
   return ordered.slice(0, max).map((c, i) => {
     const note = noteOf(c.item, c.provider)
-    const year = c.provider === "europepmc" ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts writes "(Journal, 2025)" at the end of a title
+    const provider = providerOf(c.item, c.provider)
+    const year = isPaper(provider) ? /\((?:[^()]*, )?((?:19|20)\d{2})\)(?: \[\w+\])?$/.exec(c.item.title)?.[1] : undefined // literature.ts and scholarly.ts write "(Journal, 2025)" at the end of a title
     const serves = hypotheses.filter((id) => c.serves.includes(id))
-    return { n: i + 1, url: c.item.url, title: c.item.title, provider: c.provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
+    return { n: i + 1, url: c.item.url, title: c.item.title, provider, ...(note ? { note } : {}), ...(year ? { published: year } : {}), ...(serves.length ? { hypotheses: serves } : {}), ...(c.earlier ? { earlier: true } : {}), ...(c.item.image ? { image: c.item.image } : {}), text: c.item.text, ...(c.item.studyType ? { studyType: c.item.studyType } : {}), ...(c.item.relevance === undefined ? {} : { relevance: c.item.relevance }) }
   })
 }
 
@@ -663,6 +736,7 @@ export function missingOf(record: Pick<ResearchRecord, "searches" | "steps" | "s
   for (const h of record.hypotheses ?? []) {
     const name = h.id.toUpperCase()
     if (h.mixed) out.push(`The sources disagree on ${name}: ${quote(h.text)}`)
+    else if (h.thin) out.push(`${name} rests on one source only (a second, independent source would make its mark stronger): ${quote(h.text)}`)
     else if (h.verdict === "unsupported") out.push(`No checked evidence for or against ${name}: ${quote(h.text)}`)
     else if (h.verdict === "unchecked") out.push(`${name} was not checked: ${quote(h.text)}`)
   }
@@ -699,10 +773,11 @@ export const countsOf = (sources: number, statements: Statement[]): Counts => ({
 
 // ── The run ──────────────────────────────────────────────────────────────────────────────────────
 
-const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed and preprints", fixture: "Loading example sources" }
+const SEARCH_LABEL: Partial<Record<Provider, string>> = { exa: "Searching the web", europepmc: "Searching PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv", protocols: "Searching published lab protocols (protocol journals, protocols.io)", fixture: "Loading example sources" }
 const NOT_SEARCHED: Partial<Record<Provider, string>> = {
   exa: "The web search did not run, so this answer rests on the other searches only.",
-  europepmc: "PubMed and preprints were not searched, so this answer rests on the other searches only.",
+  europepmc: "The literature (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv) was not searched, so this answer rests on the other searches only.",
+  protocols: "The published lab protocols were not searched, so this answer rests on the other searches only.",
 }
 const hash = (value: unknown) => createHash("sha1").update(JSON.stringify(value)).digest("hex").slice(0, 16)
 /** First-pass calls that run at once, at most (as triage.ts does inside one FirstPass). */
@@ -724,7 +799,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
 
   // What an earlier invocation worked out is worked out again from the stored steps, so the record starts clean.
   Object.assign(record, { status: "running", steps: [], searches: [], sources: [], statements: [], recommendations: [], review: { ...record.review, revised: false, notes: [] } })
-  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds"] as const) delete record[field]
+  for (const field of ["opening", "selection", "draft", "answer", "counts", "stopped", "note", "error", "finishedAt", "seconds", "short"] as const) delete record[field]
   record.workStartedAt ??= now()
 
   // Time is counted while the answer is worked on, not while the engine was down.
@@ -859,6 +934,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   let cut: { text: string; reason: string }[] = []
   let proposed: string[] = []
   let medical = looksMedical(record.question)
+  /** The short path for a plain factual question (`shortPath`). Decided once the plan is read. */
+  let short = false
+  const sourcesKept = () => (short ? Math.min(level.sourcesKept, SHORT.sourcesKept) : level.sourcesKept)
+  const levelName = () => (short ? `${record.effort} (short path)` : record.effort)
   /** Cited sentences of the shown text that no check reached are recorded as not checked: a missing check is said, never left blank. */
   const markUnchecked = (why: StopReason) => {
     if (record.statements.length || !sources.length || !record.answer) return
@@ -883,7 +962,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const databasesOn = !demo && Boolean(deps.database) && level.databaseLookups > 0
     let plan = fallbackPlan(record.question)
     {
-      const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0 })
+      const system = plannerSystem({ web: level.exaSearches, literature: level.queries, databases: databasesOn ? level.databaseLookups : 0, protocols: !demo && deps.protocols ? Math.min(MAX_PROTOCOL_QUERIES, Math.max(1, level.queries)) : 0 })
       const user = plannerUser(record.question, thread)
       begin({ step: "prepare", kind: "prepare", label: "Preparing the searches", agent: "planner", input: { model: brain.names.planner, level: record.effort, webSearches: level.exaSearches, literatureQueries: level.queries, databaseLookups: databasesOn ? level.databaseLookups : 0 } })
       const why = allow(brain.worstCase("plan", system.length + user.length), "plan", { system, user })
@@ -895,21 +974,30 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor("prepare", stop.reason); throw stop ?? error }
         // The planner failing is not a reason to fail the answer: the question's own words are searched.
       }
+      plan = demo || !deps.protocols ? { ...plan, protocols: [] } : withProtocols(plan, record.question, level)
       if (demo) plan = { ...plan, opening: "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked." }
+      medical = medical || plan.medical
+      short = !demo && shortPath(plan, medical)
+      if (short) plan = { ...plan, opening: SHORT_OPENING }
       if (plan.fallback && !demo) {
         notes.push("The query planner's reply could not be used, so the question's own words were searched.")
         end("prepare", "failed", { error: "The query planner's reply could not be used.", consequence: "The question's own words are searched instead." })
-      } else end("prepare", "completed", { summary: demo ? "Example sources only." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
-      medical = medical || plan.medical
+      } else end("prepare", "completed", { summary: demo ? "Example sources only." : short ? "A plain factual question: the short path is taken (one search, a short answer, one round of checks)." : `${plural(plan.web.length, "web search", "web searches")}, ${plural(plan.literature.length, "literature query", "literature queries")}${plan.protocols.length ? `, ${plural(plan.protocols.length, "lab protocol query", "lab protocol queries")}` : ""}${plan.databases.length ? `, ${plural(plan.databases.length, "database lookup")}` : ""} planned.` })
       record.opening = plan.opening
       emit("opening", { type: "opening", text: plan.opening })
+      if (short) {
+        const skipped = [...(level.hypotheses > 0 ? ["hypotheses"] : []), ...(level.specialists > 0 ? ["method specialists"] : []), "further searches", "the critic's review", "the revision"]
+        record.short = true
+        notes.push(`A plain factual question, so the short path was taken: one search, a short answer and one round of statement checks; no ${skipped.join(", ")}.`)
+        emit("short", { type: "short.path", note: "The planner judged this a plain factual question with one settled answer, so the answer takes the short path.", skipped })
+      }
       save()
     }
 
     // ── method specialists: chosen by code from the question, before anything is searched ─────────
     // The matcher compares the question's words with the method notes (specialists.ts). No model chooses. The chosen
     // ones are named now, so a person sees who joined; each works once the searches have given it sources.
-    const invited = (level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
+    const invited = (!short && level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
     const notesOf = new Map(invited.map((m) => [m.specialist.name, answerNotes(m.specialist, m.methods)]))
     const team: AnswerSpecialist[] = invited.map((m) => ({
       room: specialistRoom(m.specialist), name: m.specialist.name, title: m.specialist.title, agent: specialistAgent(m.specialist.name),
@@ -920,7 +1008,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     // ── hypotheses (Standard level): what to test, written before anything is searched ─────────────
     // Each hypothesis needs one web search and one literature query of the level, so the level's own limits say how
     // many can be tested. No limit is raised for them; what does not fit is set aside and said.
-    if (level.hypotheses > 0) {
+    if (level.hypotheses > 0 && short) record.hypothesesNote = "A plain factual question: no hypotheses were needed."
+    else if (level.hypotheses > 0) {
       const fit = Math.min(level.hypotheses, level.exaSearches, level.queries, Math.floor(level.sourcesKept / 2))
       const system = hypothesesSystem({ max: MAX_HYPOTHESES, databases: databasesOn }), user = hypothesesUser(record.question, thread)
       begin({ step: "hypotheses", kind: "hypothesize", label: "Setting up hypotheses to test", agent: "planner", input: { model: brain.names.planner, atMost: fit } })
@@ -935,7 +1024,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const cutNote = set.cut.length ? `${plural(set.cut.length, "more hypothesis", "more hypotheses")} ${set.cut.length === 1 ? "was" : "were"} proposed and not tested, because ${set.cut[0].reason}.` : ""
       if (!tested.length || cutNote) record.hypothesesNote = [tested.length ? "" : set.reason ?? "No hypotheses were needed.", cutNote].filter(Boolean).join(" ")
       cut = set.cut
-      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
+      end("hypotheses", "completed", { found: tested.length, summary: tested.length ? `${plural(tested.length, "hypothesis", "hypotheses")} to test. Each gets its own web search and literature search; the general searches planned before are not run on top${plan.protocols.length ? ", except the lab protocol searches, whose protocols every hypothesis may cite" : ""}.${cutNote ? ` ${cutNote}` : ""}` : `None: ${set.reason ?? "not needed"}` })
       emit("hypotheses", { type: "hypotheses", items: record.hypotheses, needed: set.needed, ...(tested.length ? {} : { reason: set.reason }), ...(set.cut.length ? { cut: set.cut } : {}) })
       save()
     }
@@ -948,10 +1037,10 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const counter = new Map<Provider, number>()
     let slotNumber = 1_000 // searches that belong to no hypothesis come after those that do
     const line = (l: SearchLine & { slot: number }) => { lines.push(l); record.searches = [...lines].sort((a, b) => a.slot - b.slot).map(({ slot: _slot, ...rest }) => rest); save() }
-    const keysOf = () => new Set(pool.map((c) => urlKey(c.item.url)))
+    const keysOf = () => new Set(pool.flatMap((c) => sourceKeys(c.item, c.provider)))
     /** Screen one search's results and add what is kept to the pool. */
     const evaluate = async (provider: Provider, i: number, place: number, query: string, found: EvidenceItem[], known: Set<string>, tag?: Tag) => {
-      const fresh = found.filter((item) => !known.has(urlKey(item.url)))
+      const fresh = found.filter((item) => !sourceKeys(item, provider).some((k) => known.has(k)))
       const order = (item: EvidenceItem) => place * 1_000 + found.indexOf(item)
       const hypothesis = tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}
       const agent = tag?.hypothesis ? investigatorOf(tag.hypothesis.id) : "searcher"
@@ -967,16 +1056,17 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         try {
           let screened = await firstPassOnce(`screen:${provider}`, screening, (firstPass) => firstPass.triage(fresh, question))
           // A database record (a trial registration, a label) often "reports no results of its own": it is kept unless it is off the question, as the board keeps it.
-          const record_ = (DATABASES as readonly string[]).includes(provider)
+          // So is a protocol: it describes a method and reports no findings, which is what was asked for.
+          const record_ = (DATABASES as readonly string[]).includes(provider) || provider === "protocols"
           screened = screened.map((s) => (record_ && !s.keep && s.item.relevance !== 0 ? { ...s, keep: true } : s))
           screened.forEach((s, at) => {
-            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); tag?.chain?.add(urlKey(s.item.url)); kept++ }
-            else notSelected.push({ title: s.item.title, url: s.item.url, provider, order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
+            if (s.keep) { pool.push({ item: s.item, provider, order: order(fresh[at]), ...hypothesis }); for (const k of sourceKeys(s.item, provider)) tag?.chain?.add(k); kept++ }
+            else notSelected.push({ title: s.item.title, url: s.item.url, provider: providerOf(s.item, provider), order: order(fresh[at]), reason: s.item.relevance === 0 ? "Screened as not about the question." : "Screened as background only: it reports no findings of its own and is not a review." })
           })
           end(step, "completed", { found: fresh.length, kept: screened.filter((s) => s.keep).length, summary: `${screened.filter((s) => s.keep).length} of ${fresh.length} kept.` })
         } catch (error) {
           if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) { endFor(step, stop.reason, "These results were not screened and are not used."); line({ provider, query, ran: true, found: found.length, kept, slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) }) } throw stop ?? error }
-          for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); tag?.chain?.add(urlKey(item.url)); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
+          for (const item of fresh) { pool.push({ item, provider, order: order(item), ...hypothesis }); for (const k of sourceKeys(item, provider)) tag?.chain?.add(k); kept++ } // not screened: kept, as triage.ts keeps an item whose screening is missing
           notes.push(`The results of one ${providerName(provider)} search could not be screened for relevance and were kept as found.`)
           end(step, "failed", { found: fresh.length, kept: fresh.length, error: `The screening did not answer (${error.message}).`, consequence: "These results were kept without screening, so some may be off the question." })
         }
@@ -1012,7 +1102,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         return line({ provider, query, ran: false, found: 0, kept: 0, reason: scrub(why, env, 300), slot: place, ...(tag?.hypothesis ? { hypothesis: tag.hypothesis.id } : {}) })
       }
       const found = usable(result.items, provider)
-      result.items.forEach((item, at) => { if (item && safeUrl(item.url) && !found.some((f) => f.url === item.url)) notSelected.push({ title: oneLine(item.title, MAX_TITLE_CHARS) || item.url, url: item.url, provider, order: place * 1_000 + at, reason: "No text came back for it, so nothing could be checked against it." }) })
+      result.items.forEach((item, at) => { if (item && safeUrl(item.url) && !found.some((f) => f.url === item.url)) notSelected.push({ title: oneLine(item.title, MAX_TITLE_CHARS) || item.url, url: item.url, provider: providerOf(item, provider), order: place * 1_000 + at, reason: "No text came back for it, so nothing could be checked against it." }) })
       const said = result.notices.map((n) => oneLine(n, 200)).filter(Boolean)[0]
       if (!found.length) {
         end(step, "empty", { found: 0, summary: said ?? "The search ran and found nothing." })
@@ -1062,27 +1152,35 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const db = databaseOf.get(h.id)
       const sameBefore = db ? tested.slice(0, at).filter((x) => databaseOf.get(x.id)?.source === db.source).length : 0
       await together([
-        search("europepmc", h.literature, { maxResults: 8, text: "abstracts" }, new Set(chain), () => deps.literature(h.literature), undefined, tag(1, at + 1)),
+        search("europepmc", h.literature, { maxResults: MAX_MERGED, text: "abstracts" }, new Set(chain), () => deps.literature(h.literature), undefined, tag(1, at + 1)),
         ...(db && deps.database ? [search(db.source, db.query, { text: "database records" }, new Set(chain), () => deps.database!(db.source, db.query), undefined, tag(2, sameBefore + 1))] : []),
       ])
     }
-    if (tested.length) await together(tested.map((h, at) => chainOf(h, at))) // every hypothesis at the same time, each opened by its web search
+    /** The lab protocol searches, when the plan has them. They belong to no one hypothesis: what they find serves every hypothesis (numberSources). */
+    const protocolSearches = (known: Set<string>) => (deps.protocols ? plan.protocols.map((q) => search("protocols", q, { maxResults: MAX_PROTOCOLS, text: "abstracts" }, known, () => deps.protocols!(q))) : [])
+    if (tested.length) await together([...tested.map((h, at) => chainOf(h, at)), ...protocolSearches(new Set())]) // every hypothesis at the same time, each opened by its web search
     else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
-    else {
+    else if (short) {
+      // One web search. The literature is searched only when the web gave no source, so a short answer still has one to cite.
+      await web(plan.web[0], new Set())
+      const q = plan.literature[0]
+      if (!pool.length && q) await search("europepmc", q, { maxResults: 8, text: "abstracts" }, keysOf(), () => deps.literature(q))
+    } else {
       // The web search opens every answer. What it cannot do is said, and the other searches still run, all at once.
       const [first, ...moreWeb] = plan.web.slice(0, level.exaSearches)
       await web(first, new Set())
       const afterFirst = keysOf()
       await together([
         ...moreWeb.map((w) => web(w, afterFirst)),
-        ...plan.literature.slice(0, level.queries).map((q) => search("europepmc", q, { maxResults: 8, text: "abstracts" }, afterFirst, () => deps.literature(q))),
+        ...plan.literature.slice(0, level.queries).map((q) => search("europepmc", q, { maxResults: MAX_MERGED, text: "abstracts" }, afterFirst, () => deps.literature(q))),
+        ...protocolSearches(afterFirst),
         ...plan.databases.slice(0, level.databaseLookups).map((d) => search(d.source, d.query, { text: "database records" }, afterFirst, () => deps.database!(d.source, d.query))),
       ])
       // A follow-up may list sources of the answer before it again, when they pass screening for the new question.
       const last = deps.earlier.filter((r) => r.mode === "real" && r.status === "done").at(-1)
       const known = keysOf()
-      const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !known.has(urlKey(s.url)) && safeUrl(s.url) && s.text?.length >= 40)
-      const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text }))
+      const again = (last?.sources ?? []).filter((s) => s.provider !== "fixture" && !sourceKeys(s, s.provider).some((k) => known.has(k)) && safeUrl(s.url) && s.text?.length >= 40)
+      const items = again.map((s) => ({ url: s.url, title: s.title, text: s.text, ...(imageUrl(s.image) ? { image: s.image } : {}) }))
       const rescreening = { items: items.map((f) => [f.url, f.title, f.text]), question: plan.keyQuestion }
       if (again.length && !allow(brain.worstCase("screen", again.reduce((n, s) => n + Math.min(1_500, s.text.length) + 230, 600)), "screen:earlier", rescreening)) {
         const place = slotNumber++
@@ -1100,17 +1198,17 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     }
 
     // ── sources and the selection ────────────────────────────────────────────────────────────────
-    sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
-    const numbered = new Set(sources.map((s) => urlKey(s.url)))
+    sources = numberSources(pool, sourcesKept(), tested.map((h) => h.id))
+    const numbered = new Set(sources.flatMap((s) => sourceKeys(s, s.provider)))
     const seen = new Set<string>()
     for (const c of [...pool].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-      const key = urlKey(c.item.url)
-      if (numbered.has(key) || seen.has(key)) continue
-      seen.add(key)
-      notSelected.push({ title: c.item.title, url: c.item.url, provider: c.provider, order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${level.sourcesKept} sources are numbered at the ${record.effort} level and more relevant ones came first.` })
+      const keys = sourceKeys(c.item, c.provider)
+      if (keys.some((k) => numbered.has(k) || seen.has(k))) continue
+      for (const k of keys) seen.add(k)
+      notSelected.push({ title: c.item.title, url: c.item.url, provider: providerOf(c.item, c.provider), order: (c.order ?? 0) + 1e9, reason: `Passed screening, but at most ${sourcesKept()} sources are numbered at the ${levelName()} level and more relevant ones came first.` })
     }
     record.sources = sources
-    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), level.sourcesKept, record.effort, lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)
+    record.selection = selectionOf(sources, notSelected.sort((a, b) => a.order - b.order).map(({ order: _order, ...rest }) => rest), sourcesKept(), levelName(), lines.reduce((sum, l) => sum + l.found, 0) + notSelected.filter((n) => n.reason.startsWith("No text came back")).length)
     emit("sources", { type: "sources", items: record.sources.map(({ text: _t, studyType: _s, relevance: _r, ...s }) => s) })
     emit("selection", { type: "selection", ...record.selection })
     save()
@@ -1197,12 +1295,14 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (failures.length) throw failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
         specialistText = drafted.map((r) => (r as PromiseFulfilledResult<string>).value).filter(Boolean).join("\n\n")
       }
-      const system = testing.length ? leadSystem(level.words) : writerSystem(level.words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
-      begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
-      const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
+      const words = short ? Math.min(level.words, SHORT.words) : level.words, maxOutputTokens = short ? Math.min(level.maxOutputTokens, SHORT.outputTokens) : level.maxOutputTokens
+      const system = testing.length ? leadSystem(words) : writerSystem(words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
+      begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens, words, ...(short ? { shortPath: true } : {}) } })
+      const whyNot = allow(brain.worstCase("write", system.length + user.length, short), "write", { system, user })
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.
+      // A piece is sent every 400 characters or 200 ms, whichever comes first, so a live view shows the text as it comes.
       const streamed = log.has("answer.delta:0")
       let all = "", sent = 0, piece = 0, last = performance.now()
       const flush = (final: boolean) => {
@@ -1212,7 +1312,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (upTo > sent) { emit(`answer.delta:${piece++}`, { type: "answer.delta", text: all.slice(sent, upTo) }); sent = upTo; last = performance.now() }
       }
       let reply: { text: string; truncated: boolean }
-      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 500) flush(false) })) } catch (error) {
+      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 200) flush(false) }, short)) } catch (error) {
         const stop = error instanceof StepFailed ? undefined : asStop(error)
         if (stop) endFor("write", stop.reason, "No answer was written. The sources that were found are listed.")
         else if (!(error instanceof Interrupted)) end("write", "failed", { error: `The writer did not answer (${message(error)}).`, consequence: "No answer was written." })
@@ -1317,7 +1417,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
           throw error
         }
       }
-      const reviewed = await Promise.allSettled([checkAll("check", "draft", cited.map((sentence, index) => ({ index, sentence }))), critique()])
+      // The short path checks every cited sentence once; the critic, the revision and the second look are left out.
+      const reviewed = await Promise.allSettled([checkAll("check", "draft", cited.map((sentence, index) => ({ index, sentence }))), short ? Promise.resolve([] as ReviewNote[]) : critique()])
       const broken = reviewed.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason as unknown)
       if (broken.some((b) => b instanceof Interrupted)) throw new Interrupted()
       const draftStatements = reviewed[0].status === "fulfilled" ? reviewed[0].value : []
@@ -1334,7 +1435,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       // notes. A sentence whose check did not run is not rewritten for that; it stays, shown as not checked.
       const failed = draftStatements.filter((s) => s.verdict === "contradicted" || s.verdict === "unsupported")
       const notPassed = draftStatements.filter((s) => s.verdict !== "verified")
-      if (failed.length || reviewNotes.length) {
+      if (!short && (failed.length || reviewNotes.length)) {
         const rSystem = reviserSystem(level.words, testing.length > 0)
         const rUser = reviserUser({ question: record.question, thread, searches: record.searches, sources, draft, statements: draftStatements, notes: reviewNotes, hypotheses: testing })
         const unrevised = "The first draft is shown, with the marks of its review."
@@ -1469,7 +1570,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       for (const step of [...running.keys()]) end(step, "cancelled")
       closeLeftOpen("cancelled")
       if (!record.sources.length && pool.length) { // cancelled during the searches: what was found by then is kept
-        sources = numberSources(pool, level.sourcesKept, tested.map((h) => h.id))
+        sources = numberSources(pool, sourcesKept(), tested.map((h) => h.id))
         record.sources = sources
         emit("sources", { type: "sources", items: sources.map(({ text: _t, studyType: _s, relevance: _r, ...rest }) => rest) })
       }
@@ -1519,7 +1620,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const testedBy = { kind: "sources" as const } // published sources; a swarm run on data would be {kind: "swarm", run} (not built)
       return stopped && mark.verdict === "unsupported" && !mark.mixed ? { ...h, ...mark, verdict: "unchecked" as const, note: `Not checked: ${STOP_WORDS[stopped]}.`, testedBy } : { ...h, ...mark, testedBy }
     })
-    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.note ? { note: h.note } : {}), ...(h.agent ? { agent: h.agent } : {}), testedBy: h.testedBy })
+    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.thin ? { thin: true } : {}), ...(h.note ? { note: h.note } : {}), ...(h.agent ? { agent: h.agent } : {}), testedBy: h.testedBy })
   }
 
   // ── what was used, what to do next, and the files ────────────────────────────────────────────────

@@ -1,0 +1,253 @@
+{
+  "runId": "202611151618-kras-g12c-hit-to-lead",
+  "briefFile": "/Users/devin/repos/agent-test-examples/board/briefs/kras-g12c-hit-to-lead.md",
+  "startedAt": 1794759506671,
+  "members": {
+    "scout": 7,
+    "proposer": 13,
+    "experimenter": 19,
+    "methods-auditor": 25,
+    "critic": 31,
+    "reporter": 37
+  },
+  "rounds": 3,
+  "lastRound": [
+    {
+      "member": "Scout (Data and Evidence)",
+      "reply": "In short: Go with CMP-0423, conditional on a resistance-mutant panel by month 3.\n\nGo with CMP-0423, conditional on a resistance-mutant panel by month 3.",
+      "verdicts": []
+    },
+    {
+      "member": "Proposer (Triage)",
+      "reply": "In short: Go with CMP-0423, conditional on a resistance-mutant panel by month 3.\n\nGo with CMP-0423, conditional on a resistance-mutant panel by month 3.",
+      "verdicts": []
+    },
+    {
+      "member": "Experimenter (Data Scientist)",
+      "reply": "In short: Go with CMP-0423, conditional on a resistance-mutant panel by month 3.\n\nGo with CMP-0423, conditional on a resistance-mutant panel by month 3.",
+      "verdicts": []
+    },
+    {
+      "member": "Methods Auditor (Quality Checker)",
+      "reply": "In short: Go with CMP-0423, conditional on a resistance-mutant panel by month 3.\n\nGo with CMP-0423, conditional on a resistance-mutant panel by month 3.",
+      "verdicts": []
+    },
+    {
+      "member": "Critic (Scientific Reviewer)",
+      "reply": "In short: No-Go: no advantage over the approved drugs is established yet.\n\nNo-Go: no advantage over the approved drugs is established yet.",
+      "verdicts": []
+    },
+    {
+      "member": "Reporter (Research Writer)",
+      "reply": "In short: Go with CMP-0423, conditional on a resistance-mutant panel by month 3.\n\nGo with CMP-0423, conditional on a resistance-mutant panel by month 3.",
+      "verdicts": []
+    }
+  ],
+  "evidence": {
+    "https://example.org/mock/kras-g12c-clinical-review": {
+      "url": "https://example.org/mock/kras-g12c-clinical-review",
+      "title": "KRAS G12C inhibitors in NSCLC: clinical review (mock)",
+      "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients. Acquired resistance through secondary KRAS mutations and bypass signaling is common within a year.",
+      "provider": "fixture",
+      "query": "KRAS G12C Scout (Data and Evidence) evidence",
+      "studyType": "clinical",
+      "relevance": 1
+    },
+    "https://example.org/mock/herg-acrylamide": {
+      "url": "https://example.org/mock/herg-acrylamide",
+      "title": "hERG liability of piperazine acrylamides (mock)",
+      "text": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.",
+      "provider": "fixture",
+      "query": "KRAS G12C Scout (Data and Evidence) evidence",
+      "studyType": "in_vitro",
+      "relevance": 1
+    },
+    "https://example.org/mock/resistance-mechanisms": {
+      "url": "https://example.org/mock/resistance-mechanisms",
+      "title": "Resistance mechanisms to KRAS G12C inhibition (mock)",
+      "text": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification. Compounds binding a different pocket region retained activity against Y96D in cell assays.",
+      "provider": "fixture",
+      "query": "KRAS G12C Scout (Data and Evidence) evidence",
+      "studyType": "clinical",
+      "relevance": 1
+    }
+  },
+  "ledger": [
+    {
+      "key": "1:scout:bbbff6d4a4e86888",
+      "round": 1,
+      "member": "scout",
+      "claim": "The brief gives six assays for each of CMP-0423 and CMP-0517",
+      "kind": "brief",
+      "verdict": "unsupported",
+      "checker": "openai",
+      "note": "mock: evidence mentions the topic but not the number [first pass escalated: the checker could not tell]",
+      "source": "brief"
+    },
+    {
+      "key": "1:scout:7e113c698ce5aee7",
+      "round": 1,
+      "member": "scout",
+      "claim": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients",
+      "kind": "literature",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients.\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "https://example.org/mock/kras-g12c-clinical-review"
+    },
+    {
+      "key": "1:proposer:49eb6c24a91a4a62",
+      "round": 1,
+      "member": "proposer",
+      "claim": "CMP-0517 pERK IC50 is 95 nM in H358",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| KRAS G12C pERK IC50 (H358) | 180 nM | 95 nM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "1:proposer:a2138af6827fe555",
+      "round": 1,
+      "member": "proposer",
+      "claim": "CMP-0423 pERK IC50 is 180 nM in H358",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| KRAS G12C pERK IC50 (H358) | 180 nM | 95 nM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "1:experimenter:c5b8cd628c817c58",
+      "round": 1,
+      "member": "experimenter",
+      "claim": "CMP-0423 TPSA is about 49 and cLogP about 2.4",
+      "kind": "computed",
+      "verdict": "verified",
+      "checker": "claude-code",
+      "note": "mock: RDKit recomputation matches within tolerance",
+      "source": "RDKit on CMP-0423 SMILES"
+    },
+    {
+      "key": "1:experimenter:d16bd103ee24978c",
+      "round": 1,
+      "member": "experimenter",
+      "claim": "CMP-0517 kinetic solubility is 4 uM",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| Kinetic solubility (pH 7.4) | 12 uM | 4 uM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "1:experimenter:87043bb28b6572e0",
+      "round": 1,
+      "member": "experimenter",
+      "claim": "CMP-0423 shows no resistance liability",
+      "kind": "brief",
+      "verdict": "contradicted",
+      "checker": "first-pass",
+      "note": "quoted: \"| CMP-0423 | C=CC(=O)N1CCN(CC1)c1ncnc2ccc(Cl)cc12 | Acrylamide covalent warhead, quinazoline core |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "2:experimenter:50497332af397815",
+      "round": 2,
+      "member": "experimenter",
+      "claim": "CMP-0423 kinetic solubility is 12 uM",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| Kinetic solubility (pH 7.4) | 12 uM | 4 uM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "2:methods-auditor:e8785805f5628d52",
+      "round": 2,
+      "member": "methods-auditor",
+      "claim": "CMP-0517 hERG IC50 is 6 uM",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| hERG IC50 | 18 uM | 6 uM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "2:methods-auditor:1eb382bed1a60283",
+      "round": 2,
+      "member": "methods-auditor",
+      "claim": "Adding polarity reduced hERG binding in most matched pairs",
+      "kind": "literature",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs.\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "https://example.org/mock/herg-acrylamide"
+    },
+    {
+      "key": "2:critic:ec6ee27908fef7ea",
+      "round": 2,
+      "member": "critic",
+      "claim": "CMP-0423 hERG IC50 is 18 uM",
+      "kind": "brief",
+      "verdict": "verified",
+      "checker": "first-pass",
+      "note": "quoted: \"| hERG IC50 | 18 uM | 6 uM |\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "brief"
+    },
+    {
+      "key": "2:critic:790bfa9653f68617",
+      "round": 2,
+      "member": "critic",
+      "claim": "Piperazine-linked quinazolines show no resistance liability",
+      "kind": "literature",
+      "verdict": "contradicted",
+      "checker": "first-pass",
+      "note": "quoted: \"Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification.\"",
+      "checkedBy": "scripted",
+      "quoteFound": true,
+      "source": "https://example.org/mock/resistance-mechanisms"
+    },
+    {
+      "key": "2:reporter:3b0d1fd6a14a66e6",
+      "round": 2,
+      "member": "reporter",
+      "claim": "Neither candidate has resistance-mutant data",
+      "kind": "brief",
+      "verdict": "unsupported",
+      "checker": "first-pass",
+      "checkedBy": "scripted",
+      "source": "brief"
+    }
+  ],
+  "escalations": 2,
+  "checkerUsd": 0,
+  "firstPassUsd": 0,
+  "usd": 0,
+  "mock": true,
+  "dayBase": 0,
+  "day": "2026-11-15",
+  "droppedKeys": [
+    "567eeb292d7a15be"
+  ],
+  "lastRoundUsd": 0,
+  "finalRound": 3,
+  "finished": true
+}

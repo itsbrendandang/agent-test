@@ -14,7 +14,7 @@ import { hypothesisDoing, hypothesisWork, oncePractice, type AnswerState, type H
 export function HypothesisMark({ hypothesis: h, demo }: { hypothesis: Hypothesis; demo: boolean }) {
   if (!h.result) return null
   const m = markOf(h.result.verdict)
-  const word = `${MARK_WORD[m]}${h.result.mixed ? ": the sources disagree" : ""}`
+  const word = `${MARK_WORD[m]}${h.result.mixed ? ": the sources disagree" : h.result.thin ? ": one source only" : ""}`
   if (demo) return <span className="answer-markword" data-mark="unchecked" data-demo="" title="Practice: not a real result" aria-label={`${word} (practice: not a real result)`}>{word}</span>
   return <span className="answer-markword" data-mark={m}><span aria-hidden="true">{MARK_GLYPH[m]}</span> {word}</span>
 }

@@ -1,6 +1,7 @@
 // The board's decisions that cost money, tested without a model, a harness or a server: which rounds may
 // run, which claim checks are paid for, what an unpriced model costs, when a run may continue, and how the
 // escalation checker's child process is confined.
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"

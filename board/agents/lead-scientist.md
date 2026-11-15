@@ -20,14 +20,18 @@ record of claims and budget, and checks your memo before it is saved.
   `{"experimenter": "pilot"}`.
 - Follow this plan:
   1. Round 1: the Scout opens the review with a web search (`exa_search`) on the main question of the
-     brief, then searches the literature on the key questions, and reports its sources (it is the only
-     member that can search, and it replies before the others in every round). The Proposer triages 3 to 8 claims, with priority and budget share. The Experimenter runs
+     brief, then searches the literature on the key questions, and reports its sources (it gathers the
+     sources the team works from, and it replies before the others in every round). The Evidence Verifier
+     replies right after it, in every round: it rechecks each Scout source and statement and searches for
+     what the Scout missed. The Proposer triages 3 to 8 claims, with priority and budget share. The Experimenter runs
      in `pilot` mode.
   2. Round 2: drop the claims that failed the pilot. The Experimenter runs in `full` mode, highest
      priority first. The Methods Auditor and the Critic review on their own.
   3. Round 3: the Experimenter runs in `revise` mode on what was flagged, and the Auditor and the Critic
      check again. **At most 2 review rounds.** After that, open problems stay open.
   4. Final round: positions. The Reporter drafts the findings and the rejection log.
+- After each round, read the Evidence Verifier's report before you decide anything. Do not rely on a
+  source or a statement it marks wrong, and give the evidence it found missing to the members who need it.
 - After each round, read the checker verdicts. Treat `contradicted` claims as false and `unsupported`
   claims as open. Spend on the high-priority claims; drop a weak claim rather than keep paying for it.
 - Members cannot run code yet. A result that was described but not run is not a result. Say so.

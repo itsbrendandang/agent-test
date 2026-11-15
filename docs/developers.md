@@ -10,14 +10,15 @@ tests and the known limits. To set up your machine, read
 1. **GLHF swarm.** A solver with nine roles for Edison's BixBench3 benchmark. The nine roles are
    nine phases with their own instructions. Only the solver is ours. The sandbox, time limit,
    grader and judge are the benchmark's own code.
-2. **Board review.** A lead scientist agent and six members discuss a written brief in rounds
-   and the lead writes a memo. The members are the scout, proposer, experimenter (one agent with
-   three modes: Pilot, full run, Reviser), methods auditor, critic and reporter. They are prompts
-   only and run no code. One member, the scout, can search: the web (Exa, paid) and the literature
-   (PubMed and preprints through Europe PMC, free). It replies first, so the others see its
-   sources. Each statement a member makes is checked by a model from a different vendor, which
-   must quote the source. The team is the `board:` list in `board/config.yaml`; **keep the scout
-   on it**, or a review gathers no sources. See
+2. **Board review.** A lead scientist agent and seven members discuss a written brief in rounds
+   and the lead writes a memo. The members are the scout, evidence verifier, proposer, experimenter
+   (one agent with three modes: Pilot, full run, Reviser), methods auditor, critic and reporter. They
+   are prompts only and run no code. The scout gathers the sources: the web (Exa, paid) and the
+   literature (PubMed and preprints through Europe PMC, free). It replies first, so the others see its
+   sources. The evidence verifier replies next, in every round: it rechecks the scout's sources with
+   its own free searches. Each statement a member makes is checked by a model from a different vendor,
+   which must quote the source. The team is the `board:` list in `board/config.yaml`; **keep the
+   scout and the evidence verifier on it** (the engine refuses a list without them). See
    [docs/drug-board.md](drug-board.md).
 
 Both are tracked by one engine (`engine/`, port 8787) and shown in one app (`dashboard/`, port 5317).
@@ -286,12 +287,13 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
 | `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
 | `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
+| `engine/src/db/supabase.ts`, `backfill.ts` | The optional copy of the records in Supabase, written in the background, and `npm run db:backfill` ([database.md](database.md)). |
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
 | `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |
 | `dashboard/src/swarm/NewRun.tsx` | The form that starts a run from the dashboard. |
 | `board/` | Board review configuration, members, briefs. The folder and the API keep the name "board". |
-| `glhf/specialists/` | Domain specialist profiles and skill agents. Instructions only. Nothing runs them. |
+| `glhf/specialists/` | Domain specialist profiles and method notes. Research answers match their skills to the question and ask selected specialists to write from the sources found. |
 | `bixbench/` | A teammate's separate single-agent baseline for BixBench v1. Not used for our comparison. |
 | `datasets/` | A catalogue of 1,262 public biology and chemistry datasets with their licences. Pointers only, no data. No code reads it yet. See [datasets/README.md](../datasets/README.md). |
 | `scripts/start.mjs`, `scripts/check.mjs` | What `npm start` and `npm run check` run. |
@@ -335,20 +337,20 @@ code 1 if a part needs attention. Use it before you commit and after you pull.
 `npm test` runs the harness tests, the type checks and the engine tests in one go. To run one engine test file:
 `cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts`.
 
-**`main` is not fully green today.** Measured on commit `1197442` with a clean checkout (`npm run check`):
+**GitHub's checks pass on `main`** (the runs of 2026-11-15). Measured on commit `1197442` with a clean checkout
+(`npm run check`), except where a row names another commit:
 
 | Part | State |
 |---|---|
 | Merge-conflict markers | None. |
 | Engine type check | Clean. |
-| Engine tests | 306 pass, 4 fail in 25 files, and `app.test.ts` does not finish. The four failures are in the run tracker and the BixBench v1 results API (`glhf-tracker` 2, `glhf-runs` 1, `bixv1-budget` 1) and are being fixed. All board, chat, paid-switch, literature and specialist tests pass. |
+| Engine tests | At `6e3cb2c`: 457 pass, 0 fail in 44 files, in a worktree without keys (`node --test test/*.test.ts`, 36 s). Type check and `oxlint` clean. |
 | Dashboard | Type check clean, 478 tests pass. |
 | Harness (`glhf/bixbench/tests/unit`) | 2,531 pass, 2 skipped, 192 expected failures (run after the claims-engine merge). The tests that need Docker were not repeated for this commit. |
 | BixBench v1 adapter | 200 pass (last full run; not repeated for this commit). |
 | Datasets catalogue | 231 pass (last full run; not repeated for this commit). |
 
-GitHub's checks fail on every push for the same reasons: the engine job runs into its time limit on the
-file that does not finish.
+GitHub's checks (`.github/workflows/ci.yml`) passed on the pushes to `main` of 2026-11-15, the engine job included.
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](status.md).

@@ -36,6 +36,10 @@ const quote = (s: string, n = 110) => `“${clip(oneLine(s), n)}”`
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 /** A short stable code for a text, for ids. */
 const hash = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36) }
+/** The node of a review's statement: who made it and what it says. Other views link to it (lib/links.ts graphLink). */
+export const claimNodeId = (member: string, claim: string) => `claim:${member}:${hash(norm(claim))}`
+/** The node of a source a review's search kept. */
+export const sourceNodeId = (url: string) => `source:${url}`
 export const safeUrl = (u: string): string | undefined => {
   try { const p = new URL(u); return p.protocol === "http:" || p.protocol === "https:" ? p.href : undefined } catch { return undefined }
 }
@@ -183,7 +187,7 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
         a.activity.push({ label: "Searched", text: `${e.query} (kept ${e.kept}, dropped ${e.dropped})` })
         const ids = [a.id]
         for (const item of Array.isArray(e.items) ? e.items : []) {
-          const s = b.node(`source:${item.url}`, "source", item.title || item.url, order, {
+          const s = b.node(sourceNodeId(item.url), "source", item.title || item.url, order, {
             url: safeUrl(item.url), text: str((item as { text?: unknown }).text) || undefined,
             facts: [
               { label: "Address", value: item.url },
@@ -202,7 +206,7 @@ export function buildBoardGraph({ runId, events, roster = [] }: BoardInput): Gra
       case "claim.checked": {
         const a = agent(e.member, order), p = round(e.round, order)
         const ck = checkerOf(e.checker)
-        const id = `claim:${e.member}:${hash(norm(e.claim))}`
+        const id = claimNodeId(e.member, e.claim)
         const c = b.node(id, "claim", e.claim, order, { text: e.claim, round: e.round })
         const chk = b.node(`checker:${ck.id}`, "checker", ck.label, order, { facts: [{ label: "Checker", value: ck.what }] })
         c.rounds = [...(c.rounds ?? []), e.round]

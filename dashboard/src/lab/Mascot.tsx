@@ -4,16 +4,11 @@
 // only: a teammate's name and state are always in text beside it.
 import type { ReactNode } from "react"
 import type { FaceShape } from "./identity"
+import { FACE, INK } from "../design/mascot"
 
-const INK = "#1b1a17"
 /** How a Buddy looks at the moment: 2.0's four moods. */
 export type Mood = "happy" | "working" | "sleeping" | "alert"
 
-/** Where the face sits on each body (Buddy.tsx's table). */
-const FACE: Record<FaceShape, { x: number; y: number; spread: number }> = {
-  bunny: { x: 50, y: 66, spread: 11 }, flame: { x: 50, y: 66, spread: 10 }, egg: { x: 50, y: 54, spread: 9 },
-  mountain: { x: 50, y: 72, spread: 10 }, sprout: { x: 50, y: 46, spread: 11 }, generic: { x: 50, y: 60, spread: 10 },
-}
 
 // Flat, outline-free shapes: one soft colour each, plus one small detail.
 function body(shape: FaceShape, color: string): ReactNode {

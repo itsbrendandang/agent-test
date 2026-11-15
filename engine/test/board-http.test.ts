@@ -1,4 +1,5 @@
 // node --test engine/test/*.test.ts   (no model calls, no network, no server started)
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"

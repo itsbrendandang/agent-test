@@ -1,7 +1,9 @@
 # Proposal: run the BixBench v1 adapter on Modal
 
-Status: plan only. Nothing here has been run on Modal. No Modal app, volume, image, sandbox or
-secret was created while writing it.
+Status: built. Option C is `--sandbox modal`, and section 8 is `bixbench-v1 run --jobs N`. How
+to use them, and what was checked, is in `glhf/bixbench_v1/README.md` ("The sandbox on Modal").
+`docs/status.md` says what has run. The text below is the plan as it was written, before
+anything ran on Modal. Where the two differ, the README is right.
 
 ## 0. Short answer
 

@@ -1,10 +1,12 @@
 // The Graph view: a 3D picture of one run, with a sentence that says what happened, a replay, and a list of the same graph
 // for keyboard and screen readers. Wording follows the dashboard's shared glossary (see words.ts).
-import { lazy, Suspense, useCallback, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { Loading } from "@/components/Crew"
 import { PRACTICE } from "@/lib/words"
 import { EngineOffline, ModeLabel, PageHead } from "@/components/Shared"
-import { setOpen, takeOpen } from "@/lib/open"
+import { graphLink, graphOfHash, logLink, replaceAddress, runLink } from "@/lib/links"
+import { takeOpen } from "@/lib/open"
+import { LABEL } from "@/nav"
 import { useBoardRun, useRunList, useSwarmRun, useVisible, type RunRef } from "./data"
 import { useReducedMotion } from "./env"
 import { GraphList } from "./GraphList"
@@ -16,7 +18,7 @@ import { headline, narration, replaySeconds } from "./story"
 import { GLYPH, LINK_KINDS, MAX_NODES, NODE_KINDS, QUIET_LINKS, VERDICT_CLASSES, type GraphModel, type LinkKind, type NodeKind, type Outcome } from "./types"
 import { applyView, byAttention, capGraph, countVerdicts, layoutView, neighbourMap, reveal, searchNodes } from "./view"
 import { GROUP_WORD, KIND_WHAT, kindLabel, LINK_VERB } from "./words"
-import "./graph.css"
+import "../design/graph.css"
 
 const GraphCanvas = lazy(() => import("./GraphCanvas").then((m) => ({ default: m.GraphCanvas })))
 /** A run whose first picture (team members and statements) has fewer nodes than this opens as a list: a handful of dots says less than a short list does. */
@@ -39,10 +41,19 @@ const DETAIL: { key: "calm" | "checked" | "all"; hidden: readonly NodeKind[] }[]
 
 export function GraphScreen() {
   const list = useRunList()
+  // The run to show: the one the address names ("#Graph/<kind>/<id>?node=<node id>"), else the one another view handed over.
   const [picked, setPicked] = useState<Pick<RunRef, "kind" | "id"> | undefined>(() => {
+    const named = graphOfHash(window.location.hash)
     const swarm = takeOpen("swarm"), board = takeOpen("board")
-    return swarm ? { kind: "swarm", id: swarm } : board ? { kind: "board", id: board } : undefined
+    return named ? { kind: named.kind, id: named.id } : swarm ? { kind: "swarm", id: swarm } : board ? { kind: "board", id: board } : undefined
   })
+  // A node the address names: selected once its run's graph has loaded.
+  const [pending, setPending] = useState(() => graphOfHash(window.location.hash)?.node)
+  useEffect(() => {
+    const sync = () => { const named = graphOfHash(window.location.hash); if (named) { setPicked((p) => (p?.kind === named.kind && p.id === named.id ? p : { kind: named.kind, id: named.id })); setPending(named.node) } }
+    window.addEventListener("hashchange", sync)
+    return () => window.removeEventListener("hashchange", sync)
+  }, [])
   // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
   const [auto, setAuto] = useState<RunRef>()
   if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
@@ -105,6 +116,21 @@ export function GraphScreen() {
   }, [full, step])
 
   const select = useCallback((id: string | null) => { setSelected(id); if (id) setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })) }, [])
+  // A node named by the address: its kind is shown if the detail level hid it, the replay steps back to the whole run, and it is selected.
+  if (pending && full) {
+    const node = full.nodes.find((n) => n.id === pending)
+    setPending(undefined)
+    if (node) {
+      if (hiddenKinds.has(node.kind)) setChosenKinds(new Set([...hiddenKinds].filter((k) => k !== node.kind)))
+      setStep(null)
+      select(node.id)
+    }
+  }
+  // The address says which run is shown and which node is selected, so it can be copied and Back returns here.
+  useEffect(() => {
+    if (!current || pending || !/^#Graph\b/.test(window.location.hash)) return
+    replaceAddress(graphLink(current.kind, current.id, selected ?? undefined))
+  }, [current, selected, pending])
   const stepBy = useCallback((by: 1 | -1) => {
     if (order.length === 0) return
     const i = order.findIndex((n) => n.id === selected)
@@ -123,8 +149,7 @@ export function GraphScreen() {
   }
   const openRun = () => {
     if (!current) return
-    setOpen(current.kind, current.id)
-    window.location.hash = current.kind === "swarm" ? "#Compare" : "#Board"
+    window.location.hash = runLink(current.kind, current.id)
   }
   const play = () => {
     if (playing) { setPlaying(false); return }
@@ -143,7 +168,7 @@ export function GraphScreen() {
   if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading runs…</Loading></div>
   if (!current) {
     return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
-      <p className="graph-empty card-surface">No runs yet. Start one in Board or Compare, and its graph appears here.</p></div>
+      <p className="graph-empty card-surface">No runs yet. Start one in {LABEL.Board}, and its graph appears here.</p></div>
   }
 
   const status = full?.status
@@ -269,7 +294,8 @@ export function GraphScreen() {
               : <aside className="graph-panel" aria-label="About this graph">
                   <h2>About this picture</h2>
                   <p className="muted small">Select a node to see its details and to light up what it is connected to.</p>
-                  <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? "Compare" : "Board"}</button>
+                  <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? LABEL.Compare : LABEL.Board}</button>
+                  <a className="btn" href={logLink({ kind: current.kind, id: current.id })}>Open in the Agent Log</a>
                   <details><summary>Run details</summary><p className="muted small">{full.kind === "board" ? "Review" : "Team-of-nine run"} <code>{full.runId}</code></p></details>
                   <details><summary>What this graph cannot show</summary><ul className="graph-notes">{full.notes.map((n) => <li key={n}>{n}</li>)}</ul></details>
                 </aside>}

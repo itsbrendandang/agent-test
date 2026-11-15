@@ -10,7 +10,7 @@ Each local run has a folder `glhf/runs/<run-id>/`. Run folders are not in git.
 | File | Written by | Content |
 |---|---|---|
 | `record.json` | Run tracker | The run as the CLI and the dashboard show it: phase, score, settings. |
-| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. |
+| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. Token use has input, output and total, plus cache reads and writes, reasoning tokens and cost (`total_cost`) when Inspect reports them. `versions` has the git commit (`git_commit`) and whether tracked files had changes (`git_dirty`). |
 | `grade.json` | The benchmark's grader | The full grade. |
 | `runner.log`, `tracker.log` | Runner, run tracker | Logs. Read `runner.log` first when a run fails. |
 | `logs/` | Inspect | Every model call of the run. |
@@ -53,7 +53,7 @@ not a benchmark score.
 | Supported findings | Claims with the verdict supported. |
 | Rejected claims | Claims with the verdict refuted. |
 | Not established | Claims with the verdict insufficient or untested. They are not findings. |
-| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. |
+| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. An issue raised by `harness` comes from a refuted claim: code raises it so that the Reviser checks the claim's artifacts. |
 | Unresolved issues | Issues that are still open or were not fixed. |
 
 ## Verdict rules
@@ -156,9 +156,9 @@ Read `<run folder>/ledger.json` (written by the solver process), not the copy un
 |---|---|
 | `claims[].registered[]` | One entry per registered test: `name`, `method`, `by`, `test_null`, `script_path`, `script_sha256`, `script_bytes`, `script` (the registered content), `relevance`, `run`. |
 | `registered[].relevance` | `null` until judged. Then `score` (or `null` when the judge gave no usable answer), `relevant`, `reason`, `threshold`, `judge`, `judge_model`, `proposer_model`, `same_vendor_as_proposer`. |
-| `registered[].run` | `null` until run. Then `status` (`ok`, `changed`, `missing`, `failed`, `timeout`, `unparsable`), `command`, `exit_code`, `seconds`, `output_tail`, `sha256_at_run`, `p_value`, `contradicts`, `detail`. Only `ok` has a result. |
+| `registered[].run` | `null` until run. Then `status` (`ok`, `changed`, `missing`, `failed`, `timeout`, `unparsable`), `command`, `exit_code`, `seconds`, `output_tail`, `sha256_at_run`, `p_value`, `contradicts`, `detail`, and where it ran: `backend` (`docker`, or `modal` with `ANALYSIS_BACKEND=modal`) and `sandbox_id`. Only `ok` has a result. Where it ran does not change the verdict rules. |
 | `claims[].tests[]` | The results that enter the mean: `name`, `p_value`, `contradicts`, `note`, `by`, `registered`, `e_value`, and now `source` (`harness` or `model`) and `counts` (`false`: judged not relevant, worth 0). |
-| Events | `test.registered` (now with `test_null`, `script_path`, `script_sha256`, `script_bytes`), `test.relevance`, `test.executed`, `test.recorded` (now with `source`, `counts`), `test.not_run`, `relevance.skipped`, `relevance.failed`, and the phase events of `relevance N`. |
+| Events | `test.registered` (now with `test_null`, `script_path`, `script_sha256`, `script_bytes`), `test.relevance`, `test.executed` (now with `backend` and `sandbox_id`), `test.recorded` (now with `source`, `counts`), `test.not_run`, `relevance.skipped`, `relevance.failed`, and the phase events of `relevance N`. |
 
 Tested with automated tests, including a simulation of the false-support rate with a table of
 before and after ([DESIGN.md](../glhf/docs/DESIGN.md#simulation-of-false-support)), and with
@@ -232,7 +232,7 @@ time limits end phases at different points.
 
 Fixed or recorded: the order of roles and their budgets (code), the verdicts (code), every model
 call (`logs/`), every search query and claim (ledger), the analysis scripts, and the settings,
-seed and versions (`run.json`).
+seed, versions and git commit (`run.json`).
 
 Report the mean and the range of several runs, not one run.
 

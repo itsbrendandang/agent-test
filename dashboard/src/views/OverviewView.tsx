@@ -1,20 +1,24 @@
-// The Overview: the question box, and under it the Agent Lab. The team is idle at its desks until a question is sent
-// from this page; then the lab follows that answer's own events (nothing moves without one) and the answer is
-// written below it. One line keeps the counts: a practice run is counted apart and is never added to research.
+// The Overview: the question box, the answer asked from here right under it, then the Agent Lab. The team is idle at
+// its desks until a question is sent from this page; then the lab follows that answer's own events (nothing moves
+// without one). That answer is also Research's conversation, so Research shows it and continues it. One quiet line
+// keeps the counts: a practice run is counted apart and is never added to research.
+// Spend and limits are in Settings (Usage and limits), not on this page.
 import { useEffect, useMemo, useState } from "react"
 import { EngineOffline } from "@/components/Shared"
-import { answerLab, emptyLab, Lab, type LabEvent } from "@/lab"
+import { answerLab, boardLab, emptyLab, Lab, type LabEvent } from "@/lab"
+import { useLabEvents } from "@/lab/useLabModel"
+import { Provenance } from "@/components/Provenance"
 import { answerRuns, boardRuns, mergeRuns, swarmRuns, type RunRef } from "@/lab/runs"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { setAsk, setOpenAnswer } from "@/lib/open"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
-import { Credits } from "@/overview/Credits"
+import { startConversation } from "@/home/chat"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
 import { ResearchAnswer } from "@/research/Answer"
 import { ResearchRefused, startResearch, useSeenEvents } from "@/research/api"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
 function useRuns() {
@@ -43,15 +47,26 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const totals = useMemo(() => totalsOf(runs ?? []), [runs])
 
   // The answer asked from this page. The lab below is drawn from its events, the same ones the answer reads.
-  const [asked, setAsked] = useState<{ id: string; question: string }>()
+  const [asked, setAsked] = useState<{ id: string; question: string; kind?: "answer" | "board"; example?: boolean }>()
+  useEffect(() => {
+    const open = () => {
+      const match = /^#Overview\/example\/(?:(answer|board)\/)?([\w.-]+)$/.exec(window.location.hash)
+      if (!match) return
+      const kind = match[1] === "board" ? "board" : "answer"
+      void readEngine<{ question?: string; title?: string; example?: boolean }>(`/api/${kind === "board" ? "runs" : "research"}/${encodeURIComponent(match[2])}`).then((r) => { if (r.example) setAsked({ id: match[2], question: r.question ?? r.title ?? "Example board review", kind, example: true }) }, () => {})
+    }
+    open(); window.addEventListener("hashchange", open)
+    return () => window.removeEventListener("hashchange", open)
+  }, [])
   const [refused, setRefused] = useState<string>()
-  const events = useSeenEvents(asked?.id)
-  const lab = useMemo(() => (asked ? answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events])
+  const events = useSeenEvents(asked?.kind === "board" ? undefined : asked?.id)
+  const board = useLabEvents(asked?.kind === "board" ? "board" : undefined, asked?.kind === "board" ? asked.id : undefined)
+  const lab = useMemo(() => (asked ? asked.kind === "board" ? boardLab(board.events, asked.id) : answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events, board.events])
   const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
   // An answer that ended is counted at once: the line of counts is read again.
   useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
-    : lab.status === "done" ? "The team finished your question. The answer is below."
+    : lab.status === "done" ? "The team finished your question. The answer is above."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
     : lab.status === "cancelled" ? "The answer was stopped."
     : "The team is working on your question. Nothing here moves unless the engine reports it."
@@ -60,6 +75,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
     try {
       const started = await startResearch(question, effort)
       setAsked({ id: started.id, question })
+      startConversation(question, started) // the same answer is Research's conversation: opening Research shows it, and a follow-up there continues its thread
       return true
     } catch (error) {
       // An engine without direct answers (or with them switched off): Research makes its team-review plan for the question, as before.
@@ -76,21 +92,23 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <Hero onOpen={onOpen} onAsk={ask} />
       {refused && <p className="newrun-error" role="alert">{refused}</p>}
 
+      {/* The answer comes first, so it is in view without scrolling past the lab. */}
+      {asked && asked.kind !== "board" && (
+        <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
+          <h2 id="ov-answer-title">{asked.question}</h2>
+          <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
+          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Ask a follow-up in Research"}</button>
+        </section>
+      )}
+
       <div className="ov-lab">
         <div className="ov-row-label">
           <span id="ov-lab-title">Agent Lab</span>
+          {asked?.example && <Provenance kind="example" />}
           <small role="status">{said}</small>
         </div>
         <Lab model={lab} />
       </div>
-
-      {asked && (
-        <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
-          <h2 id="ov-answer-title">{asked.question}</h2>
-          <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
-          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>Ask a follow-up in Research</button>
-        </section>
-      )}
 
       <p className="ov-counts" aria-label="Totals">
         {runs
@@ -98,10 +116,6 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
           : "Counting the runs… "}
         <button type="button" className="ov-link" onClick={() => onOpen("Runs")}>See everything in Saved research</button>
       </p>
-
-      <Credits />
-
-      <button type="button" className="ov-link" onClick={() => onOpen("Benchmarks")}>See how we do on the benchmarks</button>
     </div>
   )
 }

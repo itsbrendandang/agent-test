@@ -81,8 +81,10 @@ from .tools import (
     record_falsification_test,
     register_falsification_test,
     report_failed_replication,
+    required_columns,
     resolve_issue,
     run_registered_test,
+    sandbox_backend,
     save_ledger,
     search_docs,
     triage_claim,
@@ -799,6 +801,9 @@ def glhf_swarm(
         outputs = case.expected_outputs
         brief = state.input_text
         ledger = Ledger()
+        # Column names the brief asks for, read from its Required Outputs: contract warnings only.
+        columns = required_columns(brief, outputs)
+        ledger.log("contract.columns", columns=columns)
         from .. import tasks  # late import: avoids a cycle with tasks.py
 
         total = float(budget_seconds or tasks.TIME_LIMIT_SECONDS)
@@ -865,6 +870,9 @@ def glhf_swarm(
                 "token_share": TOKEN_SHARE["relevance"],
             },
             test_results="run by the harness from the registered script",
+            # Where every command, check and registered test of this run executes: local Docker,
+            # or a Modal sandbox (ANALYSIS_BACKEND=modal). Each test.executed event repeats it.
+            analysis_backend=sandbox_backend(),
             engine=engine,
             flags=flags.event() if engine == "claims" else None,
         )
@@ -903,7 +911,7 @@ def glhf_swarm(
                     python(timeout=600),
                     text_editor(timeout=120),
                     request_web_access(),
-                    check_outputs(outputs),
+                    check_outputs(outputs, columns),
                     read_ledger(ledger),
                     *extra,
                 ],
@@ -1435,7 +1443,7 @@ def glhf_swarm(
                     book.used = tokens_used()
             placed = await assemble_outputs(board, outputs)
             ledger.log("finish.assembled", artifacts=placed)
-            missing = needs_rescue(await check_contract(outputs))
+            missing = needs_rescue(await check_contract(outputs, columns=columns))
             if missing:
                 ledger.log("finish.missing", failing=contract_text(missing)[:500])
             await save_ledger(ledger)
@@ -1453,7 +1461,9 @@ def glhf_swarm(
                 )
                 first_pass = "Produce every required artifact on the full data."
                 if "pilot" in plan.phases:
-                    pilot_contract = contract_text(await check_contract(outputs, root=PILOT_OUT))
+                    pilot_contract = contract_text(
+                        await check_contract(outputs, root=PILOT_OUT, columns=columns)
+                    )
                     ledger.log("pilot.checked", contract=pilot_contract)
                     first_pass += (
                         f"\n\nShape check of the pilot's subsampled artifacts under {PILOT_OUT}:\n"
@@ -1467,7 +1477,7 @@ def glhf_swarm(
                     if review_left() < min_review_seconds(clock.budget):
                         ledger.log("review.skipped", round=n, reason="time")
                         break
-                    contract = contract_text(await check_contract(outputs))
+                    contract = contract_text(await check_contract(outputs, columns=columns))
                     await phase(
                         f"audit {n}",
                         auditor,
@@ -1486,6 +1496,10 @@ def glhf_swarm(
                     # not yet judged is asked about again. Each step skips itself without budget.
                     await judge_relevance(n)
                     await run_registered_tests(n)
+                    # A refuted claim (harness-run contradicting test, or a failed replication)
+                    # becomes a major issue on its artifacts, so the Reviser must act on it.
+                    if ledger.flag_refuted():
+                        await save_ledger(ledger)
                     step = review_step(critique, len(ledger.open_issues()))
                     if critique.completed:
                         critiques_completed += 1
@@ -1527,7 +1541,7 @@ def glhf_swarm(
                     )
                 # Last line of defence for completeness: only for artifacts that would score zero
                 # because they are missing or unreadable. Warnings never trigger it.
-                last_check = await check_contract(outputs)
+                last_check = await check_contract(outputs, columns=columns)
                 if check_failed(last_check):
                     # Nothing is known about the artifacts, so the finisher is not started on a guess.
                     ledger.log("contract.check_failed", detail=contract_text(last_check)[:500])
@@ -1541,7 +1555,7 @@ def glhf_swarm(
                         finisher,
                         "These required artifacts are missing or cannot be read:\n"
                         f"{contract_text(failing)}\n\nFull check, for context:\n"
-                        f"{contract_text(await check_contract(outputs))}",
+                        f"{contract_text(await check_contract(outputs, columns=columns))}",
                         finish_time,
                     )
                 elif failing:
@@ -1608,7 +1622,7 @@ def glhf_swarm(
                     )
                 except Exception as error:  # a missing lessons file must not fail the run
                     ledger.log("memory.failed", error=str(error)[:200])
-            final = contract_text(await check_contract(outputs))
+            final = contract_text(await check_contract(outputs, columns=columns))
             # The reporter is the only writer of METHODS.md. If it was cut off or could not
             # start and left none, code writes one from the ledger and says so in its first line.
             written = await sandbox().exec(["test", "-s", "/outputs/METHODS.md"])

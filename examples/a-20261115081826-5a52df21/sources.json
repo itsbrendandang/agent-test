@@ -1,0 +1,34 @@
+{
+ "answer": "a-20261115081826-5a52df21",
+ "question": "What GLP-1s are working in the market right now?",
+ "mode": "demo",
+ "sources": [
+  {
+   "n": 1,
+   "url": "https://example.org/mock/kras-g12c-clinical-review",
+   "title": "KRAS G12C inhibitors in NSCLC: clinical review (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "cited": true,
+   "text": "Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients. Acquired resistance through secondary KRAS mutations and bypass signaling is common within a year."
+  },
+  {
+   "n": 2,
+   "url": "https://example.org/mock/herg-acrylamide",
+   "title": "hERG liability of piperazine acrylamides (mock)",
+   "provider": "fixture",
+   "note": "example source, in vitro",
+   "cited": true,
+   "text": "In vitro patch-clamp data show piperazine-linked quinazolines often inhibit hERG at low micromolar concentrations; adding polarity reduced hERG binding in most matched pairs."
+  },
+  {
+   "n": 3,
+   "url": "https://example.org/mock/resistance-mechanisms",
+   "title": "Resistance mechanisms to KRAS G12C inhibition (mock)",
+   "provider": "fixture",
+   "note": "example source, clinical",
+   "cited": false,
+   "text": "Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification. Compounds binding a different pocket region retained activity against Y96D in cell assays."
+  }
+ ]
+}

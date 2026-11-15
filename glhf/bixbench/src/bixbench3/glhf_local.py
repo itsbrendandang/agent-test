@@ -17,23 +17,37 @@ Layout of --out:
 Nothing the sandbox wrote is trusted as a record or followed as a link: a symbolic link, a hard
 link, a device or a pipe under outputs/ fails the run (it scored 1.0 once, by pointing at the
 grader's own files), and outputs/glhf/ledger.json is only the roles' working copy.
+
+Where the analyses run (`--sandbox`): `docker` (the default) is a container on this machine.
+`modal` runs the same sandbox as a Modal Sandbox, made by PR #32's code in glhf/bixbench_v1
+(bixbench_v1/glhf_modal.py): our checked R/conda image, no network, only the case's data/ files
+uploaded, a timeout, a per-run dollar cap, every sandbox terminated. It is billed, so it is a
+paid call (refused while NO_PAID_CALLS is on, also with `--model mock`), and it needs that
+package and its `modal` group: run this module from glhf/bixbench_v1 with
+`uv run --group modal python -m bixbench3.glhf_local ... --sandbox modal`. If Modal cannot be
+used the run fails with the reason; it never falls back to Docker on its own. On Modal only
+/outputs comes back (workspace/ stays empty on the host); the ledger is kept on the host as
+always.
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import json
 import os
 import platform
 import re
 import shutil
+import signal
 import stat
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from inspect_ai import eval as inspect_eval
 from inspect_ai.model import (
@@ -63,6 +77,8 @@ GRADED_DIR = "graded"  # under --out; never mounted into the sandbox
 UNTRUSTED = "sandbox-copy-untrusted"  # in graded/glhf/: ledger.<this>.json, FINDINGS.<this>.md
 MAX_OUTPUT_FILE_BYTES = 2 * 1024**3
 MAX_OUTPUT_TOTAL_BYTES = 8 * 1024**3
+SANDBOXES = ("docker", "modal")  # where the analyses run; see the module text
+MODAL_BRIDGE = "bixbench_v1.glhf_modal"  # PR #32's Modal sandbox, for this runner
 # The agent names of solver.py and the instructions that identify each in a model call.
 ROLE_PROMPTS = {
     "scout": swarm_roles.SCOUT,
@@ -121,7 +137,8 @@ def role_script(
     Story: the first pass leaves the first artifact with a header and no rows; the critic
     raises that and registers a test script for the claim that the first pass was complete; the
     relevance judge passes the test and the harness runs it: it contradicts, the claim is
-    refuted; the reviser fixes the artifact; in the second review the critic registers a test
+    refuted, and code raises a major issue for the refutation; the reviser fixes the artifact
+    and resolves both issues; in the second review the critic registers a test
     for the other claim, the judge passes it, the harness runs it and the claim is supported;
     the reporter writes METHODS.md. No role types a p-value. `relevance_scores` are the judge's
     scores in rounds 1 and 2 (a score under 0.8 in round 2 leaves the claim unsupported).
@@ -246,6 +263,13 @@ def role_script(
                 issue_id="I1",
                 status="fixed",
                 resolution="Reran the counting script; rows present.",
+            ),
+            # I2: raised by code because the row-count test refuted C2 (the same empty file).
+            _call(
+                "resolve_issue",
+                issue_id="I2",
+                status="fixed",
+                resolution="The refutation was right: the first pass had no rows. Rows restored.",
             ),
             _done("fixed"),
         ],
@@ -613,6 +637,125 @@ def trusted_ledger(out_dir: Path, sample_store: dict[str, Any] | None) -> dict[s
     return loaded
 
 
+# Token counts Inspect may report besides input, output and total. Kept only when reported (not None), so a run.json
+# from a provider without them has the same shape as before. Cache reads count fully in `total_tokens` (and in
+# Inspect's token limit) but cost a tenth of an input token, so the split is needed to turn tokens into dollars.
+USAGE_EXTRAS = (
+    "input_tokens_cache_read",
+    "input_tokens_cache_write",
+    "reasoning_tokens",
+    "total_cost",
+)
+
+
+def usage_summary(model_usage: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Token use per model for run.json, from Inspect's ``log.stats.model_usage``."""
+    summary: dict[str, dict[str, Any]] = {}
+    for name, u in model_usage.items():
+        row: dict[str, Any] = {
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "total_tokens": u.total_tokens,
+        }
+        for key in USAGE_EXTRAS:
+            value = getattr(u, key, None)
+            if value is not None:
+                row[key] = value
+        summary[name] = row
+    return summary
+
+
+def git_state(cwd: Path | None = None) -> dict[str, Any]:
+    """The commit of the code that ran, and whether tracked files differed from it. None values without git."""
+    where = cwd or Path(__file__).parent
+
+    def git(*args: str) -> str | None:
+        try:
+            done = subprocess.run(
+                ["git", *args],
+                cwd=where,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout.strip()
+
+    commit = git("rev-parse", "HEAD")
+    if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        return {"git_commit": None, "git_dirty": None}
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return {"git_commit": commit, "git_dirty": None if status is None else bool(status)}
+
+
+class AnalysisBackend(Protocol):
+    """Where a run's analyses execute when it is not local Docker (`--sandbox modal`). `prepare`
+    refuses or gets ready before the run and returns the Inspect sandbox (provider name and its
+    config as a dict); `finish` runs after the run, also after an error or Ctrl+C, makes sure
+    nothing is left running and returns what run.json records about it."""
+
+    name: str
+
+    def prepare(
+        self,
+        *,
+        data_dir: Path,
+        outputs_dir: Path,
+        run_dir: Path,
+        task: str,
+        solver: str,
+        time_limit_seconds: int,
+    ) -> tuple[str, dict[str, Any]]: ...
+
+    def finish(self) -> dict[str, Any]: ...
+
+
+class AnalysisBackendUnavailable(RuntimeError):
+    """The analyses were asked to run elsewhere and cannot. Nothing runs on this machine instead."""
+
+
+class _Unavailable:
+    """Stands in for a backend that could not even be loaded: `prepare` raises the reason, so the
+    run fails the same way as when the backend itself refuses."""
+
+    def __init__(self, name: str, error: Exception) -> None:
+        self.name, self.error = name, error
+
+    def prepare(
+        self,
+        *,
+        data_dir: Path,
+        outputs_dir: Path,
+        run_dir: Path,
+        task: str,
+        solver: str,
+        time_limit_seconds: int,
+    ) -> tuple[str, dict[str, Any]]:
+        raise self.error
+
+    def finish(self) -> dict[str, Any]:
+        return {"errors": [str(self.error)[:300]]}
+
+
+def modal_backend(usd_cap: float | None = None) -> AnalysisBackend:
+    """The Modal backend from glhf/bixbench_v1 (PR #32's sandbox, image check and boundary). Raises
+    AnalysisBackendUnavailable, never falls back, when that package is not installed here."""
+    try:
+        bridge = importlib.import_module(MODAL_BRIDGE)
+    except ImportError as error:
+        raise AnalysisBackendUnavailable(
+            f"--sandbox modal needs glhf/bixbench_v1 and its modal group ({error}). Run this "
+            "module from glhf/bixbench_v1: uv run --group modal python -m bixbench3.glhf_local "
+            "... --sandbox modal"
+        ) from error
+    backend: AnalysisBackend = (
+        bridge.ModalAnalyses() if usd_cap is None else bridge.ModalAnalyses(usd_cap=usd_cap)
+    )
+    return backend
+
+
 def load_case(case_dir: Path) -> RuntimeCase:
     first = (case_dir / "cases.jsonl").read_text(encoding="utf-8").splitlines()[0]
     return RuntimeCase.model_validate(json.loads(first))
@@ -639,12 +782,26 @@ def run_local(
     no_retriage: bool = False,
     max_parallel: int = 2,
     mock_tokens_per_call: int | None = None,
+    sandbox: str = "docker",
+    modal_usd_cap: float | None = None,
+    backend: AnalysisBackend | None = None,
 ) -> dict[str, Any]:
     """`mock_outputs` replaces the fixed script of `--model mock` (tests only).
     `mock_tokens_per_call` makes each answer of the claims engine's script report that many
-    tokens (tests only)."""
+    tokens (tests only). `sandbox` is where the analyses run (see the module text);
+    `modal_usd_cap` is the most a Modal run may cost; `backend` replaces the Modal backend
+    (tests only)."""
+    if sandbox not in SANDBOXES:
+        raise ValueError(f"unknown sandbox {sandbox!r}; use one of {SANDBOXES}")
+    if sandbox == "docker" and backend is not None:
+        raise ValueError("backend replaces the Modal backend: it needs sandbox='modal'")
     # NO_PAID_CALLS (paid.py): before anything is created or started.
-    paid.refuse_run(model, (role_models or {}).values(), exa=exa)
+    paid.refuse_run(model, (role_models or {}).values(), exa=exa, modal=sandbox == "modal")
+    if sandbox == "modal" and backend is None:
+        try:
+            backend = modal_backend(modal_usd_cap)
+        except AnalysisBackendUnavailable as error:  # written to run.json below, as a failure
+            backend = _Unavailable("modal", error)
     case_dir, out_dir = case_dir.resolve(), out_dir.resolve()
     case = load_case(case_dir)
     workspace, outputs, data = out_dir / "workspace", out_dir / "outputs", case_dir / "data"
@@ -727,6 +884,9 @@ def run_local(
         )
         if swarm
         else [],
+        # "docker": a container on this machine; "modal": a Modal sandbox (settings.modal says
+        # which image, what it cost and that every sandbox was terminated).
+        "sandbox": sandbox,
     }
     summary: dict[str, Any] = {
         "task": case.task_id,
@@ -739,7 +899,11 @@ def run_local(
         "memory_dir": str(memory_dir) if memory_dir else None,
         "seed": seed,
         "settings": settings,
-        "versions": {"inspect_ai": version("inspect_ai"), "python": platform.python_version()},
+        "versions": {
+            "inspect_ai": version("inspect_ai"),
+            "python": platform.python_version(),
+            **git_state(),
+        },
         "started_at": started,
         "status": "running",
     }
@@ -757,21 +921,49 @@ def run_local(
             "no_retriage": no_retriage,
             "max_parallel": max_parallel,
         }
-    # A scripted run never reaches a search engine, key or no key.
-    with offline_search() if model == "mock" else contextlib.nullcontext():
-        logs = inspect_eval(
-            bixbench3_cases(
-                dataset_path=str(case_dir),
-                case_ids=[case.task_id],
+    if backend is not None:
+        try:
+            kind, config = backend.prepare(
+                data_dir=data,
+                outputs_dir=outputs,
+                run_dir=out_dir,
+                task=case.task_id,
                 solver=solver,
-                review_rounds=review_rounds,
                 time_limit_seconds=time_limit_seconds,
-                **task_args,
-            ),
-            model=resolved,
-            log_dir=str(out_dir / "logs"),
-            display="none",
-        )
+            )
+        except Exception as error:  # refused or unreachable: say so; nothing runs here instead
+            os.environ.pop(swarm_tools.HOST_LEDGER_ENV, None)
+            summary.update(
+                status="failed",
+                error=f"the analyses could not start on {backend.name}: {error}. Nothing was "
+                "run on this machine instead.",
+                finished_at=time.time(),
+                seconds=round(time.time() - started, 1),
+            )
+            settings[backend.name] = _finished(backend)
+            (out_dir / "run.json").write_text(json.dumps(summary, indent=2, default=str))
+            return summary
+        task_args |= {"sandbox_type": kind, "sandbox_config": config}
+    # A scripted run never reaches a search engine, key or no key.
+    try:
+        with offline_search() if model == "mock" else contextlib.nullcontext():
+            logs = inspect_eval(
+                bixbench3_cases(
+                    dataset_path=str(case_dir),
+                    case_ids=[case.task_id],
+                    solver=solver,
+                    review_rounds=review_rounds,
+                    time_limit_seconds=time_limit_seconds,
+                    **task_args,
+                ),
+                model=resolved,
+                log_dir=str(out_dir / "logs"),
+                display="none",
+            )
+    finally:
+        if backend is not None:  # also after an error or Ctrl+C: nothing is left running
+            settings[backend.name] = _finished(backend)
+            (out_dir / "run.json").write_text(json.dumps(summary, indent=2, default=str))
     log = logs[0]
     os.environ.pop(swarm_tools.HOST_LEDGER_ENV, None)
     sample = log.samples[0] if log.samples else None
@@ -792,14 +984,7 @@ def run_local(
     else:
         result = dict(grade(grading_spec, graded))
         (out_dir / "grade.json").write_text(json.dumps(result, indent=2, default=str))
-    usage = {
-        name: {
-            "input_tokens": u.input_tokens,
-            "output_tokens": u.output_tokens,
-            "total_tokens": u.total_tokens,
-        }
-        for name, u in (log.stats.model_usage or {}).items()
-    }
+    usage = usage_summary(log.stats.model_usage or {})
     ledger = trusted_ledger(out_dir, dict(sample.store) if sample else None) if swarm else None
     if ledger is not None:
         if refused:
@@ -858,6 +1043,15 @@ def run_local(
     return summary
 
 
+def _finished(backend: AnalysisBackend) -> dict[str, Any]:
+    """What the backend's `finish` returns, or the reason it failed (recorded, never raised: the
+    run's own result must still be written)."""
+    try:
+        return backend.finish()
+    except Exception as error:
+        return {"errors": [f"finishing the {backend.name} sandbox failed: {error}"[:300]]}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -900,6 +1094,19 @@ def main() -> int:
     parser.add_argument(
         "--max-parallel", type=int, default=2, help="claims engine: claims worked on at once"
     )
+    parser.add_argument(
+        "--sandbox",
+        choices=SANDBOXES,
+        default="docker",
+        help="where the analyses run: docker on this machine (default) or a Modal sandbox "
+        "(billed; needs glhf/bixbench_v1 with its modal group, see the module text)",
+    )
+    parser.add_argument(
+        "--modal-usd-cap",
+        type=float,
+        help="--sandbox modal: the most this run may cost on Modal, in USD; refused before it "
+        "starts when its worst case (every sandbox alive until its timeout) is higher",
+    )
     arguments = parser.parse_args()
     role_models: dict[str, str] = {}
     for item in arguments.role_model:
@@ -908,9 +1115,18 @@ def main() -> int:
             parser.error(f"--role-model expects ROLE=MODEL with ROLE in {ROLES}; got {item!r}")
         role_models[role] = name
     try:  # NO_PAID_CALLS (paid.py): a refusal is one line, not a traceback
-        paid.refuse_run(arguments.model, role_models.values(), exa=arguments.exa)
+        paid.refuse_run(
+            arguments.model,
+            role_models.values(),
+            exa=arguments.exa,
+            modal=arguments.sandbox == "modal",
+        )
     except paid.PaidCallsOff as error:
         parser.error(str(error))
+    if arguments.sandbox == "modal":
+        # A plain `kill` (SIGTERM, as the engine sends after Ctrl+C) is handled like Ctrl+C, so
+        # the Modal sandboxes are terminated and their cost written down before the exit.
+        signal.signal(signal.SIGTERM, lambda *_: os.kill(os.getpid(), signal.SIGINT))
     summary = run_local(
         arguments.case,
         arguments.out,
@@ -929,8 +1145,10 @@ def main() -> int:
         no_pilot=arguments.no_pilot,
         no_retriage=arguments.no_retriage,
         max_parallel=arguments.max_parallel,
+        sandbox=arguments.sandbox,
+        modal_usd_cap=arguments.modal_usd_cap,
     )
-    print(json.dumps(summary, indent=2))
+    print(json.dumps(summary, indent=2, default=str))
     return 0 if summary["status"] == "done" else 1
 
 

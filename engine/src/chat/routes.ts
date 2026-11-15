@@ -7,12 +7,13 @@
 //   POST /api/chat/plans/:id/start    {confirm: true}: starts the plan's board run, once.
 //
 // Every route needs the dashboard's Origin or the session token. Anything that can spend needs the token.
-import { existsSync, writeFileSync } from "node:fs"
+import { existsSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { buildIndex, keywordAnswer, parseReply, renderIndex } from "../search/ask.ts"
-import { BudgetReached, checkDailyBudget, RunBusy, runDir } from "../board/board.ts"
+import { BudgetReached, checkDailyBudget, OverridesUnreadable, RunBusy, runDir } from "../board/board.ts"
 import { BriefRejected } from "../brief.ts"
-import type { BoardConfig } from "../config.ts"
+import { writeWhole } from "../fsx.ts"
+import { type BoardConfig, VERIFIER } from "../config.ts"
 import { access, allowedOrigin, HttpError, isSafeId, readJson, tokenNeeded } from "../http.ts"
 import { PaidCallsOff, paidCallsOff } from "../paid/paid.ts"
 import { type BoardRun, search } from "../search/search.ts"
@@ -181,8 +182,8 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
     if (!Array.isArray(body.agents) || body.agents.some((a) => typeof a !== "string")) throw bad("agents", "agents must be a list of agent names from the plan")
     const unknown = (body.agents as string[]).filter((a) => !agents.some((p) => p.name === a))
     if (unknown.length) throw bad("agents", `not in this plan at the ${effort.id} level: ${unknown.slice(0, 5).join(", ")}`)
-    agents = agents.filter((a) => a.name === lead.name || (body.agents as string[]).includes(a.name)) // the lead always stays
-    if (agents.filter((a) => a.source !== "specialist").length < 2) throw bad("agents", "keep at least one board member besides the lead")
+    agents = agents.filter((a) => a.name === lead.name || a.name === VERIFIER || (body.agents as string[]).includes(a.name)) // the lead and the verifier always stay
+    if (agents.filter((a) => a.source !== "specialist" && a.name !== VERIFIER).length < 2) throw bad("agents", "keep at least one board member besides the lead and the evidence verifier")
   }
   const limits: Limits = { ...effort.limits }
   if (body.limits !== undefined) {
@@ -226,7 +227,7 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
   const dir = runDir(config, runId)
   // `specialists` (only when the plan has some): board.ts adds them as members with no tools (specialists.ts runSpecialists checks every name and method again).
   const guests = agents.filter((a) => a.source === "specialist")
-  if (existsSync(dir)) writeFileSync(`${dir}/overrides.json`, JSON.stringify({ planId: id, effort: effort.id, board: agents.slice(1).filter((a) => a.source !== "specialist").map((a) => a.name), meeting: { max_usd: limits.maxUsd, max_minutes: limits.maxMinutes, max_rounds: limits.maxRounds }, modelTier: effort.modelTier, maxSearches: effort.search.maxSearches,
+  if (existsSync(dir)) writeWhole(`${dir}/overrides.json`, JSON.stringify({ planId: id, effort: effort.id, board: agents.slice(1).filter((a) => a.source !== "specialist").map((a) => a.name), meeting: { max_usd: limits.maxUsd, max_minutes: limits.maxMinutes, max_rounds: limits.maxRounds }, modelTier: effort.modelTier, maxSearches: effort.search.maxSearches,
     ...(guests.length ? { specialists: guests.map((a) => ({ name: a.name, why: a.why, methods: (a.methods ?? []).map((m) => m.name) })) } : {}) }, null, 2))
   deps.launch(runId)
   const warnings = [...new Set(derived.warnings)]
@@ -298,7 +299,7 @@ export async function handleChat(req: IncomingMessage, res: ServerResponse, part
     json(404, { error: "not found" })
   } catch (error) {
     if (res.headersSent) return void res.end()
-    const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
+    const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy || error instanceof OverridesUnreadable ? 409 : error instanceof PaidCallsOff ? 403 : 500
     const field = (error as { field?: unknown }).field
     json(code, { error: code === 500 ? "the chat route failed" : String(error instanceof Error ? error.message : error), ...(typeof field === "string" ? { field } : {}), ...(error instanceof FieldError ? error.extra : {}) })
     if (code === 500) console.error("chat route failed:", error)

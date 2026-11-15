@@ -51,6 +51,14 @@ export function safeUrl(url: unknown): url is string {
   try { const u = new URL(url); return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password && u.hostname.includes(".") } catch { return false }
 }
 
+/**
+ * The address of a source's picture as it may be kept and shown: https only (a page served over https cannot show an
+ * http picture), the rules of `safeUrl`, and at most 1,000 characters. Anything else is no picture.
+ */
+export function imageUrl(url: unknown): string | undefined {
+  return safeUrl(url) && url.length <= 1_000 && url.startsWith("https://") ? url : undefined
+}
+
 // ── Markers ──────────────────────────────────────────────────────────────────────────────────────
 
 /** "[1, 2]" and "[1-3]" and "【1】" written as "[1][2]..." so that one form is left to read. */
@@ -252,6 +260,17 @@ export const ADVICE_LINE = "This is a research summary, not medical advice."
 const HEALTH = /\b(patients?|treat(?:ment|ed|ing)?|therap(?:y|ies|eutic)|drugs?|dos(?:e|es|ing|age)|disease|disorder|syndrome|cancer|tumou?rs?|diabet|clinical|trials?|symptoms?|diagnos|medic(?:ine|ation|al)|side effects?|adverse|toxicit|safety|surgery|vaccin|infection|risk of|mortality|pregnan|inhibitors?|health)\b/i
 /** A word rule for "is this about health": used with the planner's own flag, so the line is added even when the planner failed. */
 export const looksMedical = (question: string): boolean => HEALTH.test(question)
+
+const PROTOCOL_ASK = /\b(protocols?|sops?|standard operating procedures?|step[- ]by[- ]step)\b/i
+const HOW_TO = /\b(how (?:do|can|should|would|could) (?:i|we|you|one)|how to|what is the best way to|best practices? for)\b/i
+const LAB_WORK = /\b(assays?|extract(?:ion|ing)? (?:of )?(?:rna|dna|proteins?|genomic|nucleic)\w*|(?:rna|dna|protein) extraction|isolat\w*|stain\w*|transfect\w*|transduc\w*|clon(?:e|es|ed|ing)|purif\w*|blot\w*|(?:q|rt-?q?)?pcr|knock-?(?:out|down|in)|crispr|antibod\w*|lysates?|lyse|lysis|centrifug\w*|pipet\w*|elisa|flow cytometry|facs|microscop\w*|immuno(?:stain|precipitat|fluoresc|histochem|blot)\w*|electrophoresis|plasmids?|organoids?|cell cultures?|cell lines?|primary cells|tissue sections?|fixation|ligat\w*|titrat\w*|cryopreserv\w*|steriliz\w*|autoclav\w*|hepatocytes?|pbmcs?)\b/i
+/**
+ * True when a question explicitly asks for a lab protocol or an SOP, or how to do a lab method ("How do I isolate
+ * primary hepatocytes?"). Used only when the planner's reply could not be read (withProtocols in pipeline.ts): then
+ * code decides whether to search the published lab protocols. Both forms need a named lab method, so "What is the
+ * Kyoto Protocol?" or "How do I get rid of mice?" does not count.
+ */
+export const looksProtocol = (question: string): boolean => LAB_WORK.test(question) && (PROTOCOL_ASK.test(question) || HOW_TO.test(question))
 
 /** The answer with the medical line as its last line, once. */
 export function withAdviceLine(markdown: string): string {

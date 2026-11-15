@@ -1,0 +1,30 @@
+[
+ {
+  "id": "a-20261115081826-1459beed/answer.md",
+  "name": "answer.md",
+  "type": "text/markdown",
+  "bytes": 1991,
+  "at": 1794759506508
+ },
+ {
+  "id": "a-20261115081826-1459beed/sources.json",
+  "name": "sources.json",
+  "type": "application/json",
+  "bytes": 1483,
+  "at": 1794759506508
+ },
+ {
+  "id": "a-20261115081826-1459beed/sources.csv",
+  "name": "sources.csv",
+  "type": "text/csv",
+  "bytes": 491,
+  "at": 1794759506508
+ },
+ {
+  "id": "a-20261115081826-1459beed/record.json",
+  "name": "record.json",
+  "type": "application/json",
+  "bytes": 16646,
+  "at": 1794759506508
+ }
+]

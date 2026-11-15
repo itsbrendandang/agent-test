@@ -7,6 +7,7 @@ import "./env.ts"
 import { BudgetReached, loadState, RunBusy, runBoard, startRun } from "./board/board.ts"
 import { BriefRejected } from "./brief.ts"
 import { loadConfig, MOCK, path, ROOT } from "./config.ts"
+import { flushDb } from "./db/supabase.ts"
 import type { Stamped } from "./events.ts"
 import { PaidCallsOff } from "./paid/paid.ts"
 import { MissingTierKey } from "./providers.ts"
@@ -52,6 +53,7 @@ try {
     console.log("usage: board run [brief.md] [--max-usd N] | board resume <run-id> | board list")
   }
 } catch (error) {
+  await flushDb()
   if (error instanceof BriefRejected) { console.error(`✘ ${error.message}`); process.exit(2) }
   if (error instanceof RunBusy || error instanceof BudgetReached || error instanceof PaidCallsOff || error instanceof MissingTierKey) { console.error(`✘ ${error.message}`); process.exit(3) }
   throw error

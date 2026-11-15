@@ -9,7 +9,7 @@ git clone https://github.com/itsbrendandang/agent-test.git
 cd agent-test
 ```
 
-The GitHub repository is named `agent-test`. Some older text calls the project `drug-board` or Drug Board; the product is now called AI Scientist Bot.
+The GitHub repository is named `agent-test`. Some older text calls the project `drug-board` or Drug Board; the product is now called Bit Crew.
 All these names mean this repository.
 
 ## Quick start with Docker only
@@ -158,7 +158,7 @@ Three things that have gone wrong here, and how to avoid them:
   `npm run check -- --fast`. It lists every file that still has markers.
 - **The team list changed and the engine was not restarted.** The engine reads `board/config.yaml`
   and `board/agents/` when it starts. After a pull, restart it.
-- **The scout was removed from the team list.** The scout is the only member that searches. Without
+- **The scout was removed from the team list.** The scout is the only member with the web search. Without
   it a review has no sources and no statement about the literature can be checked. If you change
   the `board:` list in `board/config.yaml`, keep the scout, and run the board tests
   (`cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-real-run.test.ts test/board-direct.test.ts`).

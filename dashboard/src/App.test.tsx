@@ -51,7 +51,7 @@ describe("one header row", () => {
     expect(await header.findByText("Is hERG a risk?")).toBeInTheDocument()
     expect(header.getByRole("button", { name: "Inspector" })).toBeInTheDocument()
     expect(within(screen.getByRole("main")).queryByText("Is hERG a risk?")).toBeNull() // moved, not copied
-    await t.user.click(screen.getByRole("button", { name: "Compare" }))
+    await t.user.click(screen.getByRole("button", { name: "Agents" }))
     expect(header.queryByText("Is hERG a risk?")).toBeNull()
     expect(header.queryByRole("button", { name: "Inspector" })).toBeNull()
   })
@@ -62,14 +62,15 @@ describe("one header row", () => {
 })
 
 describe("the navigation", () => {
-  it("has the primary places, a quieter More group, and Settings once: in the profile menu at the foot", async () => {
+  it("has the primary places, one quieter group, and Settings once: in the profile menu at the foot", async () => {
     await show("#Home")
     const nav = within(screen.getByRole("navigation", { name: "Places" }))
     const names = nav.getAllByRole("button").map((b) => b.textContent)
-    expect(names).toEqual(["Overview", "Research", "Agent Log", "Saved research", "Compare", "Team review", "Agents", "Graph", "Benchmarks"])
-    const more = within(nav.getByRole("list", { name: "More" })).getAllByRole("button")
-    expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Benchmarks"])
-    for (const b of more) expect(b).toHaveAttribute("data-quiet")
+    expect(names).toEqual(["Overview", "Research", "Saved research", "Agent Log", "Team review", "Graph", "Agents"])
+    const how = within(nav.getByRole("list", { name: "How it works" })).getAllByRole("button")
+    expect(how.map((b) => b.textContent)).toEqual(["Agent Log", "Team review", "Graph", "Agents"])
+    expect(nav.queryByRole("list", { name: "Evaluation" })).toBeNull()
+    for (const b of how) expect(b).toHaveAttribute("data-quiet")
     expect(nav.getByRole("button", { name: "Research" })).not.toHaveAttribute("data-quiet")
     expect(screen.queryByRole("button", { name: "Settings" })).toBeNull() // no bare Settings item any more
     const profile = screen.getByRole("button", { name: "Set up your profile: profile and settings" })
@@ -98,6 +99,12 @@ describe("the navigation", () => {
     expect(screen.getByTestId("place")).toHaveTextContent(place)
     expect(await within(screen.getByRole("main")).findByText(new RegExp(text))).toBeInTheDocument()
   })
+  it.each([["#Benchmarks", "Benchmarks", "benchmarks view"], ["#Compare", "Compare", "compare view"]])("%s is not in the navigation but still opens by its address", async (hash, place, text) => {
+    await show(hash)
+    expect(screen.getByTestId("place")).toHaveTextContent(place)
+    expect(await within(screen.getByRole("main")).findByText(text)).toBeInTheDocument()
+    expect(within(screen.getByRole("navigation", { name: "Places" })).queryByRole("button", { name: place })).toBeNull()
+  })
   it("a deep link to a run hands the run to its view, also when the address changes later", async () => {
     await show("#Board/202611150232-kras-g12c-hit-to-lead")
     expect(takeOpen("board")).toBe("202611150232-kras-g12c-hit-to-lead")
@@ -120,10 +127,10 @@ describe("the navigation", () => {
     await t.user.click(menu)
     const drawer = within(await screen.findByRole("dialog", { name: "Navigation" }))
     expect(drawer.getByRole("button", { name: "Saved research" })).toHaveAttribute("aria-current", "page")
-    await t.user.click(drawer.getByRole("button", { name: "Compare" }))
+    await t.user.click(drawer.getByRole("button", { name: "Graph" }))
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull())
-    expect(screen.getByTestId("place")).toHaveTextContent("Compare")
-    expect(window.location.hash).toBe("#Compare")
+    expect(screen.getByTestId("place")).toHaveTextContent("Graph")
+    expect(window.location.hash).toBe("#Graph")
   })
   it("on a wide window the menu button folds the navigation to icons and remembers it", async () => {
     const t = await show("#Home")
