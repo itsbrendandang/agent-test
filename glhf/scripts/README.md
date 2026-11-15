@@ -103,6 +103,10 @@ The "answerer" is who answers the questions:
    python3 glhf/scripts/eval_adapter.py sciq --answerer claude --model claude-3-5-haiku-20241022
    ```
 
+The `claude` and `openai` answerers are paid calls. They refuse unless the person who pays
+sets `NO_PAID_CALLS=0` (the project's paid-calls switch, `refuse_paid()`). The other answerers
+are free and always work. Test: `glhf/bixbench_v1/tests/test_eval_adapter_paid.py`.
+
 This is the quick "one model call per question" test. The full multi-agent swarm
 is wired via `swarm_answers()` in `eval_adapter.py`.
 

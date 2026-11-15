@@ -33,6 +33,8 @@ from pathlib import Path
 # Make bixbench_v1 importable without installing it (src layout).
 SRC = Path(__file__).resolve().parents[1] / "bixbench_v1" / "src"
 sys.path.insert(0, str(SRC))
+# bixbench_v1.paid uses the shared switch in bixbench3.paid.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bixbench" / "src"))
 
 from bixbench_v1.dataset import (  # noqa: E402
     KeyEntry,
@@ -155,6 +157,10 @@ def answer_claude(public: list[PublicQuestion], model: str) -> dict[str, str]:
     This is the lightweight "test with our model" path: a single Claude call per question,
     not the full Docker/Modal swarm. Uses the Anthropic REST API over urllib (no SDK).
     """
+    from bixbench_v1.paid import _paid
+
+    # Paid call: refused unless NO_PAID_CALLS=0 (AGENTS.md). Check before any key or client.
+    _paid.refuse_paid(f"the claude answerer ({model})")
     import json
     import os
     import re
@@ -201,6 +207,10 @@ def answer_claude(public: list[PublicQuestion], model: str) -> dict[str, str]:
 
 def answer_openai(public: list[PublicQuestion], model: str) -> dict[str, str]:
     """Answer each MCQ with an OpenAI model (one letter per question). Needs OPENAI_API_KEY."""
+    from bixbench_v1.paid import _paid
+
+    # Paid call: refused unless NO_PAID_CALLS=0 (AGENTS.md). Check before any key or client.
+    _paid.refuse_paid(f"the openai answerer ({model})")
     import json
     import os
     import re
