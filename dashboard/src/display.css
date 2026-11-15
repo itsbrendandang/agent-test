@@ -25,6 +25,7 @@
   --radius: 0.625rem;
 }
 :is(h1, h2, h3, h4, h5, h6):where(:not(.ov-lab *, .lab-page *)) { font-family: var(--font-heading); }
+.ov-page .ov-lab .lab-both { max-height: none; }
 .search-composer textarea::placeholder { font-family: var(--font-display); font-weight: 500; opacity: 1; }
 .ov-hero { color: var(--text); }
 .ov-hero h2 { color: var(--text); font-family: var(--font-display); }
