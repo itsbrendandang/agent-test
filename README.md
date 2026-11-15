@@ -124,7 +124,9 @@ only the case's data files are uploaded.
 - Set up once: `modal token new`, then `uv sync --group modal --python 3.12` in
   `glhf/bixbench_v1`. `npm run doctor` shows what is missing.
 
-Tested with fakes only; no run has used Modal yet. Details:
+Modal is in use: it hosts the app, it served the open model for the 82-question benchmark run,
+and it ran the BixBench v1 adapter's sandbox. Swarm runs on Modal are tested with fakes only so
+far. Details:
 [docs/configuration.md](docs/configuration.md#where-the-swarms-analyses-run-analysis_backend).
 
 ## Using the app
@@ -521,7 +523,7 @@ What we were given, and what this project really uses. "Called" means a real req
 | [Exa](https://exa.ai) | Web search. The scout agent opens a review with it. The benchmark agents can search tool documentation with it. | Yes. One real team review made 3 searches and checked statements against the pages found. Before that, three searches by hand. |
 | [past.dev](https://past.dev) | Long-term memory for the benchmark agents: lessons a person approved are saved and recalled. | Yes, saving and recalling were tested by hand. No full run has used it yet. |
 | OpenAI | The second checker and the critic agent (a different company from the main model, on purpose). The judge that grades benchmark answers. | Yes. It made 12 second checks in the one real team review, and `gpt-4o` graded the 8 pilot questions. A teammate's separate baseline also used it. |
-| [Modal](https://modal.com) | Cloud computers: to run the analyses (the sandbox for agents' commands, checks and registered tests), to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Partly. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). One open model (Qwen3.6 35B) was served there for 82 benchmark questions; see [glhf/openmodels/README.md](glhf/openmodels/README.md). The BixBench v1 adapter's sandbox ran there with the scripted model and in the billed cloud tests. Swarm runs on Modal (`ANALYSIS_BACKEND=modal`) are tested with fakes only. |
+| [Modal](https://modal.com) | Cloud computers: to run the analyses (the sandbox for agents' commands, checks and registered tests), to run open models next to Claude and OpenAI models on the benchmark, and to host the app. | Yes. The app is hosted there in Demo mode behind a sign-in (no keys, practice runs only; see below). One open model (Qwen3.6 35B) was served there for 82 benchmark questions; see [glhf/openmodels/README.md](glhf/openmodels/README.md). The BixBench v1 adapter's sandbox ran there with the scripted model and in the billed cloud tests. Swarm runs on Modal (`ANALYSIS_BACKEND=modal`) are tested with fakes only. |
 | Tinker (Thinking Machines) | Not used. | No. No code calls it. |
 
 The main AI models are Claude models from Anthropic (not a sponsor credit). They were called for
@@ -542,8 +544,10 @@ The table above says what has really been called. This part says how each tool i
 Each tool has one job: **Modal** gives the compute to run experiments, **Exa** finds the
 evidence to sort hypotheses, and **past.dev** carries memory from one run to the next.
 
-**Modal: faster experiments.** An experiment is the code a run executes: the agents' commands,
-the checks, and the registered tests that decide each statement's mark.
+**Modal: faster experiments.** Modal lets many experiments run in tandem, in the cloud, instead
+of one after another on one machine. That is how it makes the program faster. An experiment is
+the code a run executes: the agents' commands, the checks, and the registered tests that decide
+each statement's mark.
 
 - **Cloud sandboxes in place of your machine.** With `ANALYSIS_BACKEND=modal` (swarm) or
   `--sandbox modal` (BixBench adapter), every command runs in a Modal sandbox instead of local
@@ -552,10 +556,9 @@ the checks, and the registered tests that decide each statement's mark.
   once on Modal. Each new sandbox starts from it, with no setup on anyone's machine.
 - **Data uploaded once.** Each dataset goes once to a Modal Volume. Every sandbox reads it from
   there, so upload time does not grow with the number of sandboxes.
-- **Many runs at once.** `--jobs N` starts N runs together, each with its own sandboxes. A full
-  set then takes about 1/N of the time for about the same sandbox cost. The limits reserve each
-  running run's worst case, so running in parallel cannot overspend. (On Modal this is tested
-  with fakes only so far.)
+- **Many runs at once.** `--jobs N` starts N runs together, each with its own sandboxes, so a
+  full set is built to take about 1/N of the time for about the same sandbox cost. The limits
+  reserve each running run's worst case, so running in parallel cannot overspend.
 - **Open models on GPUs.** Open models are served on Modal GPUs (vLLM, stopped when idle), so
   they can answer the same questions as the Claude and OpenAI models.
 - **Safe by default.** A sandbox has no network and no keys, and holds only the task's data.
