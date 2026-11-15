@@ -18,6 +18,7 @@ time is up (bixbase/cellrun.py), so nothing a cell starts outlives it.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -29,6 +30,20 @@ from . import cellrun
 
 DEFAULT_TIMEOUT_S = 120
 MAX_OUTPUT_CHARS = 20_000
+
+# Variables a code cell never gets: keys, tokens and credentials (the same names the v1 adapter's
+# Modal probe looks for). A cell is code the model wrote; it must not be able to print a key.
+_SECRET_NAME = re.compile(
+    r"(API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)|^(ANTHROPIC|OPENAI|EXA|PAST|HF|HUGGING|AWS|GOOGLE|"
+    r"GCP|AZURE|TINKER|OPENROUTER|MODAL|SUPABASE)_",
+    re.I,
+)
+
+
+def cell_environment() -> dict[str, str]:
+    """This process's environment without anything that looks like a secret."""
+    return {k: v for k, v in os.environ.items() if not _SECRET_NAME.search(k)}
+
 
 _SANDBOX_EXEC = shutil.which("sandbox-exec")
 # Linux: bubblewrap re-mounts the data dir read-only for the child process.
@@ -165,7 +180,7 @@ class Sandbox:
         cell_path = self.work_dir / f"cell_{idx:03d}.{ext}"
         cell_path.write_text(code)
 
-        env = dict(os.environ)
+        env = cell_environment()  # no key reaches a cell
         env["DATA_DIR"] = str(self.data_dir)
         env["MPLBACKEND"] = "Agg"  # headless figures
         env.setdefault("OMP_NUM_THREADS", "4")

@@ -57,7 +57,9 @@ def parse_args(argv=None):
                    choices=["llm_verifier", "str_verifier", "range_verifier"],
                    help="override per-question eval_mode")
     p.add_argument("--solver", choices=["single", "board"], default="single",
-                   help="single = baseline agent; board = 5-member board")
+                   help="single = baseline agent; board = the app's board (board/config.yaml: "
+                        "the Lead Scientist and the members of its board: list, each on its "
+                        "model tier; --model is not used)")
     p.add_argument("--no-grade", action="store_true")
     p.add_argument("--skip-existing", action="store_true",
                    help="skip (study,repeat) pairs with a successful result.json")
@@ -88,19 +90,31 @@ def run_one(study, repeat_idx, args, run_root: Path, session=None) -> dict:
         max_tool_calls=args.budget_tool_calls,
     )
     budget = Budget(caps)
-    llm = LLMClient(model=args.model, provider=args.provider,
-                    seed=args.seed + repeat_idx)
+    seed = args.seed + repeat_idx
+    if args.solver == "board":
+        # The app's board: each member on its tier from board/config.yaml (models:), as in the app.
+        board_def = board.load_board()
+        llm_for = board.app_clients(board_def, seed)
+        models = {m: board.model_of(board_def, m) for m in board_def.members}
+        model_name, provider_name = "board/config.yaml tiers", "mixed"
+    else:
+        llm = LLMClient(model=args.model, provider=args.provider, seed=seed)
+        model_name, provider_name, models = llm.model, llm.provider, None
 
     prepare_study_data(study, Path(args.cache_dir))
-    solve = board.solve if args.solver == "board" else agent.solve
     sandbox = None
     if session is not None:  # --sandbox modal: one Modal sandbox for this run
         sandbox = session.open(study.data_dir, run_dir / "work",
                                name=f"{study.study_id}/rep{repeat_idx}",
                                seconds=args.budget_seconds)
     try:
-        result = solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox,
-                       run_id=f"{study.study_id}/rep{repeat_idx}")
+        run_id = f"{study.study_id}/rep{repeat_idx}"
+        if args.solver == "board":
+            result = board.solve(study, budget, llm_for=llm_for, run_dir=run_dir,
+                                 sandbox=sandbox, run_id=run_id, board=board_def)
+        else:
+            result = agent.solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox,
+                                 run_id=run_id)
     finally:
         sandbox_line = sandbox.close() if sandbox is not None else None
 
@@ -109,8 +123,9 @@ def run_one(study, repeat_idx, args, run_root: Path, session=None) -> dict:
         "repeat": repeat_idx,
         "seed": args.seed + repeat_idx,
         "solver": args.solver,
-        "model": llm.model,
-        "provider": llm.provider,
+        "model": model_name,
+        "provider": provider_name,
+        "member_models": models,
         "submitted": result.submitted,
         "forced": result.forced,
         "stop_reason": result.stop_reason,

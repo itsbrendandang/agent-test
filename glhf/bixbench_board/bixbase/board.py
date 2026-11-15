@@ -1,27 +1,31 @@
-"""Board solver: the 5 strong board members from agent-test on a BixBench study.
+"""Board solver: the app's board (board/config.yaml) on a BixBench study.
 
-Same interface as bixbase.agent.solve, so run.py, the sandbox, the Budget, the
-logger and the grader stay shared with the single-agent baseline. ONE Budget is
-shared by every member, so the board gets the same caps as the baseline.
+Same interface as bixbase.agent.solve, so run.py, the sandbox, the Budget, the logger and the
+grader stay shared with the single-agent baseline. ONE Budget is shared by every member.
 
-Members (prompts read at run time from the repository's board/agents/, or from
-BOARD_AGENTS_DIR; their sha256 is logged in run_start):
-  proposer         plans one claim (an answer) per question. No tools.
-  experimenter     Full mode: runs the analysis (Python or R) and records draft
-                   answers. Revise mode: fixes what the reviewers flagged.
-  methods-auditor  checks the methods. No tools.
-  critic           tries to break each draft answer. No tools. Runs in
-                   parallel with the auditor and does not see its report.
-  reporter         writes the final answers via submit_answer. No tools.
+The board is the app's (engine/src/board/board.ts), read at run time:
+  - the members are the `board:` list of board/config.yaml, in its order, plus the Lead
+    Scientist; each member's prompt, title, deliverable, model tier and modes come from its file
+    in board/agents/ (their sha256 is logged in run_start);
+  - each member's model is its tier in the `models:` of board/config.yaml (lead, strong, cheap,
+    rival), as in the app;
+  - the Lead Scientist runs the review. It frames the question, then calls `converse`: every
+    member gets the message and replies; the members that inspect the data (the scout) reply
+    first, and the others then reply in parallel. Round 1 is blind; from round 2, every member
+    sees the others' last replies. The lead names the experimenter's mode (pilot, full, revise).
+    At most meeting.max_rounds rounds and meeting.lead_turns lead calls; past a limit, only one
+    round with final=true may run;
+  - each member keeps its own conversation across rounds.
 
-The lead scientist is this code: it runs the fixed order above and splits the
-budget. Edits to the prompts, all made here in code (the .md files are not changed):
-  - lines about "the lead gives you no task" are dropped (every turn has a task);
-  - the experimenter's "You cannot run code on this board yet" line is replaced,
-    because in this benchmark it can run code;
-  - the critic's "different model vendor" line is dropped: every member uses
-    the solver model so the comparison with the baseline is model-fair;
-  - a shared BENCHMARK header explains claims = answers and the shared budget.
+What the benchmark changes, and why. The prompt files are not edited; a BENCHMARK section is
+added to each prompt, and it says that it overrides the file where they differ:
+  - the scout cannot search (AGENTS.md: no open search for benchmark agents; the answers are in
+    published papers). It inspects the study's data with list_dir and read_file;
+  - the experimenter can run code (run_code, Python or R) and read the data. In the app it cannot
+    run code; on BixBench the answers come from the data. It is the only member that runs code;
+  - there are no claim checkers: in the app they check claims against web and literature
+    sources, which the benchmark forbids. So there are no verdicts in the digest;
+  - the lead ends with submit_answer (an answer per question id), not with write_memo.
 """
 
 from __future__ import annotations
@@ -31,44 +35,30 @@ import json
 import os
 import re
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from .agent import SolveResult, _content_blocks, _execute_tool, _task_prompt
+import yaml
+
+from .agent import TOOL_SCHEMAS, SolveResult, _content_blocks, _execute_tool, _task_prompt
 from .budget import Budget, BudgetExhausted
 from .llm import LLMClient
 from .loader import Study
 from .logger import RunLogger
 from .sandbox import Sandbox, settings_of
 
-AGENTS_DIR = Path(
-    os.environ.get("BOARD_AGENTS_DIR")
-    or Path(__file__).resolve().parents[3] / "board" / "agents"
-)
-MEMBERS = ["proposer", "experimenter", "methods-auditor", "critic", "reporter"]
-
-# share of each cap the experimenter may use before the next phase starts
-FULL_PHASE_SHARE = 0.60
-REVIEW_START_LIMIT = 0.80  # skip review/revise when this much is gone
-REVISE_PHASE_SHARE = 0.90
-LOG_CHARS = 30_000
-
-_DROP_PATTERNS = [
-    re.compile(r"lead gives you no task", re.I),
-    re.compile(r"different model vendor", re.I),
-]
-_NO_CODE = re.compile(r"You cannot run code on this board yet\.[^\n]*")
-_CAN_CODE = (
-    "In this benchmark you can run code: use run_code (Python or R). Do not "
-    "report a number you did not compute."
-)
-
-BENCHMARK_HEADER = """BENCHMARK MODE. The board is answering a BixBench data-analysis study.
-- The study data is read-only in DATA_DIR. Only the Experimenter can run code (Python or R).
-- Each question is one claim. The claim is the answer to that question id.
-- Final answers are graded against hidden reference answers. Short, exact answers (a number,
-  a gene name, a short phrase) score best. A refusal scores as wrong.
-- One budget is shared by the whole board: {caps}. Be brief."""
+REPO = Path(__file__).resolve().parents[3]
+AGENTS_DIR = Path(os.environ.get("BOARD_AGENTS_DIR") or REPO / "board" / "agents")
+CONFIG_FILE = Path(os.environ.get("BOARD_CONFIG") or REPO / "board" / "config.yaml")
+LEAD = "lead-scientist"
+DATA_READERS = ("scout",)  # members that inspect the data; they reply first in every round
+CODE_RUNNERS = ("experimenter",)  # the only members with run_code
+WRAP_UP_SHARE = 0.85  # past this share of any budget cap, only a final round may run
+MEMBER_TOOL_TURNS = 40  # model calls one member may make in one round (the budget is the real cap)
+DIGEST_CHARS = 6_000  # of each member's reply, in the next round's digest
 
 RUN_CODE_SCHEMA = {
     "name": "run_code",
@@ -83,39 +73,39 @@ RUN_CODE_SCHEMA = {
         "type": "object",
         "properties": {
             "code": {"type": "string"},
-            "language": {"type": "string", "enum": ["python", "r"],
-                         "default": "python"},
+            "language": {"type": "string", "enum": ["python", "r"], "default": "python"},
         },
         "required": ["code"],
     },
 }
+READ_TOOLS = [t for t in TOOL_SCHEMAS if t["name"] in ("list_dir", "read_file")]
 ANSWERS_PROP = {
     "type": "object",
     "description": "{question_id: answer_string}",
     "additionalProperties": {"type": "string"},
 }
-RECORD_DRAFT_SCHEMA = {
-    "name": "record_draft",
+CONVERSE_SCHEMA = {
+    "name": "converse",
     "description": (
-        "Hand your results to the reviewers. answers maps each question id "
-        "to your concise answer; evidence maps each question id to one or "
-        "two lines on how you computed it."
+        "Address the whole board. Every member replies (the scout first, then the others in "
+        "parallel); you get their replies. Give each member its task by name. Use modes to name "
+        "the role a member with modes plays this round, e.g. {\"experimenter\": \"pilot\"}."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "answers": ANSWERS_PROP,
-            "evidence": {"type": "object",
-                         "additionalProperties": {"type": "string"}},
+            "message": {"type": "string"},
+            "final": {"type": "boolean", "description": "true to ask for final positions"},
+            "modes": {"type": "object", "additionalProperties": {"type": "string"}},
         },
-        "required": ["answers"],
+        "required": ["message"],
     },
 }
 SUBMIT_SCHEMA = {
     "name": "submit_answer",
     "description": (
-        "Submit the board's final answers. answers maps each question id to "
-        "the final concise answer. Call exactly once."
+        "Submit the board's final answers: answers maps each question id to a short, exact "
+        "answer. Call exactly once, after final positions."
     ),
     "input_schema": {
         "type": "object",
@@ -124,26 +114,140 @@ SUBMIT_SCHEMA = {
     },
 }
 
+_NO_CODE = re.compile(r"You cannot run code on this board yet\.[^\n]*")
+_CAN_CODE = (
+    "In this benchmark you can run code: use run_code (Python or R). Do not report a number you "
+    "did not compute."
+)
 
-def _strip_frontmatter(text: str) -> str:
-    if text.startswith("---"):
-        end = text.find("\n---", 3)
-        if end != -1:
-            return text[end + 4:].lstrip()
-    return text
+MEMBER_BENCHMARK = """# BENCHMARK MODE (this section overrides the file above where they differ)
+The board is answering a BixBench data-analysis study, not a drug brief.
+- The study data is read-only in DATA_DIR. Only the Experimenter can run code (Python or R).
+- Nobody can search the web, the literature or a database. There are no checkers and no verdicts.
+- Each question is one claim: the claim is the answer to that question id. Final answers are
+  graded against hidden reference answers; short, exact answers score best.
+- One budget is shared by the whole board: {caps}. Be brief.
+{role}"""
+
+ROLE_NOTES = {
+    "scout": (
+        "- You cannot search. Your job here is the first half of your purpose: inspect the data. "
+        "Use list_dir and read_file on DATA_DIR and report the files, their columns, the samples "
+        "in each group, and anything missing or corrupted."
+    ),
+    "experimenter": (
+        "- You run the analysis with run_code, and can read files with list_dir and read_file. "
+        "Report each question id with the value you computed."
+    ),
+}
+
+LEAD_BENCHMARK = """# BENCHMARK MODE (this section overrides the file above where they differ)
+The board is answering a BixBench data-analysis study: the questions are below, not a brief.
+- The Scout cannot search. It inspects the study data and reports what is there. It replies
+  first in every round.
+- The Experimenter can run code (Python or R) and is the only member that can. A number it did
+  not compute is not a result.
+- There are no checkers and no verdicts. Judge each answer by the computed results and the
+  reviews.
+- Each question is one claim: the claim is the answer to that question id.
+- You have at most {max_rounds} rounds (converse calls). One budget is shared by the whole
+  board: {caps}.
+- Instead of write_memo, end with submit_answer: an answer for every question id, short and
+  exact (a number, a gene name, a short phrase). Never leave an id empty: give the best estimate.
+
+# Your board
+{board}"""
 
 
-def load_member_prompt(name: str, agents_dir: Path = AGENTS_DIR) -> str:
-    body = _strip_frontmatter((agents_dir / f"{name}.md").read_text())
-    body = _NO_CODE.sub(_CAN_CODE, body)
-    lines = [ln for ln in body.splitlines()
-             if not any(p.search(ln) for p in _DROP_PATTERNS)]
-    return "\n".join(lines).strip()
+# --- The board's definition, read from board/config.yaml and board/agents/ ----------------------
 
 
-def prompt_hashes(agents_dir: Path = AGENTS_DIR) -> dict[str, str]:
-    return {m: hashlib.sha256((agents_dir / f"{m}.md").read_bytes()).hexdigest()[:16]
-            for m in MEMBERS}
+@dataclass
+class AgentDef:
+    name: str
+    title: str
+    tier: str
+    tools: list[str]
+    deliverable: str
+    prompt: str
+    sha256: str
+    modes: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class BoardDef:
+    lead: AgentDef
+    roster: list[AgentDef]  # the members, in the order of board/config.yaml
+    models: dict[str, str]  # tier -> "provider/model"
+    max_rounds: int
+    lead_turns: int
+
+    @property
+    def members(self) -> list[str]:
+        return [self.lead.name, *(a.name for a in self.roster)]
+
+
+def load_agent(name: str, agents_dir: Path = AGENTS_DIR) -> AgentDef:
+    raw = (agents_dir / f"{name}.md").read_bytes()
+    text = raw.decode()
+    match = re.match(r"^---\n(.*?)\n---\n?(.*)$", text, re.S)
+    if not match:
+        raise ValueError(f"agent {name} has no frontmatter")
+    front = yaml.safe_load(match.group(1)) or {}
+    return AgentDef(
+        name=str(front.get("name", name)),
+        title=str(front.get("title", name)),
+        tier=str(front.get("model", "strong")),
+        tools=[str(t) for t in front.get("tools") or []],
+        deliverable=str(front.get("deliverable", "")),
+        prompt=match.group(2).strip(),
+        sha256=hashlib.sha256(raw).hexdigest()[:16],
+        modes={str(k): str(v) for k, v in (front.get("modes") or {}).items()},
+    )
+
+
+def load_board(config_file: Path = CONFIG_FILE, agents_dir: Path = AGENTS_DIR) -> BoardDef:
+    config = yaml.safe_load(config_file.read_text()) or {}
+    names = [str(n) for n in config.get("board") or []]
+    if not names:
+        raise ValueError(f"{config_file} has no board: list")
+    meeting = config.get("meeting") or {}
+    return BoardDef(
+        lead=load_agent(LEAD, agents_dir),
+        roster=[load_agent(n, agents_dir) for n in names],
+        models={str(k): str(v) for k, v in (config.get("models") or {}).items()},
+        max_rounds=int(meeting.get("max_rounds", 4)),
+        lead_turns=int(meeting.get("lead_turns", 20)),
+    )
+
+
+def prompt_hashes(board: BoardDef | None = None) -> dict[str, str]:
+    board = board or load_board()
+    return {a.name: a.sha256 for a in (board.lead, *board.roster)}
+
+
+def model_of(board: BoardDef, member: str) -> str:
+    """The "provider/model" of a member: its tier in board/config.yaml, as in the app."""
+    agent = board.lead if member == board.lead.name else next(a for a in board.roster if a.name == member)
+    return board.models.get(agent.tier) or board.models.get("strong", "")
+
+
+def app_clients(board: BoardDef, seed: int | None = None) -> Callable[[str], LLMClient]:
+    """One client per model (members on the same tier share it), made when first needed."""
+    made: dict[str, LLMClient] = {}
+    lock = threading.Lock()
+
+    def client_for(member: str) -> LLMClient:
+        provider, _, model = model_of(board, member).partition("/")
+        with lock:
+            if model_of(board, member) not in made:
+                made[model_of(board, member)] = LLMClient(model=model, provider=provider, seed=seed)
+            return made[model_of(board, member)]
+
+    return client_for
+
+
+# --- Helpers ---------------------------------------------------------------------------------------
 
 
 def _caps_text(budget: Budget) -> str:
@@ -186,7 +290,7 @@ def _data_overview(sandbox: Sandbox, max_lines: int = 60) -> str:
     return "DATA_DIR contents:\n" + ("\n".join(rows) or "(empty)")
 
 
-def _parse_answers(raw) -> dict[str, str] | None:
+def _parse_answers(raw: Any) -> dict[str, str] | None:
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
@@ -197,318 +301,314 @@ def _parse_answers(raw) -> dict[str, str] | None:
     return {str(k): str(v) for k, v in raw.items()}
 
 
-class _Board:
-    def __init__(self, study, budget, llm, sandbox, logger):
-        self.study = study
-        self.budget = budget
-        self.llm = llm
-        self.sandbox = sandbox
-        self.logger = logger
-        self.lock = threading.Lock()
-        self.header = BENCHMARK_HEADER.format(caps=_caps_text(budget))
-        self.prompts = {m: load_member_prompt(m) + "\n\n" + self.header
-                        for m in MEMBERS}
-        self.task = _task_prompt(study)
-        self.work_log: list[str] = []
-        self.forced = False
-        self.exhausted_reason: str | None = None
-
-    def log(self, event: str, **kw):
-        with self.lock:
-            self.logger.log(event, **kw)
-
-    def ask(self, member: str, content: str, *, tools=None,
-            enforce_budget=True):
-        """One turn for a member with an empty context."""
-        msgs = [{"role": "user", "content": content}]
-        self.log("member_input", member=member, content=content)
-        resp = self.llm.chat(msgs, system=self.prompts[member], tools=tools,
-                             budget=self.budget, enforce_budget=enforce_budget)
-        self.log("member_output", member=member,
-                 content=_content_blocks(resp.text, resp.tool_calls),
-                 budget=self.budget.snapshot())
-        return resp
-
-    # -- experimenter tool loop ----------------------------------------------
-
-    def experimenter_loop(self, messages, *, stop_share, final_tool):
-        """Run tools until final_tool is called or stop_share of the budget is
-        used. Returns (answers or None, evidence)."""
-        tools = [RUN_CODE_SCHEMA] + [
-            t for t in _BASE_TOOLS if t["name"] in ("list_dir", "read_file")
-        ] + [final_tool]
-        while True:
-            if _used_share(self.budget) >= stop_share:
-                return None, {}
-            try:
-                resp = self.llm.chat(messages, system=self.prompts["experimenter"],
-                                     tools=tools, budget=self.budget)
-            except BudgetExhausted as e:
-                self.exhausted_reason = e.reason
-                return None, {}
-            blocks = _content_blocks(resp.text, resp.tool_calls)
-            messages.append({"role": "assistant", "content": blocks})
-            self.log("member_output", member="experimenter", content=blocks,
-                     budget=self.budget.snapshot())
-            if not resp.tool_calls:
-                messages.append({"role": "user", "content": (
-                    f"Continue: use a tool, or call {final_tool['name']}.")})
-                continue
-            results, done = [], None
-            for tc in resp.tool_calls:
-                self.budget.record_tool_call()
-                self.logger.log_tool_call(tc.name, tc.id, tc.input, member="experimenter")
-                text, found = self._run_tool(tc)
-                if found is not None:
-                    done = found
-                self.logger.log_tool_result(tc.id, tc.name, text, member="experimenter")
-                results.append({"type": "tool_result", "tool_use_id": tc.id,
-                                "content": text})
-            messages.append({"role": "user", "content": results})
-            if done is not None:
-                return done
-
-    def _run_tool(self, tc):
-        name, inp = tc.name, tc.input or {}
-        try:
-            if name == "run_code":
-                code = inp.get("code", "")
-                lang = "r" if str(inp.get("language", "python")).lower() in (
-                    "r", "rscript") else "python"
-                if not code.strip():
-                    return "ERROR: empty code", None
-                res = self.sandbox.run_code(code, language=lang)
-                self.logger.log_code_cell(
-                    code if lang == "python" else _r_as_comment(code), res)
-                self.logger.log_cell("experimenter", tc.id, res, lang,
-                                     settings_of(self.sandbox).get("sandbox", "unknown"))
-                text = res.tool_result_text()
-                self.work_log.append(
-                    f"[{lang}]\n{code[:1200]}\n--> {text[:1500]}")
-                return text, None
-            if name in ("record_draft", "submit_answer"):
-                answers = _parse_answers(inp.get("answers"))
-                if answers is None:
-                    return ("ERROR: answers must be an object "
-                            "{question_id: answer}."), None
-                evidence = inp.get("evidence") or {}
-                if not isinstance(evidence, dict):
-                    evidence = {}
-                return "recorded", (answers, {str(k): str(v)
-                                              for k, v in evidence.items()})
-            text, _ = _execute_tool(name, inp, self.sandbox, self.logger)
-            return text, None
-        except (PermissionError, OSError, RuntimeError) as e:
-            return f"ERROR: {e}", None
-
-    def force_draft(self, messages):
-        """One call that only allows record_draft (on exhaustion: unenforced)."""
-        messages.append({"role": "user", "content": (
-            "Stop analysing now. Call record_draft with your best answer for "
-            "every question from the work you have done.")})
-        exhausted = self.budget.exhausted
-        try:
-            resp = self.llm.chat(messages, system=self.prompts["experimenter"],
-                                 tools=[RECORD_DRAFT_SCHEMA], budget=self.budget,
-                                 enforce_budget=not exhausted)
-        except BudgetExhausted as e:
-            self.exhausted_reason = e.reason
-            return None, {}
-        self.log("member_output", member="experimenter",
-                 content=_content_blocks(resp.text, resp.tool_calls),
-                 budget=self.budget.snapshot())
-        for tc in resp.tool_calls:
-            if tc.name == "record_draft":
-                self.budget.record_tool_call()
-                _, found = self._run_tool(tc)
-                if found is not None:
-                    return found
-        return None, {}
-
-    def work_log_text(self) -> str:
-        out, size = [], 0
-        for entry in reversed(self.work_log):
-            if size + len(entry) > LOG_CHARS:
-                out.append("[earlier cells omitted]")
-                break
-            out.append(entry)
-            size += len(entry)
-        return "\n\n".join(reversed(out)) or "(no code was run)"
-
-
-_BASE_TOOLS = __import__("bixbase.agent", fromlist=["TOOL_SCHEMAS"]).TOOL_SCHEMAS
-
-
 def _r_as_comment(code: str) -> str:
     return "# [R cell]\n" + "\n".join("# " + ln for ln in code.splitlines())
 
 
-def _fmt_answers(answers: dict, evidence: dict | None = None) -> str:
-    if not answers:
-        return "(none)"
-    rows = []
-    for k, v in answers.items():
-        ev = (evidence or {}).get(k)
-        rows.append(f"- [{k}] {v}" + (f"\n  evidence: {ev}" if ev else ""))
-    return "\n".join(rows)
+def check_modes(roster: list[AgentDef], modes: dict[str, str] | None) -> str:
+    """The app's checkModes: "" when the lead's modes are valid, else the refusal."""
+    problems = []
+    for member, mode in (modes or {}).items():
+        agent = next((a for a in roster if a.name == member), None)
+        if agent is None:
+            problems.append(f"{member} is not on the board")
+        elif not agent.modes:
+            problems.append(f"{member} has no modes")
+        elif mode not in agent.modes:
+            problems.append(f"{member} has no mode {mode!r} (it has: {', '.join(agent.modes)})")
+    if problems:
+        return f"Round not run, and not counted: {'; '.join(problems)}. Call converse again with valid modes."
+    return ""
+
+
+def member_input(*, round_: int, message: str, digest: str, final: bool, pool: str, mode: str | None) -> str:
+    """The app's memberInput, without the evidence pool's sources (there is no search)."""
+    parts = [
+        f"Round {round_}. Lead Scientist to the board:",
+        f"Mode: {mode}. Work in this role this round." if mode else "",
+        message,
+        "Work independently: you have not seen the other members' views, on purpose." if round_ == 1 else digest,
+        pool,
+        "Give your final position in two sentences." if final else "Reply with your deliverable.",
+    ]
+    return "\n\n".join(p for p in parts if p)
+
+
+# --- The board at work -----------------------------------------------------------------------------
+
+
+class _Board:
+    def __init__(self, study: Study, budget: Budget, llm_for: Callable[[str], Any],
+                 sandbox: Sandbox, logger: RunLogger, board: BoardDef) -> None:  # fmt: skip
+        self.study, self.budget, self.llm_for = study, budget, llm_for
+        self.sandbox, self.logger, self.board = sandbox, logger, board
+        caps = _caps_text(budget)
+        roster_text = "\n".join(f"- {a.title} ({a.name}): {a.deliverable}" for a in board.roster)
+        self.prompts = {
+            board.lead.name: board.lead.prompt + "\n\n"
+            + LEAD_BENCHMARK.format(max_rounds=board.max_rounds, caps=caps, board=roster_text)
+        }
+        for a in board.roster:
+            body = _NO_CODE.sub(_CAN_CODE, a.prompt)
+            self.prompts[a.name] = (
+                f"{body}\n\n# Your deliverable\n{a.deliverable}\n\n"
+                + MEMBER_BENCHMARK.format(caps=caps, role=ROLE_NOTES.get(a.name, ""))
+            )
+        self.conversations: dict[str, list[dict]] = {a.name: [] for a in board.roster}
+        self.rounds = 0
+        self.final_round: int | None = None
+        self.last_round: list[tuple[str, str]] = []  # (title and mode, reply)
+        self.exhausted_reason: str | None = None
+
+    def tools_of(self, member: str) -> list[dict]:
+        if member in CODE_RUNNERS:
+            return [RUN_CODE_SCHEMA, *READ_TOOLS]
+        if member in DATA_READERS:
+            return list(READ_TOOLS)
+        return []
+
+    # One member's turn in a round: its own conversation, its own tools.
+    def member_turn(self, agent: AgentDef, text: str, round_: int, mode: str | None) -> str:
+        name, msgs = agent.name, self.conversations[agent.name]
+        msgs.append({"role": "user", "content": text})
+        self.logger.log("member_input", member=name, round=round_, content=text,
+                        **({"mode": mode} if mode else {}))  # fmt: skip
+        tools, reply = self.tools_of(name), ""
+        try:
+            for _ in range(MEMBER_TOOL_TURNS):
+                resp = self.llm_for(name).chat(msgs, system=self.prompts[name], tools=tools or None,
+                                               budget=self.budget)  # fmt: skip
+                blocks = _content_blocks(resp.text, resp.tool_calls)
+                msgs.append({"role": "assistant", "content": blocks})
+                self.logger.log("member_output", member=name, round=round_, content=blocks,
+                                budget=self.budget.snapshot())  # fmt: skip
+                reply = resp.text or reply
+                if not resp.tool_calls:
+                    break
+                results = []
+                for tc in resp.tool_calls:
+                    self.budget.record_tool_call()
+                    self.logger.log_tool_call(tc.name, tc.id, tc.input, member=name)
+                    out = self.run_tool(name, tc)
+                    self.logger.log_tool_result(tc.id, tc.name, out, member=name)
+                    results.append({"type": "tool_result", "tool_use_id": tc.id, "content": out})
+                msgs.append({"role": "user", "content": results})
+        except BudgetExhausted as e:
+            self.exhausted_reason = e.reason
+            reply = reply or f"(no reply: the budget ran out: {e.reason})"
+        reply = reply or "(no reply)"
+        self.logger.log("member_reply", member=name, round=round_, text=reply,
+                        **({"mode": mode} if mode else {}))  # fmt: skip
+        return reply
+
+    def run_tool(self, member: str, tc: Any) -> str:
+        allowed = {t["name"] for t in self.tools_of(member)}
+        if tc.name not in allowed:
+            return f"ERROR: {member} has no tool {tc.name}"
+        inp = tc.input or {}
+        try:
+            if tc.name == "run_code":
+                code = inp.get("code", "")
+                lang = "r" if str(inp.get("language", "python")).lower() in ("r", "rscript") else "python"
+                if not code.strip():
+                    return "ERROR: empty code"
+                res = self.sandbox.run_code(code, language=lang)
+                self.logger.log_code_cell(code if lang == "python" else _r_as_comment(code), res)
+                self.logger.log_cell(member, tc.id, res, lang,
+                                     settings_of(self.sandbox).get("sandbox", "unknown"))  # fmt: skip
+                return res.tool_result_text()
+            text, _ = _execute_tool(tc.name, inp, self.sandbox, self.logger, tc.id)
+            return text
+        except (PermissionError, OSError, RuntimeError) as e:
+            return f"ERROR: {e}"
+
+    def digest(self) -> str:
+        return "What the board said last round:\n\n" + "\n\n".join(
+            f"### {who}\n{reply[:DIGEST_CHARS]}" for who, reply in self.last_round
+        )
+
+    def gate(self, final: bool) -> str:
+        """The app's gateRound: "" when the round may run, else the refusal for the lead."""
+        if self.final_round is not None:
+            return f"Final positions are in (round {self.final_round}). No further rounds: call submit_answer now."
+        limit = ""
+        if self.rounds >= self.board.max_rounds:
+            limit = f"{self.rounds} of {self.board.max_rounds} rounds used"
+        elif _used_share(self.budget) >= WRAP_UP_SHARE:
+            limit = f"{_used_share(self.budget):.0%} of the budget used"
+        if limit and not final:
+            return f"WRAP UP: {limit}. Call converse once with final=true to ask for final positions, then submit_answer."
+        return ""
+
+    def converse(self, args: dict[str, Any]) -> str:
+        modes = args.get("modes") if isinstance(args.get("modes"), dict) else None
+        refusal = check_modes(self.board.roster, modes) or self.gate(bool(args.get("final")))
+        if refusal:
+            return refusal
+        self.rounds += 1
+        round_, final = self.rounds, bool(args.get("final"))
+        if final:
+            self.final_round = round_
+        message = str(args.get("message", ""))
+        self.logger.log("round_start", round=round_, final=final, modes=modes or {}, message=message)
+        digest = "" if round_ == 1 else self.digest()
+
+        def mode_line(agent: AgentDef) -> str | None:
+            mode = (modes or {}).get(agent.name)
+            return f"{agent.modes[mode]} ({mode})" if mode else None
+
+        def turn(agent: AgentDef, pool: str) -> tuple[AgentDef, str]:
+            text = member_input(round_=round_, message=message, digest=digest, final=final,
+                                pool=pool, mode=mode_line(agent))  # fmt: skip
+            return agent, self.member_turn(agent, text, round_, (modes or {}).get(agent.name))
+
+        readers = [a for a in self.board.roster if a.name in DATA_READERS]
+        others = [a for a in self.board.roster if a.name not in DATA_READERS]
+        replies: dict[str, str] = {}
+        for agent in readers:  # the data readers first, as the app's searchers reply first
+            replies[agent.name] = turn(agent, "")[1]
+        pool = "\n\n".join(f"{a.title}'s data report this round:\n{replies[a.name][:DIGEST_CHARS]}"
+                           for a in readers)  # fmt: skip
+        with ThreadPoolExecutor(max_workers=max(1, len(others))) as pool_exec:
+            for agent, reply in pool_exec.map(lambda a: turn(a, pool), others):
+                replies[agent.name] = reply
+        self.last_round = []
+        for agent in self.board.roster:  # in the board's order
+            mode = (modes or {}).get(agent.name)
+            who = f"{agent.title}, as {agent.modes[mode]}" if mode else agent.title
+            self.last_round.append((who, replies[agent.name]))
+        self.logger.log("round_end", round=round_, budget=self.budget.snapshot())
+        status = ""
+        if final:
+            status = "\n\nFinal positions are in. Call submit_answer now."
+        elif self.gate(False):
+            status = "\n\n" + self.gate(False)
+        return self.digest() + status
 
 
 def solve(
     study: Study,
     budget: Budget,
     *,
-    llm: LLMClient,
+    llm: Any = None,
     run_dir: Path,
     sandbox: Sandbox | None = None,
     run_id: str | None = None,
+    llm_for: Callable[[str], Any] | None = None,
+    board: BoardDef | None = None,
 ) -> SolveResult:
-    """Run the 5-member board on one study under one shared Budget. `run_id` (for example
-    "bix-1/rep0") names the run in its transcript; several runs of one study can run at once."""
+    """Run the app's board on one study under one shared Budget. `llm_for(member)` gives each
+    member its client (run.py: app_clients, the app's model tiers); `llm` alone serves every
+    member (the scripted model in the self-tests). `run_id` (e.g. "bix-1/rep0") names the run."""
     run_dir = Path(run_dir)
+    board = board or load_board()
+    if llm_for is None:
+        if llm is None:
+            raise ValueError("board.solve needs llm_for (one client per member) or llm")
+        llm_for = lambda member: llm  # noqa: E731
     sandbox = sandbox or Sandbox(study.data_dir, run_dir / "work")
     logger = RunLogger(run_dir)
-    b = _Board(study, budget, llm, sandbox, logger)
+    b = _Board(study, budget, llm_for, sandbox, logger, board)
     qids = [q.question_id for q in study.questions]
-    logger.log_run_start(study_id=study.study_id, model=llm.model,
-                         provider=llm.provider, seed=llm.seed, questions=qids,
-                         solver="board", members=MEMBERS,
-                         agents_dir=str(AGENTS_DIR), prompt_sha256=prompt_hashes(),
-                         run=run_id or study.study_id, sandbox=settings_of(sandbox))
-    phases: list[str] = []
+    logger.log_run_start(
+        study_id=study.study_id, questions=qids, solver="board", members=board.members,
+        member_models={m: model_of(board, m) for m in board.members},
+        model=getattr(llm_for(board.lead.name), "model", None), provider=getattr(llm_for(board.lead.name), "provider", None),
+        seed=getattr(llm_for(board.lead.name), "seed", None), max_rounds=board.max_rounds,
+        lead_turns=board.lead_turns, agents_dir=str(AGENTS_DIR), config=str(CONFIG_FILE),
+        prompt_sha256=prompt_hashes(board), run=run_id or study.study_id, sandbox=settings_of(sandbox),
+    )  # fmt: skip
+    lead = board.lead.name
+    lead_msgs: list[dict] = [{"role": "user", "content": (
+        f"{_task_prompt(study)}\n\n{_data_overview(sandbox)}\n\n"
+        "Frame the question, then run the review with converse. End with submit_answer."
+    )}]  # fmt: skip
     answers: dict[str, str] = {}
-    draft: dict[str, str] = {}
-    evidence: dict[str, str] = {}
-    submitted = False
-    error = None
-    stop_reason = "running"
+    submitted, forced, error, stop_reason = False, False, None, "running"
+
+    def lead_call(tools: list[dict], enforce: bool) -> Any:
+        logger.log("member_input", member=lead, round=b.rounds, content=lead_msgs[-1]["content"]
+                   if isinstance(lead_msgs[-1]["content"], str) else "(tool results)")  # fmt: skip
+        resp = llm_for(lead).chat(lead_msgs, system=b.prompts[lead], tools=tools,
+                                  budget=budget, enforce_budget=enforce)  # fmt: skip
+        blocks = _content_blocks(resp.text, resp.tool_calls)
+        lead_msgs.append({"role": "assistant", "content": blocks})
+        logger.log("member_output", member=lead, round=b.rounds, content=blocks, budget=budget.snapshot())
+        logger.log("member_reply", member=lead, round=b.rounds, text=resp.text or "")
+        return resp
 
     try:
-        # 1. proposer
-        plan = "(no plan)"
-        overview = _data_overview(sandbox)
-        try:
-            resp = b.ask("proposer", (
-                f"{b.task}\n\n{overview}\n\nPlan one claim per question id: "
-                "what to compute, from which files, which method, and a "
-                "falsification test. Keep it under 400 words."))
-            plan = resp.text or plan
-            phases.append("proposer")
-        except BudgetExhausted as e:
-            b.exhausted_reason = e.reason
-
-        # 2. experimenter, Full mode
-        exp_msgs = [{"role": "user", "content": (
-            f"Mode: Full\n\n{b.task}\n\n{overview}\n\nProposer's plan:\n{plan}"
-            "\n\nRun the analysis. When every question has an answer, call "
-            "record_draft.")}]
-        b.log("member_input", member="experimenter", mode="full",
-              content=exp_msgs[0]["content"])
-        if b.exhausted_reason is None:
-            phases.append("experimenter:full")
-            found = b.experimenter_loop(exp_msgs, stop_share=FULL_PHASE_SHARE,
-                                        final_tool=RECORD_DRAFT_SCHEMA)
-            draft, evidence = found if found[0] is not None else (None, {})
-            if draft is None:
-                draft, evidence = b.force_draft(exp_msgs)
-            draft = draft or {}
-
-        # 3. methods-auditor and critic, in parallel, blind to each other
-        reviews: dict[str, str] = {}
-        if (b.exhausted_reason is None and draft
-                and _used_share(budget) < REVIEW_START_LIMIT):
-            review_input = (
-                f"{b.task}\n\nProposer's plan:\n{plan}\n\nExperimenter's draft "
-                f"answers:\n{_fmt_answers(draft, evidence)}\n\nExperimenter's "
-                f"code and outputs:\n{b.work_log_text()}\n\nReview each "
-                "question id. For each one write OK, or FLAG with the exact "
-                "fix needed. End with a line 'FLAGGED: <ids>' or "
-                "'FLAGGED: none'. Under 300 words.")
-
-            def _review(member):
-                try:
-                    return member, b.ask(member, review_input).text
-                except BudgetExhausted as e:
-                    b.exhausted_reason = e.reason
-                    return member, None
-
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                for member, text in pool.map(
-                        _review, ["methods-auditor", "critic"]):
-                    if text:
-                        reviews[member] = text
-                        phases.append(member)
-
-        # 4. experimenter, Revise mode (same conversation as Full)
-        flagged = any(not re.search(r"FLAGGED:\s*none", t, re.I)
-                      for t in reviews.values())
-        if (reviews and flagged and b.exhausted_reason is None
-                and _used_share(budget) < REVISE_PHASE_SHARE):
-            phases.append("experimenter:revise")
-            exp_msgs.append({"role": "user", "content": (
-                "Mode: Revise\n\n" + "\n\n".join(
-                    f"{m} report:\n{t}" for m, t in reviews.items())
-                + "\n\nFix what is flagged (run code if needed). Then call "
-                "record_draft with the full, updated answer set.")})
-            b.log("member_input", member="experimenter", mode="revise",
-                  content=exp_msgs[-1]["content"])
-            found = b.experimenter_loop(exp_msgs, stop_share=REVISE_PHASE_SHARE,
-                                        final_tool=RECORD_DRAFT_SCHEMA)
-            if found[0] is not None:
-                draft, evidence = found
-
-        # 5. reporter writes the final answers
-        exhausted = budget.exhausted
-        if exhausted:
-            b.forced = True
-            b.exhausted_reason = b.exhausted_reason or budget.exhaustion_reason()
-        rep_input = (
-            f"{b.task}\n\nExperimenter's answers (latest):\n"
-            f"{_fmt_answers(draft, evidence)}\n\n"
-            + ("".join(f"{m} report:\n{t}\n\n" for m, t in reviews.items()))
-            + ("" if draft else
-               f"The experimenter recorded no answers. Its work log:\n"
-               f"{b.work_log_text()}\n\n")
-            + "Write the final answer for every question id and call "
-            "submit_answer. Keep each answer short and exact. Keep the "
-            "experimenter's answer unless a review shows it is wrong and "
-            "gives the fix. Never leave an id empty: give the best estimate.")
-        phases.append("reporter")
-        resp = b.ask("reporter", rep_input, tools=[SUBMIT_SCHEMA],
-                     enforce_budget=not exhausted)
-        for tc in resp.tool_calls:
-            if tc.name == "submit_answer":
+        for _ in range(board.lead_turns):
+            if b.exhausted_reason or budget.exhausted:
+                break
+            resp = lead_call([CONVERSE_SCHEMA, SUBMIT_SCHEMA], True)
+            if not resp.tool_calls:
+                lead_msgs.append({"role": "user", "content": "Use converse to run the next round, or submit_answer to finish."})
+                continue
+            results = []
+            for tc in resp.tool_calls:
                 budget.record_tool_call()
-                parsed = _parse_answers((tc.input or {}).get("answers"))
-                if parsed:
-                    answers = parsed
-                    submitted = True
-        stop_reason = "submitted" if submitted else "reporter_no_submit"
+                logger.log_tool_call(tc.name, tc.id, tc.input, member=lead)
+                if tc.name == "converse":
+                    out = b.converse(tc.input or {})
+                elif tc.name == "submit_answer":
+                    parsed = _parse_answers((tc.input or {}).get("answers"))
+                    if parsed:
+                        answers, submitted = parsed, True
+                    out = "Answers saved." if parsed else "ERROR: answers must be an object {question_id: answer}."
+                else:
+                    out = f"ERROR: unknown tool {tc.name}"
+                logger.log_tool_result(tc.id, tc.name, out, member=lead)
+                results.append({"type": "tool_result", "tool_use_id": tc.id, "content": out})
+            lead_msgs.append({"role": "user", "content": results})
+            if submitted:
+                break
+        if submitted:
+            stop_reason = "submitted"
+        elif b.exhausted_reason or budget.exhausted:
+            b.exhausted_reason = b.exhausted_reason or budget.exhaustion_reason()
+            stop_reason = f"budget_exhausted:{b.exhausted_reason}"
+        else:
+            stop_reason = "lead_turns_used"
     except BudgetExhausted as e:
-        b.forced = True
+        b.exhausted_reason = e.reason
         stop_reason = f"budget_exhausted:{e.reason}"
-    except Exception as e:  # noqa: BLE001 - record and fall back
+    except Exception as e:  # noqa: BLE001 - record, then still ask for answers
         error = f"{type(e).__name__}: {e}"
         stop_reason = f"error:{error}"
 
-    # fill ids the reporter skipped with the experimenter's answers
-    for q in qids:
-        if not answers.get(q, "").strip() and draft.get(q, "").strip():
-            answers[q] = draft[q]
-    if not submitted and answers:
-        b.forced = True
+    if not submitted:
+        # One last lead call that may only submit (unenforced once the budget is gone), as the
+        # baseline's forced final answer.
+        forced = True
+        lead_msgs.append({"role": "user", "content": (
+            "Stop now. Call submit_answer with the board's best answer for every question id, "
+            "from the work so far. Never leave an id empty.")})  # fmt: skip
+        try:
+            resp = lead_call([SUBMIT_SCHEMA], not budget.exhausted)
+            for tc in resp.tool_calls:
+                if tc.name == "submit_answer":
+                    budget.record_tool_call()
+                    parsed = _parse_answers((tc.input or {}).get("answers"))
+                    if parsed:
+                        answers = parsed
+        except Exception as e:  # noqa: BLE001
+            error = error or f"{type(e).__name__}: {e}"
     if b.exhausted_reason and not stop_reason.startswith("budget"):
         stop_reason += f"|budget_exhausted:{b.exhausted_reason}"
-    if not answers:
-        answers = {q: "<no_answer>" for q in qids}
+    for q in qids:
+        if not str(answers.get(q, "")).strip():
+            answers[q] = "<no_answer>"
+    if all(v == "<no_answer>" for v in answers.values()):
         stop_reason += "|no_answer_submitted"
 
-    logger.log_final_answer(answers, forced=b.forced, reason=stop_reason)
-    logger.log_run_end(stop_reason=stop_reason, submitted=submitted,
-                       forced=b.forced, error=error, phases=phases,
-                       budget=budget.snapshot())
+    phases = [f"round {i}" + (" (final)" if i == b.final_round else "") for i in range(1, b.rounds + 1)]
+    logger.log_final_answer(answers, forced=forced, reason=stop_reason)
+    logger.log_run_end(stop_reason=stop_reason, submitted=submitted, forced=forced, error=error,
+                       phases=phases, rounds=b.rounds, budget=budget.snapshot())  # fmt: skip
     logger.close()
     return SolveResult(
-        study_id=study.study_id, answers=answers, submitted=submitted,
-        forced=b.forced, stop_reason=stop_reason, budget=budget.snapshot(),
-        run_dir=run_dir, transcript=run_dir / "transcript.jsonl",
-        final_script=run_dir / "final_script.py", error=error)
+        study_id=study.study_id, answers=answers, submitted=submitted, forced=forced,
+        stop_reason=stop_reason, budget=budget.snapshot(), run_dir=run_dir,
+        transcript=run_dir / "transcript.jsonl", final_script=run_dir / "final_script.py", error=error,
+    )  # fmt: skip

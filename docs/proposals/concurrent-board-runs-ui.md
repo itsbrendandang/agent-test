@@ -28,10 +28,10 @@ run bix-2/rep0: proposer, experimenter, ...  ──cells──▶  sandbox for b
 - Only the **experimenter's code cells** (`run_code`, and its `list_dir` and `read_file`) run on
   Modal, in the sandbox of its own run. One run has one sandbox. Other members never run on Modal.
 - With `--sandbox local` (the default) the cells run on the VM. Everything else is the same.
-- Inside one run, members can also work at the same time. Today the methods auditor and the critic
-  review together. In the 7-member board that is being built (PR #20), members answer in parallel
-  each round. So one run can have two or more members active at once, and the experimenter can run
-  cells while others talk.
+- Inside one run, members also work at the same time. The board is the app's: the Lead Scientist
+  sends a message to the board (`converse`), the scout replies first, then the other members reply
+  at the same time. So one run can have five members active at once, and the experimenter can run
+  cells while others talk. The lead waits while a round runs.
 
 ## 2. What to draw
 
@@ -54,7 +54,8 @@ run bix-2/rep0: proposer, experimenter, ...  ──cells──▶  sandbox for b
 
 - The Modal sandbox for board runs is on the branch `board-cell-timeout`, on top of PR #20. It is
   tested with a fake Modal only. **No run has used real Modal yet.**
-- PR #20 is the 5-member board. It is being changed to the 7 members of the app.
+- The board is the app's 7 (on the branch `board-cell-timeout`). It is tested with a scripted
+  model only; no real-model run has used it yet.
 - The engine reads nothing from board-harness runs, and the dashboard has no view for them
   (section 5).
 - So a demo today must be a **replay**: a recorded or scripted run played back, as
@@ -82,17 +83,22 @@ same time never mix.
 
 | `event` | When | Fields you need |
 |---|---|---|
-| `run_start` | the run begins | `run` (the run id), `study_id`, `solver` (`board` or `single`), `members` (list), `sandbox` (`{"sandbox": "local"\|"modal", ...}`; on Modal also `sandbox_id`, `image`, `environment_check`), `model` |
-| `member_input` | a member's turn starts | `member`; the experimenter also has `mode` (`full` or `revise`) |
-| `member_output` | one model call of that member ends | `member`, `budget` (see 4.4) |
+| `run_start` | the run begins | `run` (the run id), `study_id`, `solver` (`board` or `single`), `members` (list, the lead first), `member_models` (board), `sandbox` (`{"sandbox": "local"\|"modal", ...}`; on Modal also `sandbox_id`, `image`, `environment_check`), `model` |
+| `round_start` | the lead's message goes to the board | `round`, `final`, `modes` (e.g. `{"experimenter": "pilot"}`), `message` |
+| `member_input` | a member's turn starts | `member`, `round`; the experimenter also has `mode` (`pilot`, `full` or `revise`) when the lead named one |
+| `member_output` | one model call of that member ends (a turn can have several) | `member`, `round`, `budget` (see 4.4) |
+| `member_reply` | a member's turn ends | `member`, `round`, `text` (its reply) |
+| `round_end` | every member has replied | `round`, `budget` |
 | `tool_call` | a tool starts (experimenter; single agent) | `member`, `name` (`run_code`, `list_dir`, `read_file`, `record_draft`), `id` |
 | `cell` | a code cell ended | `member`, `id` (same as its `tool_call`), `cell` (number), `language` (`python`\|`r`), `where` (`local`\|`modal`), `exit_code`, `timed_out`, `duration_s`, `new_files` |
 | `tool_result` | the tool's answer went back to the model | `member`, `id`, `name` |
 | `final_answer` | answers are fixed | `forced` |
-| `run_end` | the run is solved (grading may still run) | `phases`, `stop_reason`, `error`, `budget` |
+| `run_end` | the run is solved (grading may still run) | `phases`, `rounds`, `stop_reason`, `error`, `budget` |
 
-The single-agent solver (`solver: "single"`) writes `message` events instead of `member_input` and
-`member_output`, and its only member is `agent`.
+The Lead Scientist is a member too (`lead-scientist`): each of its model calls has a
+`member_input`, a `member_output` and a `member_reply`, and its `tool_call` named `converse` spans a
+round. The single-agent solver (`solver: "single"`) writes `message` events instead of the member
+events, and its only member is `agent`.
 
 ### 4.3 How to tell each state
 
@@ -100,8 +106,8 @@ The single-agent solver (`solver: "single"`) writes `message` events instead of 
 |---|---|
 | Starting (data, a Modal sandbox, or waiting for the Modal cap) | the run folder exists, with no `transcript.jsonl` yet |
 | Running | `run_start`, no `run_end` |
-| A member is active (proposer, critic, auditor, reporter) | between its `member_input` and its `member_output` |
-| The experimenter is active | from its `member_input` (mode `full` or `revise`) until another member's `member_input`, or `run_end`. It makes many model calls: one `member_output` each |
+| A round is going | between `round_start` and `round_end` with the same `round` |
+| A member is active | between its `member_input` and its `member_reply` (same `member` and `round`). The scout and the experimenter make several model calls in a turn: one `member_output` each |
 | A cell is running | between a `tool_call` with `name: "run_code"` and the `cell` with the same `id`. `where` tells local or Modal. A cell lasts at most 120 seconds |
 | Solved | `run_end` |
 | Graded and done | `result.json` exists |
@@ -155,6 +161,6 @@ against them (AGENTS.md).
   (`bix-3/rep0` and `bix-3/rep1`).
 - A run that waits for the Modal cap shows no transcript for a while.
 - A member waiting on the provider's rate limit looks stalled: it has a `member_input` and no
-  `member_output` for a long time.
+  `member_reply` for a long time.
 - A cell that runs past 120 seconds is stopped: its `cell` event has `timed_out: true`.
 - `--workers` decides how many instances of each role you can see at once. Size the layout for 40.

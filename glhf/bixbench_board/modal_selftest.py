@@ -6,7 +6,7 @@ runner, data copy, read-only data, environment check, copy-back, ledger and cap 
 only Modal's API is replaced. No model, no network, nothing billed. Paid calls are turned on
 inside these tests only (NO_PAID_CALLS=0), as AGENTS.md allows for fakes.
 
-  1. a whole board run (five members) with its cells on the fake Modal; and run.py's run_one.
+  1. a whole run of the app's board (7 agents) with its cells on the fake Modal; and run.py's run_one.
      In it: the data is read-only, no key reaches a cell, the work folder comes back
   3. a cell whose time is up is killed with its children; cells at the same time get their own numbers
   4. list_dir and read_file answer as the local sandbox does; paths outside are refused
@@ -191,26 +191,6 @@ def _gone(pid: int, seconds: float = 5.0) -> bool:
     return False
 
 
-def _python_steps() -> list[dict[str, Any]]:
-    """The board self-test's experimenter steps, with the R cell in Python (no R here)."""
-    return [
-        {"tool_calls": [{"name": "run_code", "input": {"code": (
-            "import os, pandas as pd\n"
-            "print(pd.read_csv(os.environ['DATA_DIR']+'/values.csv').x.mean())\n"
-            "open('notes.txt', 'w').write('kept')\n"
-            "try:\n"
-            "    open(os.environ['DATA_DIR']+'/hack.txt','w').write('x')\n"
-            "    print('WRITE_OK')\n"
-            "except OSError:\n"
-            "    print('WRITE_DENIED')\n"
-            "print('KEY', os.environ.get('OPENAI_API_KEY'))")}}]},
-        {"tool_calls": [{"name": "record_draft", "input": {
-            "answers": {"selftest-q1": "2.5"}, "evidence": {"selftest-q1": "pandas mean"}}}]},
-        {"tool_calls": [{"name": "run_code", "input": {"code": "print('revise', 2.5)"}}]},
-        {"tool_calls": [{"name": "record_draft", "input": {"answers": {"selftest-q1": "2.5"}}}]},
-    ]  # fmt: skip
-
-
 # --- The tests ------------------------------------------------------------------------------------
 
 
@@ -221,7 +201,7 @@ def test_a_board_run_on_modal(tmp: Path) -> None:
     box = s.open(study.data_dir, tmp / "t1" / "run" / "work", name="selftest/rep0", seconds=600)
     budget = Budget(BudgetCaps(max_total_tokens=500_000, max_tool_calls=90, max_seconds=600))
     try:
-        res = board.solve(study, budget, llm=ScriptedBoardLLM(_python_steps()),
+        res = board.solve(study, budget, llm=ScriptedBoardLLM(),
                           run_dir=tmp / "t1" / "run", sandbox=box)  # fmt: skip
     finally:
         line = box.close()
@@ -230,14 +210,16 @@ def test_a_board_run_on_modal(tmp: Path) -> None:
     assert res.answers == {"selftest-q1": "2.5"} and res.submitted, res
     assert "2.5" in outs[0] and "WRITE_DENIED" in outs[0], outs[0]
     assert "KEY None" in outs[0], "an API key reached a code cell"
-    assert events[-1]["phases"] == ["proposer", "experimenter:full", "methods-auditor",
-                                    "critic", "experimenter:revise", "reporter"], events[-1]
+    assert events[-1]["phases"] == ["round 1", "round 2", "round 3 (final)"], events[-1]
+    assert len(events[0]["members"]) == 7 and events[0]["members"][0] == "lead-scientist"
+    listed = [e for e in events if e["event"] == "tool_result" and e["name"] == "list_dir"]
+    assert listed and "values.csv" in listed[0]["result"], listed  # the scout read the data on Modal
     assert (tmp / "t1" / "run" / "work" / "notes.txt").read_text() == "kept"  # copied back
     assert line["ok"] and line["environment_check"] == "passed" and line["usd"] >= 0, line
     assert api.sandboxes[0].alive is False and not s._held and not s._live
     created = api.created[0]
     assert created["cpu"] == 2.0 and created["timeout"] == 600 + modal_sandbox.SETUP_SECONDS
-    print("test 1 OK: a board run (5 members) with its cells on Modal; data read-only, "
+    print("test 1 OK: a run of the app's board (7) with its cells on Modal; data read-only, "
           "no key in cells, work folder copied back")
 
     # run.py's run_one, with the same fake session.
@@ -245,13 +227,15 @@ def test_a_board_run_on_modal(tmp: Path) -> None:
 
     args = run.parse_args(["--solver", "board", "--no-grade", "--budget-seconds", "600",
                            "--budget-tokens", "500000", "--sandbox", "modal"])  # fmt: skip
-    old_llm, old_prepare = run.LLMClient, run.prepare_study_data
-    run.LLMClient = lambda **kw: ScriptedBoardLLM(_python_steps())  # type: ignore[assignment]
+    scripted = ScriptedBoardLLM()
+    old_clients, old_prepare = board.app_clients, run.prepare_study_data
+    board.app_clients = lambda board_def, seed=None: (lambda member: scripted)  # type: ignore[assignment]
     run.prepare_study_data = lambda study, cache: None  # type: ignore[assignment]
     try:
         row = run.run_one(study, 0, args, tmp / "t1" / "runs", s)
     finally:
-        run.LLMClient, run.prepare_study_data = old_llm, old_prepare
+        board.app_clients, run.prepare_study_data = old_clients, old_prepare
+    assert row["member_models"]["critic"] == board.load_board().models["rival"], row["member_models"]
     assert row["sandbox"]["sandbox"] == "modal" and row["sandbox"]["network"] == "blocked"
     assert row["sandbox"]["environment_check"] == "passed" and row["answers"]
     assert json.loads((tmp / "t1" / "runs" / "selftest" / "rep0" / "result.json").read_text())
