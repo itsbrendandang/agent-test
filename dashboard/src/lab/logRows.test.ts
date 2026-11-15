@@ -57,6 +57,13 @@ describe("full event log", () => {
     expect(reply("c2")).toMatchObject({ agent: "The second, careful check", agentId: "openai" })
     expect(reply("c2").text).toContain("Checked by gpt-x.")
     expect(reply("c3").agent).toBe("The second, careful check")
+    const sourced = eventRows([
+      { key: "f", type: "claim.checked", member: "critic", round: 1, claim: "x", verdict: "verified", checker: "first-pass", source: "analysis.py" },
+      { key: "u", type: "claim.checked", member: "critic", round: 1, claim: "y", verdict: "verified", checker: "first-pass", source: "https://example.org/p" },
+    ], "board")
+    expect(sourced[0].text).toContain("Source: analysis.py.")
+    expect(sourced[1].text).not.toContain("Source:")
+    expect(sourced[1].sources).toEqual([{ title: "https://example.org/p", url: "https://example.org/p" }])
     expect(rows.every((r) => !r.note || r.job === undefined)).toBe(true)
     expect(eventRows([{ key: "a", type: "member.replied", member: "critic", round: 1, text: "x" }], "answer")[0].job).toBeUndefined()
   })

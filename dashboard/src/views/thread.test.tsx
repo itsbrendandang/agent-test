@@ -121,7 +121,7 @@ describe("the board's discussion", () => {
     const critic = bubble(agentIdentity("critic").label)
     expect(critic).toHaveTextContent('<img src=x onerror="window.__pwned=1">')
     expect(critic).toHaveTextContent("[click](javascript:alert(1))")
-    expect(log()).toHaveTextContent("javascript:alert(1)") // the check's source, shown as text
+    expect(checks()[2]).toHaveTextContent("Source: javascript:alert(1).") // the check's source, shown as text
     expect(container.querySelector("img, script, iframe, object, embed")).toBeNull() // nothing is fetched from a model-supplied address
     expect((window as { __pwned?: number }).__pwned).toBeUndefined()
     const links = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))

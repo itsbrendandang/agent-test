@@ -137,7 +137,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
         const by = str(e.checkedBy), source = str(e.source)
         text = join(`${MARK_WORD[mark]}: ${whose} statement “${str(e.claim) ?? ""}”.`, e.note,
           e.quoteFound === true ? "The quoted passage was found in the source." : e.quoteFound === false ? "The quoted passage was not found in the source." : "",
-          source === "brief" ? "Source: the brief." : "", by === "scripted" ? "Practice run: no model checked it." : by ? `Checked by ${by}.` : "")
+          source === "brief" ? "Source: the brief." : source && !sourceLink(source).length ? `Source: ${source}.` : "", by === "scripted" ? "Practice run: no model checked it." : by ? `Checked by ${by}.` : "")
         break
       }
       case "constraint": kind = "limit"; text = join("Reached a run limit.", e.detail, e.reason); break
