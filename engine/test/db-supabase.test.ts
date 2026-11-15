@@ -2,7 +2,7 @@
 // answer that never waits for or fails because of the database. Fake clients and a fake fetch only: no network,
 // no paid call. NO_PAID_CALLS stays 1; answers run in demo mode and the board run is scripted.
 import assert from "node:assert/strict"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, test } from "node:test"
@@ -178,6 +178,22 @@ test("a board run that stops before its end is mirrored as paused, not left runn
   assert.ok(statuses.includes("running"), "running while the lead works")
   assert.equal(fake.tables.board_runs.get(id)?.status, "paused")
   assert.deepEqual(outbound, [])
+})
+
+test("a resumed run that stops before its first round is mirrored as paused, not left running", async () => {
+  const fake = fakeDb()
+  db.setDbClient(fake.client)
+  const base = tempConfig()
+  const config = { ...base, board: base.board.slice(0, 3) }
+  const brief = join(mkdtempSync(join(tmpdir(), "db-brief-")), "brief.md")
+  copyFileSync(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), brief)
+  const id = await startRun(brief, { config, mock: true })
+  const file = join(runDir(config, id), "run.json")
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), failed: "an earlier stop" }))
+  rmSync(brief)
+  await assert.rejects(runBoard(id, undefined, { config, mock: true }))
+  await db.flushDb()
+  assert.equal(fake.tables.board_runs.get(id)?.status, "paused")
 })
 
 test("backfill: every local answer, run and Exa line, in batches, and running it twice changes nothing", async () => {

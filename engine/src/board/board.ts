@@ -560,7 +560,10 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void, o
   if (!mock) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
   checkDailyBudget(config, new Date(), mock) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
-  try { await runLocked(config, runId, mock, onLog, options.models) } finally { release() }
+  try { await runLocked(config, runId, mock, onLog, options.models) } finally {
+    release()
+    try { mirrorRun(loadState(config, runId), false) } catch { /* best effort */ }
+  }
 }
 
 /** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
@@ -859,7 +862,6 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     // A failure caused by the setup (a refused model id or key), or a lead that wrote no memo, is recorded on the run, so it
     // is listed as failed and not continued by itself at the next start; a person fixes the cause and resumes it.
     if (error instanceof FatalModelError || error instanceof MemoMissing) { state.failed = error.message; save() }
-    mirrorRun(state, false)
     log.emit(`failed:${Date.now()}`, { type: "run.failed", error: error instanceof FatalModelError || error instanceof MemoMissing ? error.message : String(error) })
     throw error
   } finally {
