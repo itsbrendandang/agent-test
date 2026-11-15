@@ -26,7 +26,7 @@ describe("first visit", () => {
     render(<HomeView onOpen={() => {}} />)
     return sent
   }
-  it("is one clear thing: the headline, the search box right under it, and three short examples that fill the box", async () => {
+  it("is one clear thing: the headline, the search box right under it, and four short examples that fill the box", async () => {
     const sent = home(CATALOG_OFF)
     const headline = screen.getByRole("heading", { level: 1, name: "What do you want to research?" })
     expect(screen.getByText("Ask a question. Explore evidence and sources.")).toBeInTheDocument()

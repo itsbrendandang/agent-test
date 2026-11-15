@@ -29,7 +29,7 @@ const storedMode = (): "graph" | "list" | null => { try { const v = localStorage
 const when = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 
 const ABOUT = "Who said what in one run, and what each check found. Contradicted statements are the easiest to find."
-/** The built-in example: first in the picker, and open until the person picks a run. It needs no engine and costs nothing. */
+/** The built-in example: first in the picker, and open while there is no run to show. It needs no engine and costs nothing. */
 const EXAMPLE_REF: RunRef = { kind: "board", id: EXAMPLE_ID, startedAt: 0, state: "example", title: EXAMPLE_TITLE, example: true }
 const isExample = (r: Pick<RunRef, "kind" | "id"> | undefined) => r?.kind === "board" && r.id === EXAMPLE_ID
 const EXAMPLE_NOTE = `Example, assembled by hand from public records retrieved on ${RETRIEVED_ON}. No model was called and nothing was paid. Each statement links to the record it was checked against.`
@@ -59,9 +59,11 @@ export function GraphScreen() {
     window.addEventListener("hashchange", sync)
     return () => window.removeEventListener("hashchange", sync)
   }, [])
-  // Until the person picks a run (or another view hands one over), the built-in example is open: it needs no engine.
-  // A picked run stays selected when newer runs appear: the graph never changes under the reader.
-  const current: Pick<RunRef, "kind" | "id"> = picked ?? EXAMPLE_REF
+  // The newest run when the view opens. It stays selected when newer runs appear: the graph never changes under the reader.
+  // With no run listed (none yet, still loading, or no engine), the built-in example is open: it needs no engine.
+  const [auto, setAuto] = useState<RunRef>()
+  if (!auto && !picked && list.runs?.[0]) setAuto(list.runs[0])
+  const current: Pick<RunRef, "kind" | "id"> = picked ?? auto ?? EXAMPLE_REF
   const example = isExample(current)
   const board = useBoardRun(current.kind === "board" && !example ? current.id : undefined)
   const swarm = useSwarmRun(current.kind === "swarm" ? current.id : undefined)
@@ -101,7 +103,7 @@ export function GraphScreen() {
   const key = `${current.kind}:${current.id}`
   // Another run starts from the beginning (state is reset while rendering, which React allows, rather than in an effect).
   const [seenKey, setSeenKey] = useState(key)
-  if (seenKey !== key) { setSeenKey(key); setStep(null); setPlaying(false); setSelected(null); setQuery("") }
+  if (seenKey !== key) { setSeenKey(key); setStep(null); setPlaying(false); setSelected(null); setQuery(""); setChosenKinds(null); setChosenLinks(null) }
 
   const state = useMemo(() => ({ hiddenKinds, hiddenVerdicts, hiddenLinks, step }), [hiddenKinds, hiddenVerdicts, hiddenLinks, step])
   // The layout works on everything that passes the filters; the replay only reveals it, so nodes keep their places.

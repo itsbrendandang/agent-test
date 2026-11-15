@@ -283,11 +283,11 @@ nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
 
 ![The Team review screen: the recommendation and the counts of supported, contradicted and unproven statements](docs/images/team-review.png)
 
-**Graph.** The built-in example: a cancer drug from biomanufacturing to FDA approval. One column
+**Graph.** The built-in example, first in the run picker: a cancer drug from biomanufacturing to FDA approval. One column
 per stage, left to right. Red and amber flags mark articles that were retracted or corrected. It
 is built by hand from public records, not by a run.
 
-![The Graph screen with the pembrolizumab example: eight stages as columns, the team between them, and flagged sources](docs/images/graph-example.png)
+![The Graph screen with the pembrolizumab example: eight stages plus a summary column, the team between them, and flagged sources](docs/images/graph-example.png)
 
 **Overview's Agent Lab.** The same run as a scene: who is working and who fetched what.
 This earlier picture shows the room art, not the current three-column layout or the Agent Log.
