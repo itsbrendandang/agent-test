@@ -66,7 +66,7 @@ describe("the navigation", () => {
     await show("#Home")
     const nav = within(screen.getByRole("navigation", { name: "Places" }))
     const names = nav.getAllByRole("button").map((b) => b.textContent)
-    expect(names).toEqual(["Overview", "Research", "Agent Lab", "Saved research", "Compare", "Team review", "Agents", "Graph", "Benchmarks"])
+    expect(names).toEqual(["Overview", "Research", "Agent Log", "Saved research", "Compare", "Team review", "Agents", "Graph", "Benchmarks"])
     const more = within(nav.getByRole("list", { name: "More" })).getAllByRole("button")
     expect(more.map((b) => b.textContent)).toEqual(["Team review", "Agents", "Graph", "Benchmarks"])
     for (const b of more) expect(b).toHaveAttribute("data-quiet")
@@ -93,7 +93,7 @@ describe("the navigation", () => {
     expect(screen.getAllByRole("button").filter((b) => b.getAttribute("aria-current") === "page")).toEqual([screen.getByRole("button", { name: /profile and settings$/ })]) // the profile row is the current place
   })
   it.each([["#Experiments", "Saved research", "saved view"], ["#Swarm", "Compare", "compare view"], ["#Worlds", "Graph", "graph view"], ["#Runs", "Saved research", "saved view"],
-    ["#Board", "Team review", "review view"], ["#Lab/board/r-1", "Agent Lab", "lab view"], ["#Lab", "Agent Lab", "lab view"], ["#Research", "Research", "research view"], ["#Home", "Research", "research view"], ["#Overview", "Overview", "overview view"], ["#Benchmarks", "Benchmarks", "benchmarks view"], ["", "Overview", "overview view"]])("the address %s still opens %s", async (hash, place, text) => {
+    ["#Board", "Team review", "review view"], ["#Lab/board/r-1", "Agent Log", "lab view"], ["#Lab", "Agent Log", "lab view"], ["#Research", "Research", "research view"], ["#Home", "Research", "research view"], ["#Overview", "Overview", "overview view"], ["#Benchmarks", "Benchmarks", "benchmarks view"], ["", "Overview", "overview view"]])("the address %s still opens %s", async (hash, place, text) => {
     await show(hash)
     expect(screen.getByTestId("place")).toHaveTextContent(place)
     expect(await within(screen.getByRole("main")).findByText(new RegExp(text))).toBeInTheDocument()

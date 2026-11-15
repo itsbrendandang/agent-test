@@ -8,7 +8,7 @@ export const VIEWS = ["Overview", "Home", "Runs", "Compare", "Benchmarks", "Boar
 export type View = (typeof VIEWS)[number]
 export const DEFAULT_VIEW: View = "Overview"
 /** What a person reads in the navigation and in the header. Renames happen here only. */
-export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Lab", Settings: "Settings" }
+export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Log", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
   Overview: "How much has been run, and how much of it is research.",
@@ -19,7 +19,7 @@ export const ABOUT: Record<View, string> = {
   Board: "One team review: the recommendation, the checks and the discussion.",
   Agents: "Who does the work: the nine roles, the review agents, specialists and skills.",
   Graph: "One run as a graph of who said what and how it was checked.",
-  Lab: "Watch the team at work in a run.",
+  Lab: "The full event log of a run, with agent filters and downloads.",
   Settings: "Run mode (Demo or Real), the session token, and help.",
 }
 /** The everyday workflow: these get the weight. */
