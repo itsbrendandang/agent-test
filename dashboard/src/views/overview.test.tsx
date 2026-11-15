@@ -15,7 +15,7 @@ beforeEach(() => {
 })
 const NOW = Date.now(), HOUR = 3_600_000, MIN = 60_000
 const sse = (event: object) => `data: ${JSON.stringify({ key: "run", at: 0, ...event })}\n\n`
-const started = (mock: boolean) => new Response(sse({ type: "run.started", mock, question: "Q" }), { status: 200, headers: { "content-type": "text/event-stream" } })
+const started = (mock: boolean, title?: string) => new Response(sse({ type: "run.started", mock, title }), { status: 200, headers: { "content-type": "text/event-stream" } })
 const PAID_OFF = { paid: false, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 0, exaUsedUsd: 0.035, exaCeilingUsd: 40 } }
 
 function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid?: unknown }, more: Parameters<typeof routes>[0] = {}) {
@@ -32,7 +32,7 @@ function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const path = new URL(String(url)).pathname
     const m = /^\/api\/runs\/([\w.-]+)\/events$/.exec(path)
-    return m ? started(m[1] !== "b-live") : real(url, init)
+    return m ? started(m[1] !== "b-live", m[1] === "b-live" ? "Is KRAS G12C druggable in the lung?" : undefined) : real(url, init)
   }))
   render(<OverviewView onOpen={onOpen} />)
   return { onOpen, sent }
@@ -64,7 +64,9 @@ describe("the home page: research in progress", () => {
     expect(answer.textContent).toContain("$0.42 of $2.00")
     expect(rows[1].textContent).toContain("critic: reviewing the analysis")
     expect(rows[1].textContent).toContain("Not recorded") // a benchmark run records no dollars: none are shown
-    expect(rows[0].textContent).toContain("$1.50")
+    expect(rows[0].textContent).toContain("$1.50 of $5.00") // a team review's cap is the engine's limit per run
+    // A team review shows the question it asked (its first event), not its brief's file name.
+    await waitFor(() => expect(rows[0].querySelector(".ov-run-title")?.textContent).toBe("Is KRAS G12C druggable in the lung?"))
     // Each running run follows its own events.
     await waitFor(() => expect(streams.map((s) => s.url).some((u) => u.endsWith("/api/research/a-run/events"))).toBe(true))
     expect(streams.some((s) => s.url.endsWith("/api/runs/b-live/events"))).toBe(true)
@@ -189,6 +191,24 @@ describe("the home page: metrics from recorded data only", () => {
     render(<OverviewView onOpen={() => {}} />)
     await waitFor(() => expect(document.querySelector(".page")?.textContent).toMatch(/engine/i))
     expect(screen.queryByRole("region", { name: "Metrics" })).toBeNull()
+  })
+
+  it("keeps reading after the engine was offline, and shows the page once it is back", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline") }))
+      render(<OverviewView onOpen={() => {}} />)
+      await waitFor(() => expect(document.querySelector(".page")?.textContent).toMatch(/engine/i))
+      routes({
+        "GET /api/runs": { status: 200, body: [] },
+        "GET /api/research": { status: 200, body: { items: [] } },
+        "GET /api/glhf/runs": { status: 200, body: [] },
+        "GET /api/paid": { status: 200, body: PAID_OFF },
+        "GET /api/chat/catalog": { status: 503, body: {} },
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_100) })
+      await waitFor(() => expect(screen.getByRole("region", { name: "Metrics" })).toBeTruthy())
+    } finally { vi.useRealTimers() }
   })
 })
 

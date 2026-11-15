@@ -56,8 +56,9 @@ describe("the figures", () => {
   it("counts runs by how they ended, and research apart from practice", () => {
     expect(countsOf(works)).toEqual({ done: 3, running: 0, failed: 1, stopped: 1, research: 4, practice: 1 })
   })
-  it("adds the dollars runs started in the last 7 days recorded; none recorded is not $0", () => {
-    expect(recentSpend(works, 7, NOW)).toEqual({ usd: 2.6, runs: 4 })
+  it("adds the dollars research runs started in the last 7 days recorded, never practice; none recorded is not $0", () => {
+    expect(recentSpend(works, 7, NOW)).toEqual({ usd: 2.6, runs: 3 }) // b1, a1, a4: the practice a3 is not counted
+    expect(recentSpend(works.filter((w) => w.id === "a3"), 7, NOW)).toBeUndefined()
     expect(recentSpend([], 7, NOW)).toBeUndefined()
   })
   it("averages time and cost over finished answers of one scope only", () => {

@@ -136,7 +136,7 @@
 .ov-kind[data-kind="answer"]::before { background: var(--info); }
 .ov-kind[data-kind="board"]::before { background: var(--success); }
 .ov-kind[data-kind="swarm"]::before { background: var(--warning); }
-[data-tone="bad"] { color: var(--danger); }
+.ov-home [data-tone="bad"] { color: var(--danger); }
 
 /* In progress: one row per run. Text left, its numbers in a fixed column, its buttons at the end. */
 .ov-running { list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }

@@ -37,7 +37,7 @@ function useWork() {
     const read = () => {
       void Promise.allSettled([readEngine<unknown>("/api/runs"), readEngine<unknown>("/api/research?all=1"), readEngine<unknown>("/api/glhf/runs"), readEngine<unknown>("/api/paid")]).then(([board, answers, swarm, spend]) => {
         if (stopped) return
-        if (board.status === "rejected" && answers.status === "rejected" && swarm.status === "rejected") { setProblem(problemOf(board.reason)); return }
+        if (board.status === "rejected" && answers.status === "rejected" && swarm.status === "rejected") { setProblem(problemOf(board.reason)); timer = setTimeout(read, POLL_IDLE_MS); return }
         setProblem(undefined)
         const next = workOf(board.status === "fulfilled" ? board.value : undefined, answers.status === "fulfilled" ? answers.value : undefined, swarm.status === "fulfilled" ? swarm.value : undefined)
         setWorks(next)
@@ -72,7 +72,9 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   // An older engine does not say in the list whether a team review used scripted models: its first event does.
   const unknownBoards = useMemo(() => (listed ?? []).filter((w) => w.kind === "board" && w.provenance === undefined).map((w) => w.id), [listed])
   const boardIds = useMemo(() => (listed ?? []).filter((w) => w.kind === "board").map((w) => w.id), [listed])
-  const scripted = useBoardScripted(unknownBoards)
+  // The question each shown team review asked is in its first event: read it for the rows on this page only.
+  const shownBoards = useMemo(() => [...new Set([...unknownBoards, ...[...running(listed ?? []), ...recent(listed ?? [])].filter((w) => w.kind === "board").map((w) => w.id)])], [listed, unknownBoards])
+  const scripted = useBoardScripted(shownBoards)
   const titles = boardTitles(boardIds)
   const works = useMemo<Work[] | undefined>(() => listed?.map((w) => {
     if (w.kind !== "board") return w
@@ -132,7 +134,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
           <h2 id="ov-running-title">In progress</h2>
           <small role="status">{!works ? "Reading the runs…" : going.length ? `${going.length} running now` : "Nothing running"}</small>
         </header>
-        {works ? <Running works={going} models={models} now={now} watched={watched} onWatch={setPicked} onOpenRun={openRun} /> : <Skeleton className="ov-skeleton" />}
+        {works ? <Running works={going} models={models} perRun={paid?.perRun} now={now} watched={watched} onWatch={setPicked} onOpenRun={openRun} /> : <Skeleton className="ov-skeleton" />}
       </section>
 
       <section className="ov-section" aria-labelledby="ov-metrics-title">

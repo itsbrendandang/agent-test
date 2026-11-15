@@ -111,10 +111,10 @@ export function countsOf(works: readonly Work[]): Counts {
 }
 
 const DAY = 86_400_000
-/** Dollars recorded by runs started in the last `days` days (today included). Undefined when no run in that window records dollars. */
+/** Dollars recorded by research runs (never practice) started in the last `days` days (today included). Undefined when none in that window records dollars. */
 export function recentSpend(works: readonly Work[], days = 7, now: Date = new Date()): { usd: number; runs: number } | undefined {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - (days - 1) * DAY
-  const priced = counted(works).filter((w) => w.startedAt >= start && w.usd !== undefined)
+  const priced = counted(works).filter((w) => madeOf(w) !== "practice" && w.startedAt >= start && w.usd !== undefined)
   if (!priced.length) return undefined
   return { usd: priced.reduce((sum, w) => sum + (w.usd ?? 0), 0), runs: priced.length }
 }
