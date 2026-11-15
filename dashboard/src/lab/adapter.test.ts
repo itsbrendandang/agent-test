@@ -468,6 +468,17 @@ describe("a swarm run (swarmLab)", () => {
 })
 
 describe("method specialists of a research answer", () => {
+  it("prefers valid engine rooms, retaining legacy fallback for invalid or absent rooms", () => {
+    const item = { name: "literature-evidence-synthesist", title: "Literature specialist", agent: "specialist:literature", room: "quality", methods: [{ title: "Evidence synthesis" }, null, {}, { title: 7 }] }
+    const event = { type: "specialists", items: [item] }
+    expect(answerLab([event]).visitors[0]).toMatchObject({ room: "quality", methods: ["Evidence synthesis"] })
+    for (const room of ["unknown", "library", "data", "specialists", undefined]) {
+      expect(answerLab([{ ...event, items: [{ ...item, room }] }]).visitors[0].room).toBe("discovery")
+    }
+    expect(answerLab([{ ...event, items: [{ ...item, methods: null }] }]).visitors[0].methods).toEqual([])
+    const roster = { type: "run.roster", members: [{ ...item, source: "specialist" }] }
+    expect(boardLab([roster]).visitors[0]).toMatchObject({ room: "quality", methods: ["Evidence synthesis"] })
+  })
   const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
   const events: LabEvent[] = [
     { seq: 1, at: 1, type: "research.started", id: "a-1", question: "Is hERG a risk?", mode: "real" },

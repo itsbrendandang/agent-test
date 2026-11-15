@@ -3,6 +3,7 @@
 //
 // DO NOT rename a field here without telling the dashboard's owner: the Search screen reads these shapes.
 import type { BoardConfig } from "../config.ts"
+import type { SpecialistRoom } from "../specialists.ts"
 import type { Verdict } from "../events.ts"
 
 export type Effort = "quick" | "standard"
@@ -130,7 +131,7 @@ export type StepStatus = "completed" | "empty" | "failed" | "cancelled"
 /** A safe summary of what a step was given, for a details view. Never a key, a header, a token, a path or a prompt. */
 export type StepInput = Record<string, string | number | boolean>
 /** A method specialist of one answer (specialists.ts). `agent` is who the step and the lab show: "specialist:<name>". */
-export interface AnswerSpecialist { name: string; title: string; agent: string; why: string; methods: { name: string; title: string }[] }
+export interface AnswerSpecialist { room?: SpecialistRoom; name: string; title: string; agent: string; why: string; methods: { name: string; title: string }[] }
 
 export interface StepStart {
   step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput

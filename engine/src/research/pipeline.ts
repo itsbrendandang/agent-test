@@ -43,7 +43,7 @@ import { PaidCallsOff } from "../paid/paid.ts"
 import { describeModelFailure, FatalModelError, firstPassModel, isFatalModelError, type ModelId, parseModelId } from "../providers.ts"
 import { type FirstPass, type FirstPassRuling, parseJson, quietReasoning } from "../board/triage.ts"
 import { investigatorSystem, investigatorUser, leadSystem, leadUser, specialistSystem, specialistUser } from "./prompts.ts"
-import { answerNotes, type Match } from "../specialists.ts"
+import { answerNotes, specialistRoom, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
@@ -910,7 +910,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     const invited = (level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
     const notesOf = new Map(invited.map((m) => [m.specialist.name, answerNotes(m.specialist, m.methods)]))
     const team: AnswerSpecialist[] = invited.map((m) => ({
-      name: m.specialist.name, title: m.specialist.title, agent: specialistAgent(m.specialist.name),
+      room: specialistRoom(m.specialist), name: m.specialist.name, title: m.specialist.title, agent: specialistAgent(m.specialist.name),
       why: `Its method notes match the question's words: ${m.words.slice(0, 6).join(", ")}.`, methods: m.methods.map((x) => ({ name: x.name, title: x.title })),
     }))
     if (team.length) { record.specialists = team; emit("specialists", { type: "specialists", items: team }); save() } else delete record.specialists

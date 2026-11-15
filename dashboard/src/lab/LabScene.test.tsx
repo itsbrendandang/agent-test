@@ -361,6 +361,12 @@ describe("LabScene", () => {
 })
 
 describe("LabPanel and Lab", () => {
+  it("shows a visitor's method skills", () => {
+    const model = emptyLab()
+    model.visitors = [{ id: "new", name: "New specialist", title: "New specialist", room: "bench", methods: ["RNA-seq analysis", "Differential expression"], state: "idle", doing: "Waiting." }]
+    render(<LabPanel model={model} selected="guardian" />)
+    expect(screen.getByText("Method skills: RNA-seq analysis; Differential expression")).toBeInTheDocument()
+  })
   it("says who the selected teammate is, what it does and what it last fetched; the rest is under About, closed", () => {
     render(<LabPanel model={fixtureModel()} selected="guardian" />)
     const panel = screen.getByRole("complementary", { name: /Selected teammate/ })

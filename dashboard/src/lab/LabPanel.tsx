@@ -137,7 +137,7 @@ export function LabPanel({ model, selected, compact = false }: { model: LabModel
           <h3>Visiting specialists</h3>
           <ul className="lab-visitors">
             {model.visitors.map((v) => (
-              <li key={v.id}><b>{v.name}</b> <span className="muted">in {roomOf(v.room).name}</span><br />{STATE_GLYPH[v.state] && <span aria-hidden="true">{STATE_GLYPH[v.state]} </span>}{STATE_WORD[v.state]}. {v.doing}{v.why && <><br /><span className="muted">Why it joined: {v.why}</span></>}</li>
+              <li key={v.id}><b>{v.name}</b> <span className="muted">in {roomOf(v.room).name}</span><br />{STATE_GLYPH[v.state] && <span aria-hidden="true">{STATE_GLYPH[v.state]} </span>}{STATE_WORD[v.state]}. {v.doing}{v.methods && v.methods.length > 0 && <><br /><span className="muted">Method skills: {v.methods.join("; ")}</span></>}{v.why && <><br /><span className="muted">Why it joined: {v.why}</span></>}</li>
             ))}
           </ul>
         </>
