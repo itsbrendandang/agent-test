@@ -112,7 +112,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
 
       <p className="ov-counts" aria-label="Totals">
         {runs
-          ? <><b>{totals.research}</b> research {totals.research === 1 ? "run" : "runs"}, <b>{totals.practice}</b> practice, <b>{totals.inProgress}</b> in progress. </>
+          ? <><b>{totals.research}</b> research {totals.research === 1 ? "run" : "runs"}, <b>{totals.practice}</b> practice, <b>{totals.inProgress}</b> in progress{totals.failed ? <>, <b>{totals.failed}</b> failed</> : null}. </>
           : "Counting the runs… "}
         <button type="button" className="ov-link" onClick={() => onOpen("Runs")}>See everything in Saved research</button>
       </p>

@@ -44,8 +44,7 @@ describe("Overview", () => {
       swarm: [{ id: "s1", solver: "glhf", task: "demo", phase: "done", model: "mock", modelClass: "scripted", startedAt: NOW - 4 * HOUR }, { id: "s2", solver: "single", task: "demo", phase: "failed", model: "mock", modelClass: "scripted", startedAt: NOW - 5 * HOUR }],
     })
     // The team reviews say how they were made in their first event: wait for both to be read.
-    await waitFor(() => expect(counts()).toContain("2 research runs, 4 practice, 1 in progress."))
-    expect(counts()).not.toContain("failed") // a failure count is not front-page news; Saved research lists every run
+    await waitFor(() => expect(counts()).toContain("2 research runs, 4 practice, 1 in progress, 1 failed."))
     await userEvent.click(screen.getByRole("button", { name: "See everything in Saved research" }))
     expect(onOpen).toHaveBeenCalledWith("Runs")
     // The old statistics block is gone: no tiles, no chart, no activity log.

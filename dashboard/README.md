@@ -69,6 +69,9 @@ button, the place name, and two slots a view can fill
 (`<HeaderSlot area="title" | "actions">`, `src/components/HeaderSlot.tsx`). When the engine cannot be reached, the
 page says so once, with "Try again".
 
+Content is at most 1100 px wide, with the same left edge on every view. Graph and Research use the full width
+(`data-wide`): Graph for its picture, Research for its inspector.
+
 ## Run mode (Demo or Real) and provenance
 
 Two different things, never mixed:
