@@ -12,12 +12,13 @@ const NOW = Date.now(), HOUR = 3_600_000
 const sse = (event: object) => `data: ${JSON.stringify({ key: "run", at: 0, ...event })}\n\n`
 const started = (mock: boolean) => new Response(sse({ type: "run.started", mock, question: "Q" }), { status: 200, headers: { "content-type": "text/event-stream" } })
 
-function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown }) {
+function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid?: unknown }) {
   const onOpen = vi.fn()
   routes({
     "GET /api/runs": { status: 200, body: lists.board ?? [] },
     "GET /api/research": { status: 200, body: lists.answers ?? { items: [] } },
     "GET /api/glhf/runs": { status: 200, body: lists.swarm ?? [] },
+    "GET /api/paid": { status: 200, body: lists.paid ?? { paid: false, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 0, exaUsedUsd: 0.035, exaCeilingUsd: 40 } } },
   })
   const real = globalThis.fetch
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -50,14 +51,26 @@ describe("Overview", () => {
     expect(kinds.textContent).toContain("0 research, 2 practice")
     expect(screen.getByRole("img", { name: /Runs started on each of the last 14 days: 6 in all/ })).toBeTruthy()
     expect(screen.getByRole("table").textContent).toMatch(/Research.*Practice.*All/)
-    // The latest five, newest first, each with its own label.
-    const latest = screen.getByRole("region", { name: "Latest" })
-    const rows = within(latest).getAllByRole("listitem")
+    // The activity log: newest first under a day pill, each entry with an agent's face, who did what, and its own label.
+    const log = screen.getByRole("region", { name: "Activity log" })
+    expect(within(log).getByText("Today")).toBeTruthy()
+    const rows = within(log).getAllByRole("listitem")
+    expect(rows).toHaveLength(6)
+    expect(rows[0].textContent).toContain("Reporter")
+    expect(rows[0].textContent).toContain("is working on")
     expect(rows[0].textContent).toContain("A practice one")
     expect(rows[0].textContent).toContain("Practice")
+    expect(rows[1].textContent).toContain("wrote an answer to")
     expect(rows[1].textContent).toContain("Does it work?")
     expect(rows[1].textContent).toContain("Live research")
-    expect(rows).toHaveLength(5)
+    expect(rows[2].textContent).toContain("Lead Scientist")
+    expect(rows[2].textContent).toContain("led a team review of")
+    expect(rows[4].textContent).toContain("Team of nine")
+    expect(rows[4].textContent).toContain("the demo task")
+    expect(rows[5].textContent).toContain("One agent")
+    expect(rows[5].textContent).toContain("failed on")
+    expect(rows[5].getAttribute("data-failed")).toBe("true")
+    expect(rows[0].querySelector("svg[data-agent]")).toBeTruthy()
   })
 
   it("a practice run is not research even when it is the only thing there", async () => {
@@ -102,5 +115,24 @@ describe("the welcome on the home page", () => {
     // The agents are named in text for a screen reader; the moving picture is hidden from it.
     expect(document.querySelector(".ov-stage")?.getAttribute("aria-hidden")).toBe("true")
     expect(screen.getByText("Scout: finds sources")).toBeTruthy()
+    expect(screen.getByRole("group", { name: "Example questions" }).querySelectorAll("button")).toHaveLength(3)
+  })
+})
+
+describe("API credits on the home page", () => {
+  it("shows the engine's own spend and limits, and says what it cannot know", async () => {
+    show({ paid: { paid: true, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 3.456, exaUsedUsd: 0.035, exaCeilingUsd: 40 } } })
+    const credits = (await screen.findByText("Spent today")).closest("section") as HTMLElement
+    expect(credits.textContent).toContain("Real mode: runs spend money, inside these limits.")
+    expect(credits.textContent).toContain("$3.46Spent todayof a $20.00 daily limit")
+    expect(credits.textContent).toContain("$5.00Limit per run")
+    expect(credits.textContent).toContain("$0.04Web search (Exa)of a $40.00 ceiling, all time")
+    expect(credits.textContent).toContain("Not knownAccount balances")
+  })
+  it("says nothing can be spent in Demo mode, and Not known for a number the engine did not give", async () => {
+    show({ paid: { paid: false, caps: { dailyUsd: 20 } } })
+    const credits = (await screen.findByText("Spent today")).closest("section") as HTMLElement
+    expect(credits.textContent).toContain("Demo mode: nothing can be spent.")
+    expect(credits.textContent).toContain("Not knownSpent today")
   })
 })

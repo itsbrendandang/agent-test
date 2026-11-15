@@ -78,3 +78,54 @@ export function niceTop(max: number): number {
   for (const step of [1, 2, 5, 10]) if (step * power >= max) return step * power
   return 10 * power
 }
+
+// ---- The activity log ---------------------------------------------------------------------------------------
+export interface Entry {
+  key: string
+  kind: RunKind
+  /** The engine name of the agent whose face stands for the run (identity.ts decides the face). */
+  agent: string
+  /** Who did it, as a person reads it. */
+  actor: string
+  /** What they did, in a few muted words. */
+  verb: string
+  /** What it was about: the question, the brief or the task. Untrusted text. */
+  object: string
+  at: number
+  /** "9:12 am". */
+  time: string
+  failed: boolean
+  provenance: RunRef["provenance"]
+}
+export interface DayGroup { day: string; entries: Entry[] }
+
+const clock = (ms: number) => { const d = new Date(ms), h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}` }
+/** "Today", "Yesterday", or "12 Nov" (with the year when it is not this one). */
+export function dayName(ms: number, now: Date = new Date()): string {
+  const days = Math.round((midnight(now.getTime()) - midnight(ms)) / 86_400_000)
+  if (days === 0) return "Today"
+  if (days === 1) return "Yesterday"
+  const d = new Date(ms)
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`}`
+}
+/** Who stands for a run of each kind, and the words for what they did. A run still going or failed says so. */
+function told(run: RunRef): Pick<Entry, "agent" | "actor" | "verb" | "object"> {
+  const going = run.live, failed = run.status === "failed", stopped = run.status === "cancelled"
+  const verb = (done: string) => (going ? "is working on" : failed ? "failed on" : stopped ? "stopped work on" : done)
+  if (run.kind === "answer") return { agent: "reporter", actor: "Reporter", verb: verb("wrote an answer to"), object: run.title }
+  if (run.kind === "board") return { agent: "lead-scientist", actor: "Lead Scientist", verb: verb("led a team review of"), object: run.title }
+  const [who, ...rest] = run.title.split(" on ")
+  const alone = /^one agent/i.test(who)
+  return { agent: alone ? "experimenter" : "scout", actor: alone ? "One agent" : "Team of nine", verb: verb(alone ? "worked alone on" : "worked through"), object: rest.join(" on ") || run.title }
+}
+/** The newest runs as a log, grouped by day, newest first. A run with no start time is left out. */
+export function activityOf(runs: readonly RunRef[], limit = 8, now: Date = new Date()): DayGroup[] {
+  const groups: DayGroup[] = []
+  for (const run of runs.filter((r) => r.startedAt).slice(0, limit)) {
+    const day = dayName(run.startedAt, now)
+    const entry: Entry = { key: `${run.kind}/${run.id}`, kind: run.kind, ...told(run), at: run.startedAt, time: clock(run.startedAt), failed: run.status === "failed", provenance: run.provenance }
+    const last = groups.at(-1)
+    if (last && last.day === day) last.entries.push(entry); else groups.push({ day, entries: [entry] })
+  }
+  return groups
+}

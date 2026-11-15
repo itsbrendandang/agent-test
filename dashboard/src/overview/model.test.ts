@@ -2,7 +2,7 @@
 // has one bar a day in the person's own time zone.
 import { describe, expect, it } from "vitest"
 import type { RunRef } from "@/lab/runs"
-import { madeOf, niceTop, perDay, totalsOf } from "./model"
+import { activityOf, dayName, madeOf, niceTop, perDay, totalsOf } from "./model"
 
 const NOW = new Date(2026, 10, 14, 21, 0) // 14 Nov 2026, 9 pm local
 const at = (daysAgo: number, hour = 12) => new Date(2026, 10, 14 - daysAgo, hour).getTime()
@@ -52,5 +52,23 @@ describe("runs per day", () => {
   })
   it("scales the chart to a round number at or above the tallest bar", () => {
     expect([0, 1, 2, 3, 5, 7, 10, 11, 37, 50, 120].map(niceTop)).toEqual([1, 1, 2, 5, 5, 10, 10, 20, 50, 50, 200])
+  })
+})
+
+describe("the activity log", () => {
+  it("groups the newest runs by day and says who did what", () => {
+    expect([dayName(at(0), NOW), dayName(at(1, 23), NOW), dayName(at(5), NOW), dayName(new Date(2025, 0, 3).getTime(), NOW)]).toEqual(["Today", "Yesterday", "9 Nov", "3 Jan 2025"])
+    const runs: RunRef[] = [
+      run("answer", "practice", at(0, 9), { title: "Is it safe?" }),
+      run("swarm", "practice", at(0, 8), { title: "Team of nine on the demo task", live: true, status: "in progress" }),
+      run("swarm", "live", at(1), { title: "One agent alone on task 9", status: "failed" }),
+      run("board", "live", at(1, 8), { title: "Kras hit to lead" }),
+      run("answer", "practice", 0, { title: "no time" }),
+    ]
+    const log = activityOf(runs, 8, NOW)
+    expect(log.map((g) => [g.day, g.entries.length])).toEqual([["Today", 2], ["Yesterday", 2]])
+    expect(log[0].entries.map((e) => [e.actor, e.verb, e.object, e.time])).toEqual([["Reporter", "wrote an answer to", "Is it safe?", "9:00 am"], ["Team of nine", "is working on", "the demo task", "8:00 am"]])
+    expect(log[1].entries.map((e) => [e.agent, e.actor, e.verb, e.object, e.failed])).toEqual([["experimenter", "One agent", "failed on", "task 9", true], ["lead-scientist", "Lead Scientist", "led a team review of", "Kras hit to lead", false]])
+    expect(activityOf(runs, 1, NOW)[0].entries).toHaveLength(1)
   })
 })

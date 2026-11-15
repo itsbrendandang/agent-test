@@ -1,19 +1,22 @@
 // The Overview: how much has been run, how much of it is research, and when. It reads the same three lists the
 // other views read (team reviews, research answers, benchmark runs) and counts them. A practice run is counted
 // apart and is never added to "research done": the big number is only what real models produced.
+import { CalendarDays, FlaskConical, MessageSquareText, Trophy, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { Provenance } from "@/components/Provenance"
 import { EngineOffline } from "@/components/Shared"
+import { AgentAvatar } from "@/lab/AgentAvatar"
 import { answerRuns, boardRuns, mergeRuns, swarmRuns, type RunRef } from "@/lab/runs"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { plainWhen } from "@/lib/format"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
+import { Credits } from "@/overview/Credits"
 import { Hero } from "@/overview/Hero"
-import { KIND_LABEL, KINDS, niceTop, perDay, totalsOf, type Day } from "@/overview/model"
+import { activityOf, KIND_LABEL, KINDS, niceTop, perDay, totalsOf, type Day } from "@/overview/model"
 import "@/overview/overview.css"
 
-const KIND_ONE = { answer: "Research answer", board: "Team review", swarm: "Benchmark run" } as const
+const KIND_ICON = { answer: MessageSquareText, board: FlaskConical, swarm: Trophy } as const
 const DAYS = 14
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
@@ -77,13 +80,14 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const runs = useMemo<RunRef[] | undefined>(() => listed?.map((r) => (r.kind === "board" && r.provenance === undefined && scripted[r.id] !== undefined ? { ...r, provenance: scripted[r.id] ? "practice" : "live" } : r)), [listed, scripted])
   const totals = useMemo(() => totalsOf(runs ?? []), [runs])
   const days = useMemo(() => perDay(runs ?? [], DAYS), [runs])
+  const log = useMemo(() => activityOf(runs ?? []), [runs])
 
   if (problem) return <div className="page"><EngineOffline needs="the list of runs" said={problem.said} onRetry={retry} /></div>
   return (
-    <div className="page" aria-busy={!runs}>
+    <div className="page ov-page" aria-busy={!runs}>
       <h1 className="sr-only">Overview</h1>
       <Hero onOpen={onOpen} />
-      <p className="page-about">What has been run so far. Practice runs use fixed example text and are counted apart from research.</p>
+      <div className="ov-row-label">So far <small>Practice runs use example text and are counted apart from research.</small></div>
 
       <section className="ov-tiles" aria-label="Totals">
         <div className="ov-tile" data-lead><b>{runs ? totals.research : "–"}</b><span>Research runs</span><small>Made with real AI models.</small></div>
@@ -91,6 +95,8 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
         <div className="ov-tile"><b>{runs ? totals.inProgress : "–"}</b><span>In progress</span><small>Running or waiting now.</small></div>
         <div className="ov-tile"><b>{runs ? totals.all : "–"}</b><span>All runs</span><small>{totals.failed ? `${totals.failed} failed.` : "None failed."}{totals.unknown ? ` ${totals.unknown} not read yet.` : ""}</small></div>
       </section>
+
+      <Credits />
 
       {runs && !runs.length && (
         <section className="ov-card"><h2>Nothing has been run yet</h2><p>Ask the team a question above to make the first one.</p><button type="button" className="ov-link" onClick={() => onOpen("Home")}>Go to Research</button></section>
@@ -136,16 +142,30 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
           </div>
 
           <section className="ov-card" aria-labelledby="ov-recent">
-            <h2 id="ov-recent">Latest</h2>
-            <ul className="ov-recent">
-              {runs.slice(0, 5).map((r) => (
-                <li key={`${r.kind}/${r.id}`}>
-                  <span className="ov-title">{r.title}</span>
-                  <span className="ov-meta">{KIND_ONE[r.kind]} · {r.startedAt ? plainWhen(r.startedAt) : "no start time"} · {r.status}</span>
-                  <Provenance kind={r.provenance} compact />
-                </li>
-              ))}
-            </ul>
+            <h2 id="ov-recent">Activity log</h2>
+            {log.map((group) => (
+              <div className="ov-day" key={group.day}>
+                <div className="ov-day-head"><span className="ov-dot" data-kind="day"><CalendarDays size={13} aria-hidden="true" /></span><span className="ov-day-pill">{group.day}</span></div>
+                <ul className="ov-log">
+                  {group.entries.map((e) => {
+                    const Icon = KIND_ICON[e.kind]
+                    return (
+                      <li key={e.key} data-failed={e.failed || undefined}>
+                        <span className="ov-dot" data-kind={e.kind}>{e.failed ? <X size={13} aria-hidden="true" /> : <Icon size={13} aria-hidden="true" />}</span>
+                        <div className="ov-log-line">
+                          <AgentAvatar name={e.agent} size={24} />
+                          <b>{e.actor}</b>
+                          <span className="ov-verb">{e.verb}</span>
+                          <span className="ov-object">{e.object}</span>
+                          <Provenance kind={e.provenance} compact />
+                          <time className="ov-time" dateTime={new Date(e.at).toISOString()} title={plainWhen(e.at)}>{e.time}</time>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
             <button type="button" className="ov-link" onClick={() => onOpen("Runs")}>See everything in Saved research</button>
           </section>
         </>

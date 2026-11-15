@@ -5,6 +5,7 @@
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
 //  Lab:      the team at work, drawn from the same events.
 // A tab exists only when it has content. Nothing here is a placeholder.
+import { tracked } from "@/lib/engine"
 import { lazy, Suspense, useState } from "react"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
@@ -126,7 +127,7 @@ function Results({ id, state: s }: { id: string; state: AnswerState }) {
   const [preview, setPreview] = useState<{ name: string; text: string }>()
   const show = async (name: string) => {
     if (preview?.name === name) { setPreview(undefined); return }
-    try { const r = await fetch(artifactUrl(id, name)); setPreview({ name, text: r.ok ? (await r.text()).slice(0, 6000) : `The engine answered ${r.status}, so this file could not be shown.` }) }
+    try { const r = await tracked(fetch(artifactUrl(id, name))); setPreview({ name, text: r.ok ? (await r.text()).slice(0, 6000) : `The engine answered ${r.status}, so this file could not be shown.` }) }
     catch { setPreview({ name, text: "The app's engine isn't running, so this file could not be shown." }) }
   }
   const textual = (a: { name: string; type: string }) => /^text\/|json|csv|markdown/.test(a.type) || /\.(md|json|csv|txt)$/i.test(a.name)

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ENGINE, type RunSummary } from "@/board/api"
 import { RecordList, type RecordItem } from "@/components/RecordRow"
 import { EngineOffline, PageHead } from "@/components/Shared"
-import { problemOf, readEngine, type Problem } from "@/lib/engine"
+import { problemOf, readEngine, tracked, type Problem } from "@/lib/engine"
 import { fmtScore, runTitle } from "@/lib/format"
 import { setOpenAnswer, viewOfKind } from "@/lib/open"
 import { provenanceOf, type ProvenanceKind } from "@/lib/provenance"
@@ -27,7 +27,7 @@ const KIND_WORD: Record<Kind, string> = { all: "All", answer: "Answers", board: 
 const FIRST = 10
 
 const list = <T,>(path: string, signal: AbortSignal): Promise<T[]> =>
-  fetch(ENGINE + path, { signal }).then((r) => (r.ok ? r.json() : [])).then((v: unknown) => (Array.isArray(v) ? (v as T[]) : []), () => [])
+  tracked(fetch(ENGINE + path, { signal })).then((r) => (r.ok ? r.json() : [])).then((v: unknown) => (Array.isArray(v) ? (v as T[]) : []), () => [])
 
 export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" | "Board") => void }) {
   const [query, setQuery] = useState(() => sessionStorage.getItem("experiments.q") ?? "")

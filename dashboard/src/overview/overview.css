@@ -76,47 +76,69 @@
 .ov-eval th[scope="row"] { text-align: left; font-weight: 600; }
 .ov-eval thead th { font-weight: 600; color: var(--text-muted); font-size: 12.5px; }
 
-/* The welcome: a question box with the agents waiting around it. */
-.ov-hero { position: relative; overflow: hidden; flex: none; border: 1px solid var(--edge); border-radius: var(--radius-composer); padding: var(--space-6) var(--space-5) 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center;
-  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--brand) 55%, var(--surface)) 0%, var(--surface) 62%); }
-.ov-hero h2 { font-size: clamp(24px, 3.2vw, 34px); font-weight: 680; letter-spacing: -0.01em; }
-.ov-hero-sub { max-width: 58ch; font-size: 15.5px; line-height: 1.5; color: var(--text); }
-.ov-ask { width: min(680px, 100%); display: flex; gap: var(--space-2); align-items: flex-end; background: var(--surface); border: 1.5px solid var(--edge-strong); border-radius: var(--radius-composer); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
+/* The home page: one centred column, a question box first, everything else quiet beneath it. */
+.ov-page > * { width: min(860px, 100%); margin-inline: auto; flex: none; }
+.ov-hero { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-3); padding-top: clamp(16px, 7vh, 72px); }
+.ov-hero h2 { font-size: 22px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
+.ov-stage { display: flex; justify-content: center; gap: 10px; height: 52px; }
+.ov-agent { width: 44px; height: 44px; align-self: flex-end; animation: ov-bob 2.8s ease-in-out var(--delay) infinite; transform-origin: 50% 100%; }
+.ov-agent svg { width: 100%; height: 100%; display: block; }
+@keyframes ov-bob { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-4px) scale(1.02, .98); } }
+@keyframes ov-hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-12px); } 60% { transform: translateY(0); } }
+.ov-hero[data-eager] .ov-agent { animation: ov-hop .9s ease-in-out var(--delay) infinite; }
+
+.ov-ask { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--edge-strong); border-radius: var(--radius-composer); padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4); box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
 .ov-ask:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 70%, transparent); }
-.ov-ask textarea { flex: 1; min-width: 0; border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 16px; line-height: 1.45; padding: 8px 0; color: var(--text); }
+.ov-ask textarea { border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 16px; line-height: 1.5; padding: 4px 0; color: var(--text); min-width: 0; }
 .ov-ask textarea::placeholder { color: var(--text-muted); }
-.ov-ask button { flex: none; border: 0; border-radius: 12px; background: var(--ink); color: var(--on-ink); font: inherit; font-weight: 600; padding: 10px 16px; cursor: pointer; }
+.ov-ask-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.ov-chip { font-size: 12.5px; color: var(--text-muted); border: 1px solid var(--edge); border-radius: 999px; padding: 3px 10px; }
+.ov-ask button { flex: none; width: 36px; height: 36px; border: 0; border-radius: 999px; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; cursor: pointer; }
 .ov-ask button:disabled { background: var(--edge-strong); cursor: default; }
 .ov-ask button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.ov-hero-note { font-size: 12.5px; color: var(--text-muted); }
+.ov-hero-note { font-size: 12.5px; color: var(--text-muted); padding-inline: var(--space-1); }
 
-.ov-stage { position: relative; width: 100%; height: 128px; margin-top: var(--space-2); border-top: 1px dashed var(--edge); }
-.ov-agent { position: absolute; bottom: 8px; left: var(--x); width: 96px; margin-left: -48px; display: flex; flex-direction: column; align-items: center; gap: 1px; transition: left .6s cubic-bezier(.2, .8, .2, 1); animation: ov-roam var(--pace) ease-in-out var(--delay) infinite; }
-.ov-agent-body { width: 56px; height: 56px; animation: ov-bob 2.6s ease-in-out var(--delay) infinite; transform-origin: 50% 100%; }
-.ov-agent-body svg { width: 100%; height: 100%; display: block; }
-.ov-agent-name { font-size: 12.5px; font-weight: 650; background: var(--surface); border: 1px solid var(--edge); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
-.ov-agent-does { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
-@keyframes ov-roam { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(var(--roam)); } }
-@keyframes ov-bob { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-5px) scale(1.02, .98); } }
-@keyframes ov-hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-14px); } 60% { transform: translateY(0); } }
-/* Someone is at the box: the team gathers under it and bounces. */
-.ov-hero[data-eager] .ov-agent { left: var(--gx); animation-play-state: paused; }
-.ov-hero[data-eager] .ov-agent-body { animation: ov-hop .9s ease-in-out var(--delay) infinite; }
-@media (max-width: 720px) {
-  .ov-stage { height: 104px; }
-  .ov-agent { width: 64px; margin-left: -32px; }
-  .ov-agent-body { width: 42px; height: 42px; }
-  .ov-agent-does { display: none; }
-  .ov-agent-name { font-size: 11px; padding: 0 6px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ov-agent, .ov-agent-body, .ov-hero[data-eager] .ov-agent-body { animation: none; }
-  .ov-agent { transition: none; }
-}
-
-.ov-starters { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); max-width: 760px; }
-.ov-starters button { border: 1px solid var(--edge); background: var(--surface); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; }
+.ov-row-label { font-size: 13px; color: var(--text-muted); margin-top: var(--space-3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ov-row-label small { font-size: 12.5px; }
+.ov-starters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.ov-starters button { text-align: left; border: 0; background: var(--neutral-bg); border-radius: var(--radius-control); padding: 10px 12px; font: inherit; color: var(--text); cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ov-starters button b { font-size: 13.5px; font-weight: 600; }
+.ov-starters button span { font-size: 13px; color: var(--text-muted); line-height: 1.35; }
 .ov-starters button:hover { background: var(--hover); }
 .ov-starters button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ov-page .ov-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.ov-page .ov-tile { border: 0; background: var(--neutral-bg); border-radius: var(--radius-control); padding: 10px 12px; }
+.ov-page .ov-tile b { font-size: 22px; }
+.ov-page .ov-tile span { font-size: 13.5px; }
+.ov-page .ov-tile[data-lead] { background: color-mix(in srgb, var(--brand) 60%, var(--surface)); }
+.ov-page .ov-two { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 720px) {
+  .ov-starters { grid-template-columns: minmax(0, 1fr); }
+  .ov-page .ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { .ov-agent, .ov-hero[data-eager] .ov-agent { animation: none; } }
 
-.page > .ov-tiles, .page > .ov-two, .page > .ov-card, .page > .ov-link { flex: none; }
+/* The activity log: day pills, a rail with one dot per entry, then who did what. */
+.ov-day { display: flex; flex-direction: column; }
+.ov-day + .ov-day { margin-top: var(--space-3); }
+.ov-day-head { display: flex; align-items: center; gap: var(--space-3); }
+.ov-day-pill { font-size: 12.5px; color: var(--text-muted); border: 1px solid var(--edge); border-radius: 999px; padding: 2px 10px; background: var(--surface); }
+.ov-dot { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--neutral-bg); color: var(--neutral); position: relative; z-index: 1; }
+.ov-dot[data-kind="answer"] { background: var(--info-bg); color: var(--info); }
+.ov-dot[data-kind="board"] { background: var(--success-bg); color: var(--success); }
+.ov-dot[data-kind="swarm"] { background: var(--warning-bg); color: var(--warning); }
+.ov-log li[data-failed] .ov-dot { background: var(--danger-bg); color: var(--danger); }
+.ov-log { list-style: none; display: flex; flex-direction: column; }
+.ov-log li { display: flex; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-3); position: relative; }
+.ov-log li::before { content: ""; position: absolute; left: 12px; top: 0; bottom: -2px; width: 2px; background: var(--line); }
+.ov-day:last-of-type .ov-log li:last-child::before { bottom: auto; height: var(--space-3); }
+.ov-log-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; font-size: 14px; line-height: 1.5; }
+.ov-log-line b { font-weight: 600; }
+.ov-verb { color: var(--text-muted); }
+.ov-object { border: 1px solid var(--edge); border-radius: 8px; padding: 0 8px; background: var(--surface); overflow-wrap: anywhere; }
+.ov-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+
+.ov-credits { display: flex; flex-direction: column; gap: var(--space-2); }
+.ov-credits .ov-row-label { margin-top: 0; }
+.ov-page .ov-credits .ov-tile b { font-size: 20px; }
+.ov-credits .ov-track { margin-top: 6px; height: 6px; }

@@ -1,6 +1,6 @@
 // Client for the engine (engine/src/server.ts). The engine owns runs; the dashboard only watches and starts them.
 import { useEffect, useMemo, useState } from "react"
-import { ENGINE, readEngine } from "@/lib/engine"
+import { ENGINE, readEngine, tracked } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
 
 export { ENGINE }
@@ -43,7 +43,7 @@ export const get = readEngine
 export const post = <T,>(path: string, body?: unknown): Promise<T> =>
   engineFetch(ENGINE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) })
     .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error((await r.json().catch(() => ({}))).error ?? `The engine answered ${r.status}.`))))
-export const memo = (runId: string) => fetch(`${ENGINE}/api/runs/${encodeURIComponent(runId)}/memo`).then((r) => (r.ok ? r.text() : ""))
+export const memo = (runId: string) => tracked(fetch(`${ENGINE}/api/runs/${encodeURIComponent(runId)}/memo`)).then((r) => (r.ok ? r.text() : ""))
 
 /** Every event of a run, replayed then live. Events with the same key replace each other (replays after a crash). */
 export function useRunEvents(runId: string | undefined): BoardEvent[] {

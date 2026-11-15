@@ -6,7 +6,7 @@
 //   useSwarmRun(id)          a swarm run's record and shared notes, polled
 //   useLabModel(kind, id)    the activity model of a run in progress, for embedding the lab in another view
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ENGINE } from "@/lib/engine"
+import { ENGINE, tracked } from "@/lib/engine"
 import { answerLab, boardLab, swarmLab, type LabEvent, type SwarmNotes, type SwarmRun } from "./adapter"
 import { claimsLab, type ClaimsBoard } from "./claims"
 import { emptyLab, type LabModel, type RunKind } from "./model"
@@ -88,7 +88,7 @@ export function useSwarmRun(id: string | undefined): SwarmSeen {
     const tick = async () => {
       let next = 2000
       try {
-        const r = await fetch(`${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}`, { signal: stop.signal })
+        const r = await tracked(fetch(`${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}`, { signal: stop.signal }))
         if (!r.ok) throw new Error(String(r.status))
         const body = (await r.json()) as { run?: SwarmRun; ledger?: SwarmNotes | null }
         if (stopped) return
@@ -138,7 +138,7 @@ export function useClaimsRun(id: string | undefined, live: boolean): ClaimsSeen 
     const stop = new AbortController()
     const base = `${ENGINE}/api/glhf/runs/${encodeURIComponent(id)}`
     let board: ClaimsBoard | undefined, events: LabEvent[] = [], seen: (number | undefined)[] = [], polls = 0
-    const read = async (path: string) => { const r = await fetch(base + path, { signal: stop.signal }); if (r.status === 404) return undefined; if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as unknown }
+    const read = async (path: string) => { const r = await tracked(fetch(base + path, { signal: stop.signal })); if (r.status === 404) return undefined; if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as unknown }
     const tick = async () => {
       try {
         if (!board) {

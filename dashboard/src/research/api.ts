@@ -2,7 +2,7 @@
 // Starting one in Real mode needs the session token, like every action that can cost money; engineFetch asks for
 // it and sends the question again, so the question is never lost.
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
-import { ENGINE } from "@/lib/engine"
+import { ENGINE, tracked } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
 import type { ResearchEvent } from "./model"
 
@@ -76,11 +76,11 @@ const asAnswers = (body: unknown): ThreadAnswer[] => {
 }
 /** The answers of one conversation, oldest first, as the engine holds them. Empty when it cannot be read. */
 export async function threadAnswers(thread: string): Promise<ThreadAnswer[]> {
-  try { const r = await fetch(`${ENGINE}/api/research?thread=${encodeURIComponent(thread)}`); return r.ok ? asAnswers(await r.json()) : [] } catch { return [] }
+  try { const r = await tracked(fetch(`${ENGINE}/api/research?thread=${encodeURIComponent(thread)}`)); return r.ok ? asAnswers(await r.json()) : [] } catch { return [] }
 }
 /** The conversation one answer belongs to: its thread id, from the engine's record of it. */
 export async function threadOf(id: string): Promise<string | undefined> {
-  try { const r = await fetch(`${ENGINE}/api/research/${encodeURIComponent(id)}`); if (!r.ok) return undefined; const body = (await r.json()) as { thread?: unknown; record?: { thread?: unknown } }; const t = body.thread ?? body.record?.thread; return typeof t === "string" ? t : undefined }
+  try { const r = await tracked(fetch(`${ENGINE}/api/research/${encodeURIComponent(id)}`)); if (!r.ok) return undefined; const body = (await r.json()) as { thread?: unknown; record?: { thread?: unknown } }; const t = body.thread ?? body.record?.thread; return typeof t === "string" ? t : undefined }
   catch { return undefined }
 }
 
