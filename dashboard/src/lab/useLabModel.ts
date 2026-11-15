@@ -57,11 +57,16 @@ export function useLabEvents(kind: "board" | "answer" | undefined, id: string | 
         try { e = JSON.parse(m.data) as LabEvent } catch { return } // a broken line is skipped
         if (!e || typeof e !== "object" || typeof e.type !== "string") return
         if (typeof e.seq === "number") lastSeq = Math.max(lastSeq, e.seq)
-        if (TERMINAL[kind].includes(e.type)) { ended = true; source?.close() } // nothing more will come
+        // A team review that failed can be resumed: it goes on writing to the same log, so the stream stays open after
+        // run.failed and a later event (the resumed run) is read too. Any other last event closes it.
+        if (kind === "board" && e.type === "run.failed") ended = true
+        else if (TERMINAL[kind].includes(e.type)) { ended = true; source?.close() } // nothing more will come
+        else if (kind === "board" && ended) ended = false // events after run.failed: the run was resumed
         patch((old) => ({ events: mergeEvent(kind, old.events, e), connection: ended ? "ended" : "live" }))
       }
       source.onerror = () => {
-        if (stopped || ended) return
+        if (stopped) return
+        if (ended) { source?.close(); return } // the run had ended: no new try
         source?.close() // the browser's own retry would replay from the start without saying so; this one counts
         patch((old) => ({ ...old, connection: "lost" }))
         timer = setTimeout(open, RETRY_MS[Math.min(tries++, RETRY_MS.length - 1)])
