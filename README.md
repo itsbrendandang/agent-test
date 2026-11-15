@@ -21,6 +21,28 @@ answer. It shows the work:
 
 The app is allowed to say "I do not know" or "nothing was found". That is better than a guess.
 
+## The brief: Track 3, AI Scientist Swarms
+
+The hackathon's instructions for the track we entered, as given:
+
+> **The question:** can a team of agents reproduce a full computational biology study from raw
+> data better than the best single frontier model?
+>
+> **What to build:** generating hypotheses is the easy part, rejecting the wrong ones is harder.
+> Build a multi-agent system where agents with different roles (proposer, experimenter, critic)
+> plan, run the analysis and check each other's results before anything is reported.
+>
+> **Record to beat:** BixBench3 (Edison Scientific), 20 published studies rebuilt from raw data.
+> Best score: 0.523.
+>
+> **Context:** Kosmos (Edison Scientific, 2025) coordinates 200+ agents through a shared world
+> model, and independent scientists judged 79.4% of its statements accurate, so about 1 in 5 is
+> wrong. Popper (Huang et al., ICML 2025) has agents design falsification experiments with
+> Type-I error control.
+>
+> **Judged on:** score vs. the record and a single-agent baseline on the same compute budget,
+> rigour, reproducibility. Report what the swarm rejected as well as what it found.
+
 ## Try it
 
 You need a terminal and [Node.js](https://nodejs.org) 24 or newer.
@@ -96,6 +118,55 @@ We say only what was really done.
   Modal.
 
 The exact list, with what was tested and how, is in [docs/status.md](docs/status.md).
+
+## Benchmarks
+
+A first report, in words. Charts and a fuller scope come later.
+
+**Two benchmarks, and they are not the same thing.**
+
+| | BixBench3 | BixBench v1.5 |
+|---|---|---|
+| Who made it | Edison Scientific | FutureHouse (public dataset `futurehouse/BixBench`) |
+| The task | Rebuild a published study from raw data: 20 studies | Answer questions about a dataset: 205 questions on 59 datasets |
+| Record | 0.523, the number Track 3 asks us to beat | Published numbers exist, but ours cannot be set beside them yet (see below) |
+| Our solver | Nine-role swarm, in `glhf/bixbench/` | Three-role swarm (analyst, blind critic, reconciler), in `glhf/bixbench_v1/` |
+| Compared with | One agent alone, same model | One agent alone, same model, same token budget by default |
+
+**What we have run with real AI models.**
+
+| Benchmark | What was run | Result |
+|---|---|---|
+| BixBench3 | No real task yet. | No score. We cannot compare with 0.523. |
+| BixBench v1.5 | A pilot: 3 datasets, 8 questions, `anthropic/claude-sonnet-5-5`. | One agent: 4 of 8 correct, 317,110 tokens. Swarm: 4 of 8 correct, 532,394 tokens (about 1.7 times). |
+
+Eight questions are far too few to tell the two apart. The pilot also used an older swarm; it
+has changed since, and the changes were tested with a scripted model only, not a real one. We
+also ran a small practice case of our own with both solvers. That checks that the system works;
+it is not a benchmark result.
+
+**How a comparison is kept fair.** This follows what Track 3 is judged on.
+
+- **Same compute budget.** By default the swarm gets the same token total as the single agent.
+  A run where the swarm got more is labelled "more budget" and reported apart.
+- **Same rules for both.** Same model, sandbox, tools, instructions and time limit. Both get
+  the same last turn to record answers when the budget ends.
+- **No answers in reach.** The answer key never enters the sandbox or the prompt. Only data
+  files are copied in; solution notebooks and write-ups are left out.
+- **What was rejected is reported.** Each swarm run lists the answers it threw out and why,
+  next to the answers it kept.
+- **Honest statistics.** Each report says how it was graded and whether its numbers can be
+  compared with published ones. Today the answer is "no", with the reasons: for example, our
+  sandbox has no network and the official one does. Questions that share a dataset are not
+  counted as independent evidence.
+- **Reproducible.** Every run records its settings, seed, sandbox image and token use.
+
+**What comes next.** A full run of both solvers on one benchmark at the same budget, then
+charts of score, cost and what the swarm rejected. Until then we do not claim that a team of
+agents beats one agent.
+
+Details: [docs/status.md](docs/status.md), [glhf/bixbench_v1/README.md](glhf/bixbench_v1/README.md),
+[docs/reading-results.md](docs/reading-results.md).
 
 ## Sponsor tools
 
