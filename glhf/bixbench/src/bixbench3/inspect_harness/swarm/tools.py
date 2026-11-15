@@ -176,11 +176,11 @@ def _required_outputs_section(brief: str) -> str:
 
 
 def _items(section: str) -> list[str]:
-    """The section split into list items (with their continuation lines); text before the first
-    item is one item of its own."""
+    """The section split into list items and sub-headed blocks (with their continuation lines);
+    text before the first item is one item of its own."""
     items: list[str] = []
     for line in section.splitlines():
-        if _ITEM.match(line) or not items:
+        if _ITEM.match(line) or _HEADING.match(line) or not items:
             items.append(line)
         else:
             items[-1] += "\n" + line

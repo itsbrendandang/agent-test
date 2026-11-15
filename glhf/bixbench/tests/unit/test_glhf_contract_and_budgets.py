@@ -226,6 +226,15 @@ def test_a_file_name_inside_another_is_not_its_line() -> None:
     assert tools.required_columns(brief, outputs) == {"gene_counts": ["gene_id", "s1"]}
 
 
+def test_each_sub_heading_is_its_own_files_block() -> None:
+    brief = (
+        "## Required Outputs\n### outputs/a.csv\nColumns `x`, `y`.\n"
+        "### outputs/b.csv\nColumns `z`.\n## Method\ncolumns `w`\n"
+    )
+    outputs = _outputs("outputs/a.csv", "outputs/b.csv")
+    assert tools.required_columns(brief, outputs) == {"a": ["x", "y"], "b": ["z"]}
+
+
 def test_a_column_the_brief_names_and_the_header_lacks_is_a_warning(tmp_path: Path) -> None:
     text = "gene_id,Log2FC\ng1,1.5\ng2,-2\n"
     r = _check(
