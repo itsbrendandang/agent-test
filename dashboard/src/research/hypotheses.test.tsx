@@ -128,8 +128,8 @@ describe("no hypotheses needed, and the record", () => {
 describe("the inspector's Hypotheses tab", () => {
   it("exists only when the answer has hypotheses, and shows them as a table with what would support and contradict each", () => {
     const events = [...START(), SOURCES, ...CHECKED, DONE]; const s = foldAnswer(events)
-    expect(tabsOf(s, events)).toContain("hypotheses"); expect(tabsOf(foldAnswer([START()[0]]), [START()[0]])).not.toContain("hypotheses")
-    render(<Inspector id="a-1" state={s} events={events} tab="hypotheses" onTab={() => {}} />)
+    expect(tabsOf(s)).toContain("hypotheses"); expect(tabsOf(foldAnswer([START()[0]]))).not.toContain("hypotheses")
+    render(<Inspector id="a-1" state={s} tab="hypotheses" onTab={() => {}} />)
     expect(screen.getByRole("tab", { name: "Hypotheses" })).toHaveAttribute("aria-selected", "true")
     const table = within(screen.getByRole("table"))
     expect(table.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hypothesis", "What would support it", "What would contradict it", "Result", "Sources for", "Sources against", "Worked on by"])

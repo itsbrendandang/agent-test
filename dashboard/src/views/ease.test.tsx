@@ -26,7 +26,7 @@ describe("first visit", () => {
     render(<HomeView onOpen={() => {}} />)
     return sent
   }
-  it("is one clear thing: the headline, the search box right under it, and three short examples that send in one click", async () => {
+  it("is one clear thing: the headline, the search box right under it, and three short examples that fill the box", async () => {
     const sent = home(CATALOG_OFF)
     const headline = screen.getByRole("heading", { level: 1, name: "What do you want to research?" })
     expect(screen.getByText("Ask a question. Explore evidence and sources.")).toBeInTheDocument()
@@ -37,8 +37,12 @@ describe("first visit", () => {
     expect(examples).toHaveLength(3)
     for (const e of examples) expect(e.textContent!.length).toBeLessThanOrEqual(60)
     expect(box.compareDocumentPosition(examples[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await userEvent.setup().click(examples[0])
-    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1)) // filled and sent, one click: a direct answer
+    const user = userEvent.setup()
+    await user.click(examples[0])
+    expect(box).toHaveValue(examples[0].textContent) // filled, not sent: in Real mode a send costs money, so it is never one click
+    expect(to(sent, "POST", "/api/research")).toHaveLength(0)
+    await user.click(screen.getByRole("button", { name: /^Send/ }))
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1)) // Send: a direct answer
     expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: examples[0].textContent, effort: "standard" })
   })
   it("has no setup cards, model names, key status or agent lists: those are in Settings", async () => {

@@ -135,8 +135,8 @@ export function LabView() {
   const picker = known.length > 0 && <RunPicker runs={known} target={target} following={!chosen} onPick={pick} />
 
   return (
-    <div className="page lab-page" data-wide>
-      <h1>Agent Log</h1>
+    <div className="page lab-page">
+      <h1 className="sr-only">Agent Log</h1>
       {problem && !runs ? <EngineOffline needs="The log reads its runs from the engine." said={problem.said} onRetry={retry} />
         : !runs ? <p className="muted" role="status">Looking for runs…</p>
           : target ? <RunLog key={`${target.kind}/${target.id}`} run={target} picker={picker} agent={agent} onAgent={onAgent} />

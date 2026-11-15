@@ -166,6 +166,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   }, [start, catalog])
 
   // Enter sends, Shift+Enter is a new line, and Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send: PromptInputTextarea does this.
+  /** Put a suggested question in the box to read or edit; nothing is sent until Send. */
+  const fill = (question: string) => { setText(question); setProblem(undefined); box.current?.focus() }
   const clear = () => { asking.current?.abort(); thread.current = undefined; setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
   const openRun = (kind: "swarm" | "board", id: string) => { setOpen(kind, id); onOpen(viewOfKind(kind)) }
   /** The plan of one reply, asked for again at another effort. The reply is replaced only when a new plan arrives. */
@@ -244,7 +246,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   )
 
   // The inspector shows one answer: the one asked for, else the latest. It reads the events that answer received.
-  const canInspect = !!inspected && tabsOf(seenState, seenEvents).length > 0
+  const canInspect = !!inspected && tabsOf(seenState).length > 0
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
   // A source or a checked statement chosen in an answer opens the inspector's Evidence tab on it (where there is room
@@ -359,8 +361,9 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
           {empty && (
             <div className="search-start">
-              {/* One row: biology questions trending on Google (or curated) from the engine, else the fixed examples. */}
-              <TryAsking onPick={(question) => void send(question)} disabled={sending !== undefined} fallback={EXAMPLES} />
+              {/* One row: biology questions trending on Google (or curated) from the engine, else the fixed examples.
+                  A question fills the box, as on the Overview: in Real mode a send costs money, so it is never one click. */}
+              <TryAsking onPick={fill} disabled={sending !== undefined} fallback={EXAMPLES} />
               {catalog === null && (
                 <p className="search-demo" role="alert">
                   {whyNone
@@ -375,7 +378,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
         </section>
         {showPane && inspected && seenState && (
           <InspectorPane narrow={narrow} width={pane.width} onClose={() => showInspector(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
-            <Inspector id={inspected} state={seenState} events={seenEvents} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
+            <Inspector id={inspected} state={seenState} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
               picked={chosenItem?.id === inspected ? chosenItem : undefined} onPick={pick(inspected)} />
           </InspectorPane>
         )}

@@ -1,6 +1,8 @@
-// The Overview: the question box, and under it the Agent Lab. The team is idle at its desks until a question is sent
-// from this page; then the lab follows that answer's own events (nothing moves without one) and the answer is
-// written below it. That answer is also Research's conversation, so Research shows it and continues it. One line keeps the counts: a practice run is counted apart and is never added to research.
+// The Overview: the question box, the answer asked from here right under it, then the Agent Lab. The team is idle at
+// its desks until a question is sent from this page; then the lab follows that answer's own events (nothing moves
+// without one). That answer is also Research's conversation, so Research shows it and continues it. One quiet line
+// keeps the counts: a practice run is counted apart and is never added to research.
+// Spend and limits are in Settings (Usage and limits), not on this page.
 import { useEffect, useMemo, useState } from "react"
 import { EngineOffline } from "@/components/Shared"
 import { answerLab, boardLab, emptyLab, Lab, type LabEvent } from "@/lab"
@@ -12,7 +14,6 @@ import { setAsk, setOpenAnswer } from "@/lib/open"
 import { useBoardScripted } from "@/lib/scripted"
 import type { View } from "@/nav"
 import { startConversation } from "@/home/chat"
-import { Credits } from "@/overview/Credits"
 import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
 import { ResearchAnswer } from "@/research/Answer"
@@ -65,7 +66,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   // An answer that ended is counted at once: the line of counts is read again.
   useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
-    : lab.status === "done" ? "The team finished your question. The answer is below."
+    : lab.status === "done" ? "The team finished your question. The answer is above."
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
     : lab.status === "cancelled" ? "The answer was stopped."
     : "The team is working on your question. Nothing here moves unless the engine reports it."
@@ -91,6 +92,15 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <Hero onOpen={onOpen} onAsk={ask} />
       {refused && <p className="newrun-error" role="alert">{refused}</p>}
 
+      {/* The answer comes first, so it is in view without scrolling past the lab. */}
+      {asked && asked.kind !== "board" && (
+        <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
+          <h2 id="ov-answer-title">{asked.question}</h2>
+          <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
+          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Ask a follow-up in Research"}</button>
+        </section>
+      )}
+
       <div className="ov-lab">
         <div className="ov-row-label">
           <span id="ov-lab-title">Agent Lab</span>
@@ -100,24 +110,12 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
         <Lab model={lab} />
       </div>
 
-      {asked && asked.kind !== "board" && (
-        <section className="ov-card ov-answer" aria-labelledby="ov-answer-title">
-          <h2 id="ov-answer-title">{asked.question}</h2>
-          <ResearchAnswer key={asked.id} id={asked.id} latest fresh />
-          <button type="button" className="ov-link" onClick={() => { setOpenAnswer(asked.id, asked.question); onOpen("Home") }}>{asked.example ? "Open example in Research" : "Ask a follow-up in Research"}</button>
-        </section>
-      )}
-
       <p className="ov-counts" aria-label="Totals">
         {runs
           ? <><b>{totals.research}</b> research {totals.research === 1 ? "run" : "runs"}, <b>{totals.practice}</b> practice, <b>{totals.inProgress}</b> in progress{totals.failed ? <>, <b>{totals.failed}</b> failed</> : null}. </>
           : "Counting the runs… "}
         <button type="button" className="ov-link" onClick={() => onOpen("Runs")}>See everything in Saved research</button>
       </p>
-
-      <Credits />
-
-      <button type="button" className="ov-link" onClick={() => onOpen("Benchmarks")}>See how we do on the benchmarks</button>
     </div>
   )
 }

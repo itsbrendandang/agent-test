@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { hasCard } from "@/lab/agentFocus"
 import { agentLink, logLink } from "@/lib/links"
+import { LABEL } from "@/nav"
 import { safeUrl } from "./model"
 import { connectionsOf } from "./view"
 import type { GraphLink, GraphModel, GraphNode } from "./types"
@@ -14,7 +15,7 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
 }) {
   const conns = useMemo(() => connectionsOf(node.id, nodes, links), [node.id, nodes, links])
   const href = node.url ? safeUrl(node.url) : undefined
-  const where = model.kind === "swarm" ? "Compare" : "Board"
+  const where = model.kind === "swarm" ? LABEL.Compare : LABEL.Board // the on-screen names, not the view keys
   // A team member of a review: its messages in the Agent Log and its card in Agents. (A benchmark run's agent nodes are
   // model groups, not roles, so they have neither.)
   const member = model.kind === "board" && node.kind === "agent" && node.id.startsWith("agent:") ? node.id.slice("agent:".length) : undefined

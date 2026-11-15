@@ -6,6 +6,7 @@ import { PRACTICE } from "@/lib/words"
 import { EngineOffline, ModeLabel, PageHead } from "@/components/Shared"
 import { graphLink, graphOfHash, logLink, replaceAddress, runLink } from "@/lib/links"
 import { takeOpen } from "@/lib/open"
+import { LABEL } from "@/nav"
 import { useBoardRun, useRunList, useSwarmRun, useVisible, type RunRef } from "./data"
 import { useReducedMotion } from "./env"
 import { GraphList } from "./GraphList"
@@ -167,7 +168,7 @@ export function GraphScreen() {
   if (!list.runs) return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} /><Loading className="loading-block">Loading runs…</Loading></div>
   if (!current) {
     return <div className="page graph-page" data-wide><PageHead title="Graph" about={ABOUT} />
-      <p className="graph-empty card-surface">No runs yet. Start one in Board or Compare, and its graph appears here.</p></div>
+      <p className="graph-empty card-surface">No runs yet. Start one in {LABEL.Board}, and its graph appears here.</p></div>
   }
 
   const status = full?.status
@@ -293,7 +294,7 @@ export function GraphScreen() {
               : <aside className="graph-panel" aria-label="About this graph">
                   <h2>About this picture</h2>
                   <p className="muted small">Select a node to see its details and to light up what it is connected to.</p>
-                  <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? "Compare" : "Board"}</button>
+                  <button type="button" className="btn btn-primary" onClick={openRun}>Open this run in {full.kind === "swarm" ? LABEL.Compare : LABEL.Board}</button>
                   <a className="btn" href={logLink({ kind: current.kind, id: current.id })}>Open in the Agent Log</a>
                   <details><summary>Run details</summary><p className="muted small">{full.kind === "board" ? "Review" : "Team-of-nine run"} <code>{full.runId}</code></p></details>
                   <details><summary>What this graph cannot show</summary><ul className="graph-notes">{full.notes.map((n) => <li key={n}>{n}</li>)}</ul></details>

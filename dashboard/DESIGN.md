@@ -17,8 +17,11 @@ With Docker only: `docker compose up`, then open http://localhost:5317.
 Every view has the same three parts (`src/App.tsx`).
 
 - **The navigation** (`src/components/AppSidebar.tsx`, on the shadcn sidebar in `src/components/ui/sidebar.tsx`).
-  - Three places carry the everyday work: Research, Saved research, Compare.
-  - The advanced places sit under "More", quieter: Team review, Agents, Graph, Lab.
+  - Three places carry the everyday work: Overview, Research, Saved research (ask, read, find again).
+  - One quieter group follows, with a heading: "How it works" (Agent Log, Team review, Graph, Agents). `PRIMARY` and
+    `MORE` in `src/nav.ts`.
+  - Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`, `#Compare`,
+    `#Compare/<id>`).
   - Settings is at the foot, once. The characters sit above it on a wide window.
   - On a wide window the sidebar folds to icons. The choice is remembered (`shell.sidebar`).
   - Under 768 px it is a drawer. The menu button in the header opens it. Choosing a place closes it.
@@ -26,7 +29,11 @@ Every view has the same three parts (`src/App.tsx`).
   slots a view may fill: a title and actions (`src/components/HeaderSlot.tsx`). Research puts the question and
   "New search" there. Nothing else is in the header. There is no status strip and no Demo or Real control in it.
 - **The view**, inside one `<main>`. The view scrolls inside it. The header never lies over content.
-  Content is at most 1100 px wide. Graph uses the full width (`data-wide` on the view's root element).
+  Content is at most 1100 px wide, with the same left edge on every view (the Overview's lab and the Agent Log too).
+  Graph and Research use a wider column, up to 1480 px (`data-wide` on the view's root element): Graph for its
+  picture, Research for its inspector. With the inspector open, Research has no cap and the inspector reaches the
+  right edge of the window. Every other view shares the 1100 px column. The Overview and Research start
+  screens share one 800 px column for the question box.
 
 Under 480 px the header drops the view's title, so the place name and the actions stay inside the window.
 
@@ -176,9 +183,10 @@ A practice run's score or recommendation is never the headline without the words
 
 A first-time visitor gets from opening the app to a finished result, and understands it, without help.
 
-- **First visit**: Research says what this is in one sentence, offers one "Try asking" row of questions that send in one
-  click (see README, "Try asking"), and says once when the app is in Demo mode.
-- **Fewest clicks**: example (1), "Start practice run" (2), "See what they found" (3). A practice plan starts in
+- **First visit**: Research says what this is in one sentence, offers one "Try asking" row of questions (see README, "Try asking"), and says once when the app is in Demo mode.
+- **Examples fill, Send sends**: an example question only fills the box. Send sends it, so one click on an
+  example never starts a run.
+- **Fewest clicks**: example (1), Send (2), "Start practice run" (3), "See what they found" (4). A practice plan starts in
   one click only while the engine is in Demo mode and the plan is not paid (`quick` in `src/home/PlanCard.tsx`).
   Everything else keeps the confirm step, the cost and the tick box. Never weaken that.
 - **Always a next step**: a progress line while a run works, one clear button when it ends, and a "What next?"

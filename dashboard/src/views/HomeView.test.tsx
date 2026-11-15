@@ -45,7 +45,7 @@ const planCard = async () => within(await screen.findByRole("region", { name: PL
 const paidPlan = () => ({ "POST /api/chat": reply({ plan: PLAN }) })
 
 describe("empty conversation", () => {
-  it("shows example questions, and sends one when it is pressed", async () => {
+  it("shows example questions; pressing one fills the box and sends nothing until Send", async () => {
     const t = home(CATALOG_ON, { "POST /api/chat": reply() })
     const examples = within(screen.getByRole("group", { name: "Example questions" })).getAllByRole("button")
     expect(examples.length).toBeGreaterThanOrEqual(3)
@@ -53,6 +53,10 @@ describe("empty conversation", () => {
     expect(screen.queryByRole("button", { name: "New search" })).toBeNull()
     const question = examples[1].textContent!
     await t.user.click(examples[1])
+    expect(t.box()).toHaveValue(question)
+    expect(document.activeElement).toBe(t.box())
+    expect(t.chats()).toHaveLength(0) // one click never starts a run (in Real mode it would cost money)
+    await t.user.click(screen.getByRole("button", { name: /^Send/ }))
     await waitFor(() => expect(t.chats()).toHaveLength(1))
     expect(t.chats()[0].body).toMatchObject({ messages: [{ role: "user", content: question }] })
     await waitFor(() => expect(screen.queryByRole("group", { name: "Example questions" })).toBeNull())
