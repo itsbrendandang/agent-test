@@ -315,7 +315,9 @@ def test_the_command_line_has_a_swarm_budget_option(
         seen.append((arguments["solver"], arguments["swarm_budget"], arguments["repeat"]))
         raise RuntimeError("stop here")
 
-    capsule = SimpleNamespace(key="syn-1_x", questions=[SimpleNamespace(question_id="q1")])
+    capsule = SimpleNamespace(
+        key="syn-1_x", uuid="u-1", questions=[SimpleNamespace(question_id="q1")]
+    )
     monkeypatch.setattr(cli, "run_capsule", run_capsule)
     monkeypatch.setattr(cli, "_selected", lambda arguments: [capsule])
     monkeypatch.setattr(cli, "load_env", lambda path: [])

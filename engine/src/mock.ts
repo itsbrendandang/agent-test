@@ -34,10 +34,10 @@ export function mockLeadTurn(ctx: TranscriptContext): Step {
     return { text: "Writing the memo.", tool: { name: "write_memo", args: { decision: "Go with conditions", memo: MOCK_MEMO } } }
   }
   if (wrapUp || rounds === 2) return { text: "Time to close.", tool: { name: "converse", args: { message: "We are at our limit. Final positions: one statement each, Go or No-Go, and the one condition you would attach.", final: true } } }
-  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Experimenter (revise): fix what the checkers flagged. Methods Auditor and Critic: review the claims on your own, against the Scout's sources where a claim is about published work. Reporter: draft the supported findings and the rejection log. Scout, Proposer: no task.", final: false, ...modes({ experimenter: "revise" }) } } }
+  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Experimenter (revise): fix what the checkers flagged. Methods Auditor and Critic: review the claims on your own, against the Scout's sources where a claim is about published work. Reporter: draft the supported findings and the rejection log. Evidence Verifier: recheck anything new from the Scout. Scout, Proposer: no task.", final: false, ...modes({ experimenter: "revise" }) } } }
   return {
     text: "Framing: Go only if one candidate has a credible path to the criteria and a differentiation story against the approved drugs.",
-    tool: { name: "converse", args: { message: "Round 1. Scout: search for published evidence on the main question, then report the data and the sources. Proposer: triage the claims, with priority and budget share. Experimenter (pilot): test each claim on a subsample. Methods Auditor, Critic, Reporter: no task this round.", final: false, ...modes({ experimenter: "pilot" }) } },
+    tool: { name: "converse", args: { message: "Round 1. Scout: search for published evidence on the main question, then report the data and the sources. Evidence Verifier: recheck each of the Scout's sources and search for what it missed. Proposer: triage the claims, with priority and budget share. Experimenter (pilot): test each claim on a subsample. Methods Auditor, Critic, Reporter: no task this round.", final: false, ...modes({ experimenter: "pilot" }) } },
   }
 }
 
@@ -74,6 +74,29 @@ const MOCK_SEARCHES: { name: string; args: (agent: AgentDef) => Record<string, u
   { name: "database_search", args: () => ({ source: "clinicaltrials", query: "KRAS G12C non-small cell lung cancer", key_question: KEY_QUESTION }) },
 ]
 
+/**
+ * The scripted Evidence Verifier's reply: built from the code check of the Scout's sources in its own input (board.ts
+ * checkedReport), so it names the Scout's sources only when it really got the Scout's report of the round. A source a
+ * search returned is confirmed, one no search returned is wrong, and an example source the Scout did not cite is missing.
+ */
+export function mockVerifierReply(input: string, final: boolean): string {
+  const confirmed = [...input.matchAll(/^- (\S+): returned by a search in this review/gm)].map((m) => m[1])
+  const wrong = [...input.matchAll(/^- (\S+): NOT returned by any search in this review/gm)].map((m) => m[1])
+  const missing = MOCK_EVIDENCE.map((e) => e.url).filter((url) => /resistance/.test(url) && !confirmed.includes(url) && input.includes(url))
+  if (final) return inShort(`The Scout's sources I checked hold up${wrong.length ? `, except ${wrong.length} that no search returned` : ""}; the resistance evidence it did not report must stay in the memo.\n\nCLAIMS`)
+  if (!confirmed.length && !wrong.length) return inShort("The Scout cited no new source this round, so there was nothing new to recheck. The sources in the pool were checked in an earlier round.\n\nCLAIMS")
+  return inShort([
+    `Checked the Scout's ${confirmed.length + wrong.length} cited source(s): ${confirmed.length} confirmed, ${wrong.length} wrong, and my own searches found evidence it did not report.`,
+    "",
+    `Confirmed: ${confirmed.join(", ") || "none"} (a search in this review returned it, and it says what the Scout says).`,
+    `Wrong: ${wrong.map((url) => `${url} (no search returned it)`).join(", ") || "none"}.`,
+    `Missing: ${missing.join(", ") || "none"} (switch-II pocket resistance mutations, not in the Scout's report).`,
+    "",
+    "CLAIMS",
+    ...(missing.length ? [`- [literature] Sequencing of patients progressing on KRAS G12C inhibitors found Y96D and R68S switch-II pocket mutations and MET amplification (source: ${missing[0]})`] : []),
+  ].join("\n"))
+}
+
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
   if (agent.specialist) return { text: MOCK_SPECIALIST_REPLY(agent.title) }
   const last = ctx.messages.at(-1)
@@ -87,6 +110,10 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
   if (round === 1 && searched < held.length && (last?.role === "user" || last?.role === "toolResult")) {
     const next = held[searched]
     return { text: searched === 0 ? "Searching." : "Searching further.", tool: { name: next.name, args: next.args(agent) } }
+  }
+  if (agent.verifies) { // works every round, from the report it was given (never "No task.")
+    const input = ctx.messages.filter((m) => m.role === "user").map(text).at(-1) ?? ""
+    return { text: mockVerifierReply(input, last?.role === "user" && /final positions/i.test(text(last))) }
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
     const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
@@ -106,6 +133,7 @@ CMP-0423 meets solubility, clearance and hERG criteria and misses only potency (
 Methods Auditor and Critic rate as the more fixable liability. CMP-0517's hERG IC50 of 6 uM fails the safety margin.
 
 ## Board Positions
+- Evidence Verifier: the Scout's cited sources hold up; it added resistance evidence the Scout did not report.
 - Proposer: three claims; resistance coverage ranked low.
 - Experimenter: pilot script prepared, not run; dropped one claim on revise.
 - Methods Auditor: resistance testing is missing from the plan.

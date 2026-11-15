@@ -2,7 +2,7 @@
 // No test here reaches the network: fetch is a fake, and so are the clock and the sleep.
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { clean, createHttp, cut, CUT_MARK, HOSTS, limited, MAX_BODY_BYTES, MAX_QUERY_CHARS, MAX_REQUESTS_PER_CALL, MIN_GAP_MS, num, parseJson, plainQuery, record, say, ServiceError, SOURCES, TIMEOUT_MS, USER_AGENT, words } from "../src/sources/shared.ts"
+import { CACHE_BYTES, CACHE_ENTRIES, CACHE_MS, clean, createHttp, cut, CUT_MARK, HOSTS, limited, MAX_BODY_BYTES, MAX_QUERY_CHARS, MAX_REQUESTS_PER_CALL, MIN_GAP_MS, num, parseJson, plainQuery, record, say, ServiceError, SOURCES, TIMEOUT_MS, USER_AGENT, words } from "../src/sources/shared.ts"
 
 const json = (body: unknown, status = 200) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status })
 
@@ -153,4 +153,69 @@ test("one lookup can send only a few requests", async () => {
   for (let i = 0; i < 4; i++) await one.json("uniprot", "https://rest.uniprot.org/x")
   await assert.rejects(one.json("uniprot", "https://rest.uniprot.org/x"), /more than 4 requests for one lookup/)
   assert.equal(calls.length, 4)
+})
+
+test("with cacheMs, the same request is answered from memory: nothing sent, no gap waited, each caller gets its own copy", async () => {
+  assert.equal(CACHE_MS, 600_000)
+  let now = 1_000_000, sent = 0
+  const sleeps: number[] = []
+  const http = createHttp({
+    cacheMs: CACHE_MS, now: () => now, sleep: async (ms) => { sleeps.push(ms); now += ms },
+    fetch: (async (url: string) => { sent++; return url.endsWith("/missing") ? json({}, 404) : url.endsWith("/down") ? json({}, 503) : json({ n: sent, list: [1] }) }) as unknown as typeof fetch,
+  })
+  const url = "https://rest.uniprot.org/uniprotkb/search?query=kras"
+  const first = await http.json("uniprot", url)
+  ;(first.body as { list: unknown[] }).list.push("changed by the first caller")
+  const again = await http.json("uniprot", url)
+  assert.equal(sent, 1, "the second request is not sent")
+  assert.deepEqual(again, { status: 200, body: { n: "1", list: ["1"] } }, "the kept answer is the service's, not the first caller's changed copy")
+  assert.deepEqual(sleeps, [], "a kept answer waits no gap")
+  // Identical requests at the same moment share one; a different address, body or 'nothing found' rule is its own request.
+  const [a, b] = await Promise.all([http.json("uniprot", `${url}2`), http.json("uniprot", `${url}2`)])
+  assert.equal(sent, 2)
+  assert.notEqual(a.body, b.body, "shared, but still one copy each")
+  const graphql = "https://api.platform.opentargets.org/api/v4/graphql"
+  await http.json("opentargets", graphql, { post: { q: "kras" } })
+  await http.json("opentargets", graphql, { post: { q: "egfr" } })
+  await http.json("opentargets", graphql, { post: { q: "kras" } })
+  assert.equal(sent, 4)
+  // 'Nothing found' is an answer and is kept; a failure is not.
+  await http.json("openfda", "https://api.fda.gov/drug/missing", { emptyOn: [404] })
+  assert.deepEqual(await http.json("openfda", "https://api.fda.gov/drug/missing", { emptyOn: [404] }), { status: 404, body: undefined })
+  assert.equal(sent, 5)
+  await assert.rejects(http.json("openfda", "https://api.fda.gov/drug/missing"), /answered 404/, "without the rule it is another request, and a failure")
+  assert.equal(sent, 6)
+  await assert.rejects(http.json("openfda", "https://api.fda.gov/drug/down"))
+  await assert.rejects(http.json("openfda", "https://api.fda.gov/drug/down"))
+  assert.equal(sent, 8, "a failure is asked again next time")
+  // After cacheMs the service is asked again.
+  now += CACHE_MS
+  await http.json("uniprot", url)
+  assert.equal(sent, 9)
+})
+
+test("the kept answers are bounded, and the default object keeps nothing", async () => {
+  let sent = 0
+  const http = createHttp({ cacheMs: CACHE_MS, minGapMs: 0, fetch: (async () => { sent++; return json({ ok: true }) }) as unknown as typeof fetch })
+  for (let i = 0; i <= CACHE_ENTRIES; i++) await http.json("uniprot", `https://rest.uniprot.org/x?n=${i}`)
+  assert.equal(sent, CACHE_ENTRIES + 1)
+  await http.json("uniprot", `https://rest.uniprot.org/x?n=${CACHE_ENTRIES}`)
+  assert.equal(sent, CACHE_ENTRIES + 1, "the newest is kept")
+  await http.json("uniprot", "https://rest.uniprot.org/x?n=0")
+  assert.equal(sent, CACHE_ENTRIES + 2, "the oldest went")
+  assert.ok(CACHE_BYTES >= 5 * MAX_BODY_BYTES)
+  const { http: plain, calls } = world(() => json({}))
+  await plain.json("uniprot", "https://rest.uniprot.org/x")
+  await plain.json("uniprot", "https://rest.uniprot.org/x")
+  assert.equal(calls.length, 2)
+})
+
+test("a lookup that ran out of time sends nothing more", async () => {
+  const { http, calls } = world(() => json({}))
+  const deadline = new AbortController()
+  const one = limited(http, MAX_REQUESTS_PER_CALL, deadline.signal)
+  await one.json("uniprot", "https://rest.uniprot.org/x")
+  deadline.abort()
+  await assert.rejects(one.json("uniprot", "https://rest.uniprot.org/y"), (e: Error) => e instanceof ServiceError && e.message === "UniProt: the lookup ran out of time")
+  assert.equal(calls.length, 1)
 })

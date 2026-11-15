@@ -41,6 +41,8 @@ export interface RecordItem {
   href?: string
   /** The word on the action. Default "Open". */
   openLabel?: string
+  /** The same record in other views (its Agent Log, its graph): small links after the row's facts. */
+  links?: { label: string; href: string; title?: string }[]
   /** Older runs of the same brief, newest first. The row then reads "N runs, latest <date>". */
   history?: RecordItem[]
 }
@@ -65,6 +67,7 @@ export function RecordRow({ item, emphasis = (t) => t, nested }: { item: RecordI
           <Provenance kind={item.provenance} compact />
           {item.extra}
           {item.status && item.status !== "done" && <StatusPill state={item.status} />}
+          {item.links?.map((l) => <a key={l.href} className="record-link" href={l.href} title={l.title} aria-label={`${l.label}: ${item.title}`}>{l.label}</a>)}
         </p>
         {item.result && <p className="record-result">{item.result}</p>}
         {item.detail}

@@ -6,7 +6,7 @@
 // Everything comes from the engine (GET /api/glhf/status, /api/glhf/runs, /api/bixv1/scoreboard). No number is typed in here.
 import { useEffect, useState } from "react"
 import { readEngine } from "@/lib/engine"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 import { modelFacts, plainConclusion, pricedByToken, record3Of, rowsOf, shortModel, type Record3, type Row, type Side } from "@/overview/benchmarkNumbers"
 
@@ -82,7 +82,7 @@ export function Benchmarks() {
 
   return (
     <section className="ov-card" aria-labelledby="ov-bench">
-      <h2 id="ov-bench">Benchmarks</h2>
+      <h2 id="ov-bench" className="sr-only">Benchmarks</h2>
       <p>Two different benchmarks. A score on one says nothing about the other.</p>
       <div className="ov-stack">
         <div className="ov-bench">

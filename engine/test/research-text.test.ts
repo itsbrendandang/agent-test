@@ -261,7 +261,7 @@ test("'What is missing' is built by code from what did not run, what found nothi
   const missing = missingOf(record)
   assert.deepEqual(missing, [
     "The web search did not run: EXA_API_KEY is not set.",
-    "Literature search (Europe PMC: PubMed abstracts and preprints) found nothing for \"rare thing\".",
+    "Literature search (PubMed, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: abstracts) found nothing for \"rare thing\".",
     "The review of the whole draft did not run: The critic's reply could not be read.",
     "Not found in its source [1]: \"It cures everything.\"",
     "Its source says otherwise [1]: \"No resistance was seen.\"",

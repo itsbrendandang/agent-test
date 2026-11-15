@@ -10,6 +10,7 @@
 // Rules: a teammate moves only for an event that names its agent or step. What a field does not say is not guessed.
 // Text from a run (questions, statements, errors) is untrusted and is only ever passed on as text.
 import { provenanceOf } from "@/lib/provenance"
+import { searchPlace } from "@/research/providers"
 import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
@@ -98,10 +99,12 @@ const PLACE: Record<string, string> = {
 const NOUN: Record<string, string> = { exa: "result", europepmc: "paper", fixture: "example source" }
 /** One or two words for the tag over a parcel: where it came from. */
 const TAG: Record<string, string> = { exa: "Exa", europepmc: "PubMed", fixture: "examples", chembl: "ChEMBL", clinicaltrials: "ClinicalTrials.gov", openfda: "openFDA", opentargets: "Open Targets", uniprot: "UniProt", pubchem: "PubChem" }
-const tagOf = (n: number, provider: string | undefined) => `${plural(n, nounOf(provider))}${provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
-const placeOf = (provider: string | undefined) => (provider ? PLACE[provider] ?? provider : "a search")
+/** A research answer's literature step asks six sources at once (searchPlace names them), though it carries the provider "europepmc"; a board review's asks Europe PMC only. */
+const literature = (provider: string | undefined, research: boolean) => research && provider === "europepmc"
+const tagOf = (n: number, provider: string | undefined, research = false) => `${plural(n, nounOf(provider))}${literature(provider, research) ? " · literature" : provider && TAG[provider] && provider !== "fixture" ? ` · ${TAG[provider]}` : ""}`
+const placeOf = (provider: string | undefined, research = false) => (!provider ? "a search" : literature(provider, research) ? searchPlace(provider) : PLACE[provider] ?? provider)
 /** "8 papers from PubMed and preprints (Europe PMC)". A practice run's example sources say what they are once: "4 example sources". */
-const fromPlace = (n: number, provider: string | undefined) => (provider === "fixture" ? plural(n, nounOf(provider)) : `${plural(n, nounOf(provider))} from ${placeOf(provider)}`)
+const fromPlace = (n: number, provider: string | undefined, research = false) => (provider === "fixture" ? plural(n, nounOf(provider)) : `${plural(n, nounOf(provider))} from ${placeOf(provider, research)}`)
 const nounOf = (provider: string | undefined) => (provider ? NOUN[provider] ?? "record" : "result")
 /** Who makes a search: the Scout for the web (and for a practice run's example sources), the Librarian for the literature and the databases. */
 const searcherOf = (provider: string | undefined): CharacterId => (provider === undefined || provider === "exa" || provider === "fixture" ? "scout" : "librarian")
@@ -116,10 +119,11 @@ const markLabel = (verdict: unknown, text: string) => { const m = markOf(verdict
 const BOARD_MEMBER: Record<string, CharacterId> = {
   "lead-scientist": "navigator", scout: "scout", proposer: "proposer", experimenter: "experimenter", pilot: "pilot",
   "methods-auditor": "auditor", auditor: "auditor", critic: "critic", reviser: "reviser", finisher: "finisher", reporter: "reporter",
+  "evidence-verifier": "librarian", // board/agents/evidence-verifier.md: rechecks the scout with the literature and the databases, the Librarian's work
 }
 const BOARD_STANDS: Partial<Record<CharacterId, string>> = {
   navigator: "The lead scientist: runs the discussion and writes the decision memo.",
-  scout: "The scout: the one member that searches (the web through Exa, the literature, the public databases). In a practice run it gets example sources instead.",
+  scout: "The scout: gathers the team's sources (the web through Exa, the literature, the public databases). In a practice run it gets example sources instead.",
   proposer: "The proposer: plans the research and names the statements to test.",
   experimenter: "The experimenter in its full-run mode.",
   pilot: "The experimenter in its Pilot mode: a first try on a small part of the data. The lead names the mode each round.",
@@ -130,7 +134,9 @@ const BOARD_STANDS: Partial<Record<CharacterId, string>> = {
   reporter: "The reporter, and the decision memo.",
   finisher: "The memo's completeness check: code refuses a memo with a required section missing.",
 }
-const BOARD_ABSENT = "A team review's searches are all made by the Scout. The Librarian works in research answers."
+const BOARD_ABSENT = "Without the evidence verifier on the team, a review's searches are all made by the Scout. The Librarian works in research answers."
+/** What the Librarian stands for in a review whose team has the evidence verifier. */
+const BOARD_VERIFIER = "The evidence verifier: rechecks each of the Scout's sources right after it, in every round, and searches the literature and the public databases for what the Scout missed."
 /** Captions before the team list arrives: each agent's own name, made readable. The team list brings the engine's titles. */
 const BOARD_LABELS: Partial<Record<CharacterId, string>> = {
   navigator: agentIdentity("lead-scientist").label, auditor: agentIdentity("methods-auditor").label, guardian: agentIdentity("checker").label, finisher: "Memo check",
@@ -199,7 +205,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
       case "run.started":
         m.status = "running"; m.startedAt = at ?? m.startedAt
         m.title = str(e.title)
-        m.provenance = provenanceOf({ scripted: typeof e.mock === "boolean" ? e.mock : undefined })
+        m.provenance = provenanceOf({ scripted: typeof e.mock === "boolean" ? e.mock : undefined, example: e.example })
         m.runId ??= str(e.runId)
         b.set("navigator", "working", "Framing the question for the team.", at)
         b.log(at, `The review started${m.provenance === "practice" ? " (practice run: fixed text, not research)" : ""}.`)
@@ -225,7 +231,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         // Who is in this run: the members the roster names, and the two steps code does (the checks, the memo's check).
         const has = (n: string) => roster!.has(n)
         const present: Record<CharacterId, boolean> = {
-          navigator: has("lead-scientist"), scout: has("scout"), librarian: false, proposer: has("proposer"),
+          navigator: has("lead-scientist"), scout: has("scout"), librarian: has("evidence-verifier"), proposer: has("proposer"),
           experimenter: has("experimenter"), pilot: has("experimenter") || has("pilot"), reviser: has("experimenter") || has("reviser"),
           auditor: has("methods-auditor") || has("auditor"), critic: has("critic"), reporter: has("reporter"), guardian: true, finisher: true,
         }
@@ -233,6 +239,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
           const a = b.who(id)
           a.inRun = present[id] || b.touched.has(id)
           if (!a.inRun) { a.state = "idle"; a.doing = ""; a.standsFor = BOARD_STANDS[id] ? `${BOARD_STANDS[id]} That member is not on this review's team.` : BOARD_ABSENT }
+          else if (id === "librarian" && present.librarian) { a.standsFor = BOARD_VERIFIER; if (!a.doing) a.doing = "At its desk. Nothing to do yet." }
         }
         break
       }
@@ -245,14 +252,15 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         for (const [member, id] of Object.entries(BOARD_MEMBER)) {
           if (id === "navigator" || id === "pilot" || id === "reviser" || id === "finisher") continue // modes and code steps are not asked by name
           if (roster ? !roster.has(member) : !b.who(id).inRun) continue
-          b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : what, at)
+          b.set(id, "working", id === "scout" && !final ? `Round ${round}: searching for evidence, then writing its reply.` : id === "librarian" && !final ? `Round ${round}: rechecking the Scout's sources, then writing its reply.` : what, at)
         }
         for (const v of visitors.values()) { v.state = "working"; v.doing = what; v.since = at }
         b.log(at, final ? "The lead asked for final positions." : `Round ${round} started.`, b.name("navigator"), undefined, { did: final ? "asked for final positions." : `started round ${round}.` })
         break
       }
       case "evidence.triaged": {
-        const provider = str(e.provider), who: CharacterId = "scout" // every search of a review is the scout's: one agent, one face
+        // The scout's searches are the scout's face; the evidence verifier's own searches are the Librarian's (BOARD_MEMBER).
+        const provider = str(e.provider), who: CharacterId = str(e.member) === "evidence-verifier" ? "librarian" : "scout"
         const kept = num(e.kept) ?? 0, dropped = num(e.dropped) ?? 0
         const place = placeOf(provider), query = str(e.query)
         const label = kept > 0 ? `${fromPlace(kept, provider)}${dropped ? ` (${dropped} more screened out)` : ""}` : `nothing kept from ${place}${dropped ? ` (${plural(dropped, "result")} screened out)` : ""}`
@@ -430,7 +438,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "research.resumed": b.log(at, "The answer went on after the engine restarted."); break
       case "research.started":
         m.title = str(e.question)
-        m.provenance = provenanceOf({ mode: e.mode })
+        m.provenance = provenanceOf({ mode: e.mode, example: e.example })
         m.runId ??= str(e.id) ?? str(e.run)
         m.startedAt = at ?? m.startedAt
         b.log(at, `The answer started${m.provenance === "practice" ? " (practice: fixed example text, nothing is searched)" : ""}.`)
@@ -505,13 +513,13 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const s = steps.get(str(e.step) ?? ""); if (!s?.running) break
         s.running = false
         const status = e.status === "empty" || e.status === "failed" || e.status === "cancelled" ? e.status : "completed"
-        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider)
+        const found = num(e.found), kept = num(e.kept), place = placeOf(s.provider, true)
         const error = str(e.error), consequence = str(e.consequence), summary = str(e.summary)
         let line: string, label = s.label, short = "", outcome: Trip["outcome"] = "carried"
         if (status === "failed") { line = `${s.label}: did not work.${error ? ` ${clip(error, 200)}` : ""}${consequence ? ` ${clip(consequence, 200)}` : ""}`; label = `nothing: ${s.label.charAt(0).toLowerCase()}${s.label.slice(1)} failed`; short = "failed"; outcome = "failed" }
         else if (status === "cancelled") { line = `${s.label}: stopped.`; label = "nothing (stopped)"; short = "stopped"; outcome = "empty" }
         else if (status === "empty") { line = `${s.label}: found nothing.`; label = `nothing from ${place}`; short = "nothing"; outcome = "empty" }
-        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider); short = tagOf(found ?? 0, s.provider); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
+        else if (s.kind === "search" || s.kind === "fetch") { line = `${s.label}: found ${found ?? 0}.`; label = fromPlace(found ?? 0, s.provider, true); short = tagOf(found ?? 0, s.provider, true); outcome = (found ?? 1) > 0 ? "carried" : "empty" }
         else if (s.kind === "evaluate") { line = `${s.label}: kept ${kept ?? 0}${found !== undefined ? ` of ${found}` : ""}.`; label = `${plural(kept ?? 0, "source")} kept${found !== undefined ? ` of ${found}` : ""}`; short = `${kept ?? 0} kept`; outcome = (kept ?? 1) > 0 ? "carried" : "empty" }
         else line = `${s.label}: done.${summary ? ` ${clip(summary, 160)}` : ""}`
         if (isFetch(s.kind)) b.trip(s.who, { id: `step:${s.id}`, kind: "fetch", room: "discovery", label, short, at: s.at, back: at ?? s.at, outcome, ...(s.kind !== "evaluate" && s.provider && { provider: s.provider }) })
@@ -548,7 +556,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const nums = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [])
         const sides = sidesLine({ verdict: "unchecked", for: nums(e.for), against: nums(e.against), forStatements: [], againstStatements: [], mixed: e.mixed === true })
         const practice = m.provenance === "practice"
-        const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : ""}`
+        const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : e.thin === true ? ": one source only" : ""}`
         const label = `the result for hypothesis ${id}: ${said} (${sides})`
         // code works the result out; the Guardian carries it to the investigator whose hypothesis it is, else to where the hypotheses were set up
         const to = investigatorOf(str(e.agent))?.who ?? "proposer"

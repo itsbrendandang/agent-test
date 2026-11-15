@@ -1,6 +1,6 @@
-# AI Scientist Bot dashboard
+# Bit Crew dashboard
 
-The web app for AI Scientist Bot. It runs in a browser and talks to the engine on port 8787
+The web app for Bit Crew. It runs in a browser and talks to the engine on port 8787
 (change with `VITE_ENGINE_URL`). The engine does the work and holds the API keys; the browser never
 sees a key.
 
@@ -36,19 +36,29 @@ npm run lint     # oxlint
 One file each in `src/views/`. The name in the address (the URL hash) is the view's key and never changes; what
 a person reads is the label (`src/nav.ts`). An address can name a run (`#Board/<id>`, `#Compare/<id>`), and older
 addresses still work (`#Experiments`, `#Swarm`, `#Worlds`, and the on-screen words `#Research`, `#Saved`, `#Review`).
+The views link to each other through the addresses in `src/lib/links.ts`: the Agent Log of a run and one agent
+(`#Lab/<kind>/<id>?agent=<name>`, or `#Lab/<kind>?agent=<name>` for the newest run of a kind), the graph of a run
+and one node (`#Graph/<kind>/<id>?node=<node id>`), and one agent's card (`#Agents/<name>?from=<kind>`). A choice
+made inside a view (a filter, a node, a card) replaces the address without a new history entry; a link to another
+view adds one. See "How the screens connect" in the main README.
 
 | Label (navigation) | Key (address) | File | What it shows |
 |---|---|---|---|
-| Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work, read the answer with its sources. |
+| Overview | `Overview` | `OverviewView.tsx`, `src/overview/` | The question box, the answer asked from there right under it, then the Agent Lab scene. One quiet line of counts. |
+| Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work in the live Agent Lab beside it (`research/ResearchLive.tsx`), read the answer with its sources. |
 | Saved research | `Runs` | `ExperimentsView.tsx` | Everything that was researched, newest first, with keyword search. Runs of the same brief are one row with their history. |
 | Compare | `Compare` | `SwarmView.tsx` | One agent alone and a team of nine on the same task, side by side. Start a run here (see below). |
-| Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |
+| Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion (the Agent Log's group chat, `lab/EventLog.tsx`), the sources. |
 | Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
 | Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
-| Agent Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
-| Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
+| Agent Log | `Lab` | `LabView.tsx`, `src/lab/` | Every event of one run, with filters and downloads. (The animated Agent Lab scene is on Overview.) |
+| Benchmarks | `Benchmarks` | `BenchmarksView.tsx`, `src/overview/Benchmarks.tsx` | Our benchmark results beside the record to beat. |
+| Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), Usage and limits (spend today and the limits, `src/overview/Credits.tsx`), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
-Overview, Research, Agent Lab, Saved research and Compare are the primary places. Team review, Agents, Graph and Benchmarks sit under "More".
+Overview, Research and Saved research are the primary places: ask, read, find again. One quieter group follows,
+with a heading: "How it works" (Agent Log, Team review, Graph, Agents). The groups are `PRIMARY` and `MORE` in
+`src/nav.ts`. Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`,
+`#Compare`, `#Compare/<id>`).
 Settings has one entry, at the foot of the navigation.
 
 ## The shell
@@ -59,6 +69,11 @@ its own row and the view scrolls inside the content area, so nothing lies over c
 button, the place name, and two slots a view can fill
 (`<HeaderSlot area="title" | "actions">`, `src/components/HeaderSlot.tsx`). When the engine cannot be reached, the
 page says so once, with "Try again".
+
+Content is at most 1100 px wide, with the same left edge on every view. Graph and Research use a wider column, up to
+1480 px (`data-wide`); see `DESIGN.md`. When the inspector is open, Research has no cap and the inspector reaches
+the right edge of the window. Its tabs are Evidence, Hypotheses (when there are some), Results and Activity, on one line. The
+Agent Lab scene is on Overview, not in the inspector.
 
 ## Run mode (Demo or Real) and provenance
 

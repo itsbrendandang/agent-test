@@ -19,6 +19,11 @@ export interface AgentDef {
   deliverable?: string
   /** Roles this one agent can play, as mode id -> role title (e.g. pilot -> "Pilot"). The lead names one per round. */
   modes?: Record<string, string>
+  /**
+   * The member whose report this one rechecks (the Evidence Verifier: `verifies: scout`). It replies after that member in
+   * every round, with that member's reply of the round in its input (board.ts replyPhases and memberInput).
+   */
+  verifies?: string
   /** Set only for a method specialist added to one run (specialists.ts): why it was chosen and the methods whose notes it reads. Never read from a board agent file. */
   specialist?: { room?: SpecialistRoom; why: string; methods: { name: string; title: string }[] }
   prompt: string
@@ -47,6 +52,7 @@ export function loadAgent(config: BoardConfig, name: string): AgentDef {
     tools: front.tools ?? [],
     deliverable: front.deliverable,
     ...(front.modes === undefined ? {} : { modes: readModes(name, front.modes) }),
+    ...(typeof front.verifies === "string" && front.verifies.trim() ? { verifies: front.verifies.trim() } : {}),
     prompt: match[2].trim(),
   }
 }

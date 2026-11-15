@@ -11,7 +11,7 @@ import {
   MeshBasicMaterial, MeshLambertMaterial, OctahedronGeometry, SphereGeometry, TetrahedronGeometry, TorusGeometry,
 } from "three"
 import SpriteText from "three-spritetext"
-import { colourOf, LINK_DISTANCE, palette, shapeOf, sizeOf, type Palette, type Shape } from "./style"
+import { colourOf, LINK_DISTANCE, palette, shapeOf, sizeOf, type Palette, type Shape } from "../design/graph"
 import { GLYPH, type GraphLink, type GraphNode } from "./types"
 
 export interface Style {

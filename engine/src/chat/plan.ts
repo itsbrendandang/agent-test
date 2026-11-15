@@ -8,7 +8,8 @@ import { randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import * as board from "../board/board.ts"
 import { BriefRejected, loadBrief } from "../brief.ts"
-import { type BoardConfig, path } from "../config.ts"
+import { type BoardConfig, path, VERIFIER } from "../config.ts"
+import { writeWhole } from "../fsx.ts"
 import { HttpError, isSafeId } from "../http.ts"
 import { clean, loadSpecialists, matchSpecialists, MAX_METHODS, methodsFor, namesOrigin, type Specialist, SPECIALIST_TIER } from "../specialists.ts"
 import { boardMembers, type CatalogSkill, loadSkills, type Member } from "./catalog.ts"
@@ -58,8 +59,8 @@ const flat = (text: unknown, max: number) => String(text ?? "").replace(/\s+/g, 
 export function efforts(config: BoardConfig): Effort[] {
   const m = config.meeting, usd = Math.min(m.max_usd, m.daily_usd)
   return [
-    { id: "quick", label: "Quick", description: "The lead, the member that searches, a member that makes checkable claims and the best-matched others (a method specialist when one fits); one round, the cheap model tier, a few searches.",
-      limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 3, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
+    { id: "quick", label: "Quick", description: "The lead, the member that searches, the evidence verifier, a member that makes checkable claims and the best-matched other (a method specialist when one fits); one round, the cheap model tier, a few searches.",
+      limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 4, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
     { id: "standard", label: "Standard", description: "The lead, the Critic and the members and method specialists that match the question, each on its own model tier, about half the rounds the config allows.",
       limits: { maxUsd: round2(usd * 0.6), maxMinutes: Math.max(1, Math.ceil(m.max_minutes * 2 / 3)), maxRounds: Math.max(1, Math.ceil(m.max_rounds / 2)) }, agents: "all", modelTier: "per agent", search: { exa: true, maxSearches: 12 } },
     { id: "deep", label: "Deep", description: "The members and method specialists that match plus the Critic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",
@@ -113,7 +114,8 @@ function checkedSpecialist(a: PlanAgent, specialists: Specialist[], members: Mem
 
 /**
  * The agents for an effort level: the lead, then the members.
- * - Always: the member that gathers evidence (the one with the search tool) and a member that makes checkable statements
+ * - Always: the member that gathers evidence (the one with the web search), the evidence verifier that rechecks it
+ *   (config.ts VERIFIER: board.ts keeps it on every run anyway), and a member that makes checkable statements
  *   (one whose deliverable is claims to test, else the first other member). Without them a run has nothing to check a
  *   claim against, or nothing to check. At standard and deep also the Critic.
  * - The other places, up to memberLimit, go to the ranked board members and the ranked specialists. Specialists get at
@@ -126,11 +128,13 @@ export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, mem
   const invited = ranked.filter((a) => a.source === "specialist").map((a) => checkedSpecialist(a, specialists, members)).filter((a): a is PlanAgent => Boolean(a))
     .filter((a, i, all) => all.findIndex((x) => x.name === a.name) === i)
   const gatherer = members.find((m) => m.tools.includes("exa_search"))
-  const claimMaker = members.find((m) => m !== gatherer && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer)
+  const verifier = members.find((m) => m.name === VERIFIER)
+  const claimMaker = members.find((m) => m !== gatherer && m !== verifier && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer && m !== verifier)
   const critic = effort.id === "quick" ? undefined : members.find((m) => m.name === "critic")
   const required: PlanAgent[] = []
   const need = (m: Member | undefined, why: string) => { if (m && !required.some((r) => r.name === m.name)) required.push(board.find((a) => a.name === m.name) ?? { name: m.name, title: m.title, why }) }
-  need(gatherer, "Added at every effort level: the only member that can search, so the others have sources to cite.")
+  need(gatherer, "Added at every effort level: the member that gathers the sources, so the others have sources to cite.")
+  need(verifier, "Added at every effort level: rechecks the Scout's sources and searches for what it missed, before the lead decides.")
   need(claimMaker, "Added at every effort level: makes statements that can be checked, and proven wrong, against the evidence.")
   need(critic, "Added at standard and deep effort: tries to disprove the claims the board makes, on the other vendor's model.")
   const free = Math.max(0, memberLimit(effort, members) - required.length)
@@ -191,14 +195,14 @@ export const briefFile = (config: BoardConfig, plan: Pick<Plan, "id" | "briefTit
 export function checkBrief(config: BoardConfig, plan: Pick<Plan, "id" | "briefTitle">, markdown: string): string {
   mkdirSync(plansDir(config), { recursive: true })
   const file = briefFile(config, plan)
-  writeFileSync(file, markdown)
+  writeWhole(file, markdown)
   loadBrief(file, config.brief.required_sections)
   return file
 }
 
 export function savePlan(config: BoardConfig, record: PlanRecord): void {
   mkdirSync(plansDir(config), { recursive: true })
-  writeFileSync(planFile(config, record.plan.id), JSON.stringify(record, null, 2))
+  writeWhole(planFile(config, record.plan.id), JSON.stringify(record, null, 2))
 }
 
 /** The stored plan, or undefined when there is none or it expired unstarted. */

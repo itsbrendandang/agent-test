@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { ENGINE } from "@/board/api"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
+export { sandboxWords } from "@/lib/words"
 
 // "queued": waits for another run (`after`) or for the runner. "cancelled": stopped on request; settled, but not a result.
 export type GlhfPhase = "queued" | "launching" | "running" | "completing" | "done" | "failed" | "cancelled"
@@ -14,6 +15,8 @@ export interface Usage { input_tokens: number; output_tokens: number; total_toke
 export interface RunSettings {
   timeLimit?: number; maxTokens?: number; maxMessagesPerRole?: number; reviewRounds?: number
   exa?: boolean; memory?: boolean; seed?: number; effort?: string; caseId?: string
+  /** "modal": the analyses ran in a Modal sandbox (ANALYSIS_BACKEND=modal). Absent: in Docker on the machine that ran the run. */
+  analysisBackend?: "local" | "modal"
 }
 export interface GlhfRun {
   id: string; mode: "local" | "cloud"; task: string; solver: Solver; model: string
@@ -27,6 +30,8 @@ export interface GlhfRun {
   pairedWith?: string
   /** Something to keep in mind when reading this run, such as "started although <id> failed". */
   note?: string
+  /** Runs on Modal, once settled: what their sandboxes cost by the run's cost ledger (an estimate), how many, and the run's cap. */
+  modal?: { usd: number; sandboxes: number; maxUsd: number }
 }
 /** [smallest, largest] */
 export type Range = readonly [number, number]
@@ -41,6 +46,8 @@ export interface GlhfStatus {
   models?: string[]
   /** false while the engine's NO_PAID_CALLS switch is on (its default): real models, Exa and cloud runs are refused. Absent on an older engine. */
   paidCalls?: boolean
+  /** Where new local runs' analyses run (ANALYSIS_BACKEND): "local" (Docker here) or "modal"; null with `error` when the setting is refused. Absent on an older engine. */
+  analysis?: { backend: "local" | "modal" | null; modalMaxUsd: number | null; error?: string }
 }
 
 // Mirrors engine/src/glhf/scoreboard.ts, which does the pairing (GET /api/glhf/scoreboard).
@@ -92,7 +99,7 @@ export interface StartRequest {
   timeLimit: number; maxTokens?: number; reviewRounds?: number; exa?: boolean; memory?: boolean; seed?: number
 }
 /** The fields a refusal can be about ({error, field?} from the engine). */
-export type StartField = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver"
+export type StartField = "timeLimit" | "maxTokens" | "seed" | "reviewRounds" | "maxMessagesPerRole" | "model" | "exa" | "memory" | "mode" | "caseDir" | "solver" | "analysisBackend"
 /** The engine said no. `field`: the input it is about (400). `run`: the local run that is in the way (409). */
 export class Refused extends Error {
   status: number; field?: StartField; run?: string
@@ -121,6 +128,8 @@ export const startRun = async (body: StartRequest): Promise<string[]> => {
 export const cancelRun = (id: string): Promise<GlhfRun> => send<GlhfRun>(`/api/glhf/runs/${encodeURIComponent(id)}/cancel`)
 
 export const isLive = (r: GlhfRun) => !settled(r.phase)
+/** Where a run's analyses ran, for its settings. */
+export const analysesWhere = (r: GlhfRun) => (r.mode === "cloud" ? "on the cloud VM" : r.settings?.analysisBackend === "modal" ? "in a Modal sandbox (billed by Modal)" : "in Docker on this machine")
 /** Demo case or scripted model: never a benchmark result. */
 export const isDemo = (r: GlhfRun) => r.task === "demo" || r.model === "mock"
 

@@ -4,7 +4,7 @@
 import { CircleDashed, Cpu, Radio } from "lucide-react"
 import { PROVENANCE_ABOUT, PROVENANCE_WORD, type ProvenanceKind } from "@/lib/provenance"
 
-const ICON = { practice: CircleDashed, live: Radio, local: Cpu } as const
+const ICON = { practice: CircleDashed, live: Radio, local: Cpu, example: CircleDashed } as const
 
 /** Nothing is shown while the record has not said how it was made. `detail` is a short extra, such as a model name. */
 export function Provenance({ kind, detail, compact }: { kind: ProvenanceKind | undefined; detail?: string; compact?: boolean }) {

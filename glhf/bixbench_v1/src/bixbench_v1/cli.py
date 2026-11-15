@@ -20,9 +20,11 @@ import json
 import os
 import signal
 import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
+from . import jobs as jobs_mod
 from . import modal_cost, paid, roles, staging
 from . import report as reporting
 from .dataset import (
@@ -37,9 +39,10 @@ from .dataset import (
     public_view,
 )
 from .grading import PROFILE_JUDGES, PROFILES, InspectJudge, Profile
-from .runner import SANDBOXES, check_prompt, grade_run, load_env, run_capsule
+from .modal_boundary import sandbox_timeout
+from .runner import SANDBOXES, check_prompt, grade_run, load_env, run_capsule, stage
 from .solvers import CRITIC_HINTS, SWARM_BUDGETS, swarm_budget_mode
-from .task import SOLVERS, backstop_tokens
+from .task import SOLVERS, TIME_BACKSTOP_SECONDS, backstop_tokens
 
 REPO = Path(__file__).resolve().parents[4]
 DATA = REPO / "glhf" / "data" / "bixbench_v1"
@@ -194,12 +197,161 @@ def _write_report(out: Path, profile: str, model: str | None = None) -> None:
     print(text)
 
 
+def _units(
+    arguments: argparse.Namespace,
+    capsules: list[Capsule],
+    solvers: list[str],
+    role_models: dict[str, str],
+    swarm_budget: str,
+    jobs: int,
+) -> list[jobs_mod.Unit]:
+    """Every run of the command, in order: capsule, unit, repeat, solver. Each has the most it
+    can spend (tokens and Modal dollars) and run_capsule's arguments."""
+    out: Path = arguments.out
+    units: list[jobs_mod.Unit] = []
+    for capsule in capsules:
+        groups: list[list[str] | None] = (
+            [[q.question_id] for q in capsule.questions] if arguments.unit == "question" else [None]
+        )
+        for question_ids in groups:
+            count = len(question_ids) if question_ids else len(capsule.questions)
+            max_tokens, seconds = _budget(arguments, count)
+            for solver, repeat in [(s, r) for r in range(arguments.repeats) for s in solvers]:
+                run_dir = out / capsule.key
+                if question_ids:
+                    run_dir = run_dir / question_ids[0]
+                run_dir = run_dir / (solver if repeat == 0 else f"{solver}-r{repeat}")
+                backstop = backstop_tokens(max_tokens, swarm_budget=swarm_budget)
+                memory_mib = int(arguments.modal_memory_gib * 1024)
+                worst_usd = 0.0
+                if arguments.sandbox == "modal":
+                    worst_usd = modal_cost.worst_case_usd(
+                        sandbox_timeout(seconds, TIME_BACKSTOP_SECONDS),
+                        arguments.modal_cpu,
+                        memory_mib,
+                        2 if solver == "glhf" else 1,
+                    )
+                units.append(
+                    jobs_mod.Unit(
+                        name=str(run_dir.relative_to(out)),
+                        capsule_uuid=capsule.uuid,
+                        run_dir=run_dir,
+                        worst_tokens=backstop + JUDGE_RESERVE_TOKENS,
+                        backstop_tokens=backstop,
+                        worst_usd=worst_usd,
+                        questions=count,
+                        run={
+                            "hub_dir": arguments.data / "hub",
+                            "staged_root": arguments.data / "staged",
+                            "out_dir": run_dir,
+                            "solver": solver,
+                            "model": arguments.model,
+                            "answer_mode": arguments.answer_mode,
+                            "question_ids": question_ids,
+                            "time_limit_seconds": seconds,
+                            "max_tokens": max_tokens,
+                            "max_messages_per_role": arguments.max_messages_per_role,
+                            "role_models": role_models,
+                            "critic_hints": arguments.critic_hints,
+                            "seed": arguments.seed + repeat,
+                            "image": arguments.image,
+                            "swarm_budget": swarm_budget,
+                            "repeat": repeat,
+                            "sandbox": arguments.sandbox,
+                            "modal_cpu": arguments.modal_cpu,
+                            "modal_memory_mib": memory_mib,
+                            "modal_ledgers": [out / modal_cost.LEDGER_NAME, MODAL_LEDGER],
+                            "modal_usd_cap": arguments.modal_usd_cap,
+                            "jobs": jobs,
+                        },
+                    )
+                )
+    return units
+
+
+def _is_done(unit: jobs_mod.Unit) -> bool:
+    done = unit.run_dir / "run.json"
+    return done.exists() and json.loads(done.read_text()).get("status") == "done"
+
+
+class _Books:
+    """budget.json and grading, the same for one run at a time and for --jobs."""
+
+    def __init__(
+        self,
+        out: Path,
+        cap: int | None,
+        capsules: dict[str, Capsule],
+        judges: dict[str, InspectJudge | None],
+        profiles: tuple[Profile, ...],
+    ) -> None:
+        self.out = out
+        self.file = out / "budget.json"
+        self.budget: dict[str, Any] = (
+            json.loads(self.file.read_text()) if self.file.exists() else {"spent": 0, "runs": []}
+        )
+        self.budget["cap"] = cap
+        self.capsules = capsules
+        self.judges = judges
+        self.profiles = profiles
+
+    @property
+    def spent(self) -> int:
+        return int(self.budget["spent"])
+
+    def _save(self) -> None:
+        jobs_mod.write_json(self.file, self.budget)
+
+    def error(self, unit: jobs_mod.Unit, error: str, *, charge: bool = True) -> None:
+        """Unknown spend: charge the most the run could have used, so the cap holds."""
+        if charge:
+            self.budget["spent"] += unit.backstop_tokens
+        self.budget["runs"].append({"run": unit.name, "status": "error", "error": error[:300]})
+        self._save()
+        print(f"  ERROR {unit.name}: {error[:300]}", flush=True)
+
+    def done(self, unit: jobs_mod.Unit, summary: dict[str, Any]) -> None:
+        """Grade a run that ended and charge what it and its judges spent. A judge error is
+        recorded with the run; it does not end the command."""
+        judge_before = _judge_tokens(self.judges)
+        grade_error = None
+        try:
+            grade_run(
+                unit.run_dir, self.capsules[unit.capsule_uuid], self.judges, None, self.profiles
+            )
+        except Exception as error:
+            grade_error = f"{type(error).__name__}: {str(error)[:300]}"
+        judge_tokens = _judge_tokens(self.judges) - judge_before
+        self.budget["spent"] += summary["total_tokens"] + judge_tokens
+        self.budget["runs"].append(
+            {
+                "run": unit.name,
+                "solver_tokens": summary["total_tokens"],
+                "judge_tokens": judge_tokens,
+                "seconds": summary["seconds"],
+                "status": summary["status"],
+                **({"grade_error": grade_error} if grade_error else {}),
+                **_sandbox_cost(summary),
+            }
+        )
+        self._save()
+        print(
+            f"  {unit.name} {summary['status']}: {summary['total_tokens']:,} tokens, "
+            f"{summary['seconds']} s; total spent {self.spent:,}",
+            flush=True,
+        )
+        if grade_error:
+            print(f"  GRADING ERROR {unit.name}: {grade_error}", flush=True)
+
+
 def cmd_run(arguments: argparse.Namespace) -> int:
     load_env(REPO / ".env")
     solvers = arguments.solvers.split(",")
     for solver in solvers:
         if solver not in SOLVERS:
             sys.exit(f"unknown solver {solver!r}; choose from {SOLVERS}")
+    if arguments.jobs < 1:
+        sys.exit("--jobs must be at least 1")
     role_models: dict[str, str] = {}
     for item in arguments.role_model:
         role, sep, name = item.partition("=")
@@ -211,119 +363,169 @@ def cmd_run(arguments: argparse.Namespace) -> int:
     paid.isolate_endpoint([arguments.model, *role_models.values()], judge=not arguments.no_judge)
     if arguments.sandbox == "modal":  # NO_PAID_CALLS: a Modal sandbox is billed by the second
         paid.refuse_modal("--sandbox modal: the analysis sandbox would run on Modal")
+    if arguments.sandbox == "modal" or arguments.jobs > 1:
         # A plain `kill` (SIGTERM) is handled like Ctrl+C, so the sandboxes are terminated.
         signal.signal(signal.SIGTERM, lambda *_: os.kill(os.getpid(), signal.SIGINT))
     out: Path = arguments.out
     out.mkdir(parents=True, exist_ok=True)
-    budget_file = out / "budget.json"
-    budget: dict[str, Any] = (
-        json.loads(budget_file.read_text()) if budget_file.exists() else {"spent": 0, "runs": []}
-    )
-    budget["cap"] = arguments.total_token_cap
     profiles = _profiles(arguments)
     judges = _judges(arguments, profiles)
     swarm_budget = swarm_budget_mode(arguments.swarm_budget)  # the option, else the variable
-    stopped = False
-    for capsule in _selected(arguments):
-        units: list[list[str] | None] = (
-            [[q.question_id] for q in capsule.questions] if arguments.unit == "question" else [None]
-        )
-        for question_ids in units:
-            count = len(question_ids) if question_ids else len(capsule.questions)
-            max_tokens, seconds = _budget(arguments, count)
-            for solver, repeat in [(s, r) for r in range(arguments.repeats) for s in solvers]:
-                run_dir = out / capsule.key
-                if question_ids:
-                    run_dir = run_dir / question_ids[0]
-                run_dir = run_dir / (solver if repeat == 0 else f"{solver}-r{repeat}")
-                done = run_dir / "run.json"
-                if done.exists() and not arguments.force:
-                    if json.loads(done.read_text()).get("status") == "done":
-                        print(f"skip {run_dir} (already done; --force reruns it)")
-                        continue
-                # A run starts only if the cap still covers the most it can spend.
-                worst = backstop_tokens(max_tokens, swarm_budget=swarm_budget)
-                worst += JUDGE_RESERVE_TOKENS
-                if (
-                    arguments.total_token_cap
-                    and budget["spent"] + worst > arguments.total_token_cap
-                ):
-                    print(
-                        f"STOP before {run_dir}: {budget['spent']:,} tokens spent, this run could "
-                        f"use {worst:,}, cap {arguments.total_token_cap:,}"
-                    )
-                    stopped = True
-                    break
-                print(
-                    f"run {run_dir}: {count} question(s), {max_tokens:,} tokens, {seconds} s",
-                    flush=True,
-                )
-                try:
-                    summary = run_capsule(
-                        capsule,
-                        hub_dir=arguments.data / "hub",
-                        staged_root=arguments.data / "staged",
-                        out_dir=run_dir,
-                        solver=solver,
-                        model=arguments.model,
-                        answer_mode=arguments.answer_mode,
-                        question_ids=question_ids,
-                        time_limit_seconds=seconds,
-                        max_tokens=max_tokens,
-                        max_messages_per_role=arguments.max_messages_per_role,
-                        role_models=role_models,
-                        critic_hints=arguments.critic_hints,
-                        seed=arguments.seed + repeat,
-                        image=arguments.image,
-                        swarm_budget=swarm_budget,
-                        repeat=repeat,
-                        sandbox=arguments.sandbox,
-                        modal_cpu=arguments.modal_cpu,
-                        modal_memory_mib=int(arguments.modal_memory_gib * 1024),
-                        modal_ledgers=[out / modal_cost.LEDGER_NAME, MODAL_LEDGER],
-                        modal_usd_cap=arguments.modal_usd_cap,
-                    )
-                except Exception as error:
-                    # Unknown spend: charge the most the run could have used, so the cap holds.
-                    budget["spent"] += backstop_tokens(max_tokens, swarm_budget=swarm_budget)
-                    budget["runs"].append(
-                        {
-                            "run": str(run_dir.relative_to(out)),
-                            "status": "error",
-                            "error": str(error)[:300],
-                        }
-                    )
-                    budget_file.write_text(json.dumps(budget, indent=2))
-                    print(f"  ERROR {type(error).__name__}: {str(error)[:300]}", flush=True)
-                    continue
-                judge_before = _judge_tokens(judges)
-                grade_run(run_dir, capsule, judges, None, profiles)
-                judge_tokens = _judge_tokens(judges) - judge_before
-                budget["spent"] += summary["total_tokens"] + judge_tokens
-                budget["runs"].append(
-                    {
-                        "run": str(run_dir.relative_to(out)),
-                        "solver_tokens": summary["total_tokens"],
-                        "judge_tokens": judge_tokens,
-                        "seconds": summary["seconds"],
-                        "status": summary["status"],
-                        **_sandbox_cost(summary),
-                    }
-                )
-                budget_file.write_text(json.dumps(budget, indent=2))
-                print(
-                    f"  {summary['status']}: {summary['total_tokens']:,} tokens, {summary['seconds']} s; "
-                    f"total spent {budget['spent']:,}",
-                    flush=True,
-                )
-            if stopped:
-                break
-        if stopped:
-            break
+    capsules = _selected(arguments)
+    books = _Books(out, arguments.total_token_cap, {c.uuid: c for c in capsules}, judges, profiles)
+    units = _units(arguments, capsules, solvers, role_models, swarm_budget, arguments.jobs)
+    pending: list[jobs_mod.Unit] = []
+    for unit in units:
+        if _is_done(unit) and not arguments.force:
+            print(f"skip {unit.run_dir} (already done; --force reruns it)")
+        else:
+            pending.append(unit)
+    if arguments.jobs == 1:
+        stopped = _run_serial(arguments, pending, books)
+    else:
+        stopped = _run_parallel(arguments, pending, books, capsules)
     _write_report(out, profiles[0])
     if arguments.sandbox == "modal":
         _print_modal_costs(out)
     return 2 if stopped else 0
+
+
+def _announce(unit: jobs_mod.Unit, extra: str = "") -> None:
+    run = unit.run
+    print(
+        f"run {unit.run_dir}: {unit.questions} question(s), {run['max_tokens']:,} tokens, "
+        f"{run['time_limit_seconds']} s{extra}",
+        flush=True,
+    )
+
+
+def _run_serial(arguments: argparse.Namespace, pending: list[jobs_mod.Unit], books: _Books) -> bool:
+    """One run at a time in this process. Returns whether a cap stopped the command."""
+    for unit in pending:
+        # A run starts only if the cap still covers the most it can spend.
+        if (
+            arguments.total_token_cap
+            and books.spent + unit.worst_tokens > arguments.total_token_cap
+        ):
+            print(
+                f"STOP before {unit.run_dir}: {books.spent:,} tokens spent, this run could "
+                f"use {unit.worst_tokens:,}, cap {arguments.total_token_cap:,}"
+            )
+            return True
+        _announce(unit)
+        try:
+            summary = run_capsule(books.capsules[unit.capsule_uuid], **unit.run)
+        except modal_cost.ModalCapReached as error:
+            # Refused before any sandbox or model call: nothing was spent, and every later
+            # run would be refused the same way.
+            print(f"STOP before {unit.run_dir}: {error}")
+            return True
+        except Exception as error:
+            books.error(unit, f"{type(error).__name__}: {error}")
+            continue
+        books.done(unit, summary)
+    return False
+
+
+def _run_parallel(
+    arguments: argparse.Namespace,
+    pending: list[jobs_mod.Unit],
+    books: _Books,
+    capsules: list[Capsule],
+) -> bool:
+    """Up to --jobs runs at once, each in a child process. Returns whether a cap stopped it."""
+    wanted = {u.capsule_uuid for u in pending}
+    for capsule in capsules:  # staging the same capsule twice at once would race
+        if capsule.uuid in wanted:
+            stage(capsule, arguments.data / "hub", arguments.data / "staged")
+    out: Path = arguments.out
+    modal = arguments.sandbox == "modal"
+    caps = jobs_mod.Caps(
+        tokens=arguments.total_token_cap,
+        usd=arguments.modal_usd_cap if modal else None,
+        usd_spent=lambda: modal_cost.spent(modal_cost.read(out / modal_cost.LEDGER_NAME)),
+        upload_first=modal,
+    )
+    checks = {"modal": modal}
+    print(
+        f"--jobs {arguments.jobs}: up to {arguments.jobs} runs at once. Waiting on a provider's "
+        "rate limit comes out of a run's own time: check the eval logs for retries before "
+        "raising --jobs, and use the same --jobs for every solver you compare.",
+        flush=True,
+    )
+
+    def launch(unit: jobs_mod.Unit) -> jobs_mod.Handle:
+        spec, result, log = jobs_mod.spec_paths(out, unit)
+        result.unlink(missing_ok=True)
+        jobs_mod.write_spec(spec, unit, result, checks)
+        _announce(unit, f" (log {log})")
+        argv = [sys.executable, "-m", "bixbench_v1.cli", "--data", str(arguments.data)]
+        return _launch_child([*argv, "solve-one", str(spec)], log)
+
+    def finished(unit: jobs_mod.Unit, code: int) -> str | None:
+        _, result_file, log = jobs_mod.spec_paths(out, unit)
+        result = jobs_mod.read_result(result_file)
+        if result.get("kind") == "modal_cap":
+            return f"STOP before {unit.run_dir}: {result.get('error')}"
+        run_file = unit.run_dir / "run.json"
+        summary = json.loads(run_file.read_text()) if run_file.exists() else None
+        if code != 0 or not result.get("ok") or not summary or summary["status"] == "running":
+            error = result.get("error") or f"the run's process exited with code {code}"
+            books.error(unit, f"{error} (log {log})")
+            return None
+        books.done(unit, summary)
+        return None
+
+    def abandoned(unit: jobs_mod.Unit) -> None:
+        books.error(unit, "interrupted (Ctrl+C or SIGTERM)")
+
+    try:
+        stop = jobs_mod.run_all(
+            pending,
+            jobs=arguments.jobs,
+            caps=caps,
+            spent=lambda: books.spent,
+            launch=launch,
+            finished=finished,
+            abandoned=abandoned,
+        )
+    except KeyboardInterrupt:
+        print(
+            "interrupted: budget.json is up to date; finished runs are kept and skipped next time"
+        )
+        raise SystemExit(130) from None
+    return stop is not None
+
+
+def _launch_child(argv: list[str], log: Path) -> jobs_mod.Handle:
+    """A seam for tests: they replace it with a fake child."""
+    return jobs_mod.Child(argv, log)
+
+
+def cmd_solve_one(arguments: argparse.Namespace) -> int:
+    """Internal (`run --jobs N` starts it): solve one run from a spec file, then exit. It does
+    not grade and writes no shared file: the parent does both."""
+    spec = jobs_mod.read_spec(arguments.spec)
+    result = Path(spec["result"])
+    checks, run = spec["checks"], spec["run"]
+    paid.refuse_models(run["model"], *run["role_models"].values())  # NO_PAID_CALLS, again here
+    if checks["modal"]:
+        paid.refuse_modal("--sandbox modal: the analysis sandbox would run on Modal")
+        signal.signal(signal.SIGTERM, lambda *_: os.kill(os.getpid(), signal.SIGINT))
+    capsule = find_capsules(_capsules(arguments), [spec["capsule_uuid"]])[0]
+    try:
+        run_capsule(capsule, **run)
+    except modal_cost.ModalCapReached as error:
+        jobs_mod.write_json(result, {"ok": False, "kind": "modal_cap", "error": str(error)})
+        return 3
+    except Exception as error:
+        traceback.print_exc()
+        jobs_mod.write_json(
+            result, {"ok": False, "kind": "error", "error": f"{type(error).__name__}: {error}"}
+        )
+        return 1
+    jobs_mod.write_json(result, {"ok": True})
+    return 0
 
 
 def _sandbox_cost(summary: dict[str, Any]) -> dict[str, Any]:
@@ -487,8 +689,19 @@ def main() -> int:
         f"spend past this many dollars (default {modal_cost.DEFAULT_CAP_USD})",
     )
     sub.add_argument("--force", action="store_true", help="rerun runs that are already done")
+    sub.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="runs at once, each in its own process (default 1). The caps reserve the worst "
+        "case of every running run. Start with 4 and check the logs for rate-limit retries",
+    )
     _grading_options(sub)
     sub.set_defaults(run=cmd_run)
+
+    sub = commands.add_parser("solve-one", help="internal: one run of `run --jobs`")
+    sub.add_argument("spec", type=Path)
+    sub.set_defaults(run=cmd_solve_one)
 
     sub = commands.add_parser(
         "modal-sandboxes", help="list (and with --terminate, end) running Modal sandboxes"

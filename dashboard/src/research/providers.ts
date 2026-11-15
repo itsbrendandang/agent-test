@@ -5,6 +5,13 @@ export interface ProviderInfo { label: string; link?: string; linkText?: string;
 export const PROVIDERS: Record<string, ProviderInfo> = {
   exa: { label: "Found through Exa (web search)", link: "https://exa.ai", linkText: "Exa", place: "the web", kind: "web" },
   europepmc: { label: "Found in PubMed and preprints (Europe PMC)", link: "https://europepmc.org", linkText: "Europe PMC", place: "PubMed and preprints", kind: "literature" },
+  openalex: { label: "Found in OpenAlex (scholarly index)", link: "https://openalex.org", linkText: "OpenAlex", place: "OpenAlex", kind: "literature" },
+  semanticscholar: { label: "Found in Semantic Scholar", link: "https://www.semanticscholar.org", linkText: "Semantic Scholar", place: "Semantic Scholar", kind: "literature" },
+  arxiv: { label: "Found in arXiv (preprints)", link: "https://arxiv.org", linkText: "arXiv", place: "arXiv", kind: "literature" },
+  crossref: { label: "Found in Crossref (scholarly records)", link: "https://www.crossref.org", linkText: "Crossref", place: "Crossref", kind: "literature" },
+  biorxiv: { label: "Found in bioRxiv/medRxiv (preprints)", link: "https://www.biorxiv.org", linkText: "bioRxiv/medRxiv", place: "bioRxiv/medRxiv", kind: "literature" },
+  // A lab protocol from the protocol search: a protocol journal (through Europe PMC or OpenAlex) or protocols.io, so no one site is credited.
+  protocols: { label: "Lab protocol (protocol journals and protocols.io)", place: "published lab protocols (protocol journals and protocols.io)", kind: "literature" },
   chembl: { label: "ChEMBL record", link: "https://www.ebi.ac.uk/chembl/", linkText: "ChEMBL", place: "ChEMBL", kind: "database" },
   clinicaltrials: { label: "ClinicalTrials.gov record", link: "https://clinicaltrials.gov", linkText: "ClinicalTrials.gov", place: "ClinicalTrials.gov", kind: "database" },
   openfda: { label: "FDA label or report counts (openFDA)", link: "https://open.fda.gov", linkText: "openFDA", place: "openFDA", kind: "database" },
@@ -13,3 +20,5 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
   pubchem: { label: "PubChem record", link: "https://pubchem.ncbi.nlm.nih.gov", linkText: "PubChem", place: "PubChem", kind: "database" },
   fixture: { label: "Example source (practice run)", place: "the example sources", kind: "example" },
 }
+/** Where a search step looked. The literature search asks six sources at once, though its steps carry the provider "europepmc". */
+export const searchPlace = (provider: string): string => (provider === "europepmc" ? "the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv)" : PROVIDERS[provider]?.place ?? provider)

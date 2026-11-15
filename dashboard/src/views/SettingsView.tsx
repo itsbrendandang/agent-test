@@ -9,10 +9,11 @@ import { openHelp, useShell } from "@/lib/shell"
 import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
 import { EngineOffline, PageHead } from "@/components/Shared"
+import { Credits } from "@/overview/Credits"
 import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
 import { setAppearance, useAppearance, type Appearance } from "@/lib/appearance"
 
-// Settings: Your profile, Run mode, Session token, Appearance, Help, then Technical (closed at first). One heading style and one
+// Settings: Your profile, Run mode, Usage and limits (once the engine answers), Session token, Appearance, Help, then Technical (closed at first). One heading style and one
 // container for every section. The cost of Real is said once (Run mode); what happens to API keys once (Connections).
 export function SettingsView() {
   const characters = useCharacters()
@@ -23,6 +24,7 @@ export function SettingsView() {
       <PageHead title="Settings" about="Choose how runs are made and see what the app is connected to." />
       <YourProfile />
       <RunMode />
+      <Credits />
       <section className="set-section" aria-labelledby="token-title">
         <h2 id="token-title">Session token</h2>
         <TokenRow />

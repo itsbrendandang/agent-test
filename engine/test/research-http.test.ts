@@ -355,7 +355,7 @@ test("the store writes only under the configured runs folder: ids are made and c
 test("through the engine's own handler: the route is registered behind the Host and Origin checks, and a saved answer is found by GET /api/search as kind \"answer\"", async () => {
   const base = loadConfig(), runs = join(mkdtempSync(join(tmpdir(), "research-app-")), "runs")
   const config = { ...base, paths: { ...base.paths, runs } }
-  const app = createApp({ config, mock: true, env: { NO_PAID_CALLS: "1" }, hasToken: () => false })
+  const app = createApp({ config, mock: true, env: { NO_PAID_CALLS: "1", GLHF_HIDE_EXAMPLES: "1" }, hasToken: () => false })
   const server = createServer((req, res) => void app.handler(req, res))
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready))
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`

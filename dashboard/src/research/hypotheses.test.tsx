@@ -72,6 +72,13 @@ describe("the hypotheses map", () => {
     await userEvent.setup().click(within(two).getByRole("button", { name: "Source 2, against" }))
     expect(onSource).toHaveBeenCalledWith(2)
   })
+  it("says when a mark rests on one source only, as the engine flagged it", () => {
+    const thin = ev("hypothesis.checked", { id: "h1", verdict: "contradicted", for: [], against: [3], forStatements: [], againstStatements: [2], thin: true, note: "1 checked statement from 1 source against it; none for it. It rests on one source only: a thin mark." })
+    render(<Hypotheses state={foldAnswer([...START(), SOURCES, thin, CHECKED[1], DONE])} />)
+    expect(cards()[0]).toHaveTextContent("Contradicted: one source only")
+    expect(cards()[1]).not.toHaveTextContent("one source only") // mixed says "the sources disagree" instead
+    expect(foldAnswer([...START(), SOURCES, ...CHECKED, DONE]).hypotheses[0].result?.thin).toBeUndefined()
+  })
   it("a result that arrives for one hypothesis marks that one only; one the engine never reported stays without a mark when the run ends", () => {
     render(<Hypotheses state={foldAnswer([...START(), SOURCES, CHECKED[0], DONE])} />)
     expect(cards()[0]).toHaveTextContent("Supported")
@@ -121,8 +128,8 @@ describe("no hypotheses needed, and the record", () => {
 describe("the inspector's Hypotheses tab", () => {
   it("exists only when the answer has hypotheses, and shows them as a table with what would support and contradict each", () => {
     const events = [...START(), SOURCES, ...CHECKED, DONE]; const s = foldAnswer(events)
-    expect(tabsOf(s, events)).toContain("hypotheses"); expect(tabsOf(foldAnswer([START()[0]]), [START()[0]])).not.toContain("hypotheses")
-    render(<Inspector id="a-1" state={s} events={events} tab="hypotheses" onTab={() => {}} />)
+    expect(tabsOf(s)).toContain("hypotheses"); expect(tabsOf(foldAnswer([START()[0]]))).not.toContain("hypotheses")
+    render(<Inspector id="a-1" state={s} tab="hypotheses" onTab={() => {}} />)
     expect(screen.getByRole("tab", { name: "Hypotheses" })).toHaveAttribute("aria-selected", "true")
     const table = within(screen.getByRole("table"))
     expect(table.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hypothesis", "What would support it", "What would contradict it", "Result", "Sources for", "Sources against", "Worked on by"])

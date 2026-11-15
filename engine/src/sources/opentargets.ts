@@ -16,8 +16,11 @@ export const ENSG_ID = /^ENSG\d{11}$/
 export const DISEASE_ID = /^[A-Za-z]{2,15}_[A-Za-z0-9]{1,20}$/
 const ensg = (value: unknown): string => (typeof value === "string" && ENSG_ID.test(value) ? value : "")
 
-export const SEARCH_QUERY = "query($q:String!){search(queryString:$q,entityNames:[\"target\"],page:{index:0,size:5}){hits{id entity name description}}}"
-export const TARGET_QUERY = "query($id:String!,$filter:String,$size:Int!){target(ensemblId:$id){id approvedSymbol approvedName biotype functionDescriptions tractability{label modality value} safetyLiabilities{event datasource effects{direction dosing} biosamples{tissueLabel cellLabel}} associatedDiseases(BFilter:$filter,page:{index:0,size:$size}){count rows{score disease{id name} datatypeScores{id score}}}}}"
+/** What is read of a target: the same fields whether it is found by symbol or by id. */
+const TARGET_FIELDS = "id approvedSymbol approvedName biotype functionDescriptions tractability{label modality value} safetyLiabilities{event datasource effects{direction dosing} biosamples{tissueLabel cellLabel}} associatedDiseases(BFilter:$filter,page:{index:0,size:$size}){count rows{score disease{id name} datatypeScores{id score}}}"
+/** Find by symbol and read the target in one request: each hit carries its target's record. */
+export const SEARCH_QUERY = `query($q:String!,$filter:String,$size:Int!){search(queryString:$q,entityNames:["target"],page:{index:0,size:5}){hits{id entity name description object{... on Target{${TARGET_FIELDS}}}}}}`
+export const TARGET_QUERY = `query($id:String!,$filter:String,$size:Int!){target(ensemblId:$id){${TARGET_FIELDS}}}`
 
 const MODALITY: Record<string, string> = { SM: "Small molecule", AB: "Antibody", PR: "PROTAC", OC: "Other clinical" }
 const SCORE_NOTE = "Open Targets scores run from 0 to 1 and summarise how much evidence links the target and the disease, not how large an effect is."
@@ -75,24 +78,32 @@ export function targetItems(target: Json): EvidenceItem[] {
   return items
 }
 
-/** One Open Targets lookup: at most 2 requests (find the target, then read it). */
+/**
+ * One Open Targets lookup: one request (a symbol is found and its target read in the same request; an Ensembl id is
+ * read directly). A second request only when the search names a target but does not carry its record.
+ */
 export async function openTargetsSearch(query: string, http: Http): Promise<SourceResult> {
   const [first, ...rest] = query.trim().split(/\s+/)
   const filter = words(rest.join(" ")).join(" ")
+  const variables = { filter: filter || null, size: MAX_ITEMS - 1 }
   const notices: string[] = []
   let id = ensg(first?.toUpperCase())
+  let target: Json | undefined
   if (!id) {
     const token = words(first ?? "")[0]
     if (!token) return { items: [], notices: ["Write a gene symbol (for example KRAS) or an Ensembl gene id first, then disease words if you want to narrow the associations. Nothing was looked up."] }
-    const found = await http.json("opentargets", GRAPHQL, { post: { query: SEARCH_QUERY, variables: { q: token } } })
+    const found = await http.json("opentargets", GRAPHQL, { post: { query: SEARCH_QUERY, variables: { q: token, ...variables } } })
     const hits = list(rec(rec(rec(found.body).data).search).hits).map(rec).filter((h) => h.entity === "target" && ensg(h.id))
     const hit = hits.find((h) => clean(h.name).toLowerCase() === token) ?? hits[0]
     if (!hit) return { items: [], notices: [`Open Targets has no target for "${token}". Write the official gene symbol or an Ensembl gene id as the first word.`] }
     if (clean(hit.name).toLowerCase() !== token) notices.push(`Open Targets has no target with the symbol "${token}"; its closest match is ${clean(hit.name)} (${clean(hit.description)}), used here. Check that it is the target you mean.`)
     id = ensg(hit.id)
+    if (ensg(rec(hit.object).id) === id) target = rec(hit.object)
   }
-  const answer = await http.json("opentargets", GRAPHQL, { post: { query: TARGET_QUERY, variables: { id, filter: filter || null, size: MAX_ITEMS - 1 } } })
-  const target = rec(rec(rec(answer.body).data).target)
+  if (!target) {
+    const answer = await http.json("opentargets", GRAPHQL, { post: { query: TARGET_QUERY, variables: { id, ...variables } } })
+    target = rec(rec(rec(answer.body).data).target)
+  }
   const items = targetItems(target)
   if (!items.length) return { items: [], notices: [...notices, `Open Targets has no target ${id}.`] }
   const count = num(rec(target.associatedDiseases).count), shown = items.length - 1

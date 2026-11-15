@@ -22,3 +22,11 @@ if (!HTMLDialogElement.prototype.close) {
 if (!("ResizeObserver" in globalThis)) {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
 }
+
+// jsdom has no pointer capture or scrollIntoView; Radix menus and selects (shadcn Select, DropdownMenu) call them.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+}
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}

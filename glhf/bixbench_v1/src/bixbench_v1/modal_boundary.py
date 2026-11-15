@@ -11,11 +11,15 @@ The rules, each the Modal form of a row of the README's integrity table:
     read-only; no environment variables, no secrets, no Modal identity token;
   - a fixed size (CPU and memory: request = limit) and a wall-clock timeout, always;
   - what comes back from the sandbox (/outputs as a tar archive) is untrusted and is unpacked
-    with `safe_extract`, which refuses anything but small regular files inside the target.
+    with `safe_extract`, which refuses anything but small regular files inside the target;
+  - the analysis environment is the one in the repository: every sandbox of our image prints
+    its conda packages, R packages and BUSCO layers (`FINGERPRINT`), and the run is refused
+    unless their hashes equal `modal_env/expected-env.json` (`fingerprint_problems`).
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import re
@@ -276,6 +280,106 @@ def parse_probe(stdout: str) -> dict[str, Any]:
         if isinstance(document, dict):
             return document
     raise ValueError("the sandbox probe printed no result")
+
+
+# The analysis environment -----------------------------------------------------------------------
+# What a sandbox of our image must hold, as hashes. Derived from the committed inventory
+# (image/amd64-modal.inventory.json) by `python -m bixbench_v1.modal_image fingerprint`; never
+# edited by hand. A rebuild on any Modal account must give the same hashes, or no run starts.
+EXPECTED_ENV_FILE = Path(__file__).resolve().parent / "modal_env" / "expected-env.json"
+# Images under this name are checked. Another image (`--image`) is recorded, not checked.
+CHECKED_IMAGE_PREFIX = "bixbench-v1-env:"
+
+# Prints one JSON object with the raw lists; the host hashes them (`fingerprint`), with the same
+# code that hashes the committed inventory. The commands are those of image/tools/inventory.py.
+FINGERPRINT = r"""
+import json, subprocess
+def sh(cmd, timeout=600):
+    r = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=timeout)
+    return r.stdout, r.returncode
+out = {"errors": []}
+text, code = sh("conda list --json")
+try:
+    out["conda"] = [[p["name"], p["version"], p.get("build_string")] for p in json.loads(text)]
+except Exception as e:
+    out["errors"].append(f"conda list: exit {code}: {type(e).__name__}")
+text, code = sh("Rscript -e 'ip <- installed.packages(); cat(\"RVERSION\\t\", R.version.string, \"\\n\", sep=\"\"); for (i in seq_len(nrow(ip))) cat(\"PKG\\t\", ip[i, \"Package\"], \"\\t\", ip[i, \"Version\"], \"\\n\", sep=\"\")'")
+out["r"] = [line.split("\t")[1:3] for line in text.splitlines() if line.startswith("PKG\t")]
+out["r_version"] = next((line.split("\t", 1)[1] for line in text.splitlines() if line.startswith("RVERSION\t")), None)
+if code != 0 or not out["r"]:
+    out["errors"].append(f"Rscript: exit {code}")
+text, _ = sh("find /root/.udocker/layers -type f -o -type l 2>/dev/null | sed 's|.*/||' | sort")
+out["busco_layers"] = [line for line in text.splitlines() if line]
+print(json.dumps(out))
+"""
+
+
+def _digest(lines: list[str]) -> dict[str, Any]:
+    ordered = sorted(lines)
+    return {
+        "count": len(ordered),
+        "sha256": hashlib.sha256("\n".join(ordered).encode()).hexdigest(),
+    }
+
+
+def fingerprint(
+    conda: list[tuple[str, str, str | None]],
+    r_packages: list[tuple[str, str]],
+    r_version: str | None,
+    busco_layers: list[str],
+) -> dict[str, Any]:
+    """The hashes that identify the analysis environment: every conda package (name, version,
+    build), every R package (name, version; R's own and Bioconductor's included), the R version
+    and the BUSCO image's layers (udocker stores them by sha256)."""
+    return {
+        "conda": _digest([f"{n}={v}={b}" for n, v, b in conda]),
+        "r": _digest([f"{n}={v}" for n, v in r_packages]) | {"version": r_version},
+        "busco_layers": _digest(busco_layers),
+    }
+
+
+def fingerprint_of_inventory(inventory: dict[str, Any]) -> dict[str, Any]:
+    """The fingerprint of a committed inventory (image/tools/inventory.py's output)."""
+    return fingerprint(
+        [(p["name"], p["version"], p.get("build")) for p in inventory["conda"]],
+        [(p["name"], p["version"]) for p in inventory["r"]["packages"]],
+        inventory["r"].get("rversion"),
+        list(inventory.get("udocker_layers") or []),
+    )
+
+
+def fingerprint_of_sandbox(printed: dict[str, Any]) -> dict[str, Any]:
+    """The fingerprint of what `FINGERPRINT` printed in a sandbox."""
+    return fingerprint(
+        [(n, v, b) for n, v, b in printed.get("conda") or []],
+        [(n, v) for n, v in printed.get("r") or []],
+        printed.get("r_version"),
+        list(printed.get("busco_layers") or []),
+    )
+
+
+def expected_env(path: Path = EXPECTED_ENV_FILE) -> dict[str, Any]:
+    document: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return document
+
+
+def checks_environment(image: str) -> bool:
+    return image.startswith(CHECKED_IMAGE_PREFIX)
+
+
+def fingerprint_problems(printed: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    """What differs between a sandbox's environment and the repository's (empty = the same)."""
+    problems = [f"the environment could not be read: {e}" for e in printed.get("errors") or []]
+    found = fingerprint_of_sandbox(printed)
+    names = {"conda": "conda packages", "r": "R packages", "busco_layers": "BUSCO image layers"}
+    for part, name in names.items():
+        want, got = expected[part], found[part]
+        if want != got:
+            problems.append(
+                f"{name} differ from modal_env/expected-env.json "
+                f"({got.get('count')} found, {want.get('count')} expected)"
+            )
+    return problems
 
 
 # Copy-out ----------------------------------------------------------------------------------------

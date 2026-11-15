@@ -60,6 +60,6 @@ describe("provenance comes from the record itself", () => {
     for (const none of [undefined, {}, { mode: undefined }, { model: "" }, { scripted: undefined }]) expect(provenanceOf(none)).toBeUndefined()
   })
   it("has one word per kind", () => {
-    expect(PROVENANCE_WORD).toEqual({ practice: "Practice", live: "Live research", local: "Local model" })
+    expect(PROVENANCE_WORD).toEqual({ practice: "Practice", live: "Live research", local: "Local model", example: "Example · practice, $0" })
   })
 })

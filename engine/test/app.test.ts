@@ -264,3 +264,13 @@ test("the run list takes rounds and claims from the event log when run.json has 
   const run = (JSON.parse((await call("GET", "/api/runs")).body) as { id: string; rounds: number; claims: number; status: string }[]).find((r) => r.id === "old")!
   assert.deepEqual([run.rounds, run.claims, run.status], [2, 2, "done"])
 })
+
+test("a request that throws outside a route's own error handling is answered, and the server keeps serving", async () => {
+  // `new URL("//[", base)` throws. That ran outside the handler's try, and server.ts does not await the handler: the
+  // rejection was unhandled and stopped the engine with every run in it. Here it would fail this test file instead.
+  const { call } = await boot()
+  const bad = await call("GET", "//[")
+  assert.equal(bad.status, 400)
+  assert.match(bad.body, /invalid URL/)
+  assert.equal((await call("GET", "/api/runs")).status, 200, "the same server still answers")
+})

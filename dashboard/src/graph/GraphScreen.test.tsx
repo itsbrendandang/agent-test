@@ -5,6 +5,8 @@ import { PRACTICE } from "@/lib/words"
 import { routes } from "@/test/engine"
 import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
+import { graphLink } from "@/lib/links"
+import { claimNodeId, sourceNodeId } from "./model"
 
 // jsdom has no WebGL: the renderer is replaced by a recorder, and WebGL support is switched per test.
 const fake = vi.hoisted(() => ({
@@ -175,9 +177,8 @@ describe("Graph view", () => {
     expect(fake.flown).toEqual([]) // list mode: nothing to fly
     // selection is kept in sync with the list
     expect(within(await firstRow()).getAllByRole("button")[0]).toHaveAttribute("aria-pressed", "true")
-    fireEvent.click(within(panel).getByRole("button", { name: /Open this run in Board/ }))
-    expect(sessionStorage.getItem("open.board")).toBe("r1")
-    expect(location.hash).toBe("#Board")
+    fireEvent.click(within(panel).getByRole("button", { name: /Open this run in Team review/ }))
+    expect(location.hash).toBe("#Board/r1") // the review's own address: App hands the run to the Board view
   })
 
   it("links a swarm run to Compare", async () => {
@@ -186,8 +187,7 @@ describe("Graph view", () => {
     render(<WorldsView />)
     await screen.findByTestId("scripted-label")
     fireEvent.click(screen.getAllByRole("button", { name: /Open this run in Compare/ })[0])
-    expect(sessionStorage.getItem("open.swarm")).toBe("s1")
-    expect(location.hash).toBe("#Compare")
+    expect(location.hash).toBe("#Compare/s1")
   })
 
   it("highlights a selected node's neighbours in the renderer and flies to it", async () => {
@@ -541,5 +541,43 @@ describe("Graph view", () => {
     await streamBoard()
     expect(container.querySelector("input[type=password]")).toBeNull()
     expect(container.textContent).not.toMatch(/api key/i)
+  })
+})
+
+// The graph's own address (lib/links.ts): another view opens a run and a node in it, and the graph keeps the address up
+// to date, so a copied address and the browser's Back and Forward return to the same run and node.
+describe("Graph view: addresses and links to the other views", () => {
+  const CLAIM = "CMP-0517 hERG IC50 is 6 uM"
+  it("opens the run and the node an address names, showing a kind the first picture hides", async () => {
+    routes({ ...lists, ...swarmRoutes })
+    location.hash = graphLink("board", "r1", sourceNodeId("https://example.org/a"))
+    render(<WorldsView />)
+    await streamBoard()
+    const panel = await screen.findByTestId("node-panel")
+    expect(panel).toHaveTextContent("hERG of acrylamides") // a source: hidden in the calm first picture, shown for the link
+    expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:r1")
+    expect(location.hash).toBe(graphLink("board", "r1", sourceNodeId("https://example.org/a")))
+  })
+  it("puts the run and the selected node in the address, and follows an address that changes", async () => {
+    routes({ ...lists, ...swarmRoutes })
+    location.hash = "#Graph"
+    render(<WorldsView />)
+    await streamBoard()
+    await waitFor(() => expect(location.hash).toBe("#Graph/board/r1")) // the run shown, so the address can be copied
+    listMode()
+    fireEvent.click(within(await screen.findByRole("table", { name: /nodes of the graph/i })).getAllByRole("row")[1].querySelector("button")!)
+    await waitFor(() => expect(location.hash).toMatch(/^#Graph\/board\/r1\?node=claim%3Ascout%3A/))
+    await act(async () => { location.hash = graphLink("board", "r1", claimNodeId("scout", CLAIM)); window.dispatchEvent(new HashChangeEvent("hashchange")) })
+    await waitFor(() => expect(screen.getByTestId("node-panel")).toHaveTextContent(CLAIM))
+  })
+  it("a review's member links to its messages in the Agent Log and to its card; every run links to its Agent Log", async () => {
+    routes({ ...lists, ...swarmRoutes })
+    location.hash = graphLink("board", "r1", "agent:scout")
+    render(<WorldsView />)
+    await streamBoard()
+    const panel = within(await screen.findByTestId("node-panel"))
+    expect(panel.getByRole("link", { name: /messages in the Agent Log/ })).toHaveAttribute("href", "#Lab/board/r1?agent=scout")
+    expect(panel.getByRole("link", { name: "About this agent" })).toHaveAttribute("href", "#Agents/scout?from=board")
+    expect(panel.getByRole("link", { name: "Open in the Agent Log" })).toHaveAttribute("href", "#Lab/board/r1")
   })
 })

@@ -5,8 +5,10 @@
 //   answer.md, sources.json, sources.csv   the result files
 // Ids are made here and checked before any path is built.
 import { randomBytes } from "node:crypto"
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import type { BoardConfig } from "../config.ts"
+import { mirrorAnswer } from "../db/supabase.ts"
+import { writeWhole } from "../fsx.ts"
 import { isSafeId } from "../http.ts"
 import { dayStamp, researchRoot, staleAfterMs } from "./spend.ts"
 import type { Artifact, ResearchEvent, ResearchRecord, Stamped } from "./types.ts"
@@ -20,16 +22,11 @@ export const isThreadId = (id: unknown): id is string => isSafeId(id) && /^t-[0-
 export const answerDir = (config: BoardConfig, id: string): string => `${researchRoot(config)}/${id}`
 export const eventsFile = (config: BoardConfig, id: string): string => `${answerDir(config, id)}/events.jsonl`
 
-function writeWhole(file: string, text: string): void {
-  const tmp = `${file}.${process.pid}.tmp`
-  writeFileSync(tmp, text)
-  renameSync(tmp, file)
-}
-
 /** Write the record in one step (a temp file, then a rename), so a reader never sees half a file. */
 export function saveRecord(config: BoardConfig, record: ResearchRecord): void {
   mkdirSync(answerDir(config, record.id), { recursive: true })
   writeWhole(`${answerDir(config, record.id)}/record.json`, JSON.stringify(record, null, 1))
+  mirrorAnswer(record) // the database copy, when one is set up (db/supabase.ts); never waits, never throws
 }
 
 /** How long a queued answer may wait before it is taken for lost: every answer before it in its thread, plus a minute. */
@@ -147,7 +144,7 @@ export function answerFile(record: ResearchRecord): string {
  */
 export function writeArtifacts(config: BoardConfig, record: ResearchRecord, now = Date.now()): Artifact[] {
   const dir = answerDir(config, record.id)
-  const sources = record.sources.map(({ n, url, title, provider, note, cited, text }) => ({ n, url, title, provider, ...(note ? { note } : {}), cited: cited === true, text }))
+  const sources = record.sources.map(({ n, url, title, provider, note, cited, text, image }) => ({ n, url, title, provider, ...(note ? { note } : {}), ...(image ? { image } : {}), cited: cited === true, text }))
   writeWhole(`${dir}/answer.md`, answerFile(record))
   writeWhole(`${dir}/sources.json`, JSON.stringify({ answer: record.id, question: record.question, mode: record.mode, sources }, null, 1))
   writeWhole(`${dir}/sources.csv`, [["n", "title", "url", "provider", "note", "cited"].map(csvCell).join(","), ...sources.map((s) => [s.n, s.title, s.url, s.provider, s.note ?? "", s.cited ? "yes" : "no"].map(csvCell).join(","))].join("\n") + "\n")

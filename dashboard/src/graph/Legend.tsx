@@ -1,4 +1,4 @@
-import { KIND_SHAPE, palette, VERDICT_SHAPE, type Shape } from "./style"
+import { KIND_SHAPE, palette, VERDICT_SHAPE, type Shape } from "../design/graph"
 import { GLYPH, NODE_KINDS, VERDICT_CLASSES, type NodeKind, type RunKind } from "./types"
 import { GROUP_WORD, KIND_TECH, KIND_WHAT, kindLabel, LEGEND_SENTENCES } from "./words"
 

@@ -10,14 +10,14 @@ import re
 import tempfile
 import time
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 from urllib.parse import unquote, urlsplit
 
 import anyio
 import httpx
 from inspect_ai.tool import Tool, ToolError, tool
-from inspect_ai.util import sandbox, store
+from inspect_ai.util import SandboxEnvironment, sandbox, store
 
 from ... import paid
 from ...network_gateway.policy import (
@@ -47,13 +47,21 @@ WORK = "/workspace/work/glhf"
 # declared format, else the file suffix; csv and csv.gz are comma-separated; tsv, tab, txt,
 # tsv.gz, bed and bed.gz are tab-separated. Files are read as utf-8-sig, because pandas (the
 # grader) drops a byte-order mark and so must this check.
+# Also warnings, never fatal, for what the grader matches as exact strings: a column the brief's
+# Required Outputs names for the file and the header lacks ("required_columns" in the spec, from
+# required_columns() below), and row keys with stray spaces or Ensembl version suffixes. Numbers
+# written as "1,234" (pandas' to_numeric makes them NA) and infinite values are warned about too.
 _CONTRACT_SCRIPT = r"""
-import csv, gzip, json, os, sys
+import csv, gzip, json, os, re, sys
 specs = json.loads(sys.argv[1])
 csv.field_size_limit(1 << 30)
 COMMA, TAB = ("csv", "csv.gz"), ("tsv", "tab", "txt", "tsv.gz", "bed", "bed.gz")
 SNIFFED = ("table", "tabular")
 NAME = {"\t": "tab", ",": "comma"}
+ENSEMBL = re.compile(r"ENS[A-Z]*\d{6,}(\.\d+)?")
+THOUSANDS = re.compile(r"[-+]?\d{1,3}(,\d{3})+(\.\d+)?")
+INFINITE = ("inf", "-inf", "+inf", "infinity", "-infinity", "+infinity")
+def squash(name): return re.sub(r"[\s_.\-]+", "", name.lower())
 def opened(path):
     with open(path, "rb") as fh: magic = fh.read(2)
     if magic == b"\x1f\x8b": return gzip.open(path, "rt", encoding="utf-8-sig", newline="")
@@ -105,6 +113,26 @@ for s in specs:
                     i = header.index(key); keys = [row[i] for row in body if len(row) > i]
                     if len(set(keys)) != len(keys): r["problems"].append(f"duplicate {key!r} values")
                     if any(k.strip() == "" for k in keys): r["problems"].append(f"blank {key!r} values")
+                    spaced = sum(1 for k in keys if k.strip() and k != k.strip())
+                    if spaced: r["warnings"].append(f"{spaced} {key!r} values have leading or trailing spaces (the grader matches keys as exact strings)")
+                    ens = [ENSEMBL.fullmatch(k) for k in keys]
+                    versioned = sum(1 for m in ens if m and m.group(1))
+                    plain = sum(1 for m in ens if m and not m.group(1))
+                    if versioned and plain: r["warnings"].append(f"{key!r} mixes Ensembl IDs with a version suffix ({versioned}, e.g. .12) and without ({plain}); the grader matches keys as exact strings")
+                    elif versioned: r["warnings"].append(f"{versioned} {key!r} values are Ensembl IDs with a version suffix (e.g. .12); the grader matches keys as exact strings: keep the suffix only if the brief or its inputs use it")
+            for want in [] if r["fatal"] else s.get("required_columns") or []:
+                if want in header: continue
+                near = [h for h in header if squash(h) == squash(want)]
+                if near: r["warnings"].append(f"column {near[0]!r} is named {want!r} in the brief's Required Outputs (the grader matches column names exactly)")
+                else: r["warnings"].append(f"no column {want!r}, which the brief's Required Outputs names for this file (the grader matches column names exactly; ignore this if it is not a column of this file)")
+            sample = body[:2000]
+            for i, column in enumerate(header[:200]):
+                if column == key: continue
+                cells = [row[i].strip() for row in sample if len(row) > i]
+                commas = sum(1 for c in cells if THOUSANDS.fullmatch(c))
+                if commas: r["warnings"].append(f"column {column!r}: {commas} sampled numbers are written with thousands separators (e.g. 1,234), which the grader reads as NA")
+                infinite = sum(1 for c in cells if c.lower() in INFINITE)
+                if infinite: r["warnings"].append(f"column {column!r}: {infinite} sampled values are infinite; check how the brief wants them written")
             ragged = sum(1 for row in body if len(row) != len(header))
             if ragged: r["problems"].append(f"{ragged} rows with a different column count than the header")
             cells = [c.strip().lower() for row in body[:5000] for c in row]
@@ -119,12 +147,102 @@ print(json.dumps(report))
 CONTRACT_TIMEOUT = 120  # seconds for the shape check of all artifacts
 SAVE_TIMEOUT = 60  # seconds for writing the ledger's working copy into the sandbox
 
+_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_OUTPUTS_HEADING = re.compile(r"(required|expected)\s+outputs?\b", re.IGNORECASE)
+_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+_BACKTICKED = re.compile(r"`([^`\n]+)`")
+_COLUMN_WORD = re.compile(r"\bcolumns?\b", re.IGNORECASE)
+_NOT_A_NAME = re.compile(r"[\s/\\<>=!()\[\]{}*|,;:'\"]")
+_FILE_NAME = re.compile(
+    r"\.(csv|tsv|tab|txt|json|md|bed|gz|h5ad|h5|rds|parquet|xlsx?)$", re.IGNORECASE
+)
+_NUMBER = re.compile(r"[-+]?\d*\.?\d+(e[-+]?\d+)?", re.IGNORECASE)
+MAX_REQUIRED_COLUMNS = 40  # per artifact; a brief that names more is not listing columns
+
+
+def _required_outputs_section(brief: str) -> str:
+    """The text under the brief's "Required Outputs" (or "Expected Outputs") heading, up to the
+    next heading of the same or a higher level. "" when the brief has no such heading."""
+    lines, level, out = brief.splitlines(), 0, []
+    for line in lines:
+        heading = _HEADING.match(line)
+        if level:
+            if heading and len(heading.group(1)) <= level:
+                break
+            out.append(line)
+        elif heading and _OUTPUTS_HEADING.search(heading.group(2)):
+            level = len(heading.group(1))
+    return "\n".join(out)
+
+
+def _items(section: str) -> list[str]:
+    """The section split into list items and sub-headed blocks (with their continuation lines);
+    text before the first item is one item of its own."""
+    items: list[str] = []
+    for line in section.splitlines():
+        if _ITEM.match(line) or _HEADING.match(line) or not items:
+            items.append(line)
+        else:
+            items[-1] += "\n" + line
+    return [item for item in items if item.strip()]
+
+
+def required_columns(brief: str, outputs: list[ExpectedOutput]) -> dict[str, list[str]]:
+    """Column names the brief's Required Outputs section names for each artifact, by artifact id.
+
+    Read from the text, so it can be wrong: the names are backticked words in the list item that
+    names the file (the whole section when there is one artifact), and only in an item that says
+    "column". They feed warnings of the contract check, never a fatal problem. The grader matches
+    column names as exact strings, and the models alone checked them until now."""
+    section = _required_outputs_section(brief)
+    if not section.strip():
+        return {}
+    items = _items(section)
+    files = {PurePosixPath(o.path).name for o in outputs}
+    found: dict[str, list[str]] = {}
+    for output in outputs:
+        name = PurePosixPath(output.path).name
+        mentions = re.compile(r"(?<![\w.-])" + re.escape(name) + r"(?![\w-])")
+        mine = [item for item in items if mentions.search(item)]
+        if not mine and len(outputs) == 1:
+            mine = [section]
+        names: list[str] = []
+        for item in mine:
+            if not _COLUMN_WORD.search(item):
+                continue
+            for token in _BACKTICKED.findall(item):
+                token = token.strip()
+                if (
+                    token
+                    and len(token) <= 64
+                    and token not in files
+                    and not _NOT_A_NAME.search(token)
+                    and not _FILE_NAME.search(token)
+                    and not _NUMBER.fullmatch(token)
+                    and token not in names
+                ):
+                    names.append(token)
+        if names and len(names) <= MAX_REQUIRED_COLUMNS:
+            found[output.artifact_id] = names
+    return found
+
 
 async def check_contract(
-    outputs: list[ExpectedOutput], root: str | None = None
+    outputs: list[ExpectedOutput],
+    root: str | None = None,
+    columns: dict[str, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Shape-check the required artifacts. `root` checks a copy of the tree, e.g. the pilot's."""
-    specs = [{**o.model_dump(), "sandbox_path": o.sandbox_path} for o in outputs]
+    """Shape-check the required artifacts. `root` checks a copy of the tree, e.g. the pilot's.
+    `columns`: the brief's required column names per artifact id (required_columns), warned about
+    when the header lacks them."""
+    specs = [
+        {
+            **o.model_dump(),
+            "sandbox_path": o.sandbox_path,
+            "required_columns": (columns or {}).get(o.artifact_id, []),
+        }
+        for o in outputs
+    ]
     if root:
         for spec in specs:
             spec["sandbox_path"] = root.rstrip("/") + spec["sandbox_path"].removeprefix("/outputs")
@@ -268,14 +386,17 @@ async def save_ledger(ledger: Ledger) -> None:
 
 
 @tool
-def check_outputs(outputs: list[ExpectedOutput]) -> Tool:
+def check_outputs(
+    outputs: list[ExpectedOutput], columns: dict[str, list[str]] | None = None
+) -> Tool:
     async def execute() -> str:
         """Deterministically check every required output file: present, non-empty, parseable,
         row_key column present and unique, delimiter and column counts consistent.
         This checks shape only, not scientific correctness. Lines under "Warnings" (one column,
-        no rows, empty JSON, mostly NA) are not failures: compare them with the brief.
+        no rows, empty JSON, mostly NA, a column name or key format the grader may not match)
+        are not failures: compare them with the brief.
         Run it before declaring any artifact done."""
-        return contract_text(await check_contract(outputs))
+        return contract_text(await check_contract(outputs, columns=columns))
 
     return execute
 
@@ -333,10 +454,50 @@ async def read_script(path: str) -> str | None:
         return None
 
 
+def sandbox_backend() -> dict[str, str]:
+    """Where this run's analysis code executes: {"backend": ...} and, when the provider knows it,
+    "sandbox_id". "docker" is Inspect's Docker sandbox (local runs: this machine). A provider
+    that runs elsewhere says so itself through an `analysis_backend()` method (the Modal one,
+    bixbench_v1/glhf_modal_sandbox.py, answers "modal"). Recorded only; it decides nothing."""
+    try:
+        env = sandbox()
+    except Exception:  # no sandbox in this context
+        return {"backend": "unknown"}
+    # Inspect hands out a proxy that records events; the provider is behind it (as_type unwraps).
+    unwrap: Any = getattr(env, "as_type", None)
+    if callable(unwrap):
+        try:
+            env = unwrap(SandboxEnvironment)
+        except TypeError:
+            pass
+    describe = getattr(env, "analysis_backend", None)
+    if callable(describe):
+        try:
+            found = describe()
+        except Exception:
+            found = None
+        if isinstance(found, dict) and isinstance(found.get("backend"), str):
+            return {str(k): str(v) for k, v in found.items() if v is not None}
+    name = type(env).__name__.lower()
+    if "docker" in name:
+        return {"backend": "docker"}
+    return {"backend": name.removesuffix("sandboxenvironment") or "unknown"}
+
+
+def _where(run: Run, backend: dict[str, str]) -> Run:
+    run.backend, run.sandbox_id = backend.get("backend", ""), backend.get("sandbox_id")
+    return run
+
+
 async def run_registered_test(entry: Registration, seconds: int) -> Run:
     """Execute a registered test script in the sandbox and report what was seen. Harness code:
     no model takes part. The file at the registered path must still have the registered hash;
-    what is executed is the registered content itself; the result is the last line of stdout."""
+    what is executed is the registered content itself; the result is the last line of stdout.
+    The run records where it executed (`sandbox_backend`): local Docker or a Modal sandbox."""
+    return _where(await _run_registered_test(entry, seconds), sandbox_backend())
+
+
+async def _run_registered_test(entry: Registration, seconds: int) -> Run:
     assert entry.script_path and entry.script_sha256
     command = INTERPRETERS[_script_suffix(entry.script_path)]
     found = await read_script(entry.script_path)

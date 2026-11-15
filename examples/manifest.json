@@ -1,0 +1,61 @@
+[
+  {
+    "id": "a-20261115081826-5a52df21",
+    "kind": "answer",
+    "title": "GLP-1 market",
+    "question": "What GLP-1s are working in the market right now?",
+    "status": "done",
+    "thread": "t-4f661394e8",
+    "startedAt": 1794759506419
+  },
+  {
+    "id": "a-20261115081826-1459beed",
+    "kind": "answer",
+    "title": "Safety and specialists",
+    "question": "Is hERG a safety risk for KRAS G12C inhibitors?",
+    "status": "done",
+    "thread": "t-2a923a6c04",
+    "startedAt": 1794759506477
+  },
+  {
+    "id": "a-20261115081826-afb15659",
+    "kind": "answer",
+    "title": "Hypothesis investigation",
+    "question": "Investigate hypotheses for KRAS G12C inhibitor response and resistance",
+    "status": "done",
+    "thread": "t-aae6e76340",
+    "startedAt": 1794759506516
+  },
+  {
+    "id": "a-20261115081826-afa96cbf",
+    "kind": "answer",
+    "title": "Clinical evidence",
+    "question": "Do KRAS G12C inhibitors work in previously treated lung cancer?",
+    "status": "done",
+    "thread": "t-bd07a6e49a",
+    "startedAt": 1794759506552
+  },
+  {
+    "id": "a-20261115081826-857f7eca",
+    "kind": "answer",
+    "title": "Stopped research",
+    "question": "Investigate KRAS G12C safety and resistance",
+    "status": "cancelled",
+    "thread": "t-b1d38a0068",
+    "startedAt": 1794759506605
+  },
+  {
+    "id": "202611151618-kras-g12c-hit-to-lead",
+    "brief": "kras-g12c-hit-to-lead.md",
+    "startedAt": 1794759506671,
+    "status": "done",
+    "rounds": 3,
+    "claims": 13,
+    "search": {
+      "searches": 3,
+      "provider": "fixture"
+    },
+    "kind": "board",
+    "title": "KRAS G12C board review"
+  }
+]

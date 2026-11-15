@@ -51,6 +51,9 @@ describe("Overview", () => {
     expect(screen.queryByText("Research runs")).toBeNull()
     expect(screen.queryByText("By kind")).toBeNull()
     expect(screen.queryByRole("region", { name: "Activity log" })).toBeNull()
+    // Spend and limits are in Settings, and there is no link to the (empty) Benchmarks page here.
+    expect(screen.queryByText("Spent today")).toBeNull()
+    expect(screen.queryByRole("button", { name: /benchmarks/i })).toBeNull()
   })
 
   it("a practice run is not research even when it is the only thing there", async () => {
@@ -79,8 +82,15 @@ describe("the Agent Lab under the question box", () => {
     await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is working on your question."))
     expect(onOpen).not.toHaveBeenCalled() // the page stays: no jump to Research
     expect(sessionStorage.getItem("open.ask")).toBeNull()
-    expect(screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })).toBeTruthy()
+    const answer = screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })
+    // The answer is written above the lab, so it is in view without scrolling past the lab.
+    expect(answer.compareDocumentPosition(lab()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
+    // The same answer is Research's conversation, with its thread, so Research shows it and continues it.
+    expect(JSON.parse(sessionStorage.getItem("home.chat") ?? "null")).toEqual([
+      { id: 1, role: "user", content: "Is hERG a risk for KRAS G12C inhibitors?" },
+      { id: 2, role: "assistant", content: "", research: { id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", thread: "t-1" } },
+    ])
     // The answer's own events move the lab: a specialist the engine added joins as a visitor, then works.
     const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
     const feed = (events: object[]) => act(() => { for (const stream of streams.filter((x) => /\/api\/research\//.test(x.url))) for (const e of events) stream.onmessage?.({ data: JSON.stringify(e) }) })
@@ -115,6 +125,7 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     expect((await screen.findByRole("alert")).textContent).toContain("Too many questions in a short time.")
+    expect(sessionStorage.getItem("home.chat")).toBeNull() // nothing started, so Research's conversation is left as it is
     expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("Does it work?") // kept, to send again
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
   })
@@ -136,23 +147,5 @@ describe("the welcome on the home page", () => {
     expect(document.querySelector(".ov-stage")?.getAttribute("aria-hidden")).toBe("true")
     expect(screen.getByText("Scout: finds sources")).toBeTruthy()
     expect(screen.getByRole("group", { name: "Example questions" }).querySelectorAll("button")).toHaveLength(3)
-  })
-})
-
-describe("API credits on the home page", () => {
-  it("shows the engine's own spend and limits, and says what it cannot know", async () => {
-    show({ paid: { paid: true, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 3.456, exaUsedUsd: 0.035, exaCeilingUsd: 40 } } })
-    const credits = (await screen.findByText("Spent today")).closest("section") as HTMLElement
-    expect(credits.textContent).toContain("Real mode: runs spend money, inside these limits.")
-    expect(credits.textContent).toContain("$3.46Spent todayof a $20.00 daily limit")
-    expect(credits.textContent).toContain("$5.00Limit per run")
-    expect(credits.textContent).toContain("$0.04Web search (Exa)of a $40.00 ceiling, all time")
-    expect(credits.textContent).toContain("Not knownAccount balances")
-  })
-  it("says nothing can be spent in Demo mode, and Not known for a number the engine did not give", async () => {
-    show({ paid: { paid: false, caps: { dailyUsd: 20 } } })
-    const credits = (await screen.findByText("Spent today")).closest("section") as HTMLElement
-    expect(credits.textContent).toContain("Demo mode: nothing can be spent.")
-    expect(credits.textContent).toContain("Not knownSpent today")
   })
 })

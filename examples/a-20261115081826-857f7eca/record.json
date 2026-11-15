@@ -1,0 +1,98 @@
+{
+ "id": "a-20261115081826-857f7eca",
+ "thread": "t-b1d38a0068",
+ "kind": "answer",
+ "question": "Investigate KRAS G12C safety and resistance",
+ "effort": "standard",
+ "mode": "demo",
+ "status": "cancelled",
+ "startedAt": 1794759506605,
+ "caps": {
+  "maxUsd": 0,
+  "maxSeconds": 120
+ },
+ "models": {
+  "planner": "scripted",
+  "writer": "scripted",
+  "checker": "scripted",
+  "critic": "scripted"
+ },
+ "steps": [
+  {
+   "step": "prepare",
+   "kind": "prepare",
+   "label": "Preparing the searches",
+   "agent": "planner",
+   "input": {
+    "model": "scripted",
+    "level": "standard",
+    "webSearches": 3,
+    "literatureQueries": 3,
+    "databaseLookups": 0
+   },
+   "status": "completed",
+   "ms": 1,
+   "summary": "Example sources only."
+  },
+  {
+   "step": "hypotheses",
+   "kind": "hypothesize",
+   "label": "Setting up hypotheses to test",
+   "agent": "planner",
+   "input": {
+    "model": "scripted",
+    "atMost": 3
+   },
+   "status": "cancelled",
+   "ms": 0
+  }
+ ],
+ "searches": [],
+ "sources": [],
+ "statements": [],
+ "recommendations": [],
+ "usd": 0,
+ "review": {
+  "checker": "scripted",
+  "critic": "scripted",
+  "revised": false,
+  "notes": []
+ },
+ "workStartedAt": 1794759506624,
+ "workedMs": 30,
+ "specialists": [
+  {
+   "room": "bench",
+   "name": "target-safety-druggability-analyst",
+   "title": "Target safety druggability analyst",
+   "agent": "specialist:target-safety-druggability-analyst",
+   "why": "Its method notes match the question's words: kras, safety.",
+   "methods": [
+    {
+     "name": "target-tractability-druggability",
+     "title": "Target tractability druggability"
+    }
+   ]
+  },
+  {
+   "room": "quality",
+   "name": "toxicologist",
+   "title": "Toxicologist",
+   "agent": "specialist:toxicologist",
+   "why": "Its method notes match the question's words: safety.",
+   "methods": []
+  }
+ ],
+ "opening": "This is a demo: I'll go through the same steps with example sources and fixed text, so nothing is searched and no model is asked.",
+ "finishedAt": 1794759506663,
+ "seconds": 0,
+ "counts": {
+  "sources": 0,
+  "statements": 0,
+  "verified": 0,
+  "contradicted": 0,
+  "unsupported": 0,
+  "unchecked": 0
+ },
+ "note": "Cancelled. Nothing had been found yet."
+}

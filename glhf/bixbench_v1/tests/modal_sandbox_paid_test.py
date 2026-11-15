@@ -204,3 +204,23 @@ def test_comparing_the_two_inventories_needs_no_modal_and_no_switch() -> None:
     assert result["python"]["official"] == result["python"]["modal"]
     assert result["official"]["machine"] == "aarch64" and result["modal"]["machine"] == "x86_64"
     assert "Conda packages" in modal_image.diff_markdown(result)
+
+
+def test_build_refuses_another_image_builder_version_before_modal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Paid calls on (a fake: it ends before Modal is imported, so nothing is reached)."""
+    from bixbench_v1 import modal_image
+
+    monkeypatch.setenv("NO_PAID_CALLS", "0")
+    monkeypatch.setenv("MODAL_IMAGE_BUILDER_VERSION", "2024.10")
+    real_import = builtins.__import__
+
+    def no_modal(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "modal":
+            raise AssertionError("build imported Modal")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_modal)
+    with pytest.raises(SystemExit, match=modal_image.IMAGE_BUILDER_VERSION):
+        modal_image.build()

@@ -2,7 +2,7 @@
 // API: https://rest.uniprot.org/uniprotkb/search (documented at https://www.uniprot.org/help/api_queries).
 // A query is a gene symbol or protein name, or a UniProt accession (P01116). Words are searched in reviewed
 // (Swiss-Prot) human entries first; when there is none, in reviewed entries of any organism (one more request).
-// One lookup = the best-matching entry, as up to four items: function, disease involvement, natural variants,
+// One lookup = the best-matching entry (one whose gene name is the word asked for comes first), as up to four items: function, disease involvement, natural variants,
 // subcellular location. The other matching entries are named in a note, so the member can ask for one by accession.
 // The text is UniProt's own curated text; its "(PubMed:123)" markers are kept as written.
 // Pages: https://www.uniprot.org/uniprotkb/<accession>/entry#function, #disease_variants, #subcellular_location
@@ -42,6 +42,9 @@ function names(entry: Json): { accession: string; protein: string; gene: string;
   ])
   return { accession, protein, gene, organism, head }
 }
+
+/** Every gene name of an entry (the name, its synonyms, ordered locus and ORF names), in lower case. */
+const geneNames = (entry: Json): string[] => list(entry.genes).map(rec).flatMap((g) => [rec(g.geneName), ...list(g.synonyms), ...list(g.orderedLocusNames), ...list(g.orfNames)].map((n) => clean(rec(n).value).toLowerCase())).filter(Boolean)
 
 /** One UniProt entry as evidence items: function, disease involvement, natural variants, subcellular location. A part the entry does not have gives no item. */
 export function entryItems(entry: Json): EvidenceItem[] {
@@ -94,6 +97,10 @@ export async function uniprotSearch(query: string, http: Http): Promise<SourceRe
   for (const [i, q] of queries.entries()) {
     const entries = list(rec((await http.json("uniprot", searchUrl(q))).body).results).map(rec).filter((e) => accessionOf(e.primaryAccession))
     if (!entries.length) continue
+    // UniProt's relevance order can put another gene first ("TP53" gives TP53TG5 before TP53): an entry whose gene
+    // name or synonym is the one word asked for goes first.
+    const exact = entries.find((e) => geneNames(e).includes(query.trim().toLowerCase()))
+    if (exact) { entries.splice(entries.indexOf(exact), 1); entries.unshift(exact) }
     const items = entryItems(entries[0])
     const first = names(entries[0])
     const notices: string[] = []

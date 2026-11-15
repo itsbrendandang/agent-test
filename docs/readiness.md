@@ -13,17 +13,33 @@ and engines on port 8788:
 
 The shared tree changes while others work. Where something is only in the working tree it says so.
 
+> **Later change.** The `board:` list now also has `evidence-verifier`, a seventh member. It rechecks the Scout's sources in
+> every round (see `docs/drug-board.md`). The member counts and estimates in this report predate it.
+
+> **Update (branch `fm/engine-review-cost`).** The team-review roster changed after both passes. The `board:` list in
+> `board/config.yaml` has six members: scout, proposer, experimenter, methods-auditor, critic, reporter. The scout searches
+> (`exa_search`, `literature_search`, `database_search` in `board/agents/scout.md`). The lead has `converse` and
+> `write_memo` (`board/agents/lead-scientist.md`). The other members have no tool. Sections 1, 4, 6, 8 and 9 are corrected
+> for this, and section 10 is new. Sections 2, 3 and 5 record the two passes and describe the roster of that time.
+>
+> One real team review is recorded since, in `README.md` ("Where things stand", commit `dc37c8d`): 3 Exa searches,
+> 5 literature searches, 204 statements checked (71 supported, 28 without enough evidence, 105 not checked, none
+> contradicted), $1.31, 8 minutes. At that commit `board/config.yaml` already had this six-member roster. It is one run.
+> Its run folder and its tokens per model are not in the repo. A run's `run.json` now keeps tokens and cost per model
+> (`usage`, `engine/src/board/board.ts`) for the lead and the members. The checkers are kept as dollars only
+> (`firstPassUsd`, `checkerUsd`).
+
 Labels: **measured** = I ran it and saw it. **read** = from the code, not run. **unverified** = needs a paid call or a login.
 
 ## 1. Answer in five lines
 
 | Question | Answer |
 |---|---|
-| Does the board run end to end? | **Only scripted**, and that works (measured at both commits: brief, plan, start, events, memo, verdicts). It has never run with a real model: every recorded run in `board/runs` is scripted (`usd: 0`). |
+| Does the board run end to end? | **Yes, scripted** (measured at both commits: brief, plan, start, events, memo, verdicts), **and once with real models** (recorded in `README.md`: $1.31, 8 minutes, 204 statements checked; see the update at the top). The real run's folder is not in the repo. |
 | If `NO_PAID_CALLS` is off, does a real run now start? | **Yes, by the code (read; 39 tests of it pass).** Since the rewire, scripted mode is `paid off OR DRUG_BOARD_MOCK=1` only (`config.ts:50`). With the switch off and no key for a tier, the start fails with 503 naming the tier and key (`providers.ts`). It never silently goes scripted. **Not run live.** |
-| What does a real board run actually do today? | **Less than "research".** No role has a tool (`tools: []` in all nine `board/agents/*.md`; the experimenter's prompt says "You cannot run code on this board yet"). So no retrieved evidence, no computation. Literature claims are `unsupported` with no model call, computed claims are `unchecked`, and only claims about the brief's own tables can be `verified`. See section 6. |
+| What does a real board run actually do today? | **Searches, but computes nothing** (read from the code; one real run is recorded, row above). The scout searches the web (Exa, paid), PubMed and preprints (Europe PMC, free) and public databases (free). The first pass screens its results into an evidence pool, so a literature claim that cites a pool source can be checked. No other member has a tool, and no member can run code (the experimenter's prompt says "You cannot run code on this board yet"). So computed claims are `unchecked`, and a literature claim whose source is not in the pool is `unsupported` with no model call. See section 6. |
 | Does the swarm run end to end? | **Yes, scripted** (score 1.0, 20 s). With a real model it ran 3 times on the demo case, and the single agent once (recorded in `glhf/runs/real`). It is the only path that has produced real model output with tools (it runs code in Docker). |
-| First thing that breaks with the switch off | **The first paid call is the lead's Anthropic call** (`claude-sonnet-5-5`, the one id used for real before). The likeliest non-switch failures come next and are all unverified: ids never called by this repo (`claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini`), and the reasoning setting on `gpt-5-mini`. Section 6. |
+| First thing that breaks with the switch off | **The first paid call is the lead's Anthropic call** (`claude-sonnet-5-5`, the one id used for real before). The likeliest non-switch failures come next and are all unverified: ids with no call recorded per model in the repo (`claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini`), and the reasoning setting on `gpt-5-mini`. Section 6. |
 
 ## 2. Build and tests
 
@@ -44,7 +60,12 @@ The six engine failures at pass 2, run file by file:
 | `glhf-runs` | `M7: the refusal that asks for maxTokens…` | wording assertion; owned by the run-control agents |
 | `glhf-tracker` (2) | cloud-run tests | error text now asks for `billCloud`; tests predate it |
 
-Meaning: `npm test` is still not a clean gate. One of the six hurts any CI without secrets.
+Meaning at `b749e38`: `npm test` was not a clean gate. One of the six hurt any CI without secrets.
+
+**Measured again at `6e3cb2c` (2026-11-15, a keyless worktree, `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1`):**
+`cd engine && npx tsc --noEmit` gives 0 errors, `npm run lint` is clean, and `node --test test/*.test.ts` gives
+**457 pass, 0 fail** in 36 s. The six failures above no longer happen, also without keys. GitHub's checks pass on `main`.
+The dashboard and the Python suites were not re-run for this line.
 
 ## 3. Routes (measured at `0d3b50e`, with the dashboard's `Origin` header)
 
@@ -84,7 +105,7 @@ models", but the engine log printed `(mock models)` then `Paid calls: ON … can
 |---|---|---|
 | Scripted or real | scripted iff `NO_PAID_CALLS` is not `0` or `DRUG_BOARD_MOCK=1`. A missing key no longer means scripted. | `config.ts:50` |
 | A tier key missing in a real run | HTTP **503** from `POST /api/runs` and the plan start, CLI exit 3, naming each tier, model and key. Also checked on resume. | `providers.ts` `assertBoardKeys`, `board.ts:399,427`, `cli.ts:51` |
-| Which keys a real run needs | `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` (lead and strong, cheap, critic, first-pass). `EXA_API_KEY` only if a member has the search tool, which none has. No OpenRouter or TypeSafe key. | `providers.ts` `missingKeys` |
+| Which keys a real run needs | `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` (lead and strong, cheap, critic, first-pass), and `EXA_API_KEY`, because the scout has `exa_search`. No OpenRouter or TypeSafe key. | `providers.ts` `missingKeys`; `startRun` and `runBoard` in `board.ts` ask for Exa when a roster member has `exa_search` |
 | Start-up banner | `Board runs: SCRIPTED (paid calls are off)…` or `REAL (anthropic/…, openai/…)`, then the paid-calls line, then a warning if a real run would be refused. The contradiction is gone. | `server.ts`, `providers.ts` `boardModeLine` |
 | API response | `POST /api/runs` returns `{runId, scripted, mode}` | `app.ts:183` |
 
@@ -130,28 +151,30 @@ The 600 s result is the planner plus the scripted model, not a crash. For a real
 
 ## 6. What a real run would do, step by step (read; nothing live)
 
-### Board, current config
+### Board, current config (six members)
 
 Order in time, with the key each step needs:
 
 | Order | Step | Provider and key | What could fail for a reason other than the switch |
 |---|---|---|---|
 | 1 | Lead's kickoff call | Anthropic `claude-sonnet-5-5`, `ANTHROPIC_API_KEY` | Least risk: this id has run for real in the swarm. **This is the first paid call.** |
-| 2 | Nine roles reply in parallel | Haiku (scout, pilot, finisher), Sonnet (five), `gpt-5-mini` via OpenAI (critic) | `claude-haiku-5-5` and `gpt-5-mini` have never been called by this repo. `gpt-5-mini` cannot switch reasoning off; the critic uses the default, so a few thousand hidden tokens are billed. |
-| 3 | First-pass check of claims about the brief | Haiku (for the critic's claims), `gpt-4o-mini` (for the rest), JSON with a quote, reasoning off or `minimal` | `gpt-4o-mini` never used here. Whether the providers honour the reasoning setting: unverified. A malformed reply is never `verified`; it escalates. |
-| 4 | Escalation of what the first pass cannot settle | OpenAI `gpt-5-mini` | **Not vendor-aware** (`board.ts:580`): a claim by the OpenAI critic is escalated to OpenAI. Reported to `direct-providers`. |
-| 5 | Literature claims | none | `unsupported`, no call: "source is not in the screened evidence pool" |
-| 6 | Computed claims | none | `unchecked`, `claude` is not called. `claude` 2.1.311 is installed and its help lists `--restricted`; unused today. |
-| 7 | Memo | lead model | none known |
+| 2 | The scout searches and replies first; then the other five reply in parallel | Haiku (scout), Sonnet (proposer, experimenter, methods-auditor, reporter), `gpt-5-mini` via OpenAI (critic); Exa with `EXA_API_KEY` for the scout's web searches | No call to `claude-haiku-5-5` or `gpt-5-mini` is recorded per model in the repo (the real run in `README.md` kept no record per model). `gpt-5-mini` cannot switch reasoning off; the critic uses the default, so a few thousand hidden tokens are billed. Exa from the board's code: the real run made 3 searches. |
+| 3 | Screening of each search's new results | the cheap tier (Haiku), one call per search (`triage` in `triage.ts`) | Kept results go into the evidence pool. |
+| 4 | First-pass check of claims about the brief or about a source in the pool | Haiku (for the critic's claims), `gpt-4o-mini` (for the rest), JSON with a quote, reasoning off or `minimal` | No call to `gpt-4o-mini` is recorded per model in the repo. Whether the providers honour the reasoning setting: unverified. A malformed reply is never `verified`; it escalates. |
+| 5 | Escalation of a claim the first pass cannot settle (not a computed one) | **Vendor-aware now:** `escalationModel` (`engine/src/providers.ts`) picks OpenAI `gpt-5-mini` for a Claude member's claim and the strong-tier Claude model for the critic's claim; `engine/src/board/board.ts` calls it. With no model of another vendor the claim is recorded `unchecked`. | Whether the real run escalated a claim is not recorded in the repo. |
+| 6 | Literature claim whose source is not in the pool | none | `unsupported`, no call: "source is not in the screened evidence pool" |
+| 7 | Computed claims | none | `unchecked`, `claude` is not called. `claude` 2.1.311 is installed and its help lists `--restricted`; unused today. |
+| 8 | Memo | lead model | none known |
 
 Money guards (read): the spend cap counts models, first pass, checkers and Exa; a round is refused when the last round's cost
 would pass `max_usd`; no paid call is made after the cap. The first round cannot be predicted, so it can overshoot.
 
-**What the output is.** Nine models reasoning over one brief, with every claim about the brief's table checked by a
-different vendor's model that must quote the table. It shows the machinery. It is not research: no retrieved evidence, no
-computation. The brief itself says its data is "illustrative placeholders". To make it research, a role needs a tool (the
-cheapest: `tools: [exa_search]` on the scout, plus a prompt line telling it to search; then `EXA_API_KEY` is needed and the Exa
-path, dormant today, wakes up). That is a decision for the owner, not something I changed.
+**What the output is.** Six members reasoning over one brief and the scout's screened sources. Each claim about the
+brief or about a source in the pool is checked by a different vendor's model that must quote the source. No member
+computes anything, so computed claims stay `unchecked`. The demo brief says its data is "illustrative placeholders", so
+claims about its tables restate placeholders. One real run is recorded (`README.md`): 204 statements checked, 71
+supported, 28 without enough evidence, 105 not checked (75 of them calculations, which the checker cannot re-run), none
+contradicted.
 
 ### Swarm (unchanged)
 
@@ -181,64 +204,87 @@ that costs nothing (no inference):
 ## 8. What I could not verify without spending
 
 - That `claude-haiku-5-5`, `gpt-5-mini`, `gpt-4o-mini` resolve on the accounts, and that the reasoning setting is honoured.
-- That a real model writes the `CLAIMS` section the checkers read (a real run that produces no claims has nothing to check).
-- Real token counts, cache hits and cost of any board run (cost.md is a model).
-- That Exa works from the board's code (dormant now) and its real price per search.
+- That real models write the `CLAIMS` section reliably. Shown once: the real run in `README.md` checked 204 statements.
+- Real token counts and cache hits of a board run, and its cost split by model. The one real run cost $1.31 in total
+  (`README.md`) but kept no tokens per model. `docs/cost.md` is a model of the old 9-role roster. A run's `run.json` now
+  records tokens and cost per model (`usage`) for the lead and the members, so the next real run will show them. The
+  checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`).
+- Exa's real price per search (the config's $0.007 comes from 2 live searches).
 - That the structured JSON reply is accepted by each provider.
 - The dashboard in a browser; the Python suite and dashboard `tsc` at pass 2.
 
 ## 9. To do one real run
 
-**Conditional on the rewire being merged and its tests green** (it is in the working tree, uncommitted at the time of
-writing). The payer makes one decision (step 4). Everything before it is free. `NO_PAID_CALLS=0` is given **for one command
-only** (the process environment wins over `.env`), so nothing stays enabled; do not put it in `.env` unless you want that.
-Needed keys: `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in `.env`. No OpenRouter or TypeSafe key.
+For today's roster (six members, the scout searches). Nothing below edits `board/config.yaml`. The payer makes one decision
+(step 3). Everything before it is free. `NO_PAID_CALLS=0` is given **for one command only** (the process environment wins
+over `.env`), so nothing stays enabled; do not put it in `.env` unless you want that. Needed keys in `.env`:
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `EXA_API_KEY` (the scout's web search). No OpenRouter or TypeSafe key.
 
 ```bash
-# 0. Be in the repo, with the switch ON for everything free.
-cd /Users/brendandang/AI/workspace/drug-board
+# 0. Be at the root of the repository, with paid calls off for everything free.
+cd "$(git rev-parse --show-toplevel)"
 export NO_PAID_CALLS=1
 
-# 1. The rewire must be in, and nothing live may still name the removed providers.
-git status --short engine/src board/config.yaml
-git grep -nIi 'openrouter\|typesafe\|jev' -- engine/src board/config.yaml .env.example     # expect: no live code or config hits
+# 1. Read the roster and the caps the real run will use. Change nothing.
+grep -n -A7 '^board:' board/config.yaml          # expect scout, proposer, experimenter, methods-auditor, critic, reporter
+grep -n -E '^  (max_usd|max_rounds|max_searches|max_escalations|daily_usd):' board/config.yaml
 
 # 2. Free gates. All must pass before any money is spent.
-(cd engine && npx tsc --noEmit && npm test)       # expect 0 errors and 0 failures (today: see section 2)
-npm run board -- board/briefs/kras-g12c-hit-to-lead.md    # scripted control: prints a memo and claim verdicts, first line says SCRIPTED
+npm run check                                     # health report, about 3 minutes; it forces paid calls off. Every line must say ok
+npm run board -- board/briefs/kras-g12c-hit-to-lead.md   # practice run: searches, claim verdicts, a memo, ends "finished: $0.000"
 
-# 3. Demo A configuration (docs/cost.md section 7): 4 roles, 2 rounds, small caps. Back up, then edit.
-cp board/config.yaml /tmp/config.yaml.bak
-sed -i '' -e 's/^  max_usd: .*/  max_usd: 1/' -e 's/^  max_rounds: .*/  max_rounds: 2/' \
-          -e 's/^  max_escalations: .*/  max_escalations: 3/' -e 's/^  member_turns: .*/  member_turns: 4/' board/config.yaml
-sed -i '' -e '/^  - pilot/d' -e '/^  - experimenter$/d' -e '/^  - methods-auditor$/d' -e '/^  - reviser$/d' -e '/^  - finisher$/d' board/config.yaml
-git diff board/config.yaml                         # confirm: caps changed, roster is scout, proposer, critic, reporter
-
-# 4. THE PAYER'S DECISION. Only the person who pays sets this, for this one command.
-NO_PAID_CALLS=0 npm run board -- board/briefs/kras-g12c-hit-to-lead.md
+# 3. THE PAYER'S DECISION. Only the person who pays sets this, for this one command.
+#    --max-usd only lowers this run's spend cap (here to $2, from the config's $5). It never raises it.
+NO_PAID_CALLS=0 npm run board -- board/briefs/kras-g12c-hit-to-lead.md --max-usd 2
 #    If a key is missing it stops at once (exit 3), naming the tier and key, and spends nothing.
 
-# 5. Check it was real, not scripted. All must hold.
-RUN=$(ls -t board/runs | grep -v '^\.' | head -1)
+# 4. Check it was real, not scripted. All must hold.
+RUN=$(ls -t board/runs | grep -v '^\.' | head -1)   # or the id the command printed after "run"
 grep -c '"mock": true' board/runs/$RUN/run.json    # expect 0
-node -e 'const s=require("./board/runs/'"$RUN"'/run.json"); console.log("usd", s.usd, "firstPassUsd", s.firstPassUsd, "escalations", s.escalations, "mock", s.mock, "costEstimated", s.costEstimated)'
-sed -n 1,40p board/runs/$RUN/memo.md
+node -e 'const s=require(process.argv[1]); console.log("usd", s.usd, "firstPassUsd", s.firstPassUsd, "checkerUsd", s.checkerUsd, "escalations", s.escalations, "mock", s.mock, "costEstimated", s.costEstimated); for (const [m, u] of Object.entries(s.usage ?? {})) console.log(m, "in", u.input, "out", u.output, "cacheRead", u.cacheRead, "cacheWrite", u.cacheWrite, "usd", u.cost?.total)' "$PWD/board/runs/$RUN/run.json"
+head -40 board/runs/$RUN/memo.md
 # usd 0 or mock true: stop, it was not a real run. costEstimated true: a price was missing, the cap used a fallback.
-
-# 6. Restore the config. The switch was never exported as 0.
-cp /tmp/config.yaml.bak board/config.yaml
 ```
 
 Notes:
 
-- The roster `sed` was tested on a copy of `board/config.yaml`: it removes pilot, experimenter, methods-auditor, reviser and
-  finisher, and leaves `scout`, `proposer`, `critic` and `reporter`. Check the `git diff` anyway.
-- A real run writes each role's verified and contradicted claims into `board/expertise/<member>.md` (tracked files,
-  `memory.enabled: true`), and they are read into that role's next run. Review `git diff board/expertise`, or set
-  `memory.enabled: false` in step 3.
-- Expected cost: about **$0.10, plausible $0.05 to $0.25** (estimate; `docs/cost.md` section 7). The hard stop is `max_usd: 1`
-  plus whatever round 1 costs.
-- This run shows the machinery on illustrative data. It does not retrieve evidence or compute anything (section 6).
+- Step 1, the practice run of step 2 and the step-4 commands were run on this branch with paid calls off (step 4 then
+  shows `mock true`, `usd 0` and scripted token counts). Step 3 was not run.
+- The run uses the whole roster. The lead decides the number of rounds, up to `max_rounds` (4). A team-review plan
+  (`POST /api/chat`, then start) can only narrow the members and limits (`applyOverrides` in
+  `engine/src/board/board.ts`); its model tier and search cap are not applied.
+- A real run writes each member's verified and contradicted claims into `board/expertise/<member>.md` (tracked files,
+  `memory.enabled: true`), and they are read into that member's next run. Review `git status board/expertise` and
+  `git diff board/expertise` before you commit anything.
+- **Expected cost.** The one real run recorded on this roster cost $1.31 and took 8 minutes (`README.md`). That is one
+  run, not an estimate. A cap below it may end this run early, because the lead is told to wrap up at the cap. The old
+  estimate (about $0.10, `docs/cost.md` section 7) was for the old roster with no searches. The cap is checked before
+  each round, with the last round's cost as the guess for the next one, and after a limit one final round may still run
+  (`gateRound` and `overLimit` in `engine/src/board/board.ts`). So a run can pass `--max-usd` by about one round's cost.
+  Exa searches count in the cap (`max_searches: 20` a run).
+- After the run, put its `usage` numbers into `docs/cost.md` in place of the estimate.
+- The demo brief's data is "illustrative placeholders". The run shows the machinery and the scout's sources. It computes
+  nothing (section 6).
 - Optional, the swarm on the demo case (measured $0.23 to $0.38; done before, proves nothing new):
   `NO_PAID_CALLS=0 npm run glhf -- run --mode local --solver glhf --model anthropic/claude-sonnet-5-5 --max-tokens 400000 --follow`
 - To stop: `Ctrl-C`; `NO_PAID_CALLS=0 npm run resume <run-id>` continues it later.
+
+## 10. Direct answers on the Research screen
+
+The Research screen (`Home` in `dashboard/src/nav.ts`; older documents call it the Search screen) first asks the engine
+for a direct answer (`POST /api/research`, [research-answer.md](research-answer.md)). In Real mode the engine refuses it
+with 503 unless the engine was started with `RESEARCH_PREVIEW=1` (`previewOn` in `engine/src/research/preview.ts`, used
+in `engine/src/research/routes.ts`). The screen then asks for a team-review plan instead (`dashboard/src/views/HomeView.tsx`).
+Demo mode needs no switch.
+
+This branch makes that state visible:
+
+- the engine prints a start-up line that begins `Direct answers` and says ON or OFF (`previewLine`, called in
+  `engine/src/server.ts`);
+- `GET /api/status` has `researchPreview` (the switch) and `directAnswers` (whether a question gets an answer now)
+  (`engine/src/app.ts`);
+- the Research screen shows a note under the question box when direct answers are off (`DIRECT_ANSWERS_OFF` in
+  `dashboard/src/research/api.ts`, shown by `dashboard/src/views/HomeView.tsx`).
+
+Turning it on is the payer's decision: it is a paid path, with its own cap per answer (`research:` in
+`board/config.yaml`). What it costs: [cost.md section 10](cost.md#10-the-research-answer-research-screen).

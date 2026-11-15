@@ -5,6 +5,7 @@ import { REAL_ANSWER, REVIEW_WITH_VISITOR, T0 } from "@/lab/fixtures/streams"
 import type { LabEvent } from "@/lab/adapter"
 import { forgetScripted } from "@/lib/scripted"
 import { routes } from "@/test/engine"
+import { choose } from "@/test/menus"
 import { LabView } from "./LabView"
 import { CLAIMS_BOARD, CLAIMS_EVENTS, CLAIMS_NOTES } from "@/lab/fixtures/claims"
 
@@ -90,9 +91,9 @@ describe("Agent Log view", () => {
     expect(screen.getByText("No events match these filters.")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
     expect(screen.queryByText("No events match these filters.")).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole("combobox", { name: "Kind of step" }), { target: { value: "run" } })
-    expect(screen.getByRole("combobox", { name: "Kind of step" })).toHaveValue("run")
-    expect(screen.getByRole("button", { name: "Download JSON" })).toBeEnabled()
+    choose(screen.getByRole("combobox", { name: "Kind of step" }), /^Run/)
+    expect(screen.getByRole("combobox", { name: "Kind of step" })).toHaveTextContent("Run")
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled()
   })
 
   it("keeps a watched run when it finishes and only ever reads", async () => {
@@ -102,7 +103,7 @@ describe("Agent Log view", () => {
     const source = FakeSource.to("r-live")[0]
     await emit(source, ...REVIEW_WITH_VISITOR)
     await tick(2500)
-    expect(screen.getByRole("combobox", { name: "Run shown in the Agent Log" })).toHaveValue("board/r-live")
+    expect(screen.getByRole("combobox", { name: "Run shown in the Agent Log" })).toHaveTextContent("Placeholder")
     expect(screen.getByText(/Finished run ·/)).toBeInTheDocument()
     unmount()
     await tick(20000)
@@ -114,7 +115,7 @@ describe("Agent Log view", () => {
     engine({ board: [DONE_REVIEW], answers: [DONE_ANSWER] })
     const { unmount } = render(<LabView />)
     await tick(0)
-    fireEvent.change(screen.getByRole("combobox", { name: "Run shown in the Agent Log" }), { target: { value: "board/r-practice" } })
+    choose(screen.getByRole("combobox", { name: "Run shown in the Agent Log" }), /Team review/)
     await tick(0)
     await emit(FakeSource.to("/api/runs/r-practice/events")[0], ...PRACTICE_REVIEW)
     expect(screen.getByRole("heading", { name: "KRAS G12C hit-to-lead (illustrative data)" })).toBeInTheDocument()

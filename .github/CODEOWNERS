@@ -11,3 +11,5 @@
 
 # The key template: it must never hold a real value.
 /.env.example @itsbrendandang
+
+/dashboard/src/design/ @Anhlam09 @itsbrendandang

@@ -8,8 +8,11 @@ import { RecordList, type RecordItem } from "@/components/RecordRow"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { problemOf, readEngine, tracked, type Problem } from "@/lib/engine"
 import { fmtScore, runTitle } from "@/lib/format"
+import { graphLink, logLink } from "@/lib/links"
 import { setOpenAnswer, viewOfKind } from "@/lib/open"
 import { provenanceOf, type ProvenanceKind } from "@/lib/provenance"
+import { Provenance } from "@/components/Provenance"
+import "@/design/examples.css"
 import { mendTitle } from "@/lib/words"
 import { groupRecords } from "@/lib/records"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
@@ -17,12 +20,13 @@ import { runState } from "@/lib/status"
 import type { GlhfRun } from "@/swarm/api"
 
 interface Hit {
+  example?: boolean
   /** "answer": a direct, sourced answer from Research. Its title is the question that was asked. */
   kind: "swarm" | "board" | "answer"; id: string; title: string; status: string; startedAt: number; score?: number; mode?: "real" | "demo"
   matches: { where: string; text: string }[]
 }
-type Kind = "all" | "answer" | "swarm" | "board"
-const KIND_WORD: Record<Kind, string> = { all: "All", answer: "Answers", board: "Team reviews", swarm: "Benchmark runs" }
+type Kind = "all" | "answer" | "swarm" | "board" | "examples"
+const KIND_WORD: Record<Kind, string> = { all: "All", answer: "Answers", board: "Team reviews", swarm: "Benchmark runs", examples: "Examples" }
 /** How many rows before "View all N". */
 const FIRST = 10
 
@@ -59,7 +63,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
     void list<RunSummary>("/api/runs", stop.signal).then((rows) => { if (!stop.signal.aborted) setReviews(byId(rows)) })
     return () => stop.abort()
   }, [anyHits])
-  const shown = useMemo(() => (hits ?? []).filter((h) => kind === "all" || h.kind === kind), [hits, kind])
+  const shown = useMemo(() => (hits ?? []).filter((h) => kind === "examples" ? h.example : !h.example && (kind === "all" || h.kind === kind)), [hits, kind])
   const boardIds = useMemo(() => shown.filter((h) => h.kind === "board").map((h) => h.id), [shown])
   const boardFlags = useBoardScripted(boardIds)
   const questions = boardTitles(boardIds)
@@ -78,7 +82,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
   }
 
   const madeBy = (h: Hit): ProvenanceKind | undefined =>
-    h.kind === "answer" ? provenanceOf({ mode: h.mode }) : h.kind === "swarm" ? provenanceOf({ model: swarmRuns[h.id]?.model }) : provenanceOf({ scripted: boardFlags[h.id] })
+    h.example ? "example" : h.kind === "answer" ? provenanceOf({ mode: h.mode }) : h.kind === "swarm" ? provenanceOf({ model: swarmRuns[h.id]?.model }) : provenanceOf({ scripted: boardFlags[h.id] })
   const row = (h: Hit): RecordItem => {
     const run = swarmRuns[h.id], review = reviews[h.id]
     const state = runState(h.status, h.kind !== "swarm" || h.score !== undefined)
@@ -98,6 +102,11 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
         </>
       ),
       onOpen: () => open(h),
+      // The same record in the Agent Log, and a review or benchmark run as a graph.
+      links: [
+        { label: "Agent Log", href: logLink({ kind: h.kind, id: h.id }), title: "Every event of this run, agent by agent" },
+        ...(h.kind !== "answer" ? [{ label: "Graph", href: graphLink(h.kind, h.id), title: "Who said what in this run, and how it was checked" }] : []),
+      ],
     }
   }
   // The same brief, made the same way: the engine's own title for the record (a review's brief file, a task with its
@@ -112,7 +121,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
         <input type="search" name="experiment-search" aria-label="Search saved research by word" autoComplete="off" value={query}
           placeholder="Type a word, for example: hERG" onChange={(e) => setQuery(e.currentTarget.value)} />
         <div role="group" aria-label="Kind of record" className="exp-kinds">
-          {(["all", "answer", "board", "swarm"] as const).map((k) => (
+          {(["all", "answer", "board", "swarm", "examples"] as const).map((k) => (
             <button key={k} type="button" className="btn" aria-pressed={kind === k} onClick={() => setKind(k)}>{KIND_WORD[k]}</button>
           ))}
         </div>
@@ -126,7 +135,16 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
           {query.trim() && shown.length > 0 && <> · keyword matches, newest first</>}
         </p>
       )}
-      {items.length > 0 && <RecordList items={items} label="Saved research" initial={FIRST} noun="row" emphasis={mark} />}
+      {kind === "examples" ? <section aria-label="Examples" className="example-library">
+        {shown.map((h, i) => <article className="example-card" key={h.id}>
+          <span className="example-number" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+          <Provenance kind="example" />
+          <h2><button type="button" className="link-btn" onClick={() => open(h)}>{h.title}</button></h2>
+          <p>{h.kind === "board" ? "Team review" : "Research answer"} · {h.status === "cancelled" ? "Stopped before completion" : h.status === "failed" ? "Failed" : "Finished"}</p>
+          <p className="muted small">Scripted demonstration, not scientific evidence. Read-only; nothing will be run.</p>
+          <div className="example-actions"><a href={logLink({ kind: h.kind, id: h.id })}>Agent Log</a><a href={`#Overview/example/${h.kind}/${h.id}`}>View in Overview Lab</a></div>
+        </article>)}
+      </section> : items.length > 0 && <RecordList items={items} label="Saved research" initial={FIRST} noun="row" emphasis={mark} />}
       {hits && shown.length === 0 && !error && (query.trim()
         ? <p className="empty-note">No saved research has these words. Try fewer words, or another word.</p>
         : <p className="empty-note">Nothing has been researched yet. Ask a question on <a href="#Home">Research</a>; what it finds is saved here.</p>)}
