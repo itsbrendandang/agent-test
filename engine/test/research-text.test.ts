@@ -156,6 +156,8 @@ test("recommendations: one is kept only with a basis of kept sources that back a
   assert.match(kept[1].text, /Drug X cures everything/)
   assert.deepEqual(kept[1].basis, [2])
   assert.deepEqual(buildRecommendations({ ...base, proposed: [line({ basis: [3] })] }).map((k) => k.label), ["Needs verification"], "a basis that no checked sentence cites is no basis")
+  for (const [why, bad] of [["names a source that does not exist beside a real one", { basis: [1, 9] }], ["gives advice", { text: "You should stop taking the drug." }], ["carries a web address", { does: "See www.evil.example for the rest." }], ["has no basis", { basis: [] }]] as const)
+    assert.deepEqual(buildRecommendations({ ...base, proposed: [line(bad)] }).map((k) => k.label), ["Needs verification"], `a proposal that ${why} is dropped`)
   assert.deepEqual(buildRecommendations({ sources: 3, statements: [], notes: [], proposed: [line({})] }), [], "no checked sentence: no recommendation")
   const team = buildRecommendations({ ...base, proposed: [line({}), line({ label: "Alternative", text: "Another option to look at." })], notes: [{ index: 0, reviewer: "critic", severity: "major", text: "The direct answer overclaims.", statement: null, resolved: false }] })
   assert.equal(team.length, 3)

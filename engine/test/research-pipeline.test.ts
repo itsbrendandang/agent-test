@@ -191,6 +191,7 @@ test("when the web search cannot be used the answer goes on and says so: no key,
       const ledger = join(e.runs, ".exa-ledger.jsonl")
       const net = existsSync(ledger) ? readFileSync(ledger, "utf8").trim().split("\n").reduce((sum, l) => sum + (JSON.parse(l) as { usd: number }).usd, 0) : 0
       assert.ok(Math.abs(net) < 1e-9, `${name}: a search that did not run is not charged`)
+      if (name !== "service error") assert.ok(!existsSync(ledger), `${name}: nothing was even reserved`)
     } finally { await e.close() }
   }
 })
@@ -241,6 +242,26 @@ test("levels: quick makes exactly one web search whatever the planner asks for; 
     assert.equal(of(out.events, "research.finished")[0].searches.exa, 3)
     assert.equal(Math.round(readFileSync(join(standard.runs, ".exa-ledger.jsonl"), "utf8").trim().split("\n").reduce((s, l) => s + (JSON.parse(l) as { usd: number }).usd, 0) * 1e6) / 1e6, 0.015)
   } finally { await standard.close() }
+})
+
+test("standard: a database lookup is a search step of its own; a record that is on the question is kept although it reports no results of its own", async () => {
+  const plan = (call: Parameters<typeof DEFAULTS.plan>[0], n: number) => JSON.stringify({ ...JSON.parse(DEFAULTS.plan(call, n)), databases: [{ source: "clinicaltrials", query: "semaglutide obesity" }, { source: "notadatabase", query: "x" }] })
+  // A screening that says of everything: on the question, but no findings of its own.
+  const screen = (call: { user: string }) => JSON.stringify({ items: [...call.user.matchAll(/<passage i="(\d+)">/g)].map((m) => ({ i: Number(m[1]), answers_question: "yes", reports_results: "no", study_type: "clinical" })) })
+  const asked: [string, string][] = []
+  const record = { url: "https://clinicaltrials.gov/study/NCT03574597", title: "Semaglutide Effects on Heart Disease and Stroke (NCT03574597)", text: "ClinicalTrials.gov record NCT03574597. Status: Completed. Enrollment: 17604 participants. Intervention: Semaglutide 2.4 mg once weekly." }
+  const e = await engine({ script: { plan, screen }, deps: { database: async (source, query) => { asked.push([source, query]); return { items: [record], notices: [] } } } })
+  try {
+    const standard = await paidAllowed(() => e.answer({ question: Q, effort: "standard" }))
+    assert.deepEqual(asked, [["clinicaltrials", "semaglutide obesity"]], "one lookup, and only in a database on the list")
+    assert.deepEqual([step(standard.events, "search:clinicaltrials:1").started?.label, step(standard.events, "search:clinicaltrials:1").finished?.status, step(standard.events, "evaluate:clinicaltrials:1").finished?.kept], ["Searching ClinicalTrials.gov database", "completed", 1])
+    assert.deepEqual(standard.record.sources.map((s) => [s.provider, s.url]), [["clinicaltrials", record.url]], "papers and pages with no findings of their own are dropped; the registry record stays")
+    assert.equal(of(standard.events, "selection")[0].selected[0].limitation, "A database record, not a paper.")
+    assert.ok(of(standard.events, "selection")[0].notSelected.every((n) => n.reason === "Screened as background only: it reports no findings of its own and is not a review." || /No text came back/.test(n.reason)))
+    const quick = await paidAllowed(() => e.answer({ question: Q, effort: "quick" }))
+    assert.equal(asked.length, 1, "quick: no database lookup")
+    assert.deepEqual(quick.record.sources, [])
+  } finally { await e.close() }
 })
 
 test("a follow-up gets the thread as context, searches again, and may list an earlier source again under a new number", async () => {
