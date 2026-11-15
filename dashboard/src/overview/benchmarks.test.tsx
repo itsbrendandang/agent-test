@@ -40,8 +40,8 @@ describe("benchmark numbers", () => {
 
 describe("who made a model", () => {
   it("is read from the id without calling an OpenAI-style endpoint OpenAI", () => {
-    expect(modelFacts("openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8")).toEqual({ name: "Qwen/Qwen3.6-35B-A3B-FP8", servedBy: "an open model, served on our own Modal endpoint" })
-    expect(modelFacts("openai-api/lab/mistralai/Ministral")).toEqual({ name: "mistralai/Ministral", servedBy: "served on our own endpoint (lab)" })
+    expect(modelFacts("openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8")).toEqual({ name: "Qwen3.6-35B-A3B-FP8", servedBy: "open model (Alibaba), run on Modal" })
+    expect(modelFacts("openai-api/lab/mistralai/Ministral")).toEqual({ name: "Ministral", servedBy: "open model (Mistral), run on our own endpoint (lab)" })
     expect(modelFacts("openai/gpt-5.5")).toEqual({ name: "gpt-5.5", servedBy: "OpenAI's own service" })
     expect(modelFacts("ollama/qwen2.5:14b")).toEqual({ name: "qwen2.5:14b", servedBy: "an open model, run on this computer" })
     expect(modelFacts("something-else")).toEqual({ name: "something-else", servedBy: "" })
@@ -70,9 +70,9 @@ describe("the Benchmarks card", () => {
     const text = () => document.body.textContent ?? ""
     // Set out as an evaluation: the model's full id, the setup, and a row per solver.
     // An open model reached through an OpenAI-style endpoint is not OpenAI's, and is not shown as if it were.
-    expect(text()).toContain("Qwen/Qwen3.6-35B-A3B-FP8 (an open model, served on our own Modal endpoint)")
+    expect(text()).toContain("Qwen3.6-35B-A3B-FP8 · open model (Alibaba), run on Modal")
     expect(text()).not.toContain("openai-api")
-    expect(text()).toContain("claude-sonnet-5-5 (Anthropic's own service)")
+    expect(text()).toContain("claude-sonnet-5-5 · Anthropic's own service")
     expect(text()).toContain("Like for like: both had the same token limit")
     expect(text()).toContain("Not like for like")
     expect(text()).toContain("our own rules per question type")

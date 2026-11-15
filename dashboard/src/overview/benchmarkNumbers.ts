@@ -83,7 +83,13 @@ export const pricedByToken = (model: string): boolean => /^(anthropic|openai|goo
  */
 export function modelFacts(model: string): { name: string; servedBy: string } {
   const own = /^openai-api\/([^/]+)\/(.+)$/.exec(model)
-  if (own) return { name: own[2], servedBy: own[1] === "openmodels" ? "an open model, served on our own Modal endpoint" : `served on our own endpoint (${own[1]})` }
+  if (own) {
+    const [maker, ...rest] = own[2].split("/")
+    const OPEN: Record<string, string> = { Qwen: "Alibaba", mistralai: "Mistral", "google": "Google", moonshotai: "Moonshot" }
+    const made = rest.length && OPEN[maker] ? ` (${OPEN[maker]})` : ""
+    const name = rest.length ? rest.join("/") : own[2]
+    return { name, servedBy: own[1] === "openmodels" ? `open model${made}, run on Modal` : `open model${made}, run on our own endpoint (${own[1]})` }
+  }
   const local = /^ollama\/(.+)$/.exec(model)
   if (local) return { name: local[1], servedBy: "an open model, run on this computer" }
   const [maker, ...rest] = model.split("/")
