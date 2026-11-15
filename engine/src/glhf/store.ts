@@ -39,6 +39,8 @@ export function settingsOf(request: Partial<RunRequest>): RunSettings {
   if (request.memory) out.memory = true
   if (request.seed) out.seed = request.seed
   if (request.effort) out.effort = request.effort
+  // Another machine and image for the analyses: a run on Modal is not compared with one on this machine.
+  if (request.analysisBackend === "modal") out.analysisBackend = "modal"
   // Two different case folders under the same task label are different experiments.
   if (request.caseDir && resolve(request.caseDir) !== DEMO_CASE) out.caseId = createHash("sha1").update(resolve(request.caseDir)).digest("hex").slice(0, 8)
   return out

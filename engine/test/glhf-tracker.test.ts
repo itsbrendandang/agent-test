@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { alive, parseStamp, stamp, startTime } from "../src/glhf/proc.ts"
-import { BadId, runDir, safeId, settingsOf, type Stored } from "../src/glhf/store.ts"
+import { BadId, RUNS, runDir, safeId, settingsOf, type Stored } from "../src/glhf/store.ts"
 import type { GlhfRun, RunRequest } from "../src/glhf/types.ts"
 import { findManifest, hasRival, manifestSolver, processState, startOnce } from "../src/glhf/task.ts"
 import { BadRequest, checkRequest, lock, TrackerBusy } from "../src/glhf/tracker.ts"
@@ -72,7 +72,7 @@ test("run ids are one safe path segment", () => {
   for (const id of ["202611141959-demo-glhf", "a.b_c-1"]) assert.ok(safeId(id))
   for (const id of [".", "...", "../../board/runs/x", "..", "a/b", "a\\b", "", "a..b", "a b", "%2e%2e", "x".repeat(201), 5, undefined]) assert.ok(!safeId(id), String(id))
   assert.throws(() => runDir("../../board/runs/x"), BadId)
-  assert.match(runDir("ok-run"), /glhf\/runs\/ok-run$/)
+  assert.equal(runDir("ok-run"), join(RUNS, "ok-run"))
 })
 
 test("a manifest is adopted only for the same solver", () => {

@@ -416,6 +416,12 @@ cost would pass it). `--sandbox modal` is a paid call: it is refused unless `NO_
 exactly `0`, like a real model. The image is already published in the owner's workspace. On
 another Modal account, build it there and check it (next section).
 
+The engine's swarm runs use this same sandbox when `ANALYSIS_BACKEND=modal` is set
+(`src/bixbench_v1/glhf_modal.py` and `glhf_modal_sandbox.py`, provider `glhf_modal`): the same
+plan, probe, environment check, copy-out, ledger and termination, plus `/workspace` for the
+BixBench3 swarm, one sandbox per run, and the case's `data/` folder as the upload. Tests:
+`tests/glhf_modal_test.py` (fake Modal). See `docs/configuration.md` in the repository root.
+
 ### The same environment on any Modal account
 
 The analysis environment (R 4.3.3 with 333 R packages, 843 conda packages, the BUSCO image) is

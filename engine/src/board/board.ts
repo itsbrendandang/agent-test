@@ -42,6 +42,7 @@ import { databaseLive, databaseOnce, type DatabaseSource, DEFAULT_MAX_DATABASE_S
 import { maxSearches, reserveSearch, settleSearch } from "../paid/exaledger.ts"
 import { researchSpentToday } from "../research/spend.ts"
 import { mirrorMemo, mirrorRun } from "../db/supabase.ts"
+import { glhfModalSpentToday } from "../glhf/modal.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "../models.ts"
 import { holder, take } from "../runlock.ts"
@@ -166,7 +167,8 @@ export function spentToday(config: BoardConfig, now = new Date()): number {
     const inFlight = !state.finished && !state.mock && lockHolder(`${dir}/${id}`) !== undefined
     usd += inFlight ? Math.max(today, config.meeting.max_usd) : today
   }
-  return usd + researchSpentToday(config, now) // the research answers (research/) count against the same daily cap
+  // The research answers (research/) and the swarm runs whose analyses ran on Modal (glhf/modal.ts) count against the same daily cap.
+  return usd + researchSpentToday(config, now) + glhfModalSpentToday(now)
 }
 
 /** Throws BudgetReached once today's runs have used the daily cap. Scripted runs cost nothing and always pass. */

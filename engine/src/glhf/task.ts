@@ -13,6 +13,7 @@ import { resolve } from "node:path"
 import type { Context } from "@earendil-works/chord/context"
 import { defineTask, type TaskRuntime } from "@earendil-works/pi-durable"
 import { childEnv, HOW_TO_ALLOW, paidCallsOff } from "../paid/paid.ts"
+import { type ModalCleanup, modalArgs, modalNote, modalRunDir, modalRunner, modalSpent, onModal, terminateModal } from "./modal.ts"
 import { alive, parseStamp, stamp } from "./proc.ts"
 import { bixbenchDir, DEMO_CASE, listStored, loadStored, MEMORY, patchRun, readJson, readText, runDir, runFile, type Stored, tail, trackerLog } from "./store.ts"
 import { type GlhfRun, type RunRequest, settled, type Usage } from "./types.ts"
@@ -246,26 +247,47 @@ export function sandboxNote(sandbox: SandboxCleanup | undefined): string {
   return sandbox.left.length ? `${sandbox.left.length} of ${n} could not be removed (${sandbox.left.join(", ")}); remove with \`docker rm -f\`` : `${n} removed`
 }
 
-export interface Stopped { runner: "stopped" | "none" | "stuck"; sandbox: SandboxCleanup | undefined }
+/** `modal`: what the last net did about the run's Modal sandboxes (runs on Modal only; see modal.ts terminateModal). */
+export interface Stopped { runner: "stopped" | "none" | "stuck"; sandbox: SandboxCleanup | undefined; modal?: ModalCleanup }
 const stopping = new Map<string, Promise<Stopped>>()
 
 /**
  * Stop the local runner of a run folder (stopAndWait), then remove the sandbox containers it left: they belong
  * to the Docker daemon, not to the runner's process group, and stay when the runner did not get to clean up.
+ * A run on Modal gets longer after SIGINT (GLHF_MODAL_CANCEL_INT_MS, 90 s), because its runner copies the outputs
+ * back and terminates its sandboxes over the network; then the sandboxes it may have left are terminated by tag.
  * Two callers at once (a cancel and the watcher) share one attempt.
  */
 export function stopRun(dir: string, options?: StopOptions): Promise<Stopped> {
   const going = stopping.get(dir)
   if (going) return going
   const attempt = (async () => {
-    const runner = await stopAndWait(dir, "runner", options)
-    return { runner, sandbox: await removeSandbox(dir) }
+    const modal = modalRunDir(dir)
+    const runner = await stopAndWait(dir, "runner", modal ? { intMs: ms("GLHF_MODAL_CANCEL_INT_MS", 90_000), ...options } : options)
+    const stopped: Stopped = { runner, sandbox: await removeSandbox(dir) }
+    if (modal) {
+      const cleanup = await terminateModal(dir)
+      if (cleanup) stopped.modal = cleanup
+    }
+    return stopped
   })().finally(() => stopping.delete(dir))
   stopping.set(dir, attempt)
   return attempt
 }
 /** Is a stopRun for this folder under way? */
 export const beingStopped = (dir: string) => stopping.has(dir)
+
+/** A run on Modal: what its sandboxes cost by its cost ledger, for the record. {} for any other run. */
+export function modalRecord(id: string): Pick<GlhfRun, "modal"> {
+  const request = loadStored(id)?.request
+  return onModal(request) ? { modal: { ...modalSpent(runDir(id)), maxUsd: request!.modalMaxUsd ?? 0 } } : {}
+}
+
+/** Both kinds of left-over sandbox, in words, after a runner died: Docker containers and (runs on Modal) Modal sandboxes. */
+async function leftovers(dir: string): Promise<string> {
+  const modal = modalRunDir(dir) ? modalNote(await terminateModal(dir)) : ""
+  return `${leftNote(await removeSandbox(dir))}${modal ? `; ${modal}` : ""}`
+}
 
 /** run.json as the local runner wrote it. Nothing in it is trusted: see readLocal. */
 export type LocalRun = { status?: unknown; score?: unknown; artifacts?: unknown; usage?: unknown; error?: unknown; finished_at?: unknown }
@@ -421,9 +443,9 @@ export function predecessor(after: string, stored = loadStored(after)): { settle
  * run of the scripted model without Exa). checkRequest refuses such a request, so this is for runs that were
  * accepted earlier: a queued partner, or a run that an engine with paid calls on left behind.
  */
-export function paidRun(input: Pick<RunInput, "mode" | "model" | "exa" | "roleModels">): string | undefined {
+export function paidRun(input: Pick<RunInput, "mode" | "model" | "exa" | "roleModels" | "analysisBackend">): string | undefined {
   if (!paidCallsOff()) return undefined
-  const what = input.mode === "cloud" ? "a cloud run" : input.model !== "mock" || Object.keys(input.roleModels ?? {}).length ? "a run with a real model" : input.exa ? "a run with Exa search" : undefined
+  const what = input.mode === "cloud" ? "a cloud run" : input.model !== "mock" || Object.keys(input.roleModels ?? {}).length ? "a run with a real model" : input.exa ? "a run with Exa search" : onModal(input) ? "a run with its analyses on Modal (billed by Modal, also with the scripted model; it was not moved to this machine)" : undefined
   return what && `${what} is refused. ${HOW_TO_ALLOW}`
 }
 
@@ -432,10 +454,13 @@ export function cancelDetail(stopped: Stopped): string {
   const runner = stopped.runner === "stopped" ? "cancelled; the runner was stopped and no process of its group is left"
     : stopped.runner === "none" ? "cancelled; no runner was running (it had ended, or its pid was never recorded)"
     : "cancelled, but the runner could not be stopped: processes of its group are still there after SIGKILL (see runner.pid). The machine counts as busy until they are gone"
-  return `${runner}; ${sandboxNote(stopped.sandbox)}`
+  const modal = modalNote(stopped.modal)
+  return `${runner}; ${sandboxNote(stopped.sandbox)}${modal ? `; ${modal}` : ""}`
 }
 /** For error messages: said only when containers of the run were found. */
 const leftNote = (sandbox: SandboxCleanup | undefined) => (sandbox && sandbox.found > 0 ? `; ${sandboxNote(sandbox)}` : "")
+/** For error messages: what the last net did about a run's Modal sandboxes, when it ran. */
+const leftModal = (stopped: Stopped) => (stopped.modal ? `; ${modalNote(stopped.modal)}` : "")
 
 /** The phase the swarm is in, from its ledger. The ledger is written inside the sandbox: any shape is possible. */
 const lastPhase = (id: string) => {
@@ -472,7 +497,8 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       if (refused && !existsSync(`${dir}/runner.pid`) && !existsSync(`${dir}/launch.pid`)) return finish(runtime, context, input.id, { phase: "failed", error: `not launched: ${refused}` })
       const roles = Object.entries(input.roleModels ?? {}).flatMap(([role, model]) => ["--role-model", `${role}=${model}`])
       if (input.mode === "local") {
-        const argv = [...localRunner(), "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
+        // A run on Modal: the same runner in glhf/bixbench_v1's environment, with --sandbox modal and its dollar cap.
+        const argv = [...(onModal(input) ? modalRunner() : localRunner()), "--case", input.caseDir ?? DEMO_CASE, "--solver", input.solver,
           "--model", input.model, "--out", dir, ...roles,
           ...(input.timeLimit ? ["--time-limit", String(input.timeLimit)] : []),
           ...(input.reviewRounds ? ["--review-rounds", String(input.reviewRounds)] : []),
@@ -480,9 +506,10 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
           ...(input.maxMessagesPerRole ? ["--max-messages-per-role", String(input.maxMessagesPerRole)] : []),
           ...(input.seed ? ["--seed", String(input.seed)] : []),
           ...(input.exa ? ["--exa"] : []),
-          ...(input.memory ? ["--memory-dir", input.model === "mock" ? `${dir}/memory` : MEMORY] : [])]
+          ...(input.memory ? ["--memory-dir", input.model === "mock" ? `${dir}/memory` : MEMORY] : []),
+          ...(onModal(input) ? modalArgs(input) : [])]
         const started = startOnce(dir, "runner", argv, `${dir}/runner.log`, null)
-        patchRun(input.id, { phase: "launching", detail: "starting the local runner" }, started ? "local runner started" : "local runner was already started; not starting again")
+        patchRun(input.id, { phase: "launching", detail: onModal(input) ? "starting the local runner; its analyses run on Modal" : "starting the local runner" }, started ? `local runner started${onModal(input) ? " (analyses on Modal)" : ""}` : "local runner was already started; not starting again")
         await runtime.commit(() => ({ status: "running", checkpoint: { phase: "watchLocal", polls: 0 } }), context)
         return
       }
@@ -505,7 +532,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         // record, before it stopped the runner), the runner is stopped here.
         if (!beingStopped(dir) && runnerAlive(dir)) {
           const detail = cancelDetail(await stopRun(dir)), usage = localUsage(dir)
-          patchRun(id, { phase: "cancelled", detail, ...(usage && { usage }) }, "the runner of this cancelled run was still going; stopped it")
+          patchRun(id, { phase: "cancelled", detail, ...(usage && { usage }), ...modalRecord(id) }, "the runner of this cancelled run was still going; stopped it")
         }
         return endCancelled(runtime, context)
       }
@@ -514,7 +541,7 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
       const refused = paidRun(task.input)
       if (refused && !localEnded(dir) && processState(dir, "runner", polls) === "running" && parseStamp(readText(`${dir}/runner.pid`))) {
         const stopped = await stopRun(dir)
-        return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `stopped: ${refused}${stopped.runner === "stuck" ? " The runner could not be stopped; check for a leftover process (runner.pid) or container." : ""}${leftNote(stopped.sandbox)}` })
+        return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `stopped: ${refused}${stopped.runner === "stuck" ? " The runner could not be stopped; check for a leftover process (runner.pid) or container." : ""}${leftNote(stopped.sandbox)}${leftModal(stopped)}` })
       }
       let local = readLocal(dir)
       const state = processState(dir, "runner", polls)
@@ -536,8 +563,8 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
           // Status 0 reads as success, so the message says first what is missing.
           : unusable ? `the local runner exited with status 0, but ${unusable}`
           : `the local runner ended without writing a result: it exited with status 0 and ${local.kind === "running" ? "run.json still says that it is running" : "there is no run.json"}`
-        // A runner that was killed did not remove its sandbox.
-        const sandbox = state === "gone" || state === "unknown" ? leftNote(await removeSandbox(dir)) : ""
+        // A runner that was killed did not remove its sandbox (nor, on Modal, terminate its sandboxes).
+        const sandbox = state === "gone" || state === "unknown" ? await leftovers(dir) : ""
         return finish(runtime, context, id, { phase: "failed", error: `${why}${sandbox}\n${tail(`${dir}/runner.log`)}`.trim() })
       }
       const startedAt = loadStored(id)?.run.startedAt ?? runtime.now()
@@ -545,9 +572,9 @@ export const RunTask = defineTask<RunInput, Checkpoint, RunResult>({
         const stopped = await stopRun(dir)
         const limit = task.input.timeLimit ?? 1800
         const how = stopped.runner === "stopped" ? "it was stopped" : "it could not be stopped, check for a leftover process or container"
-        return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `the local runner was still going ${Math.round((runtime.now() - startedAt) / 60_000)} minutes after the start, far past its ${limit} s limit; ${how}${leftNote(stopped.sandbox)}\n${tail(`${dir}/runner.log`)}`.trim() })
+        return finish(runtime, context, id, { phase: "failed", usage: localUsage(dir), error: `the local runner was still going ${Math.round((runtime.now() - startedAt) / 60_000)} minutes after the start, far past its ${limit} s limit; ${how}${leftNote(stopped.sandbox)}${leftModal(stopped)}\n${tail(`${dir}/runner.log`)}`.trim() })
       }
-      patchRun(id, local.kind === "running" ? { phase: "running", detail: lastPhase(id) ?? "running" } : { phase: "launching", detail: "starting the sandbox" })
+      patchRun(id, local.kind === "running" ? { phase: "running", detail: lastPhase(id) ?? "running" } : { phase: "launching", detail: onModal(task.input) ? "starting the Modal sandbox" : "starting the sandbox" })
       await runtime.sleepUntil(runtime.now() + LOCAL_POLL(), { phase: "watchLocal", polls: polls + 1 }, context)
     },
 
@@ -682,7 +709,7 @@ async function finish(runtime: Runtime, context: Context, id: string, final: Par
   const first = await runtime.memo("finished", stamp, context) // the first attempt wins, also across restarts
   const score = typeof final.score === "number" ? final.score : null
   if (first.at === stamp.at) trackerLog(id, `finished: ${final.phase}${score === null ? "" : ` score=${score}`}`)
-  patchRun(id, { detail: undefined, ...final, finishedAt: first.at })
+  patchRun(id, { detail: undefined, ...final, ...modalRecord(id), finishedAt: first.at })
   await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: { phase: final.phase, score } } }), context)
 }
 
@@ -710,7 +737,7 @@ export function failUntracked(id: string, why: string): Promise<void> {
     if (stored.run.mode === "local") {
       if (runnerAlive(dir)) {
         const stopped = await stopRun(dir)
-        rest = `. ${stopped.runner === "stuck" ? "Its runner could not be stopped; check for a leftover process (runner.pid) or container" : "Its runner was stopped"}${leftNote(stopped.sandbox)}`
+        rest = `. ${stopped.runner === "stuck" ? "Its runner could not be stopped; check for a leftover process (runner.pid) or container" : "Its runner was stopped"}${leftNote(stopped.sandbox)}${leftModal(stopped)}`
       } else if (existsSync(`${dir}/runner.pid`) && !parseStamp(readText(`${dir}/runner.pid`)) && !existsSync(`${dir}/runner.exit`) && !existsSync(`${dir}/runner.nospawn`)) rest = ". The pid of its runner was never recorded; check for a leftover process or container"
       usage = localUsage(dir)
     } else {

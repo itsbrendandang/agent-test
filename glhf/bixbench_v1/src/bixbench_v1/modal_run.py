@@ -110,11 +110,15 @@ def prepare(
     ledgers: list[Path] | None = None,
     usd_cap: float | None = None,
     volume: Any = None,
+    sandboxes: int | None = None,
 ) -> ModalRun:
     """`data_dir` and `manifest` are the staged capsule, already verified and leak-scanned by
-    the caller. `volume` replaces the real Modal Volume in tests."""
+    the caller. `volume` replaces the real Modal Volume in tests. `sandboxes` is how many
+    sandboxes the run makes one after the other (the worst case counts each until its timeout);
+    by default two for this adapter's swarm (the critic gets a new one) and one otherwise."""
     paid.refuse_modal(f"--sandbox modal for {capsule}")  # NO_PAID_CALLS, also for direct callers
-    sandboxes = 2 if solver == "glhf" else 1
+    if sandboxes is None:
+        sandboxes = 2 if solver == "glhf" else 1
     timeout = modal_boundary.sandbox_timeout(time_limit_seconds, backstop_seconds)
     worst = modal_cost.worst_case_usd(timeout, cpu, memory_mib, sandboxes)
     files = [run_dir / modal_cost.LEDGER_NAME, *(ledgers or [])]

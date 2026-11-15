@@ -186,6 +186,10 @@ class Run:
     p_value: float | None = None
     contradicts: bool | None = None
     detail: str = ""
+    # Where the script ran: "docker" (a container on the machine that runs the solver) or
+    # "modal" (a Modal sandbox, ANALYSIS_BACKEND=modal), and that sandbox's id. Recorded only.
+    backend: str = ""
+    sandbox_id: str | None = None
 
 
 @dataclass
@@ -426,6 +430,8 @@ class Ledger:
             p=run.p_value,
             contradicts=run.contradicts,
             counts=counts,
+            backend=run.backend or None,
+            sandbox_id=run.sandbox_id,
         )
         if run.status == "ok":
             self.log(

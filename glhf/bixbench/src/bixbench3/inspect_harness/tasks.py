@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from inspect_ai import Task, task
 from inspect_ai.model import GenerateConfig
+from inspect_ai.util import SandboxEnvironmentSpec, SandboxEnvironmentType
 
 from bixbench3.inspect_harness.dataset import (
     DEFAULT_TIME_LIMIT_SECONDS,
@@ -46,6 +48,8 @@ def bixbench3_cases(
     no_pilot: bool = False,
     no_retriage: bool = False,
     max_parallel: int = 2,
+    sandbox_type: str = "docker",
+    sandbox_config: dict[str, Any] | None = None,
 ) -> Task:
     """solver="single" is the upstream baseline, unchanged. solver="glhf" is the GLHF swarm.
 
@@ -54,7 +58,13 @@ def bixbench3_cases(
     `single_with_report_reserve`; without `max_tokens` it is upstream's solver, untouched.
 
     For the swarm, `engine` picks the phase engine (default) or the claims engine; `no_*` and
-    `max_parallel` apply to the claims engine only (swarm/flags.py)."""
+    `max_parallel` apply to the claims engine only (swarm/flags.py).
+
+    The sandbox is Docker from the compose file (the default). `sandbox_type` with
+    `sandbox_config` names another registered provider and its config as a dict, for example the
+    Modal sandbox of `glhf_local --sandbox modal` (bixbench_v1/glhf_modal.py); the provider must be
+    imported before the task runs. Same tools, same brief, same limits: only where the commands
+    run changes."""
     if solver not in ("single", "glhf"):
         raise ValueError(f"unknown solver {solver!r}; use 'single' or 'glhf'")
     limit = time_limit_seconds or TIME_LIMIT_SECONDS  # shorter only for local runs
@@ -62,6 +72,14 @@ def bixbench3_cases(
         "BIXBENCH3_INSPECT_SANDBOX_COMPOSE",
         str(DEFAULT_SANDBOX_COMPOSE),
     )
+    where: SandboxEnvironmentType = ("docker", compose_path)
+    if sandbox_config is not None:
+        if sandbox_type == "docker":
+            raise ValueError("sandbox_config is for a provider other than docker")
+        # A dict config is turned into the provider's own config type by Inspect.
+        where = SandboxEnvironmentSpec.model_validate(
+            {"type": sandbox_type, "config": sandbox_config}
+        )
     return Task(
         dataset=load_cases_dataset(
             dataset_path,
@@ -89,7 +107,7 @@ def bixbench3_cases(
             max_parallel=max_parallel,
         ),
         scorer=output_collection(),
-        sandbox=("docker", compose_path),
+        sandbox=where,
         message_limit=MESSAGE_LIMIT,
         time_limit=limit,
         # The token budget is enforced by the solvers (see the docstring). This is a backstop
@@ -131,5 +149,6 @@ def bixbench3_cases(
             "memory": bool(memory_dir),
             "seed": seed,
             "artifact_grading": "host_after_inspect_exit",
+            "sandbox": sandbox_type,
         },
     )

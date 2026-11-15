@@ -1,3 +1,4 @@
+import "./fixtures/glhf-runs-tmp.ts"
 import assert from "node:assert/strict"
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs"
 import { createServer } from "node:http"

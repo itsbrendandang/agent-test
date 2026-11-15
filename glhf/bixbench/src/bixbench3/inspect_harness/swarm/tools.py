@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 import anyio
 import httpx
 from inspect_ai.tool import Tool, ToolError, tool
-from inspect_ai.util import sandbox, store
+from inspect_ai.util import SandboxEnvironment, sandbox, store
 
 from ... import paid
 from ...network_gateway.policy import (
@@ -454,10 +454,50 @@ async def read_script(path: str) -> str | None:
         return None
 
 
+def sandbox_backend() -> dict[str, str]:
+    """Where this run's analysis code executes: {"backend": ...} and, when the provider knows it,
+    "sandbox_id". "docker" is Inspect's Docker sandbox (local runs: this machine). A provider
+    that runs elsewhere says so itself through an `analysis_backend()` method (the Modal one,
+    bixbench_v1/glhf_modal_sandbox.py, answers "modal"). Recorded only; it decides nothing."""
+    try:
+        env = sandbox()
+    except Exception:  # no sandbox in this context
+        return {"backend": "unknown"}
+    # Inspect hands out a proxy that records events; the provider is behind it (as_type unwraps).
+    unwrap: Any = getattr(env, "as_type", None)
+    if callable(unwrap):
+        try:
+            env = unwrap(SandboxEnvironment)
+        except TypeError:
+            pass
+    describe = getattr(env, "analysis_backend", None)
+    if callable(describe):
+        try:
+            found = describe()
+        except Exception:
+            found = None
+        if isinstance(found, dict) and isinstance(found.get("backend"), str):
+            return {str(k): str(v) for k, v in found.items() if v is not None}
+    name = type(env).__name__.lower()
+    if "docker" in name:
+        return {"backend": "docker"}
+    return {"backend": name.removesuffix("sandboxenvironment") or "unknown"}
+
+
+def _where(run: Run, backend: dict[str, str]) -> Run:
+    run.backend, run.sandbox_id = backend.get("backend", ""), backend.get("sandbox_id")
+    return run
+
+
 async def run_registered_test(entry: Registration, seconds: int) -> Run:
     """Execute a registered test script in the sandbox and report what was seen. Harness code:
     no model takes part. The file at the registered path must still have the registered hash;
-    what is executed is the registered content itself; the result is the last line of stdout."""
+    what is executed is the registered content itself; the result is the last line of stdout.
+    The run records where it executed (`sandbox_backend`): local Docker or a Modal sandbox."""
+    return _where(await _run_registered_test(entry, seconds), sandbox_backend())
+
+
+async def _run_registered_test(entry: Registration, seconds: int) -> Run:
     assert entry.script_path and entry.script_sha256
     command = INTERPRETERS[_script_suffix(entry.script_path)]
     found = await read_script(entry.script_path)

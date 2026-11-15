@@ -1,4 +1,5 @@
 import { hasWords } from "@/lib/format"
+import { sandboxWords } from "@/lib/words"
 import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
 import type { Provenance, RunKind } from "./model"
@@ -134,7 +135,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "test.registered": text = join(`Registered test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, e.method, str(e.test_null) ? `Null hypothesis: ${str(e.test_null)}` : "", e.script_path); break
       case "test.executed":
       case "test.recorded": {
-        text = join(`${type === "test.executed" ? "Ran" : "Recorded"} test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, str(e.status) ? `Status: ${str(e.status)}.` : "", num(e.exit_code) !== undefined ? `Exit code: ${num(e.exit_code)}.` : "", e.detail, num(e.p) !== undefined ? `p = ${num(e.p)}.` : "", typeof e.contradicts === "boolean" ? `Contradicts the statement: ${e.contradicts ? "yes" : "no"}.` : "", num(e.e) !== undefined ? `e = ${num(e.e)}.` : "", str(e.verdict_at_the_time) ? `Verdict at the time: ${str(e.verdict_at_the_time)}.` : "")
+        const where = type === "test.executed" ? sandboxWords(e.backend, e.sandbox_id) : undefined
+        text = join(`${type === "test.executed" ? "Ran" : "Recorded"} test ${str(e.name) ?? "(name not recorded)"} for statement ${str(e.claim) ?? "(id not recorded)"}.`, where ? `Ran in ${where}.` : "", str(e.status) ? `Status: ${str(e.status)}.` : "", num(e.exit_code) !== undefined ? `Exit code: ${num(e.exit_code)}.` : "", e.detail, num(e.p) !== undefined ? `p = ${num(e.p)}.` : "", typeof e.contradicts === "boolean" ? `Contradicts the statement: ${e.contradicts ? "yes" : "no"}.` : "", num(e.e) !== undefined ? `e = ${num(e.e)}.` : "", str(e.verdict_at_the_time) ? `Verdict at the time: ${str(e.verdict_at_the_time)}.` : "")
         break
       }
       default: text = join(`${readableName(type.replaceAll(".", " "))}.`, e.message, e.summary, e.text, e.note, e.error)
