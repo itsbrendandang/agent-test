@@ -78,7 +78,7 @@ Do not rename these in the code without a plan for the saved runs.
 |---|---|---|
 | Something that can spend money (a model call, a paid search, a cloud launch) | The engine, never the dashboard. | Call `refusePaid()` right before the paid step, store the result under a stable key so a replay does not pay twice, and add a test that counts the calls. |
 | A new search source | `engine/src/sources/` | Return the same evidence items as `literature.ts`, with a `provider` name, and give it its own cap. |
-| A team member or a change to one | `board/agents/<name>.md` and the `board:` list in `board/config.yaml` | Keep the scout on the list. Run the board tests. |
+| A team member or a change to one | `board/agents/<name>.md` and the `board:` list in `board/config.yaml` | Keep the scout and the evidence verifier on the list. Run the board tests. |
 | A new screen or part of one | `dashboard/src/views/` and a folder beside `home/` | Use the parts in `components/ui` and `components/ai-elements`; add tests beside the file. |
 | A new API route | `engine/src/<area>/routes.ts`, registered in `app.ts` | Use the request checks in `http.ts`; never loosen them. |
 | Swarm logic | `glhf/bixbench/src/bixbench3/inspect_harness/swarm/` | Do not touch the grader or the upstream solver. |

@@ -66,8 +66,8 @@ documents are in `docs/`.
   by several people and agents. Re-read the file right before you edit it, keep the edit small,
   and never resolve a merge by taking one whole side of these files.
 - **The team list keeps its searcher.** The `board:` list in `board/config.yaml` must include the
-  scout (the only member with the search tools `exa_search`, `literature_search` and `database_search`). A review without it gathers
-  no sources. A board review is not a benchmark run, so the rule below about web search for
+  scout (the member that gathers the sources, and the only one with the web search `exa_search`). A review without it gathers
+  no sources. The list must also keep `evidence-verifier`, which rechecks the scout's sources in every round. A board review is not a benchmark run, so the rule below about web search for
   benchmark agents does not apply to it.
 - Never commit a file with merge-conflict markers. `npm run check -- --fast` finds them.
 - Never read, download or reference `gs://bixbench3-ground-truth` or any published result of a

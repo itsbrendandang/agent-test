@@ -5,6 +5,9 @@ Written 2026-11-14, **updated 2026-11-15** for the direct-provider rewire and th
 proposal is in sections 5 to 8. State described: commit `b749e38` plus the uncommitted edits to `board.ts`, `triage.ts`,
 `events.ts`, `board/config.yaml` and `chat/README.md` (tested in a private worktree).
 
+> **Later change.** The `board:` list now also has `evidence-verifier`, a seventh member. It rechecks the Scout's sources in
+> every round (see `docs/drug-board.md`). The member counts and estimates in this report predate it.
+
 > **Read this first (update, branch `fm/engine-review-cost`).** The team-review roster changed after this file was
 > written. The `board:` list in `board/config.yaml` now has six members: scout, proposer, experimenter, methods-auditor,
 > critic, reporter. The experimenter has Pilot, Experimenter and Reviser modes (`board/agents/experimenter.md`); there is

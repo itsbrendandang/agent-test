@@ -112,6 +112,7 @@ export function splitReply(text: string): { short: string; rest: string; marked:
 export const BOARD_JOB: Record<string, string> = {
   "lead-scientist": "runs the discussion; does not do the research or decide what is true",
   scout: "looks at the data before any research begins",
+  "evidence-verifier": "rechecks every source the scout found, and searches for what it missed",
   proposer: "plans the research and names the claims to test",
   pilot: "tries the analysis on a small part of the data first",
   experimenter: "runs the full analysis and produces the results",

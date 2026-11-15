@@ -30,7 +30,7 @@ test("no overrides file leaves the config as it is", () => {
 test("overrides narrow members and limits and never widen them", () => {
   const config = setup({ board: ["critic", "not-a-member"], meeting: { max_usd: 0.5, max_minutes: 99999, max_rounds: 1 } })
   const got = applyOverrides(config, "r1")
-  assert.deepEqual(got.board, config.board.filter((n) => n === "critic"))
+  assert.deepEqual(got.board, config.board.filter((n) => n === "critic" || n === "evidence-verifier"), "the evidence verifier is always kept")
   assert.equal(got.meeting.max_usd, Math.min(0.5, config.meeting.max_usd))
   assert.equal(got.meeting.max_minutes, config.meeting.max_minutes)
   assert.equal(got.meeting.max_rounds, 1)
