@@ -4,6 +4,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "start": "node scripts/start.mjs",
     "setup": "npm --prefix engine install && npm --prefix dashboard install && (cd glhf/bixbench && uv sync --locked)",
     "engine": "node engine/src/server.ts",
     "board": "node engine/src/cli.ts run",
