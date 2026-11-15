@@ -61,10 +61,21 @@ def parse_args(argv=None):
     p.add_argument("--no-grade", action="store_true")
     p.add_argument("--skip-existing", action="store_true",
                    help="skip (study,repeat) pairs with a successful result.json")
+    p.add_argument("--sandbox", choices=["local", "modal"], default="local",
+                   help="where code cells run: on this machine (default) or one Modal "
+                        "sandbox per run (billed; see bixbase/modal_sandbox.py)")
+    p.add_argument("--modal-cpu", type=float, default=2.0, help="cores per Modal sandbox")
+    p.add_argument("--modal-memory-gib", type=float, default=8.0,
+                   help="GiB per Modal sandbox")
+    p.add_argument("--modal-usd-cap", type=float, default=10.0,
+                   help="stop before a run whose worst case would take this --out "
+                        "folder's Modal spend past this many dollars")
+    p.add_argument("--modal-image", default=None,
+                   help="Modal image name (default: bixbench-board-env:1)")
     return p.parse_args(argv)
 
 
-def run_one(study, repeat_idx, args, run_root: Path) -> dict:
+def run_one(study, repeat_idx, args, run_root: Path, session=None) -> dict:
     """One solve+grade for (study, repeat). Writes result.json."""
     run_dir = run_root / study.study_id / f"rep{repeat_idx}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -82,7 +93,15 @@ def run_one(study, repeat_idx, args, run_root: Path) -> dict:
 
     prepare_study_data(study, Path(args.cache_dir))
     solve = board.solve if args.solver == "board" else agent.solve
-    result = solve(study, budget, llm=llm, run_dir=run_dir)
+    sandbox = None
+    if session is not None:  # --sandbox modal: one Modal sandbox for this run
+        sandbox = session.open(study.data_dir, run_dir / "work",
+                               name=f"{study.study_id}/rep{repeat_idx}",
+                               seconds=args.budget_seconds)
+    try:
+        result = solve(study, budget, llm=llm, run_dir=run_dir, sandbox=sandbox)
+    finally:
+        sandbox_line = sandbox.close() if sandbox is not None else None
 
     row = {
         "study_id": study.study_id,
@@ -97,6 +116,9 @@ def run_one(study, repeat_idx, args, run_root: Path) -> dict:
         "error": result.error,
         "answers": result.answers,
         "budget": result.budget,
+        "sandbox": (dict(sandbox.settings(), seconds=sandbox_line.get("seconds"),
+                         usd=sandbox_line.get("usd"))
+                    if sandbox is not None else {"sandbox": "local"}),
         "grades": {},
         "metrics": None,
     }
@@ -175,9 +197,18 @@ def main(argv=None) -> int:
             print(f"skipping {len(skipped)} completed runs", flush=True)
     results = []
     failures = []
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+    session = None
+    if args.sandbox == "modal":
+        from bixbase.modal_sandbox import PUBLISHED, ModalSession
+        session = ModalSession(
+            out, cpu=args.modal_cpu, memory_mib=int(args.modal_memory_gib * 1024),
+            usd_cap=args.modal_usd_cap, image=args.modal_image or PUBLISHED)
+        print(f"code cells run on Modal ({session.image}), one sandbox per run; "
+              f"Modal cap {args.modal_usd_cap} USD for {out}", flush=True)
+    pool = ThreadPoolExecutor(max_workers=args.workers)
+    try:
         futs = {
-            pool.submit(run_one, s, k, args, out): (s.study_id, k)
+            pool.submit(run_one, s, k, args, out, session): (s.study_id, k)
             for s, k in jobs
         }
         for fut in as_completed(futs):
@@ -195,6 +226,19 @@ def main(argv=None) -> int:
                                  "error": f"{type(e).__name__}: {e}",
                                  "traceback": traceback.format_exc()})
                 print(f"[FAIL] {sid} rep{k}: {e}", flush=True)
+    except KeyboardInterrupt:
+        # Ctrl+C: start nothing more, and end every Modal sandbox now, not at its timeout.
+        print("interrupted: stopping the runs", flush=True)
+        if session is not None:
+            print(f"terminated {len(session.abort())} Modal sandbox(es)", flush=True)
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    finally:
+        pool.shutdown(wait=True)
+        if session is not None:
+            session.close()  # anything still alive
+            print(f"Modal sandboxes: {session.spent():.4f} USD in {session.ledger}",
+                  flush=True)
 
     summary = {
         "config": {k: getattr(args, k) for k in vars(args)},

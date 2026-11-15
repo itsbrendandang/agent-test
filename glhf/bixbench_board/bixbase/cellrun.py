@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -203,10 +204,38 @@ def _remote_run(spec_file: str) -> dict[str, Any]:
     return result
 
 
+def normalize(name: str) -> str:
+    """A Python package name as pip compares them."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def environment(renv: str) -> dict[str, Any]:
+    """What is installed: every conda package of the R environment (file name and md5, from its
+    conda-meta records) and every Python distribution of this interpreter."""
+    conda = []
+    for record in sorted((Path(renv) / "conda-meta").glob("*.json")):
+        try:
+            meta = json.loads(record.read_text())
+        except (OSError, ValueError):
+            continue
+        name = meta.get("fn") or Path(str(meta.get("url", ""))).name
+        conda.append([name, meta.get("md5")])
+    from importlib import metadata
+
+    python = {}
+    for dist in metadata.distributions():
+        name = dist.metadata["Name"]
+        if name:
+            python[normalize(name)] = dist.version
+    return {"conda": conda, "python": python, "python_version": sys.version.split()[0]}
+
+
 def _remote(argv: list[str]) -> dict[str, Any]:
     command = argv[0]
     if command == "run":
         return {"ok": True, **_remote_run(argv[1])}
+    if command == "env":
+        return {"ok": True, **environment(argv[1])}
     work = Path(os.environ["WORK_DIR"]).resolve()
     data = Path(os.environ["DATA_DIR"]).resolve()
     try:

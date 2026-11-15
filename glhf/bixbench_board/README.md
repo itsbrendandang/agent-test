@@ -47,7 +47,12 @@ At the end it runs both self-tests. They use a scripted model and cost nothing:
 ```bash
 .venv/bin/python selftest.py         # single agent
 .venv/bin/python board_selftest.py   # board, R cell, read-only data, paid switch
+.venv/bin/python sandbox_selftest.py # nothing a code cell starts outlives the cell
+.venv/bin/python modal_selftest.py   # code cells on Modal, with a fake Modal (needs requirements-modal.txt)
 ```
+
+A code cell runs in its own process group. When the cell ends, or when its 120 seconds are
+up, the whole group is killed: the cell and every process it started (`bixbase/cellrun.py`).
 
 On macOS the sandbox uses `sandbox-exec` instead. R is optional there.
 
@@ -72,3 +77,48 @@ The single-agent baseline with these settings scored 0.260 (64 of 246 graded att
 no R, so it used Python equivalents such as pydeseq2. Its run files are not in this repository.
 
 Do not commit `runs/` or `data/`.
+
+## Code cells on Modal (`--sandbox modal`)
+
+With `--sandbox modal`, each run gets its own Modal sandbox, and its code cells run there.
+The five members, their prompts and the board's steps do not change, and the members' model
+calls still go from this machine. Only `run_code`, `list_dir` and `read_file` run on Modal.
+This machine then only waits on the model, so more runs fit at once (`--workers`).
+
+Each sandbox:
+
+- is made from the image `bixbench-board-env:1`: Python 3.11 with `requirements.txt`, and R
+  from `r-environment.lock.txt`, installed as `setup_cloud.sh` installs them. When it starts,
+  its packages are compared with those two files. If they differ, the run is refused;
+- has no network. A code cell on a VM has network; on Modal it has none;
+- gets the study's data from a Volume (uploaded once per study), copied to `/data`, which the
+  code cannot change. The code runs as the user `agent`, in `/work`;
+- gets no key and no variable from this machine;
+- ends with its run. Its work folder is copied back to the run's `work/` folder (at most 50 MB).
+
+Every Modal step is a paid call: it is refused unless `NO_PAID_CALLS` is `0`. Only the person
+who pays runs these commands.
+
+```bash
+uv pip install -p .venv/bin/python -r requirements-modal.txt
+.venv/bin/modal token new                                   # once, on this machine
+.venv/bin/python -m bixbase.modal_sandbox build             # build and publish the image (once)
+.venv/bin/python -m bixbase.modal_sandbox verify            # one small sandbox: the check, a Python cell, an R cell
+.venv/bin/python run.py --solver board --sandbox modal --workers 40 --modal-usd-cap 20 ...   # the other options as above
+.venv/bin/python -m bixbase.modal_sandbox list              # sandboxes still running (after a crash)
+.venv/bin/python -m bixbase.modal_sandbox terminate         # end them
+```
+
+Options: `--modal-cpu` (default 2), `--modal-memory-gib` (default 8), `--modal-usd-cap`
+(default 10 USD for the `--out` folder), `--modal-image`.
+
+Money. A run reserves its worst case before its sandbox starts: the sandbox alive for the
+run's `--budget-seconds` plus 900 seconds. With 2 cores and 8 GiB that is about 0.20 USD for a
+600-second run. A run waits while the running runs' reservations would pass the cap; it is
+refused when nothing runs and it still does not fit. Each sandbox gets one line in
+`<out>/modal_ledger.jsonl`, and `result.json` records the sandbox (`"sandbox"`). Ctrl+C ends
+every sandbox at once.
+
+Compare like with like. The single-agent baseline ran its cells on a machine, with network.
+Run both solvers with the same `--sandbox` before you compare them.
+
