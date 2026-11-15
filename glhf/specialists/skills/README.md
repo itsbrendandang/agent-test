@@ -1,7 +1,7 @@
 # Biomni skills grouped into 19 role agents (draft, instructions only)
 
 The 100 skills in the Biomni Skill Hub catalog (`.agents/skills/biomni-lab/references/catalog.md`) are grouped here into
-19 role agents. Two sibling passes proposed groupings for skills 1-50 (`part1.md`, 14 groups) and 51-100 (`part2.md`, 10 groups);
+19 role agents (18 files here; `literature-evidence-synthesist` is in `../`, merged with a specialist profile: see "Merged agent"). Two sibling passes proposed groupings for skills 1-50 (`part1.md`, 14 groups) and 51-100 (`part2.md`, 10 groups);
 this directory reconciles them. Each skill has exactly one primary agent. `skills-map.json` holds the same mapping for code.
 
 ## Status (read this first)
@@ -12,7 +12,7 @@ this directory reconciles them. Each skill has exactly one primary agent. `skill
 - Nothing here states a benchmark score. No Overview reports one.
 - For the 38 index-only skills the hub showed "No markdown preview is available for this skill yet." Their agent entries say so and give a name and category only.
 - Only 15 of the 62 full-text skills have a skill-specific hub link in the source copy; every other skill's recorded URL is the hub's general listing (`https://biomni.phylo.bio/skills?section=marketplace`).
-- The nine existing board profiles in `../*.md` are separate and unchanged.
+- The nine specialist profiles in `../*.md` are instructions only too. One of them, `literature-evidence-synthesist`, now also carries skills (see "Merged agent"); the other eight carry none.
 
 ## Agents
 
@@ -35,15 +35,40 @@ this directory reconciles them. Each skill has exactly one primary agent. `skill
 | [`variant-and-genome-analyst`](variant-and-genome-analyst.md) | Variant annotation and evidence, cancer-cohort genomics, rare-disease cases, variant calling and long-read analysis. | 7 | 2 | 5 |
 | [`immune-cell-therapy-analyst`](immune-cell-therapy-analyst.md) | CAR construct design with CRISPR-screen reanalysis, TCR/BCR repertoire profiling, and (by name only) cell-therapy QC and flow cytometry. | 4 | 2 | 2 |
 | [`clinical-and-experimental-design-analyst`](clinical-and-experimental-design-analyst.md) | Trial-design simulation, plate layout, population PK/PD, real-world-evidence cohorts and survival analysis. | 6 | 5 | 1 |
-| [`literature-evidence-synthesist`](literature-evidence-synthesist.md) | Citation-verified method comparisons, ClinicalTrials.gov landscapes, meta-analysis and (by name only) literature reviews. | 5 | 3 | 2 |
+| [`literature-evidence-synthesist`](../literature-evidence-synthesist.md) | Citation-verified method comparisons, ClinicalTrials.gov landscapes, meta-analysis and (by name only) literature reviews. | 5 | 3 | 2 |
 | [`workflow-and-method-engineer`](workflow-and-method-engineer.md) | Nextflow pipelines, skill-package authoring and method-development loops. | 6 | 5 | 1 |
 | **Total (19 agents)** | | **100** | **62** | **38** |
 
 Full text = the hub showed an Overview (62 skills). Index only = it did not (38 skills). Totals are computed from the source files, not from the two proposals.
 
+## Merged agent
+
+One skill agent covered the same job as a specialist profile in `../`, so it was folded in (2026-11-14):
+
+| Merged file | Was | Why |
+|---|---|---|
+| [`../literature-evidence-synthesist.md`](../literature-evidence-synthesist.md) | `prior-work-analyst` profile + `literature-evidence-synthesist` skill agent | Both gather and compile what others have registered, published or claimed (skill 19 trial landscape, skill 52 citation-verified comparison). In the Popper paper's division of labour (Huang et al., arXiv:2502.09858, sections 2.4 and 3) neither designs a test nor produces the p-value of an analysis it ran, so merging them mixes no roles. Owns 19, 29, 45, 46, 52. |
+
+The merged file keeps the profile's frontmatter, purpose and rules, then appends the skill agent's routing, skill entries and limits unchanged. The profile's rules (a source for every stage claim, never search for the study being reproduced) now apply to all of it. One instruction was added, from the paper and the ledger's own `propose_claim`: state each claim as a measurable implication with a check that could show it false. Both former files are in git history (`git show HEAD:glhf/specialists/skills/literature-evidence-synthesist.md`, `git show HEAD:glhf/specialists/prior-work-analyst.md`).
+
+## Reviewer and executor pairs (deliberately not merged)
+
+A specialist profile in `../` reviews (it "sees the question, the data report and the proposed method, not the resident's reasoning"). A skill agent here carries the procedures for doing an analysis. The Popper paper separates the agent that designs and checks a test from the agent that executes it and reports the p-value, and gives the designer metadata only, so that the choice of test cannot depend on data it has not been allowed to use (sections 2.4 and 3, Assumption 2). The same domain with a different role stays two agents, so that whoever reviews an analysis is not the one who ran it:
+
+| Reviewer (profile) | Executor skill agents in the same domain |
+|---|---|
+| `medicinal-chemist` | `sar-analyst`, `compound-set-curator`, `small-molecule-designer` |
+| `admet` | `qsar-property-modeler`, and for population PK `clinical-and-experimental-design-analyst` |
+| `toxicologist` | `clinical-and-experimental-design-analyst` (survival, cohorts), `target-safety-druggability-analyst` (FAERS) |
+| `target-biologist` | `statistical-geneticist`, `single-cell-core-analyst`, `bulk-rnaseq-analyst`, `omics-biomarker-integrator` |
+
+Nothing enforces this yet: no code loads or calls any of these agents. It is a rule for whoever wires them.
+
+Check the whole mapping with `python3 glhf/specialists/verify_skills.py` (every one of the 100 skills assigned to exactly one agent; files, map and this table agree).
+
 ## Files
 
-- One `<agent>.md` per role: scope, when to route and when not to, each owned skill (its own scope, declared inputs and outputs, hub URL, `package: not installed`, full instructions or index only, licence flag), and what the agent cannot do.
+- One `<agent>.md` per role (18 here; `literature-evidence-synthesist` is in `../`, with its specialist profile on top): scope, when to route and when not to, each owned skill (its own scope, declared inputs and outputs, hub URL, `package: not installed`, full instructions or index only, licence flag), and what the agent cannot do.
 - `skills-map.json`: `agent_to_skills`, `skill_to_agent`, and `skill_text` (full or index_only) per skill name.
 - `part1.md`, `part2.md`: the two input proposals with the per-skill tables. Kept unchanged as the evidence for this reconciliation.
 
