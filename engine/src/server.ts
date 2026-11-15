@@ -15,7 +15,8 @@ const PORT = Number(process.env.DRUG_BOARD_PORT ?? 8787)
 const HOST = bindHost()
 const app = createApp()
 
-createServer((req, res) => void app.handler(req, res)).listen(PORT, HOST, () => {
+// app.handler answers its own errors (500); the catch is a last guard, so one request can never stop the engine.
+createServer((req, res) => void app.handler(req, res).catch((error) => { console.error("request handler failed:", error); res.destroy() })).listen(PORT, HOST, () => {
   console.log(`AI Scientist Bot engine on http://${HOST}:${PORT}`)
   console.log(boardModeLine(loadConfig(), app.mock, LOCAL))
   console.log(paidCallsLine())

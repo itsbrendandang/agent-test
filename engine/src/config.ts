@@ -39,8 +39,35 @@ export interface BoardConfig {
  * spend record are kept. For a test engine, so that its practice runs never land in a person's saved research.
  */
 export function loadConfig(file = resolve(ROOT, "board/config.yaml"), env: NodeJS.ProcessEnv = process.env): BoardConfig {
-  const config = parse(readFileSync(file, "utf8")) as BoardConfig
+  const config = checkConfig(parse(readFileSync(file, "utf8")), file)
   if (env.DRUG_BOARD_RUNS_DIR) config.paths = { ...config.paths, runs: resolve(env.DRUG_BOARD_RUNS_DIR) }
+  return config
+}
+
+/** A board/config.yaml that cannot be used as it is. The message names the file and the key. */
+export class ConfigError extends Error {}
+
+/** Limits every run reads. A value that is not a number is never reached (`spent >= "$5"` is false), so it is refused. */
+const REQUIRED_LIMITS = ["max_minutes", "max_usd", "max_rounds", "daily_usd"] as const
+/** Limits with a default in the code: absent or empty is fine, anything else must be a number. */
+const OPTIONAL_LIMITS = ["lead_turns", "member_turns", "max_literature_searches", "max_database_searches", "max_escalations",
+  "fallback_usd_per_mtok", "max_searches", "exa_usd_per_search", "exa_ceiling_usd", "exa_highlight_chars"] as const
+
+/**
+ * Refuses a config whose limits or team list would not hold: every `meeting` limit must be a number of 0 or more, and
+ * the `board:` list must name the scout (the only member that searches, AGENTS.md). Called on every load, so a typo
+ * made before a paid run stops the engine or the run at its start, naming the key, instead of switching a cap off.
+ */
+export function checkConfig(raw: unknown, file = "board/config.yaml"): BoardConfig {
+  const fail = (message: string) => { throw new ConfigError(`${file}: ${message}`) }
+  const config = (raw && typeof raw === "object" ? raw : fail("not a YAML mapping")) as BoardConfig
+  const meeting = (config.meeting && typeof config.meeting === "object" ? config.meeting : fail("the meeting: section is missing")) as Record<string, unknown>
+  const limit = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0
+  const say = (key: string, v: unknown) => fail(`meeting.${key} must be a number of 0 or more, not ${v === undefined ? "missing" : JSON.stringify(v)}. A limit that is not a number is never reached, so it would not limit anything.`)
+  for (const key of REQUIRED_LIMITS) if (!limit(meeting[key])) say(key, meeting[key])
+  for (const key of OPTIONAL_LIMITS) if (meeting[key] !== undefined && meeting[key] !== null && !limit(meeting[key])) say(key, meeting[key])
+  if (!Array.isArray(config.board) || !config.board.every((n) => typeof n === "string")) fail("board: must be a list of member names")
+  if (!config.board.includes("scout")) fail("board: must include scout, the only member that searches. Without it a review gathers no sources")
   return config
 }
 

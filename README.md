@@ -100,6 +100,9 @@ Good to know:
 The limits in `board/config.yaml` are **$0.15 per Quick answer**, **$0.60 per Standard answer**,
 **$5 per team review**, and **$20 per day** across answers and reviews. Exa also has a **$40
 lifetime limit** in the engine's search record. These are limits, not price quotes.
+The engine checks the team review limits (the `meeting:` section) when it reads the file. A limit
+that is not a number (for example `$5`) stops the engine, or the run, with a message that names
+the key, so a typo cannot switch the limit off.
 
 ## What is in the app
 
@@ -385,7 +388,10 @@ by real models is built but still switched off (see "Where things stand").
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is
 saved as it happens. A review that is interrupted, for example by a crash or a restart, continues
 where it stopped and does not repeat (or pay again for) finished work. We tested this by stopping
-a practice review in the middle.
+a practice review in the middle. A review counts as finished only when the lead has written its
+memo. If the lead stops without one, the review is marked failed, not finished. A resume does not
+ask the lead again, so start a new review. A review whose `overrides.json` (the limits its chat plan
+set) cannot be read is also marked failed and does not start.
 
 ## Words
 
