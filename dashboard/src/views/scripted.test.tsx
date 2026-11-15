@@ -91,7 +91,7 @@ describe("Runs list", () => {
   it("does not move the keyboard focus to the keyword box", async () => {
     list(false)
     await card("s-mock")
-    expect(screen.getByRole("searchbox", { name: "Search past runs by word" })).not.toHaveFocus()
+    expect(screen.getByRole("searchbox", { name: "Search saved research by word" })).not.toHaveFocus()
   })
 })
 
@@ -99,7 +99,7 @@ describe("one place for each input", () => {
   it("Runs has the keyword search and no Ask box: questions are asked on Home", async () => {
     const sent = routes({ "GET /api/search": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] } })
     render(<ExperimentsView onOpen={() => {}} />)
-    expect(await screen.findByText(/Nothing has been run yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Nothing has been researched yet/)).toBeInTheDocument()
     expect(screen.getAllByRole("searchbox")).toHaveLength(1)
     expect(screen.queryByRole("textbox")).toBeNull()
     expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()

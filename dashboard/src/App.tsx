@@ -12,7 +12,7 @@ import { getCatalog } from "./home/api"
 import { useShell } from "./lib/shell"
 import { HowItWorks } from "./components/HowItWorks"
 import { setOpen } from "./lib/open"
-import { initialView, rememberView, runOfHash, viewOfHash, VIEWS, type View } from "./nav"
+import { initialView, LABEL, rememberView, runOfHash, viewOfHash, VIEWS, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
 import { BoardView } from "./views/BoardView"
 import { ExperimentsView } from "./views/ExperimentsView"
@@ -57,7 +57,7 @@ export default function App() {
           return (
             <button key={label} type="button" className="rail-item" aria-current={label === view ? "page" : undefined} onClick={() => go(label)}>
               <Icon size={18} aria-hidden="true" />
-              <span>{label}</span>
+              <span>{LABEL[label]}</span>
             </button>
           )
         })}

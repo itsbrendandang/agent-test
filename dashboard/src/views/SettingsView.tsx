@@ -4,6 +4,8 @@ import { setCharactersShown, useCharacters } from "@/crew/store"
 import { ModeSwitch } from "@/components/PaidSwitch"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { PAID_CHANGED } from "@/lib/paidSwitch"
+import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
+import { CatalogPanel } from "@/home/CatalogPanel"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { HOW_TO_TURN_ON, paidState, type PaidState } from "@/lib/paid"
 import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
@@ -53,6 +55,7 @@ export function SettingsView() {
     <div className="page settings">
       <PageHead title="Settings" about={isDesktop ? "What the engine on this machine can use, and the API keys kept by the desktop app." : "What the engine on this machine can use. Keys are set in its .env file, never in this page."} />
       <EngineSection />
+      <SetupDetails />
       <section className="keys" aria-labelledby="look-title">
         <h2 id="look-title">Appearance</h2>
         <label className="newrun-check">
@@ -113,6 +116,21 @@ const THING: Record<string, [string, string]> = {
   OPENAI_API_KEY: ["Key for OpenAI", "Lets real OpenAI models be used."],
   EXA_API_KEY: ["Key for web search (Exa)", "Lets the team look things up."],
   HF_TOKEN: ["Key for Hugging Face", "Lets benchmark data be downloaded."],
+}
+
+/** Models, keys, team members and skills: what used to sit beside the search box. Read from the engine's catalog. */
+function SetupDetails() {
+  const [catalog, setCatalog] = useState<Catalog | null>()
+  const [why, setWhy] = useState<string>()
+  const [again, setAgain] = useState(0)
+  useEffect(() => {
+    let stale = false
+    getCatalog().then((c) => { if (!stale) { setCatalog(c); setWhy(undefined) } }, (e: unknown) => { if (!stale) { setCatalog(null); setWhy(e instanceof ChatRefused && e.status !== 0 ? e.message : undefined) } })
+    const reread = () => setAgain((n) => n + 1)
+    window.addEventListener(PAID_CHANGED, reread)
+    return () => { stale = true; window.removeEventListener(PAID_CHANGED, reread) }
+  }, [again])
+  return <CatalogPanel catalog={catalog} why={why} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
 }
 
 interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean>; paid: PaidState; locked: boolean }

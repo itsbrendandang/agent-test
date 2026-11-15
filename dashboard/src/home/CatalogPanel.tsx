@@ -1,5 +1,5 @@
 // "What this can use": the engine's catalog, read-only. Keys are shown as present or missing, never as values.
-import { EngineOffline } from "@/components/Shared"
+import { EngineOffline, SearchCredit } from "@/components/Shared"
 import { HOW_TO_TURN_ON, PAID_LABEL } from "@/lib/paid"
 import type { Catalog, CatalogAgent, ProviderId } from "./api"
 
@@ -78,10 +78,9 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                   <span className="muted small home-models">{usd(catalog.search.exa.usedUsd)} of {usd(catalog.search.exa.ceilingUsd)} used</span>
                 )}
               </li>
-              {catalog.search.literature?.available && <li><span>Literature search (Europe PMC)</span><span className="pill" data-kind="success">free, no key needed</span></li>}
+              {catalog.search.literature?.available && <li><span>Research papers (Europe PMC)</span><span className="pill" data-kind="success">free, no key needed</span></li>}
             </ul>
-            {catalog.search.provider === "exa" && <p className="muted small" data-testid="search-credit">Search powered by Exa</p>}
-            {catalog.search.provider === "fixture" && <p className="muted small">In Demo mode a run uses example sources, not a live web search.</p>}
+            {catalog.search.provider && <p className="muted small" data-testid="search-credit"><SearchCredit provider={catalog.search.provider} />{catalog.search.provider === "fixture" && ": in Demo a review uses example sources, not a live web search."}</p>}
             <p className="muted small">Keys live in the engine's .env file. This page never shows or asks for one.</p>
           </section>
           <section aria-label="Agents">

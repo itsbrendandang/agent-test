@@ -7,17 +7,20 @@ import type { ScoreRow } from "@/swarm/api"
 import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
-export const MODE_LABEL: Record<ChatMode, string> = {
-  ai: "Written by a real model",
-  keyword: "Word search of past runs: not written by a model",
-  scripted: "Practice run: fixed text, not real research",
+/** The three kinds of reply, named for what they are. They must never be mistaken for each other. */
+export const MODE_LABEL: Record<ChatMode, string> = { ai: "AI answer", keyword: "Saved-research search", scripted: "Demo response" }
+/** One short line under the label: what produced this reply. */
+export const MODE_MEANS: Record<ChatMode, string> = {
+  ai: "Written by an AI model.",
+  keyword: "Matched by words in saved research. No AI model read the question.",
+  scripted: "Fixed example text. Not an AI answer and not research.",
 }
-export const MODE_KIND: Record<ChatMode, string> = { ai: "success", keyword: "warning", scripted: "neutral" }
+export const MODE_KIND: Record<ChatMode, string> = { ai: "info", keyword: "outline", scripted: "neutral" }
 
 export const EXAMPLES = [
-  "Should we advance a KRAS G12C hit that has a hERG liability?",
+  "Should we advance a KRAS G12C hit with a hERG risk?",
   "What did past reviews decide about hERG risk?",
-  "Which runs had a statement that was proven wrong, and what was wrong with it?",
+  "Which statements were proven wrong, and why?",
 ]
 
 // The engine's own limits (engine/src/chat/routes.ts): a question of at most 2,000 characters, at most 20 messages.
