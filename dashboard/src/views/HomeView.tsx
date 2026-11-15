@@ -246,7 +246,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   )
 
   // The inspector shows one answer: the one asked for, else the latest. It reads the events that answer received.
-  const canInspect = !!inspected && tabsOf(seenState, seenEvents).length > 0
+  const canInspect = !!inspected && tabsOf(seenState).length > 0
   const showPane = pane.open && canInspect
   const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
   // A source or a checked statement chosen in an answer opens the inspector's Evidence tab on it (where there is room
@@ -378,7 +378,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
         </section>
         {showPane && inspected && seenState && (
           <InspectorPane narrow={narrow} width={pane.width} onClose={() => showInspector(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
-            <Inspector id={inspected} state={seenState} events={seenEvents} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
+            <Inspector id={inspected} state={seenState} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })}
               picked={chosenItem?.id === inspected ? chosenItem : undefined} onPick={pick(inspected)} />
           </InspectorPane>
         )}

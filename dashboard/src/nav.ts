@@ -26,11 +26,10 @@ export const ABOUT: Record<View, string> = {
 export type Listed = Exclude<View, "Benchmarks" | "Compare" | "Settings">
 /** The everyday loop, as in a search tool: ask, read the answer, find it again. These get the weight. */
 export const PRIMARY: readonly Listed[] = ["Overview", "Home", "Runs"]
-/** The quieter group under the main one: how an answer was made. It has a heading. Benchmarks and Compare are not in
- *  the navigation: they open only by their address (#Benchmarks, #Compare, #Compare/<run id>). */
-export const GROUPS: readonly { id: string; label: string; views: readonly Listed[] }[] = [
-  { id: "how", label: "How it works", views: ["Lab", "Board", "Graph", "Agents"] },
-]
+/** The quieter group under the main one, with the heading MORE_LABEL: how an answer was made. Benchmarks and Compare
+ *  are not in the navigation: they open only by their address (#Benchmarks, #Compare, #Compare/<run id>). */
+export const MORE_LABEL = "How it works"
+export const MORE: readonly Listed[] = ["Lab", "Board", "Graph", "Agents"]
 
 /** Names these views had before, and the words now on screen, so an old link or a typed name still opens the right one. */
 const FORMER: Record<string, View> = { Experiments: "Runs", Swarm: "Compare", Worlds: "Graph", Search: "Home", Research: "Home", Saved: "Runs", Review: "Board" }

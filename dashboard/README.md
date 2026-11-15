@@ -56,7 +56,7 @@ view adds one. See "How the screens connect" in the main README.
 | Settings | `Settings` | `SettingsView.tsx` | Run mode (the Demo or Real switch), Usage and limits (spend today and the limits, `src/overview/Credits.tsx`), session token, appearance, help, and a closed "Technical" disclosure with the Connections card, tools, keys (set or not) and file names. |
 
 Overview, Research and Saved research are the primary places: ask, read, find again. One quieter group follows,
-with a heading: "How it works" (Agent Log, Team review, Graph, Agents). The groups are `PRIMARY` and `GROUPS` in
+with a heading: "How it works" (Agent Log, Team review, Graph, Agents). The groups are `PRIMARY` and `MORE` in
 `src/nav.ts`. Benchmarks and Compare are not in the navigation. They open only by their address (`#Benchmarks`,
 `#Compare`, `#Compare/<id>`).
 Settings has one entry, at the foot of the navigation.
@@ -71,7 +71,9 @@ button, the place name, and two slots a view can fill
 page says so once, with "Try again".
 
 Content is at most 1100 px wide, with the same left edge on every view. Graph and Research use the full width
-(`data-wide`): Graph for its picture, Research for its inspector.
+(`data-wide`): Graph for its picture, Research for its inspector. When the inspector is open it reaches the right
+edge of the window. Its tabs are Evidence, Hypotheses (when there are some), Results and Activity, on one line. The
+Agent Lab scene is on Overview, not in the inspector.
 
 ## Run mode (Demo or Real) and provenance
 

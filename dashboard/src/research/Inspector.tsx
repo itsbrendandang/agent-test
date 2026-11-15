@@ -3,36 +3,32 @@
 //            checker, and the critic's notes with whether they were dealt with.
 //  Results:  the files the engine registered for the answer (name, type, size, time), a text preview, a download.
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
-//  Lab:      the team at work, drawn from the same events.
 // A tab exists only when it has content. Nothing here is a placeholder.
 import { tracked } from "@/lib/engine"
-import { lazy, Suspense, useEffect, useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import type { Picked } from "./Answer"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
 import { HypothesesTable } from "./Hypotheses"
 import { artifactUrl } from "./api"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markOf } from "./marks"
-import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState, type ResearchEvent } from "./model"
+import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState } from "./model"
 import { tabsOf, type InspectorTab } from "./inspectorState"
 import { ProviderCredit } from "./ProviderCredit"
 import { PROVIDERS, searchPlace } from "./providers"
 
-// The Lab draws the whole scene: loaded only when its tab is opened.
-const LabTab = lazy(() => import("./LabTab"))
-
-const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity", lab: "Agent Lab" }
+const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", hypotheses: "Hypotheses", results: "Results", activity: "Activity" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} kB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
 
-export function Inspector({ id, state, events, tab, onTab, picked, onPick }: {
-  id: string; state: AnswerState; events: ResearchEvent[]; tab: InspectorTab | undefined; onTab: (tab: InspectorTab) => void
+export function Inspector({ id, state, tab, onTab, picked, onPick }: {
+  id: string; state: AnswerState; tab: InspectorTab | undefined; onTab: (tab: InspectorTab) => void
   /** The source or statement chosen in the answer (or here): lit in the Evidence tab. */
   picked?: Picked
   /** Choose a source or a statement here: the answer shows it too. */
   onPick?: (pick: Omit<Picked, "n">) => void
 }) {
-  const tabs = tabsOf(state, events)
+  const tabs = tabsOf(state)
   const current = tab && tabs.includes(tab) ? tab : tabs[0]
   if (!current) return <p className="muted small inspector-empty">Nothing to inspect yet. It fills in as the answer is made.</p>
   return (
@@ -51,7 +47,6 @@ export function Inspector({ id, state, events, tab, onTab, picked, onPick }: {
         {current === "hypotheses" && <HypothesesTable state={state} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
-        {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Agent Lab.</p>}><LabTab id={id} events={events} /></Suspense>}
       </div>
     </div>
   )

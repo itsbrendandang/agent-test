@@ -38,7 +38,6 @@
 .set-section { padding-block: 28px; }
 .search-composer [data-slot="input-group"] { border-radius: var(--radius-composer); box-shadow: var(--shadow-sticker); }
 [role="tablist"]:where(:not(.ov-lab *)), [role="tab"]:where(:not(.ov-lab *)) { border-radius: var(--radius-pill); }
-.inspector-tabs [role="tab"] { border-radius: var(--radius-pill); letter-spacing: .07em; text-transform: uppercase; font-size: 11px; }
 .effort-segments, .effort-segments label { border-radius: var(--radius-pill); }
 .effort-segments label { border-right: 0; }
 .home-budget progress { height: 8px; border-radius: var(--radius-pill); }

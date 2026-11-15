@@ -10,7 +10,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar"
 import type { PaidState } from "@/lib/paid"
-import { ABOUT, GROUPS, LABEL, PRIMARY, PRODUCT, type Listed, type View } from "@/nav"
+import { ABOUT, LABEL, MORE, MORE_LABEL, PRIMARY, PRODUCT, type Listed, type View } from "@/nav"
 
 const ICON: Record<Listed, typeof Settings> = {
   Overview: LayoutDashboard, Home: MessagesSquare, Runs: ListChecks, Board: Gavel, Agents: Users, Graph: Share2, Lab: ScrollText,
@@ -43,12 +43,10 @@ export function AppSidebar({ view, onGo, paid }: { view: View; onGo: (view: View
           <SidebarGroup>
             <SidebarGroupContent><SidebarMenu>{PRIMARY.map((v) => item(v))}</SidebarMenu></SidebarGroupContent>
           </SidebarGroup>
-          {GROUPS.map((g) => (
-            <SidebarGroup key={g.id}>
-              <SidebarGroupLabel id={`nav-${g.id}`}>{g.label}</SidebarGroupLabel>
-              <SidebarGroupContent><SidebarMenu aria-labelledby={`nav-${g.id}`}>{g.views.map((v) => item(v, true))}</SidebarMenu></SidebarGroupContent>
-            </SidebarGroup>
-          ))}
+          <SidebarGroup>
+            <SidebarGroupLabel id="nav-how">{MORE_LABEL}</SidebarGroupLabel>
+            <SidebarGroupContent><SidebarMenu aria-labelledby="nav-how">{MORE.map((v) => item(v, true))}</SidebarMenu></SidebarGroupContent>
+          </SidebarGroup>
         </nav>
       </SidebarContent>
       <SidebarFooter>
