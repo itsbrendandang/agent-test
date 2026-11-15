@@ -122,7 +122,7 @@ flowchart TB
     subgraph mac["Your machine"]
         app["The app (dashboard)<br/>127.0.0.1:5317<br/>Research chat, Saved research, Compare,<br/>Team review, Agents, Graph, Settings"]
         subgraph engine["The engine, 127.0.0.1:8787"]
-            gate{"Demo or Real?<br/>spending limits,<br/>session token"}
+            gate{"Access check<br/>and spending limits"}
             chat["Chat and planner<br/>answers from saved research<br/>or drafts a plan"]
             board["Team review<br/>lead scientist + 6 members"]
             tracker["Run tracker<br/>starts and follows swarm runs"]
@@ -132,7 +132,7 @@ flowchart TB
         sandbox["Docker sandbox, no network<br/>the swarm (9 roles) or one single agent<br/>then the benchmark's own grader"]
     end
 
-    subgraph outside["Outside services, Real mode only"]
+    subgraph outside["Outside services"]
         anthropic["Anthropic<br/>lead, members, first check"]
         openai["OpenAI<br/>critic and second check"]
         exa["Exa<br/>web search, paid"]
@@ -159,8 +159,6 @@ flowchart TB
     board -. "scout only" .-> exa
     board -. "scout only" .-> pmc
 ```
-
-In Demo mode nothing on the dotted lines is called.
 
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is
 saved as it happens. A review that is interrupted, for example by a crash or a restart, continues

@@ -325,7 +325,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 ## Tests
 
 ```bash
-npm run check             # about 2 minutes: conflict markers, type checks, engine tests, dashboard tests
+npm run check             # about 3 minutes: conflict markers, type checks, engine tests, dashboard tests
 npm run check -- --fast   # a few seconds: conflict markers and type checks only
 npm run check -- --all    # adds the Python suites (harness, BixBench v1 adapter, datasets); several minutes
 ```
@@ -338,16 +338,20 @@ code 1 if a part needs attention. Use it before you commit and after you pull.
 test file does not exit. Use `npm run check` until that is fixed. To run one engine test file:
 `cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts`.
 
-**`main` is not fully green today.** Measured on commit `6a6d416` with a clean checkout:
+**`main` is not fully green today.** Measured on commit `1197442` with a clean checkout (`npm run check`):
 
 | Part | State |
 |---|---|
+| Merge-conflict markers | None. |
 | Engine type check | Clean. |
-| Engine tests | 290 pass, 12 fail in 22 files, and `app.test.ts` does not finish. Seven of the failures are in the board tests (`board-real-run`, `board-direct`): a merge took the scout off the team list, so a practice review gathered no sources. That is being fixed. The other five are in the run tracker and the request handler (`glhf-tracker`, `glhf-runs`, `bixv1-budget`, `app`) and are being fixed too. |
-| Dashboard | Type check clean, 450 tests pass. |
-| Harness (`glhf/bixbench/tests`) | 2,368 pass (last full run; not repeated for this commit). |
+| Engine tests | 306 pass, 4 fail in 25 files, and `app.test.ts` does not finish. The four failures are in the run tracker and the BixBench v1 results API (`glhf-tracker` 2, `glhf-runs` 1, `bixv1-budget` 1) and are being fixed. All board, chat, paid-switch, literature and specialist tests pass. |
+| Dashboard | Type check clean, 478 tests pass. |
+| Harness (`glhf/bixbench/tests/unit`) | 2,531 pass, 2 skipped, 192 expected failures (run after the claims-engine merge). The tests that need Docker were not repeated for this commit. |
 | BixBench v1 adapter | 200 pass (last full run; not repeated for this commit). |
 | Datasets catalogue | 231 pass (last full run; not repeated for this commit). |
+
+GitHub's checks fail on every push for the same reasons: the engine job runs into its time limit on the
+file that does not finish.
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](status.md).

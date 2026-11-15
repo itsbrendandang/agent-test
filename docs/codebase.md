@@ -87,7 +87,7 @@ Do not rename these in the code without a plan for the saved runs.
 ## Is my copy healthy?
 
 ```bash
-npm run check             # about 2 minutes
+npm run check             # about 3 minutes
 ```
 
 One line per part: merge-conflict markers, type checks, engine tests, dashboard tests. It never
@@ -97,8 +97,8 @@ spends money. `-- --fast` takes a few seconds; `-- --all` adds the Python suites
 Known problems on `main` today:
 
 - GitHub's checks fail on every push: one engine test file (`app.test.ts`) does not exit, so the
-  engine job runs into its time limit, and twelve engine tests fail.
-- Seven of those failures came from a merge that took the scout off the team list. Being fixed.
+  engine job runs into its time limit, and four engine tests fail (run tracker and BixBench v1
+  results API). Both are being fixed.
 - Many parts are being built at the same time (see "Being built" above). Their files appear and
   change often. If the engine type check fails right after a pull, pull again a little later
   before you look for the cause in your own change.

@@ -115,7 +115,7 @@ Run this before every commit and after every pull:
 npm run check
 ```
 
-It takes about two minutes, never spends money, and prints one line per part (`ok` or `FAIL`):
+It takes about three minutes, never spends money, and prints one line per part (`ok` or `FAIL`):
 merge-conflict markers, the two type checks, the engine tests and the dashboard tests.
 `npm run check -- --fast` does only the first two (a few seconds). `npm run check -- --all` adds
 the Python suites (several minutes).
