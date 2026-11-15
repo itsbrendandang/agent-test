@@ -4,12 +4,11 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { RunRef } from "@/lab/runs"
 import { forgetScripted } from "@/lib/scripted"
 import { foldAnswer, oncePractice, type ResearchEvent } from "@/research/model"
 import S_DEMO from "@/test/research/stream-demo.jsonl?raw"
 import DIVARASIB from "@/test/research/real-divarasib.jsonl?raw"
-import { doneLine, isLive, runningAnswer, statusLines } from "./liveModel"
+import { doneLine, isLive, statusLines } from "./liveModel"
 import { ResearchAnswer } from "./Answer"
 import { LiveChat } from "./LiveChat"
 
@@ -74,6 +73,7 @@ describe("the live answer chat", () => {
     expect(text()?.textContent).toContain("Switch to Real to ask your question for real.")
     expect(screen.queryByText("Writing now")).toBeNull()
     expect(document.querySelector(".prov")?.textContent).toContain("Practice") // a demo answer says what it is
+    expect(text()?.textContent).not.toContain("Demo answer.") // the badge says it; the text does not repeat it, as in Research
     expect(chat().querySelectorAll(".answer-mark").length).toBeGreaterThan(0) // the checks the engine recorded
   })
 
@@ -132,12 +132,6 @@ describe("the Research answer, while it is written", () => {
 })
 
 describe("the chat's pure parts", () => {
-  const run = (over: Partial<RunRef>): RunRef => ({ kind: "answer", id: "a", title: "Q", startedAt: 0, live: false, status: "finished", ...over })
-  it("picks the newest answer in progress; never a team review or a finished one", () => {
-    expect(runningAnswer([run({ id: "a-1", live: true, startedAt: 1 }), run({ id: "a-2", live: true, startedAt: 2, title: "Newest" }), run({ id: "b-1", kind: "board", live: true, startedAt: 3 }), run({ id: "a-3", startedAt: 4 })])).toEqual({ id: "a-2", question: "Newest" })
-    expect(runningAnswer([run({ id: "a-3" })])).toBeUndefined()
-    expect(runningAnswer(undefined)).toBeUndefined()
-  })
   it("a practice answer's own demo sentence is left out also while it is still streaming, so it never shows and then vanishes", () => {
     expect(oncePractice("**Demo answer. This is fixed")).toBe("")
     expect(oncePractice("**Demo answer. This is fixed example text.** In the example")).toBe("In the example")

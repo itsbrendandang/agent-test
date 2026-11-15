@@ -85,10 +85,10 @@ export const DEMO_PACE_MS = 60
 
 /**
  * The demo brain whose writer gives its text a few words at a time, `paceMs` apart, as a model streams its reply. The
- * Overview's chat then shows a demo answer being written, through the same answer.delta events as a real one. This is
+ * live answer chat then shows a demo answer being written, through the same answer.delta events as a real one. This is
  * the scripted writer's own output while its step runs: a finished answer is never streamed again (pipeline.ts sends
  * the draft once, and a replay after a restart does not repeat it). The lines after NEXT STEPS, which nobody sees,
- * come in one piece. A cancelled answer stops the pauses at once. paceMs 0 is demoBrain itself.
+ * come in one piece. A cancelled answer stops the writing at once, as a real model does: nothing more is sent. paceMs 0 is demoBrain itself.
  */
 export function pacedDemoBrain(paceMs: number): Brain {
   if (!(paceMs > 0)) return demoBrain
@@ -101,6 +101,7 @@ export function pacedDemoBrain(paceMs: number): Brain {
       const words = shown.match(/\s*\S+\s*/g) ?? [shown]
       for (let i = 0; i < words.length; i += 2) {
         if (i > 0 && !signal.aborted) await pause(paceMs, signal)
+        if (signal.aborted) throw new Error("the demo writer was stopped")
         onDelta(words.slice(i, i + 2).join(""))
       }
       if (shown.length < text.length) onDelta(text.slice(shown.length))

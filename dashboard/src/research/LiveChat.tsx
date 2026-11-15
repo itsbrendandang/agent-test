@@ -16,7 +16,7 @@ import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { provenanceOf } from "@/lib/provenance"
 import { MARK_GLYPH, MARK_WORD, markOf, safeUrl } from "@/lib/words"
 import { cancelResearch, useResearchEvents } from "./api"
-import { foldAnswer, ownLines, progressLine, withMarks, type AnswerState } from "./model"
+import { foldAnswer, oncePractice, ownLines, progressLine, withMarks, type AnswerState } from "./model"
 import { Working } from "./Working"
 import { doneLine, isLive, isWorking, statusLines, type LiveTarget } from "./liveModel"
 import "@/design/research.css"
@@ -62,7 +62,7 @@ export function LiveChat({ target, onContinue, continueLabel = "Open in Research
   const [stopping, setStopping] = useState<string>()
   const working = isWorking(s), live = isLive(s)
   const demo = s.mode === "demo"
-  const marked = useMemo(() => withMarks(ownLines(s.markdown), s.complete ? s.statements : [], s.sources, key), [s.markdown, s.complete, s.statements, s.sources, key])
+  const marked = useMemo(() => withMarks(ownLines(demo ? oncePractice(s.markdown) : s.markdown), s.complete ? s.statements : [], s.sources, key), [demo, s.markdown, s.complete, s.statements, s.sources, key])
   const byIndex = useMemo(() => new Map(s.statements.map((st) => [st.index, st])), [s.statements])
   const inline: Inline = {
     key,

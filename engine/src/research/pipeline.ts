@@ -1269,7 +1269,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.
-      // A piece is sent every 400 characters or 200 ms, whichever comes first, so the Overview's chat shows the text as it comes.
+      // A piece is sent every 400 characters or 200 ms, whichever comes first, so a live view shows the text as it comes.
       const streamed = log.has("answer.delta:0")
       let all = "", sent = 0, piece = 0, last = performance.now()
       const flush = (final: boolean) => {

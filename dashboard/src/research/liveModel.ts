@@ -1,20 +1,11 @@
 // The pure part of the live answer view (LiveChat.tsx): the quiet status lines shown above the text while an answer is
-// made, the one line said once it is finished, and which answer is being made now. Everything comes from the answer's
+// made and the one line said once it is finished. Everything comes from the answer's
 // own events (model.ts foldAnswer). Nothing is timed or invented by the page.
-import type { RunRef } from "@/lab/runs"
 import { markOf } from "@/lib/words"
 import { seconds, stepLine, type AnswerState, type Step } from "./model"
 
 /** The answer a live view is open on. `example`: an example answer (read-only: it offers no Stop). */
 export interface LiveTarget { id: string; question: string; example?: boolean }
-
-const ID = /^[\w.-]{1,120}$/
-
-/** The answer being made now: the newest research answer in progress (or waiting), from the engine's list of runs. */
-export function runningAnswer(runs: readonly RunRef[] | undefined): LiveTarget | undefined {
-  const live = (runs ?? []).filter((r) => r.kind === "answer" && r.live && ID.test(r.id)).sort((a, b) => b.startedAt - a.startedAt)[0]
-  return live && { id: live.id, question: live.title }
-}
 
 export const isWorking = (s: AnswerState) => s.status === "starting" || s.status === "queued" || s.status === "running"
 /** The text is still arriving: the answer is being made and the engine has not sent its finished text yet. */

@@ -1,4 +1,4 @@
-// The answer text is streamed while it is written (answer.delta), so the Overview's chat can show it in real time. A
+// The answer text is streamed while it is written (answer.delta), so a live answer view can show it in real time. A
 // demo answer's scripted writer gives its text a few words at a time (demo.ts pacedDemoBrain), and the event stream
 // delivers each piece as it is stored, before the answer is finished. Fakes only; nothing reaches the network.
 import assert from "node:assert/strict"
@@ -23,13 +23,14 @@ test("the paced demo writer gives the same text as the plain one, a few words at
   assert.equal(pacedDemoBrain(0), demoBrain, "pace 0 is the plain demo brain")
 })
 
-test("a cancelled answer stops the paced writer's pauses at once", async () => {
+test("a cancelled answer stops the paced writer at once: no pause waited out, no more text sent", async () => {
   const abort = new AbortController(), pieces: string[] = []
   const started = Date.now()
   const writing = pacedDemoBrain(1_000).write("system", "user", abort.signal, (text) => { pieces.push(text); abort.abort() })
-  const reply = await writing
+  await assert.rejects(writing)
   assert.ok(Date.now() - started < 500, "it did not wait out its pauses")
-  assert.equal(reply.text, DEMO_DRAFT)
+  assert.equal(pieces.length, 1, "nothing was sent after the cancel")
+  assert.ok(pieces[0].length < DEMO_DRAFT.length / 4)
 })
 
 test("a demo answer is streamed while it is written: several pieces, in order, inside the write step, before the text is final", async () => {
