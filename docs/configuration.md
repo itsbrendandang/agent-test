@@ -151,3 +151,9 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
 | (warning for the two keys above) | | The checker is not in a container. It runs as your user. If you remove `--restricted` or add `Bash(python3:*)` to the tools, code that it writes can read any file you can read (also `.env`) and use the network. Do that only inside a container. The `--restricted` mode was not tested with a live call. |
 | `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |
+
+The engine checks this file each time it reads it (`checkConfig` in `engine/src/config.ts`). `max_minutes`,
+`max_usd`, `max_rounds` and `daily_usd` must be numbers of 0 or more. The other `meeting` limits may be left out,
+but when present they must be numbers of 0 or more too. `board` must be a list of names that includes `scout`.
+Otherwise the engine stops with an error that names the file and the key (`$5` or `20 dollars` is refused, not
+read as no limit).
