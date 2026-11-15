@@ -49,13 +49,20 @@ function NoteIcon({ row }: { row: EventRow }) {
 type OnAgent = (row: EventRow) => void
 const onlyLabel = (row: EventRow) => `Show only ${row.agent}'s messages`
 
-function Note({ row, onAgent }: { row: EventRow; onAgent: OnAgent }) {
+/** A small button beside an agent's name that opens its details, when the page offers them. */
+function DetailsBtn({ row, onDetails }: { row: EventRow; onDetails?: (agentId: string) => void }) {
+  if (!onDetails || row.agentId === "engine") return null
+  return <button type="button" className="chat-who-btn" onClick={() => onDetails(row.agentId)} aria-label={`Details of ${row.agent}`}>Details</button>
+}
+
+function Note({ row, onAgent, onDetails }: { row: EventRow; onAgent: OnAgent; onDetails?: (agentId: string) => void }) {
   return (
     <li className="event-log-row chat-note" data-kind={row.kind}>
       <NoteIcon row={row} />
       <div className="chat-note-body">
         <div className="chat-note-line">
           {row.agentId !== "engine" && <button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button>}
+          <DetailsBtn row={row} onDetails={onDetails} />
           {row.agentId === "engine" && <span className="sr-only">{row.agent}: </span>}
           <span className="chat-note-text">{row.text}</span>
           <When at={row.at} />
@@ -81,7 +88,7 @@ function More({ text }: { text: string }) {
   )
 }
 
-function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
+function Message({ item, onAgent, onDetails }: { item: ChatItem; onAgent: OnAgent; onDetails?: (agentId: string) => void }) {
   const { row, first, last } = item
   const { say, more } = splitMessage(row.text)
   return (
@@ -93,7 +100,7 @@ function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
         </button>
       )}</div>
       <div className="chat-body">
-        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><span>{readableName(row.kind)}</span></div> : <span className="sr-only">{row.agent}: </span>}
+        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><DetailsBtn row={row} onDetails={onDetails} /><span>{readableName(row.kind)}</span></div> : <span className="sr-only">{row.agent}: </span>}
         <div className="chat-bubble">
           <p>{say || "(no text recorded)"}</p>
           {more && (row.thought
@@ -131,12 +138,14 @@ function kindGroups(rows: readonly EventRow[]): FilterGroup[] {
   return [{ options: [...seen].map(([value, count]) => ({ value, label: readableName(value), count })).sort((a, b) => a.label.localeCompare(b.label)) }]
 }
 
-export function EventLog({ rows, run, connection, agent, onAgent }: {
+export function EventLog({ rows, run, connection, agent, onAgent, onDetails }: {
   rows: EventRow[]; run: { id: string; kind: RunKind; provenance?: Provenance }; connection: Connection
   /** An agent another view named (the address's "agent"): its engine name or its lab character. The agent menu starts on it. */
   agent?: string
   /** Called with the agent's name when the agent filter changes (undefined: every agent), so the address can say it. */
   onAgent?: (name: string | undefined) => void
+  /** Opens an agent's details from a small button beside its name, when the page offers them. */
+  onDetails?: (agentId: string) => void
 }) {
   const [filter, setFilterState] = useState<LogFilter>({ agent: "", kind: "", query: "" })
   const [downloadError, setDownloadError] = useState("")
@@ -211,7 +220,7 @@ export function EventLog({ rows, run, connection, agent, onAgent }: {
       {!rows.length ? <p className="event-log-empty">{connection === "connecting" ? "Loading event log…" : "No events received for this run yet."}</p> : !shown.length ? <p className="event-log-empty">No events match these filters.</p> : (
         <div className="chat-scroll" ref={thread} onScroll={onScroll}>
           <ol className="event-log-rows chat-thread" aria-label="Run events">
-            {items.map((item) => item.row.note ? <Note key={item.row.id} row={item.row} onAgent={focusOn} /> : <Message key={item.row.id} item={item} onAgent={focusOn} />)}
+            {items.map((item) => item.row.note ? <Note key={item.row.id} row={item.row} onAgent={focusOn} onDetails={onDetails} /> : <Message key={item.row.id} item={item} onAgent={focusOn} onDetails={onDetails} />)}
           </ol>
         </div>
       )}

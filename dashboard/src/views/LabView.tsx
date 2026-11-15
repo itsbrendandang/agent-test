@@ -14,6 +14,8 @@ import { eventRows, swarmLogEvents } from "@/lab/logRows"
 import { KIND_WORD, type LabModel, type RunKind } from "@/lab/model"
 import { answerRuns, boardRuns, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
 import { claimsLab } from "@/lab/claims"
+import { RunCast } from "@/details/RunCast"
+import type { DetailTarget } from "@/details/DetailSheet"
 import { useClaimsRun, useLabEvents, useSwarmRun, type Connection } from "@/lab/useLabModel"
 import "@/design/lab.css"
 
@@ -69,6 +71,7 @@ function RunLog({ run, picker, agent, onAgent }: { run: RunRef; picker: ReactNod
   const rows = useMemo(() => eventRows(run.kind === "swarm" ? swarmLogEvents(claims.events, Array.isArray(notes) ? notes as LabEvent[] : [], claims.seenAt, claims.board && typeof claims.board.run_id === "string" ? claims.board.run_id : undefined) : ordered, run.kind), [run.kind, ordered, notes, claims.events, claims.seenAt, claims.board])
   const connection: Connection = run.kind === "swarm" ? swarm.connection : stream.connection
   const provenance = full.provenance ?? run.provenance
+  const [detail, setDetail] = useState<DetailTarget>()
   return (
     <>
       {picker}
@@ -83,7 +86,8 @@ function RunLog({ run, picker, agent, onAgent }: { run: RunRef; picker: ReactNod
         <p>{provenance === "practice" ? "Practice run · scripted example, not real research. " : ""}Every recorded event, oldest first. {run.live && connection !== "ended" ? "New events appear as the team works." : "Stored events from this run."}</p>
       </header>
       {full.note && <p className="lab-note" role={full.status === "failed" ? "alert" : undefined}>{full.note}</p>}
-      <EventLog rows={rows} run={{ id: run.id, kind: run.kind, provenance }} connection={connection} agent={agent} onAgent={onAgent} />
+      <RunCast run={{ kind: run.kind, id: run.id, live: run.live && connection !== "ended", practice: provenance === "practice" || provenance === "example" || undefined }} events={run.kind === "swarm" ? claims.events : ordered} rows={rows} target={detail} onTarget={setDetail} />
+      <EventLog rows={rows} run={{ id: run.id, kind: run.kind, provenance }} connection={connection} agent={agent} onAgent={onAgent} onDetails={(id) => setDetail({ kind: "agent", id })} />
     </>
   )
 }

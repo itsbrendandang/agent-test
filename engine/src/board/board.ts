@@ -25,7 +25,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { bool, map, obj, oneOf, opt, str } from "@earendil-works/pi-schema"
-import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
+import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi, UsageDoc } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { type AgentDef, instructionsFor, loadAgent, loadRoster, SEARCH_TOOLS } from "./agents.ts"
 import { rosterEntries, runSpecialists } from "../specialists.ts"
@@ -44,6 +44,7 @@ import { researchSpentToday } from "../research/spend.ts"
 import { mirrorMemo, mirrorRun } from "../db/supabase.ts"
 import { glhfModalSpentToday } from "../glhf/modal.ts"
 import { FirstPass } from "./triage.ts"
+import { memberUsage } from "./usage.ts"
 import { buildModels, modelFor } from "../models.ts"
 import { holder, take } from "../runlock.ts"
 import { writeWhole } from "../fsx.ts"
@@ -769,7 +770,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
       }
       const replies = roster.map((a) => done.get(a.name) as { agent: AgentDef; reply: string })
 
-      for (const { agent, reply } of replies) log.emit(`reply:${round}:${agent.name}`, { type: "member.replied", round, member: agent.name, ...(modeOf(agent) ? { mode: modeOf(agent) } : {}), text: stripClaims(reply), usd: 0, ...(shortSummary(reply) ? { summary: shortSummary(reply) } : {}) })
+      for (const { agent, reply } of replies) log.emit(`reply:${round}:${agent.name}`, { type: "member.replied", round, member: agent.name, ...(modeOf(agent) ? { mode: modeOf(agent) } : {}), text: stripClaims(reply), usd: 0, ...(shortSummary(reply) ? { summary: shortSummary(reply) } : {}), usage: await usageOf(state.members[agent.name]) })
       const verdicts = await checkRound(claimDeps, round, replies.map(({ agent, reply }) => ({ member: agent.name, claims: parseClaims(reply) })))
       state.lastRound = replies.map(({ agent, reply }, i) => ({ member: roleOf(agent) ? `${agent.title}, as ${roleOf(agent)}` : agent.title, reply: stripClaims(reply), verdicts: verdicts[i] }))
       const usdNow = await spend()
@@ -853,6 +854,14 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     state.members[agent.name] = c.id
     save()
   }
+  /** One agent's own model use so far (its conversation's usage record): read only, so a replay reads the same numbers. */
+  const usageOf = async (conversation: ConversationId | string | number | undefined) => {
+    try {
+      return memberUsage(conversation !== undefined ? await harness.snapshot(UsageDoc, conversation as ConversationId, ctx) : undefined, (models) => (mock ? 0 : usdOf(models, config.meeting.fallback_usd_per_mtok ?? 15, mock).usd))
+    } catch {
+      return undefined
+    }
+  }
   const memberOf = (api: ToolExecutionApi) =>
     Object.entries(state.members).find(([, id]) => id === api.conversationId)?.[0] ?? "lead-scientist"
 
@@ -868,7 +877,8 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     const usd = await spend()
     save()
     rememberRun(config, runId, state.ledger, mock ? `${runDir(config, runId)}/expertise` : undefined)
-    log.emit("finished", { type: "run.finished", usd, minutes: (Date.now() - state.startedAt) / 60_000 })
+    const members = Object.fromEntries(await Promise.all([[lead.name, leadConversation.id] as const, ...Object.entries(state.members)].map(async ([name, id]) => [name, await usageOf(id)] as const)).then((all) => all.flatMap(([name, usage]) => (usage ? [[name, usage] as const] : []))))
+    log.emit("finished", { type: "run.finished", usd, minutes: (Date.now() - state.startedAt) / 60_000, members })
     state.finished = true
     save()
   } catch (error) {

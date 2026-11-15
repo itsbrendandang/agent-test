@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { ChatRefused, getCatalog, type Catalog, type CatalogAgent } from "@/home/api"
 import { agentText, skillText } from "@/home/chat"
+import { LatestReview } from "@/details/LatestReview"
 import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentKey } from "@/lab/identity"
 import type { RunKind } from "@/lab/model"
@@ -231,6 +232,7 @@ function MemberPanel({ open, member, onClose, returnFocus }: { open: boolean; me
                 <span className="muted small"> · in the newest {member.group === "nine" ? "benchmark run" : "team review"}</span>
               </p>
               {member.details && <div className="team-prompt">{member.details}</div>}
+              {member.group === "review" && <LatestReview agent={member.agent} />}
             </div>
           </>
         )}
