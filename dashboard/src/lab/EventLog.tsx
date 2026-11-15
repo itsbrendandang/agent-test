@@ -93,7 +93,7 @@ function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
   const { row, first, last } = item
   const { say, more } = splitMessage(row.text)
   return (
-    <li className="event-log-row chat-msg" data-kind={row.kind} data-first={first || undefined} data-last={last || undefined}>
+    <li className="event-log-row chat-msg" data-kind={row.kind} data-first={first || undefined} data-last={last || undefined} data-wrong={row.wrong ? true : undefined}>
       <div className="chat-face">{first && (
         // The face and the name filter the log to this agent; the line above the log then links to its details.
         <button type="button" className="chat-face-btn" aria-label={onlyLabel(row)} title={onlyLabel(row)} onClick={() => onAgent(row)}>
@@ -101,13 +101,14 @@ function Message({ item, onAgent }: { item: ChatItem; onAgent: OnAgent }) {
         </button>
       )}</div>
       <div className="chat-body">
-        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><span>{readableName(row.kind)}</span></div> : <span className="sr-only">{row.agent}: </span>}
+        {first ? <div className="chat-who"><button type="button" className="chat-name" title={onlyLabel(row)} onClick={() => onAgent(row)}><strong>{row.agent}</strong></button><span>{readableName(row.kind)}</span>{row.job && <span className="chat-job">{row.job}</span>}</div> : <span className="sr-only">{row.agent}: </span>}
         <div className="chat-bubble">
           <p>{say || "(no text recorded)"}</p>
           {more && (row.thought
             ? <Reasoning className="chat-thinking"><ReasoningTrigger className="chat-toggle" /><ReasoningContent className="chat-more-text"><p>{more}</p></ReasoningContent></Reasoning>
             : <More text={more} />)}
           <Sources row={row} />
+          {!!row.wrong && <p className="chat-wrong"><span aria-hidden="true">✕</span> {row.wrong === 1 ? "A check contradicted one statement here." : `A check contradicted ${row.wrong} statements here.`}</p>}
         </div>
         {(validTime(row.at) || row.usd !== undefined) && <div className="chat-meta"><When at={row.at} /><Cost row={row} /></div>}
       </div>

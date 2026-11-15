@@ -203,3 +203,20 @@ it("draws a team review's rounds as headed lines, and its statement checks and s
   expect(within(list.querySelector<HTMLElement>(".chat-note[data-kind='search']")!).getByRole("link", { name: "Exa" })).toHaveAttribute("href", "https://exa.ai")
   expect(screen.getByRole("status")).toHaveTextContent("5 of 5 events shown") // the round lines are not events
 })
+
+it("shows a team member's job under the name, and a red line on a reply a check contradicted", () => {
+  const review: EventRow[] = [
+    { id: "a", agent: "Critic", agentId: "critic", kind: "write", text: "The margin is thin.", sources: [], round: { n: 1 }, job: "tries to prove the others wrong", wrong: 1 },
+    { id: "b", agent: "Scout", agentId: "scout", kind: "write", text: "Twelve samples.", sources: [], round: { n: 1 }, job: "looks at the data before any research begins", wrong: 2 },
+    { id: "c", agent: "Lead", agentId: "lead-scientist", kind: "write", text: "Fine.", sources: [], round: { n: 1 } },
+  ]
+  render(<EventLog rows={review} run={{ id: "b", kind: "board" }} connection="ended" />)
+  const [critic, scout, lead] = screen.getByRole("list", { name: "Run events" }).querySelectorAll<HTMLElement>(".chat-msg")
+  expect(critic.querySelector(".chat-who")).toHaveTextContent("tries to prove the others wrong")
+  expect(critic).toHaveAttribute("data-wrong")
+  expect(critic).toHaveTextContent("A check contradicted one statement here.")
+  expect(scout).toHaveTextContent("A check contradicted 2 statements here.")
+  expect(lead).not.toHaveAttribute("data-wrong")
+  expect(lead).not.toHaveTextContent("contradicted")
+  expect(lead.querySelector(".chat-job")).toBeNull()
+})

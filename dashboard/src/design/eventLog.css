@@ -65,6 +65,9 @@
 .chat-note[data-mark="supported"] .chat-note-mark { color: var(--success); }
 .chat-note[data-mark="contradicted"], .chat-note[data-mark="contradicted"] .chat-note-mark { color: var(--danger); }
 .chat-note[data-mark="insufficient"] .chat-note-mark { color: var(--warning); }
+/* A reply that holds a statement a check contradicted: a red edge on the bubble and one line that says so. */
+.chat-msg[data-wrong] .chat-bubble { border-left: 3px solid var(--danger); }
+.chat-wrong { margin-top: 6px !important; color: var(--danger); font-size: 12px; }
 .chat-jump { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); box-shadow: var(--shadow-pop); background: var(--background); }
 @media (max-width: 520px) { .chat-thread { padding-inline: 12px; } .chat-note { margin-left: 0; } }
 /* A touch-size window: every control 44 px, like the rest of the app (index.css), and the menus full width. */

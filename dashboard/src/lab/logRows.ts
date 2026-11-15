@@ -1,5 +1,5 @@
 import { hasWords } from "@/lib/format"
-import { MARK_WORD, sandboxWords, markOf, splitReply, type Mark } from "@/lib/words"
+import { BOARD_JOB, MARK_WORD, markOf, sandboxWords, splitReply, type Mark } from "@/lib/words"
 import { PROVIDERS } from "@/research/providers"
 import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
@@ -33,6 +33,10 @@ export interface EventRow {
   round?: { n: number; final?: boolean }
   /** What a check found about a statement, as one of the four marks. */
   mark?: Mark
+  /** A team review member's plain job, shown under the name. */
+  job?: string
+  /** How many of this reply's statements a check contradicted (team review only). */
+  wrong?: number
   /** Where a search looked, as the run recorded it: the chat credits it (Exa, Europe PMC, a database, or example sources). */
   provider?: string
 }
@@ -49,6 +53,9 @@ const NOTE_TYPES = new Set([
 const NOTE_KINDS = new Set(["search", "fetch", "sources"])
 /** Event types whose text is an agent's reasoning or plan, not a draft, a list or a record. */
 const THOUGHT_TYPES = new Set(["opening", "lead.framed", "round.started", "member.replied", "claim.checked", "hypothesis.checked", "statement.checked", "review.note", "issue.raised"])
+/** A team review's checker, in plain words. */
+const CHECKER: Record<string, string> = { "first-pass": "The quick first check", jev: "The quick first check", openai: "The second, careful check", anthropic: "The second, careful check", "claude-code": "The second, careful check" }
+const SPECIALIST_JOB = "method specialist: reads method notes, has no tools and runs nothing"
 const STEP_AGENT: Record<string, string> = { prepare: "planner", hypothesize: "planner", search: "searcher", fetch: "searcher", evaluate: "relevance", write: "writer", check: "checker", review: "critic", revise: "writer", save: "engine" }
 export function sourceLink(url: unknown, title?: unknown): LogSource[] {
   if (typeof url !== "string") return []
@@ -64,12 +71,19 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
   const titles = new Map<string, string>()
   const steps = new Map<string, LabEvent>()
   const sources = new Map<number, LogSource[]>()
+  const specialists = new Set<string>()
+  const wrong = new Map<string, number>()
   for (const e of ordered) {
     if (e.type === "run.roster" || e.type === "specialists") {
       for (const item of objects(e.members ?? e.items)) {
         const id = str(item.agent) ?? str(item.name)
         if (id && str(item.title)) titles.set(id, str(item.title)!)
+        if (id && e.type === "run.roster" && item.source === "specialist") specialists.add(id)
       }
+    }
+    if (e.type === "claim.checked" && markOf(e.verdict) === "contradicted") {
+      const at = `${str(e.member)}|${num(e.round)}`
+      wrong.set(at, (wrong.get(at) ?? 0) + 1)
     }
     if (e.type === "step.started" && str(e.step)) steps.set(str(e.step)!, e)
     if (e.type === "sources") for (const item of objects(e.items)) if (num(item.n) !== undefined) sources.set(num(item.n)!, sourceLink(item.url, item.title))
@@ -99,7 +113,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "opening": agentId = "planner"; kind = "prepare"; text = str(e.text) ?? "Opened the research question."; break
       case "lead.framed": agentId = "lead-scientist"; kind = "prepare"; text = `Framed the question: ${str(e.text) ?? ""}`; break
       // A team review's discussion: the lead opens each round, each member replies (its one-line summary first, the
-      // whole reply behind "Show thinking"), and each statement check is a quiet note under the reply it checked.
+      // whole reply behind "Show thinking"), and after the replies of a round, each statement check is a quiet note.
       case "round.started": agentId = "lead-scientist"; kind = "prepare"; text = (str(e.message) ?? "").replace(/^\s*Round \d+\.\s*/, "").trim() || `Started round ${num(e.round) ?? ""}.`; break
       case "member.replied": {
         kind = "write"
@@ -172,13 +186,16 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       }
       default: text = join(`${readableName(type.replaceAll(".", " "))}.`, e.message, e.summary, e.text, e.note, e.error)
     }
-    const agent = agentId === "engine" ? "Engine" : titles.get(agentId) ?? agentIdentity(agentId.replace(/^specialist:/, "")).label
+    const agent = agentId === "engine" ? "Engine" : (type === "claim.checked" && CHECKER[agentId]) || (titles.get(agentId) ?? agentIdentity(agentId.replace(/^specialist:/, "")).label)
     const total = /^(run|research)\.(finished|failed|cancelled)$/.test(type)
     const usd = num(e.usd) ?? num(e.spentUsd)
     links = [...new Map(links.map((s) => [s.url, s])).values()]
     const note = agentId === "engine" || NOTE_TYPES.has(type) || NOTE_KINDS.has(kind)
+    const title = /\((.+)\)\s*$/.exec(titles.get(agentId) ?? "")?.[1]
+    const job = run === "board" && !note ? (specialists.has(agentId) ? SPECIALIST_JOB : BOARD_JOB[agentId] ?? title?.toLowerCase()) : undefined
+    const contradicted = type === "member.replied" ? wrong.get(`${agentId}|${num(e.round)}`) : undefined
     const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(e.final === true ? { final: true } : {}) } : undefined
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && str(e.provider) ? { provider: str(e.provider) } : {}) }]
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && str(e.provider) ? { provider: str(e.provider) } : {}) }]
   })
 }
 

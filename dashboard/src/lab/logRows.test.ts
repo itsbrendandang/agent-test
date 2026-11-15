@@ -35,6 +35,31 @@ describe("full event log", () => {
     expect(rows.find((r) => r.kind === "search")?.sources).toHaveLength(1)
     expect(rows.find((r) => r.kind === "error")?.text).toContain("The run failed safely.")
   })
+  it("gives a team review's speakers their jobs, flags a reply a check contradicted, and names the checkers in plain words", () => {
+    const rows = eventRows([
+      { key: "roster", type: "run.roster", members: [{ name: "critic", title: "Critic", role: "member", source: "board" }, { name: "tox", title: "Toxicologist", role: "member", source: "specialist" }] },
+      { key: "r1", type: "round.started", round: 1, message: "Go." },
+      { key: "a", type: "member.replied", member: "critic", round: 1, text: "Two claims." },
+      { key: "b", type: "member.replied", member: "tox", round: 1, text: "One claim." },
+      { key: "c1", type: "claim.checked", member: "critic", round: 1, claim: "x", verdict: "contradicted", checker: "first-pass", checkedBy: "scripted" },
+      { key: "c2", type: "claim.checked", member: "critic", round: 1, claim: "y", verdict: "contradicted", checker: "openai", checkedBy: "gpt-x" },
+      { key: "c3", type: "claim.checked", member: "tox", round: 1, claim: "z", verdict: "verified", checker: "claude-code" },
+      { key: "d", type: "member.replied", member: "critic", round: 2, text: "Later." },
+    ], "board")
+    const reply = (key: string) => rows.find((r) => r.id.endsWith(`:${key}`))!
+    expect(reply("r1").job).toBe("runs the discussion; does not do the research or decide what is true")
+    expect(reply("a")).toMatchObject({ job: "tries to prove the others wrong", wrong: 2 })
+    expect(reply("b")).toMatchObject({ job: "method specialist: reads method notes, has no tools and runs nothing" })
+    expect(reply("b").wrong).toBeUndefined()
+    expect(reply("d").wrong).toBeUndefined() // a check in round 1 does not mark the same member's round 2 reply
+    expect(reply("c1")).toMatchObject({ agent: "The quick first check", agentId: "first-pass" })
+    expect(reply("c1").text).toContain("Practice run: no model checked it.")
+    expect(reply("c2")).toMatchObject({ agent: "The second, careful check", agentId: "openai" })
+    expect(reply("c2").text).toContain("Checked by gpt-x.")
+    expect(reply("c3").agent).toBe("The second, careful check")
+    expect(rows.every((r) => !r.note || r.job === undefined)).toBe(true)
+    expect(eventRows([{ key: "a", type: "member.replied", member: "critic", round: 1, text: "x" }], "answer")[0].job).toBeUndefined()
+  })
   it("combines agent, kind and word search filters including sources", () => {
     const rows = eventRows(events, "answer")
     expect(filterRows(rows, { agent: "specialist:toxicologist", kind: "write", query: "SAFETY note" })).toHaveLength(1)

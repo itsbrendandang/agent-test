@@ -7,6 +7,7 @@ import { claimNodeId, sourceNodeId } from "@/graph/model"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { DATABASES, get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
+import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
@@ -269,11 +270,12 @@ export function BoardView() {
       <section className="talk" aria-label="Discussion">
         <h2 className="talk-title">The discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
         <p className="muted small">
-          Who said what, in order, round by round. Under each reply, a quiet note says what a separate check found for each statement in it.
+          Who said what, in order, round by round. After the replies in each round, a quiet note says what a separate check found for each statement.
           {shown && <> <a href={logLink({ kind: "board", id: runId })}>Open in Agent Log</a></>}
         </p>
         {shown ? <EventLog rows={rows} run={{ id: runId, kind: "board", provenance: startedAs === undefined && !runRow?.example ? undefined : provenanceOf({ scripted: startedAs, example: runRow?.example }) }} connection={connection} />
           : <p className="empty-note">Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Search</a>.</p>}
+        {live && !memoText && <Loading>{headline}</Loading>}
         {events.filter((e): e is Of<"constraint"> => e.type === "constraint").map((c) => (
           <p key={c.key} className="pill" data-kind="warning">The lead was told to wrap up: {c.detail}</p>
         ))}
