@@ -1,6 +1,6 @@
 // How a node looks. Colour is never the only signal: every kind has its own shape, and claims and tests carry the
 // verdict glyph in their label, in the side panel and in the list. Colours come from the app's own palette (index.css).
-import type { GraphNode, NodeKind, Outcome } from "./types"
+import type { GraphNode, NodeKind, Outcome } from "../graph/types"
 
 export type Shape = "dodecahedron" | "capsule" | "cylinder" | "torus" | "sphere" | "octahedron" | "cube" | "tetrahedron" | "cone" | "slab"
 

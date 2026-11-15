@@ -15,7 +15,7 @@ import type { Catalog, EffortId } from "@/home/api"
 import { effortInEffect } from "@/home/chat"
 import { AskBox } from "@/research/AskBox"
 import { answerLimitLine } from "@/research/limitLine"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 /** Who greets you, with one plain line each: the jobs a question passes through. */
 const TEAM: { name: string; does: string }[] = [

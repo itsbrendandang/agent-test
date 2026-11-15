@@ -20,7 +20,7 @@ import {
   type Activity, type CharacterId, type LabLayout, type LabModel, type LabState, type RoomId, type Trip,
 } from "./model"
 import { active, advance, claimPlace, createSim, moving, settle, stationPoint, syncTrips, visitorPoint } from "./motion"
-import "./lab.css"
+import "../design/lab.css"
 
 export interface LabSceneProps {
   /** What the team is doing, from engine events (adapter.ts). The only thing that makes anyone move. */

@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net"
 import { runInNewContext } from "node:vm"
 
 test("dark text tokens meet WCAG AA on their surfaces", () => {
-  const css = readFileSync(new URL("../../dashboard/src/theme.css", import.meta.url), "utf8")
+  const css = readFileSync(new URL("../../dashboard/src/design/theme.css", import.meta.url), "utf8")
   const tokens = Object.fromEntries([...css.matchAll(/--([\w-]+):\s*(#[\da-f]{6})/gi)].map((m) => [m[1], m[2]]))
   const luminance = (hex: string) => hex.slice(1).match(/../g)!.map((v) => {
     const n = parseInt(v, 16) / 255

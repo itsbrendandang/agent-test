@@ -7,7 +7,7 @@ import type { SearchProvider } from "@/board/api"
 import { AgentAvatar } from "./AgentAvatar"
 import { Mascot } from "./Mascot"
 import { CLAIM_GLYPH, CLAIM_WORD, LOG_KIND_WORD, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, captionOf, characterOf, clockTime, dayName, logDid, logKind, roomOf, shortTime, type CharacterId, type LabModel, type LogKind, type LogLine } from "./model"
-import "./lab.css"
+import "../design/lab.css"
 
 const IDLE_HINT = "Teammates stay at their places until the engine reports work."
 

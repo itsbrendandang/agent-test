@@ -23,7 +23,7 @@ import { CancelRun } from "@/swarm/CancelRun"
 import { NewRun } from "@/swarm/NewRun"
 import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
 import { ROLES, roleOf, type RoleKey } from "@/swarm/roles"
-import "@/swarm/swarm.css"
+import "@/design/swarm.css"
 
 const round = (phase: string) => phase.match(/\d+/)?.[0]
 const num = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : String(Number(x.toPrecision(3))))

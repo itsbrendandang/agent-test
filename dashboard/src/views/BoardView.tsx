@@ -20,7 +20,7 @@ import { BOARD_JOB, checkedOf, clip, leadSentence, MARK_WORD, markOf, mendTitle,
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
 import { plainCost, plainDuration, plainTitle, plainWhen } from "@/lib/format"
-import "@/board/board.css"
+import "@/design/board.css"
 
 type Of<T extends BoardEvent["type"]> = Extract<BoardEvent, { type: T }>
 const VERDICTS: Verdict[] = ["verified", "contradicted", "unsupported", "unchecked"]

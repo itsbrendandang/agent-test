@@ -3,7 +3,7 @@
 // until a person confirms it in its card. The conversation is kept for the browser session only.
 import { SquarePenIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import "@/research/research.css"
+import "@/design/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"

@@ -3,7 +3,7 @@
 // at Anthropic, OpenAI or Exa: no provider tells the engine that, so it is not shown.
 import { useEffect, useState } from "react"
 import { readEngine } from "@/lib/engine"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 type Rec = Record<string, unknown>
 const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined)

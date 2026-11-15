@@ -3,7 +3,7 @@ import { readableName } from "./identity"
 import { filterRows, logDownload, type EventRow, type LogFilter } from "./logRows"
 import type { Provenance, RunKind } from "./model"
 import type { Connection } from "./useLabModel"
-import "./eventLog.css"
+import "../design/eventLog.css"
 
 export function EventLog({ rows, run, connection }: { rows: EventRow[]; run: { id: string; kind: RunKind; provenance?: Provenance }; connection: Connection }) {
   const [filter, setFilter] = useState<LogFilter>({ agent: "", kind: "", query: "" })
