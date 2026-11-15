@@ -19,7 +19,7 @@ export function useTryAsking(): TryAskingReply | undefined {
     readEngine<TryAskingReply>("/api/trending").then((r) => {
       const items = Array.isArray(r?.items) ? r.items.filter(isQuestion).slice(0, 6) : []
       if (!stopped && items.length) setReply({ source: r.source === "google-trends" ? "google-trends" : "curated", fetchedAt: Number(r.fetchedAt) || 0, items })
-    }, () => {}) // no engine: the row is left out, the box still works
+    }, () => {}) // no engine: the caller shows its fixed questions, the box still works
     return () => { stopped = true }
   }, [])
   return reply
