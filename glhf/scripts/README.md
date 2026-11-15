@@ -46,7 +46,16 @@ python3 glhf/scripts/fetch_literature.py "crispr off-target" --sources europepmc
 ```
 
 Output: one Markdown file per query in `glhf/data/literature/` with the merged top
-results (title, authors, venue, year, DOI/link, which source, abstract).
+results (title, authors, venue, year, DOI/link, source, **citation count**, abstract).
+Add `--json` to also write a machine-readable `.json` the app/agents can read.
+
+```bash
+python3 glhf/scripts/fetch_literature.py "crispr off-target" --json   # also save JSON
+```
+
+**How results are ranked:** papers with abstracts first, then **most-cited**, then
+newest — so the most trusted sources are at the top. All sources are queried **in
+parallel**, so one query finishes in a few seconds.
 
 > Tip: use 3–6 PubMed-style keywords, not full sentences.
 > Note: the app already does this live during a run — this is a cache/offline backup.
