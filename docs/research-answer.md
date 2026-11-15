@@ -360,7 +360,7 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 | `GET /api/research/threads` | One line per thread, newest first. |
 | `GET /api/research/:id/artifacts` and `.../artifacts/:name` | The registered result files; one of them as a download. |
 | `GET /api/search?q=` | Saved answers are found here as `kind: "answer"`, next to the runs. |
-| `GET /api/structure?test=<id>`, `?accession=<UniProt>`, `?sequence=<letters>[&accession=]`, `&prefer=alphafold`, `&retry=1` | One protein's predicted structure: `{model, modelLabel, link, uniprot?, accession?, length, meanPlddt, pdb, cached, note?}`. `422` for a sequence over 400 amino acids with no accession. |
+| `GET /api/structure?test=<id>`, `?accession=<UniProt>`, `?sequence=<letters>[&accession=]`, `&prefer=alphafold`, `&retry=1` | One protein's predicted structure: `{model, modelLabel, link, uniprot?, accession?, length, sequence?, meanPlddt, pdb, cached, note?, at}`. `422` for a sequence over 400 amino acids with no accession. |
 | `GET /api/structure/tests` | The built-in test proteins, with their sequences. |
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they
