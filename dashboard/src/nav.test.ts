@@ -12,15 +12,15 @@ describe("navigation", () => {
     expect(MORE.map((v) => LABEL[v])).toEqual(["Agent Log", "Team review", "Graph", "Agents"])
     expect([...PRIMARY, ...MORE, "Settings", "Benchmarks", "Compare"].sort()).toEqual([...VIEWS].sort()) // every view is reachable, none twice
   })
-  it("opens Overview when the address names no view and nothing is remembered", () => {
+  it("opens Overview, the home page, when the address names no view", () => {
     expect(DEFAULT_VIEW).toBe("Overview")
     expect(initialView("")).toBe("Overview")
     expect(initialView("#")).toBe("Overview")
     expect(initialView("#Nowhere")).toBe("Overview")
     expect(initialView("#%E0%A4%A")).toBe("Overview") // a broken escape
-    localStorage.setItem("app.view", "Runs") // a place used before wins over the default
-    expect(initialView("")).toBe("Runs")
-    expect(initialView("#Home")).toBe("Home") // and the address wins over both: Research keeps its key
+    localStorage.setItem("app.view", "Runs") // a place used before (older versions remembered it) does not replace the home page
+    expect(initialView("")).toBe("Overview")
+    expect(initialView("#Home")).toBe("Home") // the address wins: Research keeps its key
   })
   it("opens the view the address names", () => {
     expect(initialView("#Compare")).toBe("Compare")

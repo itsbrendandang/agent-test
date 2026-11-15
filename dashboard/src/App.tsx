@@ -18,7 +18,7 @@ import { useWorking } from "./lib/working"
 import { getCatalog } from "./home/api"
 import { setOpen } from "./lib/open"
 import { HELP, useShell } from "./lib/shell"
-import { initialView, LABEL, rememberView, runOfHash, viewOfHash, type View } from "./nav"
+import { initialView, LABEL, runOfHash, viewOfHash, type View } from "./nav"
 import { AgentsView } from "./views/AgentsView"
 import { BenchmarksView } from "./views/BenchmarksView"
 import { BoardView } from "./views/BoardView"
@@ -60,7 +60,6 @@ export default function App() {
   const [help, setHelp] = useState(false)
   const [open, setOpenState] = useState(sidebarOpen)
   const setSidebar = (next: boolean) => { setOpenState(next); try { localStorage.setItem(SIDEBAR, next ? "1" : "0") } catch { /* private mode */ } }
-  useEffect(() => rememberView(view), [view])
   useEffect(() => { const show = () => setHelp(true); window.addEventListener(HELP, show); return () => window.removeEventListener(HELP, show) }, [])
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {

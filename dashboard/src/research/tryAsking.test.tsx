@@ -2,8 +2,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
-import { Hero } from "@/overview/Hero"
-import { STARTERS } from "@/overview/starters"
 import { routes, to } from "@/test/engine"
 import { TryAsking } from "./TryAsking"
 import type { TryAskingReply } from "./trending"
@@ -58,17 +56,5 @@ describe("Try asking", () => {
     await waitFor(() => expect(sent.length).toBe(1))
     expect(screen.getByRole("button", { name: examples[0] })).toBeTruthy()
     expect(screen.getAllByRole("group")).toHaveLength(1)
-  })
-
-  it("on the Overview a trending question fills the box (nothing is sent); without the engine the fixed starters stay", async () => {
-    routes({ "GET /api/trending": { status: 200, body: TRENDING }, "GET /api/chat/catalog": { status: 503, body: {} } })
-    const first = render(<Hero onOpen={() => {}} />)
-    await userEvent.click(await screen.findByRole("button", { name: TRENDING.items[0].question }))
-    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(TRENDING.items[0].question)
-    first.unmount()
-
-    routes({})
-    render(<Hero onOpen={() => {}} />)
-    expect(await screen.findByRole("button", { name: STARTERS[0].question })).toBeTruthy()
   })
 })

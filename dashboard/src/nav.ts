@@ -2,8 +2,8 @@
 export const PRODUCT = "AI Scientist Bot"
 
 // The views of the app. The keys are addresses (the URL hash, stored choices, deep links): they never change.
-// What a person reads is LABEL. Overview is first and is what opens when the address names no view and no view
-// was used before. "Home" stays the key of Research.
+// What a person reads is LABEL. Overview is the home page: it is first, and it is what opens when the address names
+// no view (the brand in the sidebar goes there too). "Home" stays the key of Research, so old links keep working.
 export const VIEWS = ["Overview", "Home", "Runs", "Compare", "Benchmarks", "Board", "Agents", "Graph", "Lab", "Settings"] as const
 export type View = (typeof VIEWS)[number]
 export const DEFAULT_VIEW: View = "Overview"
@@ -11,7 +11,7 @@ export const DEFAULT_VIEW: View = "Overview"
 export const LABEL: Record<View, string> = { Overview: "Overview", Home: "Research", Runs: "Saved research", Compare: "Compare", Benchmarks: "Benchmarks", Board: "Team review", Agents: "Agents", Graph: "Graph", Lab: "Agent Log", Settings: "Settings" }
 /** One short line per place, for the navigation's tooltips and for screen readers. */
 export const ABOUT: Record<View, string> = {
-  Overview: "Ask a question and watch the team work on it.",
+  Overview: "Home: research in progress, counts, spend and checks, and recent research.",
   Home: "Ask a research question and read the answer with its sources.",
   Runs: "Everything that was researched, newest first, with keyword search.",
   Compare: "One agent against a team of nine, on the same benchmark task.",
@@ -49,12 +49,5 @@ export function viewOfHash(hash: string): View | undefined {
 /** The run a URL hash names, when it names one. Only the characters a run id can have are accepted. */
 export const runOfHash = (hash: string): string | undefined => { const id = parts(hash)[1]; return id && /^[\w.-]{1,200}$/.test(id) ? id : undefined }
 
-const LAST = "app.view"
-/** Remember the view a person is on, so reopening the app returns there. */
-export const rememberView = (view: View) => { try { localStorage.setItem(LAST, view) } catch { /* private mode */ } }
-/** The view to show on load: the one the address names, else the last one used, else Overview. */
-export const initialView = (hash: string): View => {
-  let last: string | null = null
-  try { last = localStorage.getItem(LAST) } catch { /* private mode */ }
-  return viewOfHash(hash) ?? ((VIEWS as readonly string[]).includes(last ?? "") ? (last as View) : DEFAULT_VIEW)
-}
+/** The view to show on load: the one the address names, else the home page (Overview). */
+export const initialView = (hash: string): View => viewOfHash(hash) ?? DEFAULT_VIEW

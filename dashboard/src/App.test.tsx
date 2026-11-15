@@ -112,10 +112,11 @@ describe("the navigation", () => {
     await waitFor(() => expect(screen.getByTestId("place")).toHaveTextContent("Compare"))
     expect(takeOpen("swarm")).toBe("glhf-7")
   })
-  it("remembers the last place for the next visit", async () => {
-    const t = await show("#Home")
-    await t.user.click(screen.getByRole("button", { name: "Agents" }))
-    expect(localStorage.getItem("app.view")).toBe("Agents")
+  it("the brand goes home: the Overview", async () => {
+    const t = await show("#Agents")
+    await t.user.click(screen.getByRole("link", { name: "AI Scientist Bot: home" }))
+    await waitFor(() => expect(screen.getByTestId("place")).toHaveTextContent("Overview"))
+    expect(window.location.hash).toBe("#Overview")
   })
   it("below 768 px it is a drawer: closed at first, the header names the place, choosing a place closes it", async () => {
     width(520)

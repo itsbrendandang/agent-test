@@ -135,14 +135,14 @@ Benchmarks and Compare are not in the sidebar. They open only by their address (
 
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. The answer is written right under the box. Below it, follow the six-room Agent Lab and its activity panel. The answer is also the conversation in Research, so a follow-up there continues it. One quiet line counts research and practice apart. |
+| Overview | The home page: the app opens here and the brand in the sidebar comes back here. A one-line question box starts an answer and opens it in Research, where a follow-up continues its thread. **In progress** lists every running answer, team review and benchmark run: the question, the agents taking part, the step running now, the time it has taken and what it has spent, each with links to Research (or Team review, Compare) and the Agent Log. **Metrics** shows done, running and failed runs, today's spend against the daily limit, the last 7 days' recorded spend, the limit per run, and average time and cost per answer, sources and checks for research runs or practice runs. **Recent research** lists what ended. A compact Agent Lab shows one running run. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does, as member cards grouped by team: the team of nine in step order, the team review with its lead first, then the specialists A to Z. Details opens one member at a time in a side panel, so the other cards keep their size. |
 | Graph | One run as a picture of who said what. |
-| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab stays on Overview. |
+| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. One toolbar holds the search box, the Agent and Kind of step menus (each choice with its number of events) and Clear; on the right, Download (JSON or CSV of the shown events). The run menu above it lists runs in progress, then finished runs, next to Follow newest. No room picture here; the Lab is at the bottom of the Overview. |
 | Benchmarks | Not in the sidebar; open `#Benchmarks`. Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, Usage and limits (spent today, the limit per run and per day, Exa search), and Appearance: Light, Dark, or Match system. |
 
@@ -167,8 +167,8 @@ The address bar always says what is shown, so Back, Forward and a copied link re
 `#Compare/<run id>`. The code is in `dashboard/src/lib/links.ts`.
 
 The Overview Lab has **three rooms across and two down on wide screens**: Discovery, Planning,
-Experiment bench; Evidence review, Quality control, Report studio. The activity panel sits
-below it. Narrow screens use fewer columns. Agents walk between rooms along the corridors.
+Experiment bench; Evidence review, Quality control, Report studio. On the Overview it is compact,
+without the activity panel (the Agent Log has every event). Narrow screens use fewer columns. Agents walk between rooms along the corridors.
 The room art is unchanged. The Lab's look is by Anh Lam.
 
 Research answers can add **method specialists** whose skills fit the question. Code matches
@@ -196,12 +196,12 @@ with the text drawn by streamdown with raw HTML, images and non-web links turned
 its status lines and live text for the running answer. Other screens can open it as a live preview
 of an answer in progress.
 
-**Try asking** shows biology questions under the question box on Overview and Research. They
+**Try asking** shows biology questions under the question box on Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
 only the biology word, never a person in the search. When none is about biology, or the feed
-cannot be read, curated biology questions are shown. On Overview and on Research a click fills
-the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
+cannot be read, curated biology questions are shown. On Research a click fills the box; nothing is
+sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
 preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A source that fails is skipped and named; a
@@ -239,14 +239,15 @@ the Demo pipeline, not by hand. These are practice runs, not research or benchma
 
 ### Earlier Demo screenshots
 
-The Overview, Research, Team review and Lab pictures below show earlier layouts in **Demo
-mode**. They are practice runs: fixed example text, not research. The app labels them "Practice".
+The Research, Team review and Lab pictures below show earlier layouts in **Demo mode**. The
+Overview picture is the current home page, in Demo mode. They are practice runs: fixed example text, not research. The app labels them "Practice".
 The Benchmarks picture is described separately.
 
-**Overview.** Practice runs are counted apart from research, so the big number is only what real
-models produced.
+**Overview.** A practice benchmark run (scripted models, the demo task) is in progress. Every
+number comes from the engine's records; practice runs are counted apart from research, and a
+number with nothing behind it says "No data" or "Not recorded".
 
-![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
+![The Overview home page: the question box, a practice benchmark run in progress, the metrics tiles and recent research](docs/images/overview.png)
 
 **Research.** You ask; the answer is split into hypotheses, each with the sources for and against
 it. A mark that rests on one source only says so ("one source only").

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { resolve } from "node:path"
 import { ROOT, type BoardConfig } from "./config.ts"
-import { listArtifacts, listRecords } from "./research/store.ts"
+import { listArtifacts, listRecords, shortLine } from "./research/store.ts"
 import type { ResearchRecord, Artifact } from "./research/types.ts"
 
 const root = resolve(ROOT, "examples")
@@ -96,6 +96,6 @@ export function handleExample(req: IncomingMessage, res: ServerResponse, url: UR
   if (thread && !examples.length) return false
   const saved = listRecords(config).filter((r) => !thread || r.thread === thread).map((r) => ({ ...r, artifacts: listArtifacts(config, r.id) }))
   const items = [...saved, ...examples].sort((a, b) => thread ? a.startedAt - b.startedAt : b.startedAt - a.startedAt)
-  if (!thread && url.searchParams.get("all") === "1") return json(200, { items: items.map((r) => ({ id: r.id, thread: r.thread, question: r.question.slice(0, 200), status: r.status, mode: r.mode, startedAt: r.startedAt, finishedAt: r.finishedAt, usd: r.usd, ...("example" in r && { example: true, readOnly: true, provenance: "Example · practice, $0" }) })) })
+  if (!thread && url.searchParams.get("all") === "1") return json(200, { items: items.map((r) => ({ ...shortLine(r), ...("example" in r && { example: true, readOnly: true, provenance: "Example · practice, $0" }) })) })
   return json(200, { ...(thread ? { thread } : {}), items: items.slice(0, thread ? undefined : 50) })
 }

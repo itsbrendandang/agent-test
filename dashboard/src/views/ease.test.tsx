@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { HowItWorks } from "@/components/HowItWorks"
 import { lastRun, linkTo, showing } from "@/lib/open"
 import { forgetScripted } from "@/lib/scripted"
-import { DEFAULT_VIEW, initialView, rememberView, runOfHash, viewOfHash } from "@/nav"
+import { DEFAULT_VIEW, initialView, runOfHash, viewOfHash } from "@/nav"
 import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON } from "@/test/home"
 import { BoardView } from "./BoardView"
@@ -76,13 +76,11 @@ describe("first visit", () => {
 })
 
 describe("where you were", () => {
-  it("reopening returns to the last view; an address that names a view wins", () => {
+  it("opening the app goes to the home page; an address that names a view wins", () => {
     expect(initialView("")).toBe(DEFAULT_VIEW)
-    rememberView("Board")
-    expect(initialView("")).toBe("Board")
+    localStorage.setItem("app.view", "Board") // what older versions remembered
+    expect(initialView("")).toBe(DEFAULT_VIEW)
     expect(initialView("#Runs")).toBe("Runs")
-    localStorage.setItem("app.view", "Nowhere")
-    expect(initialView("")).toBe(DEFAULT_VIEW)
   })
   it("an address can name a run, and only something shaped like a run id", () => {
     expect(viewOfHash("#Board/202611150024-kras-1060e203")).toBe("Board")

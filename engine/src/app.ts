@@ -30,6 +30,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./board/agents.ts"
 import { BudgetReached, checkDailyBudget, loadState, lockHolder, OverridesUnreadable, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
+import { boardExtras } from "./board/listline.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
@@ -108,7 +109,7 @@ export function createApp(options: AppOptions = {}) {
       const s = read.state
       // "running" also when another process (the CLI) holds the run's lock, so it is not resumed twice.
       const status = s.finished ? "done" : active.has(id) || lockHolder(`${dir}/${id}`) !== undefined ? "running" : s.failed ? "failed" : "paused"
-      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...read.summary }]
+      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...read.summary, ...boardExtras(s) }]
     })
   }
 
