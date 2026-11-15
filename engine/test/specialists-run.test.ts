@@ -215,7 +215,7 @@ test("runs without a plan, and plans that leave no free place, have no specialis
 test("a practice run of a plan whose specialists replaced the Experimenter still finishes", async () => {
   const w = await world()
   const reply = (await w.call("POST", "/api/chat", { messages: [{ role: "user", content: RNASEQ }], effort: "quick" })).body
-  assert.deepEqual(reply.plan.agents.map((a: any) => a.name), ["lead-scientist", "scout", "proposer", "bulk-rnaseq-analyst"])
+  assert.deepEqual(reply.plan.agents.map((a: any) => a.name), ["lead-scientist", "scout", "proposer", "critic", "bulk-rnaseq-analyst"])
   const started = await w.call("POST", `/api/chat/plans/${reply.plan.id}/start`, { confirm: true })
   assert.equal(started.status, 201); assert.deepEqual(started.body.specialists, ["bulk-rnaseq-analyst"])
   await w.done(started.body.id)
