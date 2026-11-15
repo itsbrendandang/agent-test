@@ -6,12 +6,12 @@
   --lab-hall-grid: var(--line, #e9e7e0);
   --lab-wall: var(--edge, #dedcd4);
   --lab-line: var(--line, #e9e7e0);
-  --lab-plate: #ffffff;
-  --lab-prop: #8a8983;
+  --lab-plate: var(--dark-surface, #ffffff);
+  --lab-prop: var(--dark-muted, #8a8983);
   --lab-ink: var(--text, #242421);
   --lab-muted: var(--text-muted, #66655f);
   --lab-select: var(--focus, #242421);
-  --lab-job: #8a4a12;
+  --lab-job: var(--dark-warning, #8a4a12);
   --lab-fail: var(--danger, #9c1414);
   --lab-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
@@ -27,27 +27,27 @@
 .lab-map .lab-room[data-active] .lab-card { filter: drop-shadow(0 0 9px rgba(255, 210, 63, .55)); }
 
 /* The room's name, as 2.0 labels it: a pill with a dot for the room's state, the name, and a count. */
-.lab-room-name { position: absolute; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 9px; border: 1px solid #e2dccb; border-radius: 14px; background: #fffdf6; box-shadow: 0 1px 3px rgba(16, 24, 40, .06); font-family: var(--font-toon, inherit); font-size: clamp(12px, calc(var(--u) * 15), 16px); font-weight: 600; color: #1b1a17; white-space: nowrap; pointer-events: none; line-height: 1.2; z-index: 6; }
-.lab-room-name i { width: 9px; height: 9px; border-radius: 50%; background: #c4bdad; flex: none; }
-.lab-room-name[data-room-state="active"] i { background: #ffd23f; box-shadow: 0 0 0 2px #1b1a1722; }
-.lab-room-name[data-room-state="done"] i { background: #5cc48d; }
-.lab-room-name b { font-family: var(--ui-font-sans, inherit); font-size: 12px; font-weight: 600; color: #55504a; background: #e9e6dd; border-radius: 8px; padding: 0 6px; }
+.lab-room-name { position: absolute; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 9px; border: 1px solid var(--dark-edge, #e2dccb); border-radius: 14px; background: var(--dark-surface, #fffdf6); box-shadow: 0 1px 3px rgba(16, 24, 40, .06); font-family: var(--font-toon, inherit); font-size: clamp(12px, calc(var(--u) * 15), 16px); font-weight: 600; color: var(--dark-text, #1b1a17); white-space: nowrap; pointer-events: none; line-height: 1.2; z-index: 6; }
+.lab-room-name i { width: 9px; height: 9px; border-radius: 50%; background: var(--dark-subtle, #c4bdad); flex: none; }
+.lab-room-name[data-room-state="active"] i { background: var(--dark-warning-bg, #ffd23f); box-shadow: 0 0 0 2px #1b1a1722; }
+.lab-room-name[data-room-state="done"] i { background: var(--dark-success-bg, #5cc48d); }
+.lab-room-name b { font-family: var(--ui-font-sans, inherit); font-size: 12px; font-weight: 600; color: var(--dark-muted, #55504a); background: var(--dark-subtle, #e9e6dd); border-radius: 8px; padding: 0 6px; }
 
 /* The name plate under a teammate's place: 2.0's name tag, fixed here, and the control that selects the teammate. */
-.lab-plate { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 5px; max-width: calc(var(--u) * 190); min-height: 20px; padding: 1px 9px 1px 7px; border: 1px solid #e2dccb; border-radius: 10px; background: #fffdf6; color: #1b1a17; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 8; -webkit-tap-highlight-color: transparent; }
-.lab-plate i { width: 7.5px; height: 7.5px; border-radius: 50%; background: #6a6457; flex: none; }
-.lab-plate[data-state="working"] i { background: #2b6cb0; }
-.lab-plate[data-state="fetching"] i, .lab-plate[data-state="handing-off"] i { background: #c26a00; }
-.lab-plate[data-state="done"] i { background: #17824d; }
+.lab-plate { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 5px; max-width: calc(var(--u) * 190); min-height: 20px; padding: 1px 9px 1px 7px; border: 1px solid var(--dark-edge, #e2dccb); border-radius: 10px; background: var(--dark-surface, #fffdf6); color: var(--dark-text, #1b1a17); font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 8; -webkit-tap-highlight-color: transparent; }
+.lab-plate i { width: 7.5px; height: 7.5px; border-radius: 50%; background: var(--dark-subtle, #6a6457); flex: none; }
+.lab-plate[data-state="working"] i { background: var(--dark-info-bg, #2b6cb0); }
+.lab-plate[data-state="fetching"] i, .lab-plate[data-state="handing-off"] i { background: var(--dark-warning-bg, #c26a00); }
+.lab-plate[data-state="done"] i { background: var(--dark-success-bg, #17824d); }
 .lab-plate[data-state="failed"] i { background: var(--lab-fail); border-radius: 2px; }
 .lab-plate:hover { border-color: var(--edge-strong, #8a8983); }
 .lab-plate:focus-visible { outline: 2px solid var(--lab-select); outline-offset: 2px; }
-.lab-plate[aria-pressed="true"] { background: #1b1a17; border-color: #1b1a17; color: #fffdf6; }
+.lab-plate[aria-pressed="true"] { background: var(--dark-ink, #1b1a17); border-color: var(--dark-edge, #1b1a17); color: var(--dark-on-ink, #fffdf6); }
 .lab-plate[data-state="failed"] { border-color: var(--lab-fail); }
 /* Not in this run: quiet. No box; the words are in the tooltip, the screen reader's name and the side panel. */
 .lab-plate[data-in-run="false"] { border-color: transparent; background: transparent; color: var(--lab-muted); font-weight: 400; opacity: .8; }
 .lab-plate[data-in-run="false"] i { display: none; }
-.lab-plate[data-in-run="false"][aria-pressed="true"] { background: #1b1a17; color: #fffdf6; opacity: 1; }
+.lab-plate[data-in-run="false"][aria-pressed="true"] { background: var(--dark-ink, #1b1a17); color: var(--dark-on-ink, #fffdf6); opacity: 1; }
 
 /* A teammate: a Buddy, 56 map units tall, standing on its point. */
 .lab-agent { position: absolute; width: calc(var(--u) * 60.5); min-width: 24px; transform: translate(-50%, -90.7%); cursor: pointer; display: block; -webkit-tap-highlight-color: transparent; }
@@ -56,7 +56,7 @@
 .lab-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
 /* The shadow under its feet; a turning ring while it works (2.0's floor mark); a dashed ring when it is selected. */
 .lab-ring { position: absolute; left: 50%; top: 90.7%; width: 52%; aspect-ratio: 30 / 9; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(27, 26, 23, .10); z-index: -1; }
-.lab-agent[data-state="working"]:not([data-out="true"]) .lab-ring, .lab-agent[data-state="fetching"]:not([data-out="true"]) .lab-ring { width: 84%; background: transparent; border: 2.5px dashed #2b6cb0; animation: lab-turn 2.8s linear infinite; }
+.lab-agent[data-state="working"]:not([data-out="true"]) .lab-ring, .lab-agent[data-state="fetching"]:not([data-out="true"]) .lab-ring { width: 84%; background: transparent; border: 2.5px dashed var(--dark-info, #2b6cb0); animation: lab-turn 2.8s linear infinite; }
 .lab-agent[data-selected] .lab-ring { width: 100%; background: transparent; border: 1.5px dashed rgba(27, 26, 23, .55); animation: none; }
 @keyframes lab-turn { to { transform: translate(-50%, -50%) rotate(360deg); } }
 .lab-agent[data-in-run="false"] .lab-art { opacity: .3; filter: grayscale(1); }
@@ -68,7 +68,7 @@
 .lab-mood-dot { animation: lab-pulse 2s ease-in-out infinite; }
 @keyframes lab-pulse { 50% { opacity: .45; } }
 /* A failed step keeps a mark on the teammate to the end of the run. */
-.lab-alert { position: absolute; left: 4%; top: 8%; width: 16px; height: 16px; border-radius: 50%; background: var(--lab-fail); color: #fff; font-size: 12px; font-weight: 700; line-height: 16px; text-align: center; z-index: 2; }
+.lab-alert { position: absolute; left: 4%; top: 8%; width: 16px; height: 16px; border-radius: 50%; background: var(--lab-fail); color: var(--dark-on-ink, #fff); font-size: 12px; font-weight: 700; line-height: 16px; text-align: center; z-index: 2; }
 /* What is in hand, beside the Buddy: the thing it carries, or the tool it works with. */
 .lab-held { position: absolute; left: 62%; top: 30%; width: 36%; pointer-events: none; }
 .lab-held svg { display: block; width: 100%; overflow: visible; }
@@ -80,17 +80,17 @@
 @keyframes lab-tool { to { transform: translateY(-6%) rotate(8deg); } }
 
 /* The bubble above a head, in 2.0's speech-bubble look: the state in a mark and a word, or what is being carried. */
-.lab-chip { position: absolute; transform: translate(-50%, -50%); padding: 2px 9px; border-radius: 13px; border: 1px solid #e2dccb; background: #fffdf6; color: #1b1a17; font-size: 12px; line-height: 1.35; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(16, 24, 40, .10); }
+.lab-chip { position: absolute; transform: translate(-50%, -50%); padding: 2px 9px; border-radius: 13px; border: 1px solid var(--dark-edge, #e2dccb); background: var(--dark-surface, #fffdf6); color: var(--dark-text, #1b1a17); font-size: 12px; line-height: 1.35; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(16, 24, 40, .10); }
 .lab-chip[hidden] { display: none; }
-.lab-chip[data-state="working"] { color: #1d4e8f; }
+.lab-chip[data-state="working"] { color: var(--dark-info, #1d4e8f); }
 .lab-chip[data-state="fetching"], .lab-chip[data-state="handing-off"] { color: var(--lab-job); }
-.lab-chip[data-cargo="true"] { border-color: #e3a46c; background: #fff7ea; color: var(--lab-job); font-weight: 600; }
+.lab-chip[data-cargo="true"] { border-color: var(--dark-warning, #e3a46c); background: var(--dark-subtle, #fff7ea); color: var(--lab-job); font-weight: 600; }
 .lab-chip[data-state="done"] { color: var(--success, #0d5f37); }
-.lab-chip[data-state="failed"] { border-color: var(--lab-fail); background: #fff1f1; color: var(--lab-fail); border-width: 2px; font-weight: 600; }
+.lab-chip[data-state="failed"] { border-color: var(--lab-fail); background: var(--dark-subtle, #fff1f1); color: var(--lab-fail); border-width: 2px; font-weight: 600; }
 .lab-chip[data-state="cancelled"] { border-style: dashed; color: var(--neutral, #55504a); }
 
 .lab-visitor { cursor: default; width: calc(var(--u) * 50); }
-.lab-visitor-name { position: absolute; left: 50%; top: 96%; transform: translateX(-50%); padding: 0 7px; border: 1px dotted var(--edge-strong, #8a8983); border-radius: 10px; background: #fffdf6; font-size: 12px; line-height: 1.4; white-space: nowrap; max-width: calc(var(--u) * 170); overflow: hidden; text-overflow: ellipsis; }
+.lab-visitor-name { position: absolute; left: 50%; top: 96%; transform: translateX(-50%); padding: 0 7px; border: 1px dotted var(--edge-strong, #8a8983); border-radius: 10px; background: var(--dark-surface, #fffdf6); font-size: 12px; line-height: 1.4; white-space: nowrap; max-width: calc(var(--u) * 170); overflow: hidden; text-overflow: ellipsis; }
 
 /* The equipment of a room comes alive only while the model says someone of that room works or fetches (data-active),
    and never without motion: under reduced motion, or with "Pause motion", everything on the map is still. */
@@ -122,19 +122,19 @@
 
 /* A claims-engine run: each claim is a small card in the room of its state. The state is written on it. */
 .lab-tray { position: absolute; margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; pointer-events: none; z-index: 7; }
-.lab-claim { pointer-events: auto; padding: 1px 6px; border: 1px solid #c98a55; border-radius: 4px; background: #fff7ea; color: #5a3300; font-size: 12px; line-height: 1.35; white-space: nowrap; box-shadow: 0 1px 2px #0000001a; }
+.lab-claim { pointer-events: auto; padding: 1px 6px; border: 1px solid var(--dark-warning, #c98a55); border-radius: 4px; background: var(--dark-subtle, #fff7ea); color: var(--dark-warning, #5a3300); font-size: 12px; line-height: 1.35; white-space: nowrap; box-shadow: 0 1px 2px #0000001a; }
 .lab-claim[hidden] { display: none; }
-.lab-claim[data-state="supported"] { border-color: #17824d; background: #e9f8ef; color: #0d5f37; }
-.lab-claim[data-state="rejected"] { border-color: var(--lab-fail); background: #fff1f1; color: var(--lab-fail); }
-.lab-claim[data-state="not_established"] { border-style: dashed; border-color: var(--edge-strong, #8a8983); background: #f4f1e8; color: var(--neutral, #55504a); }
+.lab-claim[data-state="supported"] { border-color: var(--dark-success, #17824d); background: var(--dark-subtle, #e9f8ef); color: var(--dark-success, #0d5f37); }
+.lab-claim[data-state="rejected"] { border-color: var(--lab-fail); background: var(--dark-subtle, #fff1f1); color: var(--lab-fail); }
+.lab-claim[data-state="not_established"] { border-style: dashed; border-color: var(--edge-strong, #8a8983); background: var(--dark-subtle, #f4f1e8); color: var(--neutral, #55504a); }
 
 /* The bar under the map, like a video player's: replay controls, the run's state, Pause motion. */
 .lab-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--lab-line); font-size: 13px; color: var(--lab-muted); min-height: 44px; }
 .lab-foot .btn { padding: 4px 10px; min-height: 30px; }
 .lab-foot .lab-pause { margin-left: auto; }
 .lab-badge { border: 1px solid var(--lab-line); border-radius: 20px; padding: 2px 10px; font-size: 12px; background: var(--surface, #fdfcfa); color: var(--lab-muted); white-space: nowrap; }
-.lab-badge[data-status="running"] { color: var(--success, #0d5f37); background: #eaf6e6; border-color: #bfe2b5; }
-.lab-badge[data-status="failed"] { color: var(--lab-fail); background: #ffe9e9; border-color: #f3bcbc; }
+.lab-badge[data-status="running"] { color: var(--success, #0d5f37); background: var(--dark-subtle, #eaf6e6); border-color: var(--dark-success, #bfe2b5); }
+.lab-badge[data-status="failed"] { color: var(--lab-fail); background: var(--dark-subtle, #ffe9e9); border-color: var(--dark-danger, #f3bcbc); }
 .lab-badge[data-status="cancelled"], .lab-badge[data-status="waiting"] { border-style: dashed; }
 .lab-player { display: flex; align-items: center; gap: 6px; flex: 1 1 300px; min-width: 0; flex-wrap: wrap; }
 .lab-player-label { font-weight: 650; color: var(--lab-ink); white-space: nowrap; }
@@ -153,7 +153,7 @@
 .lab-panel h2, .page .lab-panel h2 { font-size: 18px; font-weight: 650; line-height: 1.2; letter-spacing: 0; text-transform: none; color: var(--lab-ink); margin: 0; overflow-wrap: anywhere; }
 .lab-panel h3, .page .lab-panel h3 { font-size: 13px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--lab-ink); margin: 0; }
 .lab-status { justify-self: start; display: inline-block; padding: 1px 9px; border-radius: 20px; background: var(--info-bg, #dce9fb); color: var(--info, #1d4e8f); font-size: 12px; font-weight: 600; border: 1px solid transparent; }
-.lab-status[data-state="fetching"], .lab-status[data-state="handing-off"] { background: #fcebe4; color: var(--lab-job); }
+.lab-status[data-state="fetching"], .lab-status[data-state="handing-off"] { background: var(--dark-subtle, #fcebe4); color: var(--lab-job); }
 .lab-status[data-state="done"] { background: var(--success-bg, #cdf2dd); color: var(--success, #0d5f37); }
 .lab-status[data-state="failed"] { background: var(--danger-bg, #ffd5d5); color: var(--lab-fail); }
 .lab-status[data-state="idle"] { background: var(--neutral-bg, #e9e6dd); color: var(--neutral, #55504a); }
@@ -180,14 +180,14 @@
 .lab-log li[data-who]:not([data-cont]):first-child { padding-top: 5px; }
 .lab-log-dot { grid-column: 1; position: relative; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--lab-wall); background: var(--lab-plate); color: var(--lab-muted); }
 .lab-log li[data-who]:not([data-cont]) .lab-log-dot { margin-top: 3px; }
-.lab-log li[data-kind="search"] .lab-log-dot { background: #e6effb; border-color: #b9cdea; color: #1f4f8f; }
-.lab-log li[data-kind="screen"] .lab-log-dot { background: #efe9fa; border-color: #cfc2ea; color: #56388f; }
-.lab-log li[data-kind="write"] .lab-log-dot { background: #fbf0d9; border-color: #e6cf9c; color: var(--lab-job); }
-.lab-log li[data-kind="check"] .lab-log-dot { background: #eceef4; border-color: #c3c9da; color: #38456b; }
-.lab-log li[data-kind="done"] .lab-log-dot { background: #e2f3e8; border-color: #b4d9c1; color: var(--success, #0d5f37); }
-.lab-log li[data-kind="handoff"] .lab-log-dot { background: #e3f2f1; border-color: #b3d8d5; color: #17605b; }
-.lab-log li[data-kind="warn"] .lab-log-dot { background: #fdf3cf; border-color: #e3cd7a; color: #6b5200; }
-.lab-log li[data-kind="failed"] .lab-log-dot { background: #ffe9e9; border-color: var(--lab-fail); color: var(--lab-fail); }
+.lab-log li[data-kind="search"] .lab-log-dot { background: var(--dark-subtle, #e6effb); border-color: var(--dark-info, #b9cdea); color: var(--dark-info, #1f4f8f); }
+.lab-log li[data-kind="screen"] .lab-log-dot { background: var(--dark-subtle, #efe9fa); border-color: var(--dark-info, #cfc2ea); color: var(--dark-violet, #56388f); }
+.lab-log li[data-kind="write"] .lab-log-dot { background: var(--dark-subtle, #fbf0d9); border-color: var(--dark-warning, #e6cf9c); color: var(--lab-job); }
+.lab-log li[data-kind="check"] .lab-log-dot { background: var(--dark-subtle, #eceef4); border-color: var(--dark-edge, #c3c9da); color: var(--dark-info, #38456b); }
+.lab-log li[data-kind="done"] .lab-log-dot { background: var(--dark-subtle, #e2f3e8); border-color: var(--dark-success, #b4d9c1); color: var(--success, #0d5f37); }
+.lab-log li[data-kind="handoff"] .lab-log-dot { background: var(--dark-subtle, #e3f2f1); border-color: var(--dark-teal, #b3d8d5); color: var(--dark-teal, #17605b); }
+.lab-log li[data-kind="warn"] .lab-log-dot { background: var(--dark-warning-bg, #fdf3cf); border-color: var(--dark-warning, #e3cd7a); color: var(--dark-warning, #6b5200); }
+.lab-log li[data-kind="failed"] .lab-log-dot { background: var(--dark-subtle, #ffe9e9); border-color: var(--lab-fail); color: var(--lab-fail); }
 .lab-log-face { grid-column: 2; }
 .lab-log-text { grid-column: 3; margin: 0; min-width: 0; font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .lab-log li[data-who]:not([data-cont]) .lab-log-text { padding-top: 2px; }
@@ -203,7 +203,7 @@
 .lab-log li[data-who]:not([data-cont]) time { padding-top: 3px; }
 .lab-log-note { grid-column: 3 / 5; margin: 3px 0 1px; padding: 5px 8px; border: 1px solid var(--lab-line); border-radius: 8px; background: var(--lab-ground); font-size: 12px; line-height: 1.45; color: var(--lab-ink); overflow-wrap: anywhere; }
 .lab-log li:not([data-who]) .lab-log-note { grid-column: 2 / 5; }
-.lab-log li[data-kind="failed"] .lab-log-note { border-color: #f3bcbc; background: #fff6f6; }
+.lab-log li[data-kind="failed"] .lab-log-note { border-color: var(--dark-danger, #f3bcbc); background: var(--dark-surface, #fff6f6); }
 .lab-log-day { grid-column: 1 / -1; justify-self: start; position: relative; margin: 4px 0 6px; padding: 1px 9px; border: 1px solid var(--lab-wall); border-radius: 999px; background: var(--lab-plate); font-size: 11px; font-weight: 600; color: var(--lab-muted); }
 .lab-visitors { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .lab-visitors li { line-height: 1.4; }

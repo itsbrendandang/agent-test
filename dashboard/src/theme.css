@@ -1,0 +1,58 @@
+.dark {
+  color-scheme: dark;
+  --bg: #201f1c;
+  --nav: #262520;
+  --surface: #2b2a25;
+  --hover: #39382f;
+  --text: #f2efe5;
+  --ink: #f2efe5;
+  --text-muted: #c1bdb0;
+  --edge: #555247;
+  --line: #454238;
+  --brand: #454a25;
+  --on-ink: #201f1c;
+  --edge-strong: #96907f;
+  --focus: #e7eb89;
+  --success: #98dfb5; --success-bg: #203d2c;
+  --warning: #f5cc8f; --warning-bg: #47351d;
+  --danger: #ffaaaa; --danger-bg: #492b2b;
+  --info: #acccff; --info-bg: #283a52;
+  --neutral: #d1cbbd; --neutral-bg: #3c3931;
+  --muted: var(--hover);
+  --destructive: #ffaaaa;
+  --surface-sunken: #24231f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .2);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, .4);
+  --chart-1: #e7eb89; --chart-2: #acccff; --chart-3: #98dfb5; --chart-4: #f5cc8f; --chart-5: #d2b9ff;
+  --dark-surface: var(--surface);
+  --dark-subtle: var(--hover);
+  --dark-text: var(--text);
+  --dark-muted: var(--text-muted);
+  --dark-edge: var(--edge);
+  --dark-focus: var(--focus);
+  --dark-success: var(--success); --dark-success-bg: var(--success-bg);
+  --dark-warning: var(--warning); --dark-warning-bg: var(--warning-bg);
+  --dark-danger: var(--danger); --dark-danger-bg: var(--danger-bg);
+  --dark-info: var(--info); --dark-info-bg: var(--info-bg);
+  --dark-violet: #d2b9ff; --dark-violet-bg: #3c2f50;
+  --dark-teal: #9cddd6; --dark-teal-bg: #233f3c;
+  --dark-ink: var(--ink); --dark-on-ink: var(--on-ink);
+  --graph-checker: #acccff; --graph-artifact: #f5cc8f;
+  --graph-line: #555247; --graph-label-bg: rgba(43, 42, 37, .95); --graph-dim: #555247;
+}
+
+.set-theme { display: flex; align-items: center; gap: 12px; font-size: 13px; margin-bottom: 12px; }
+.dark .md pre, .dark .activity-raw { background: #181714; color: #f2efe5; }
+.dark .md pre code { background: transparent; }
+.dark .btn-danger { color: #201f1c; }
+.dark .profile-switch::after { background: var(--on-ink); }
+.dark .mode-badge[data-state="on"], .dark .mode-switch[data-state="on"] label[data-on] { color: #fff; }
+.dark .lab-plate i, .dark .lab-room-name i { background: var(--text-muted); }
+.dark .lab-plate[data-state="working"] i { background: var(--info); }
+.dark .lab-plate[data-state="fetching"] i, .dark .lab-plate[data-state="handing-off"] i,
+.dark .lab-room-name[data-room-state="active"] i { background: var(--warning); }
+.dark .lab-plate[data-state="done"] i, .dark .lab-room-name[data-room-state="done"] i { background: var(--success); }
+.dark .lab-plate[data-state="failed"] i { background: var(--danger); }
+.dark .lab-plate[data-in-run="false"] { background: var(--surface); color: var(--text-muted); opacity: 1; }
+.dark .lab-plate[data-in-run="false"][aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+.dark .mark { filter: invert(1); }

@@ -7,6 +7,7 @@ import { keepToken } from "@/lib/token"
 import { routes, to } from "@/test/engine"
 import { CATALOG_ON } from "@/test/home"
 import { SettingsView } from "./SettingsView"
+import { APPEARANCE_KEY, setAppearance, startAppearance } from "@/lib/appearance"
 
 const CATALOG = { ...CATALOG_ON, search: { exa: { keyPresent: true, usedUsd: 0.04, ceilingUsd: 40 }, provider: "exa", literature: { provider: "europepmc", free: true, keyNeeded: false, available: true } } }
 const CAPS = { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 1.5, exaUsedUsd: 0, exaCeilingUsd: 40 }
@@ -27,6 +28,22 @@ const show = async (over: { paidLocked?: boolean; catalog?: object; paidCalls?: 
 const count = (text: string, pattern: RegExp) => (text.match(pattern) ?? []).length
 
 describe("structure", () => {
+  it("offers Light, Dark and Match system, applying and remembering the selection", async () => {
+    const view = await show()
+    const select = screen.getByRole("combobox", { name: "Color theme" })
+    expect(select).toHaveValue("light")
+    await userEvent.selectOptions(select, "dark")
+    expect(document.documentElement).toHaveClass("dark")
+    expect(localStorage.getItem(APPEARANCE_KEY)).toBe("dark")
+    view.unmount()
+    const stop = startAppearance()
+    await show()
+    expect(screen.getByRole("combobox", { name: "Color theme" })).toHaveValue("dark")
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Color theme" }), "system")
+    expect(localStorage.getItem(APPEARANCE_KEY)).toBe("system")
+    act(() => setAppearance("light")); stop()
+    expect(document.documentElement).not.toHaveClass("dark")
+  })
   it("has Your profile, Run mode, Session token, Appearance, Help, then Technical, each with the same heading level", async () => {
     const { container } = await show()
     const sections = [...container.querySelectorAll(".page > .set-section")]

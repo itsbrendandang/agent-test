@@ -5,7 +5,8 @@
 // ENGINE_ORIGINS (space- or comma-separated origins) names it, by default the engine on this machine at
 // GLHF_ENGINE_PORT (8787), under both of its local names. It must be the address the dashboard was built
 // with (VITE_ENGINE_URL).
-import { createReadStream, existsSync, statSync } from "node:fs"
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { createServer } from "node:http"
 import { extname, join, normalize, sep } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -19,10 +20,10 @@ export function engineOrigins(env = process.env) {
   return given.length ? given : [`http://127.0.0.1:${port}`, `http://localhost:${port}`]
 }
 
-export function securityHeaders(env = process.env) {
+export function securityHeaders(env = process.env, appearanceScript = "") {
   const csp = {
     "default-src": "'self'",
-    "script-src": "'self' 'wasm-unsafe-eval'",
+    "script-src": "'self' 'wasm-unsafe-eval'" + (appearanceScript ? ` 'sha256-${createHash("sha256").update(appearanceScript).digest("base64")}'` : ""),
     "style-src": "'self' 'unsafe-inline'",
     "img-src": "'self' data: blob:",
     "font-src": "'self' data:",
@@ -42,7 +43,8 @@ export function securityHeaders(env = process.env) {
 }
 
 export function createDashboardServer(root, env = process.env) {
-  const headers = securityHeaders(env)
+  const appearanceScript = readFileSync(join(root, "index.html"), "utf8").match(/<script id="appearance-init">([\s\S]*?)<\/script>/)?.[1] ?? ""
+  const headers = securityHeaders(env, appearanceScript)
   return createServer((req, res) => {
     let path
     try {

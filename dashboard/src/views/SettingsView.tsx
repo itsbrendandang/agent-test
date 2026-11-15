@@ -10,11 +10,13 @@ import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
 import { EngineOffline, PageHead } from "@/components/Shared"
 import { forgetToken, TOKEN_FILE, useHasToken } from "@/lib/token"
+import { setAppearance, useAppearance, type Appearance } from "@/lib/appearance"
 
 // Settings: Your profile, Run mode, Session token, Appearance, Help, then Technical (closed at first). One heading style and one
 // container for every section. The cost of Real is said once (Run mode); what happens to API keys once (Connections).
 export function SettingsView() {
   const characters = useCharacters()
+  const appearance = useAppearance()
 
   return (
     <div className="page settings">
@@ -27,6 +29,13 @@ export function SettingsView() {
       </section>
       <section className="set-section" aria-labelledby="look-title">
         <h2 id="look-title">Appearance</h2>
+        <label className="set-theme">Color theme
+          <select className="btn" value={appearance} onChange={(e) => setAppearance(e.target.value as Appearance)}>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="system">Match system</option>
+          </select>
+        </label>
         <label className="newrun-check">
           <input type="checkbox" checked={characters} onChange={(e) => setCharactersShown(e.target.checked)} /> Show characters
         </label>

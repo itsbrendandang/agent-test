@@ -2,6 +2,7 @@
 // style, and destroys it on unmount. If WebGL is missing, fails to start or is lost, it tells its parent, which shows
 // the list instead.
 import { useEffect, useRef, useState } from "react"
+import { useDarkAppearance } from "@/lib/appearance"
 import { webglAvailable, useReducedMotion } from "./env"
 import type { Renderer, Style } from "./renderer"
 import { GLYPH, type GraphLink, type GraphNode } from "./types"
@@ -35,6 +36,7 @@ export function GraphCanvas(p: CanvasProps) {
   const latest = useRef(p)
   latest.current = p
   const reduced = useReducedMotion()
+  const dark = useDarkAppearance()
   const [ready, setReady] = useState(false)
   const [hover, setHover] = useState<GraphNode | null>(null)
   const hoverId = useRef<string | null>(null)
@@ -81,9 +83,9 @@ export function GraphCanvas(p: CanvasProps) {
       renderer.current = undefined
       setReady(false)
     }
-    // The renderer is created once. Reduced motion is read at that moment; later changes apply on the next visit.
+    // Reduced motion is read when the renderer is created.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [dark])
 
   useEffect(() => { if (ready) renderer.current?.setData(p.nodes, p.links) }, [ready, p.nodes, p.links])
   useEffect(() => { if (ready) renderer.current?.setReveal(p.revealed.nodes, p.revealed.links) }, [ready, p.revealed, p.nodes, p.links])
