@@ -32,7 +32,8 @@ documents are in `docs/`.
     (`--mode cloud`, `bixbench3 run`, `bixbench3 setup-runtime`; it creates a billed 32-core
     virtual machine), Exa search (`--exa`, the board's search), the drug board with real
     models or its checkers, the model behind Ask, a BixBench v1 run with a real model
-    (`bixbench-v1 run`), and sending lessons to past.dev.
+    (`bixbench-v1 run`), a BixBench board run (`glhf/bixbench_board/run.py`, `regrade.py`),
+    and sending lessons to past.dev.
   - The engine refuses these while `NO_PAID_CALLS` is not exactly `0` (`engine/src/paid/paid.ts`).
     Do not edit `.env`, do not export the variable, and do not change or go around `paid.ts`.
   - `npm run preflight` (engine) checks a real run's model ids and keys with the vendors' free model-list requests. It needs real
@@ -121,6 +122,8 @@ documents are in `docs/`.
 - Local runner and scripted model: `glhf/bixbench/src/bixbench3/glhf_local.py`.
 - Adapter for the public BixBench dataset (v1.5): `glhf/bixbench_v1/`, with its own README and
   tests. Built; a pilot of 8 questions ran; the full run is not done.
+- The five board members on BixBench v1 questions, with the single-agent baseline harness:
+  `glhf/bixbench_board/` (own README; R setup in `setup_cloud.sh`). Prompts come from `board/agents/`.
 - Swarm memory: `glhf/memory/` (`lessons.pending.md`, `lessons.md`, `README.md`).
 - Run tracker (Pi Durable): `engine/src/glhf/`. Contract types: `engine/src/glhf/types.ts`.
 - Paid-calls switch: `engine/src/paid/paid.ts`, tests in `engine/test/paid.test.ts`.

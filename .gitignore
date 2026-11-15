@@ -15,3 +15,6 @@ glhf/bixbench/runs/
 # Benchmark data and run outputs (never commit)
 glhf/data/
 glhf/bixbench_v1/runs/
+glhf/bixbench_board/runs/
+glhf/bixbench_board/data/
+glhf/bixbench_board/.venv/

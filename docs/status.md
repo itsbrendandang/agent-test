@@ -88,6 +88,19 @@ Known limits:
 | The forced final turn exists for the swarm only. | On a capsule where the single agent hits its limit, this is an advantage for the swarm. Say so with any comparison. |
 | The image is published for linux/arm64 only. | Tested on Apple Silicon. An x86-64 machine needs emulation or its own build. |
 
+## BixBench board (five board members)
+
+`glhf/bixbench_board/` runs the five strong board members (proposer, experimenter, methods
+auditor, critic, reporter) on BixBench v1 studies with the single-agent baseline harness. Only
+`solve()` differs, and one budget is shared by all five. Full text:
+[glhf/bixbench_board/README.md](../glhf/bixbench_board/README.md).
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Board order, Python and R cells, read-only data (bubblewrap on Linux), shared budget, forced final answer, paid switch | Tested with the scripted model. | `glhf/bixbench_board/board_selftest.py`, `selftest.py`. Run from that folder after `setup_cloud.sh`. |
+| Pinned R environment (R 4.4.3, DESeq2 1.46, edgeR, limma, clusterProfiler) | Built and loaded on a Linux x86-64 cloud machine. | `r-environment.lock.txt`, `setup_cloud.sh`. |
+| Run with a real model (20 studies, 3 repeats, 500,000 tokens, 90 tool calls, 600 seconds) | Done once (2026-11-15): gpt-5.1 for all five members, gpt-4o judge, Linux x86-64 cloud machine with R. Accuracy 0.289 (71/246), precision 0.305, coverage 0.947 (13 refusals). The single-agent baseline (same harness, macOS, no R): 0.260 (64/246), 0.314, 0.829 (42 refusals). Per question, the board did better on 22 and worse on 18 of 82 (sign test p = 0.64), so the difference in accuracy is not significant. The board used 7.38 million tokens; the baseline used 4.06 million. | Run folder `glhf/bixbench_board/runs/board_gpt51/` on the cloud machine (not in git). Command in the README. |
+
 ## Sponsor tools
 
 | Tool | Status |
