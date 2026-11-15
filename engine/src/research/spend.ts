@@ -15,7 +15,8 @@ export const dayStamp = (d: Date): string => `${d.getFullYear()}${two(d.getMonth
 export const staleAfterMs = (maxSeconds: number): number => (maxSeconds + 60) * 1000
 
 /**
- * Dollars the answers started today have spent (local day, read from each record.json). A demo answer costs nothing.
+ * Dollars the answers started today have spent (local day, read from each record.json), plus the reservation of an
+ * answer started yesterday that is still in progress. A demo answer costs nothing.
  * An answer still in progress counts for its whole cap, so several started together cannot each pass the daily check
  * at $0; one left "running" by a crash counts for what it had recorded once its time limit is long past. A record
  * that cannot be read counts for nothing here: its Exa spend is in the Exa ledger, and no model call is made without
@@ -25,17 +26,23 @@ export function researchSpentToday(config: BoardConfig, now = new Date()): numbe
   const root = researchRoot(config)
   if (!existsSync(root)) return 0
   const prefix = `a-${dayStamp(now)}`
+  // An answer asked just before midnight can still be running today: it keeps its reservation while it is live.
+  const before = `a-${dayStamp(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))}`
   let usd = 0
   for (const id of readdirSync(root)) {
-    if (!id.startsWith(prefix)) continue
-    let r: { mode?: unknown; status?: unknown; usd?: unknown; startedAt?: unknown; caps?: { maxUsd?: unknown; maxSeconds?: unknown } }
+    const today = id.startsWith(prefix)
+    if (!today && !id.startsWith(before)) continue
+    let r: { mode?: unknown; status?: unknown; usd?: unknown; startedAt?: unknown; workStartedAt?: unknown; caps?: { maxUsd?: unknown; maxSeconds?: unknown } }
     try { r = JSON.parse(readFileSync(`${root}/${id}/record.json`, "utf8")) } catch { continue }
     if (r.mode !== "real") continue
     const spent = typeof r.usd === "number" && Number.isFinite(r.usd) && r.usd > 0 ? r.usd : 0
     const cap = typeof r.caps?.maxUsd === "number" && Number.isFinite(r.caps.maxUsd) ? r.caps.maxUsd : 0
     const limit = typeof r.caps?.maxSeconds === "number" ? r.caps.maxSeconds : 120
-    const live = r.status === "running" && typeof r.startedAt === "number" && now.getTime() - r.startedAt < staleAfterMs(limit)
-    usd += live ? Math.max(spent, cap) : spent
+    // The time limit runs from when the work began, not from when a queued question was asked (as store.ts does).
+    const began = typeof r.workStartedAt === "number" ? r.workStartedAt : r.startedAt
+    const live = r.status === "running" && typeof began === "number" && now.getTime() - began < staleAfterMs(limit)
+    if (today) usd += live ? Math.max(spent, cap) : spent
+    else if (live) usd += Math.max(spent, cap)
   }
   return usd
 }
