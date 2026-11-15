@@ -75,7 +75,7 @@ On the short path, at both levels:
 | Step | Short path |
 |---|---|
 | Hypotheses, method specialists | Not run. |
-| Searches | One web search. PubMed is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
+| Searches | One web search. The literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv) is searched only when the web gave no usable source, so the answer still cites one. No database lookup. |
 | Number | At most 3 sources. |
 | Write | At most 120 words and 1,000 output tokens, with the least thinking the model allows. |
 | Statement checker | Runs once on every cited sentence, as in the full flow. |

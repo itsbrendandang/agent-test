@@ -1129,7 +1129,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
     if (tested.length) await together(tested.map((h, at) => chainOf(h, at))) // every hypothesis at the same time, each opened by its web search
     else if (deps.fixtures) await search("fixture", oneLine(record.question, MAX_QUERY_CHARS), { note: "Example sources. Nothing is searched in a demo." }, new Set(), () => deps.fixtures!(record.question))
     else if (short) {
-      // One web search. PubMed is searched only when the web gave no source, so a short answer still has one to cite.
+      // One web search. The literature is searched only when the web gave no source, so a short answer still has one to cite.
       await web(plan.web[0], new Set())
       const q = plan.literature[0]
       if (!pool.length && q) await search("europepmc", q, { maxResults: 8, text: "abstracts" }, keysOf(), () => deps.literature(q))
