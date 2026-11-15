@@ -117,4 +117,21 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     expect(proposer).toHaveTextContent("WhyA test's result went against it.")
     expect(proposer).toHaveTextContent("Checked bycode, from the results of the team's own tests")
   })
+  it("Compare: a run whose analyses ran on Modal says so, for each test and in its settings", async () => {
+    const run = { ...RUN, settings: { timeLimit: 1800, analysisBackend: "modal" }, modal: { usd: 0.0123, sandboxes: 1, maxUsd: 2 } }
+    const ledger = { ...LEDGER, events: [...LEDGER.events, { kind: "test.executed", claim: "C2", name: "header only", status: "ok", backend: "modal", sandbox_id: "sb-1" }] }
+    routes({ "GET /api/glhf/status": { status: 200, body: PAID_OFF }, "GET /api/glhf/runs": { status: 200, body: [run] }, "GET /api/glhf/scoreboard": { status: 200, body: SCORES },
+      "GET /api/glhf/runs/s-mock": { status: 200, body: { run, ledger, findings: null, methods: null } } })
+    render(<SwarmView />)
+    const story = within(await screen.findByRole("region", { name: "Run" }))
+    await waitFor(() => expect(story.getByTestId("run-analyses")).toHaveTextContent("analyses on Modal"))
+    expect(story.queryByText(/cost nothing/)).toBeNull() // Modal bills a practice run too
+    const talk = within(await screen.findByRole("region", { name: "What each role did" }))
+    expect(talk.getByRole("article", { name: "Critic, round 1" })).toHaveTextContent("Ran the test of C2 (header only) in a Modal sandbox (sb-1): it gave a result.")
+    await userEvent.setup().click(screen.getByRole("button", { name: "See how each statement was tested" }))
+    const settings = document.querySelector(".swarm-settings")!
+    expect(settings).toHaveTextContent("Analyses ranin a Modal sandbox (billed by Modal)")
+    expect(settings).toHaveTextContent("Modal cost$0.0123 for 1 sandbox (cap $2; Modal's bill is the authority)")
+    localStorage.removeItem("swarm.details") // the button remembers itself; the next test starts closed
+  })
 })

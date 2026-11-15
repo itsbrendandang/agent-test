@@ -101,11 +101,31 @@ Good to know:
 - Tests and coding agents never spend money. `npm run check` forces paid calls off.
 
 The limits in `board/config.yaml` are **$0.15 per Quick answer**, **$0.60 per Standard answer**,
-**$5 per team review**, and **$20 per day** across answers and reviews. Exa also has a **$40
-lifetime limit** in the engine's search record. These are limits, not price quotes.
+**$5 per team review**, and **$20 per day** across answers, reviews and analyses on Modal. Exa
+also has a **$40 lifetime limit** in the engine's search record. These are limits, not price quotes.
 The engine checks the team review limits (the `meeting:` section) when it reads the file. A limit
 that is not a number (for example `$5`) stops the engine, or the run, with a message that names
 the key, so a typo cannot switch the limit off.
+
+### Run the analyses on Modal (optional)
+
+A swarm run runs code: the agents' commands, the checks, and the registered tests that decide
+each statement's mark. By default this code runs in a Docker sandbox on your machine. With
+`ANALYSIS_BACKEND=modal` in `.env` it runs in a [Modal](https://modal.com) sandbox instead. That
+sandbox comes from the BixBench v1 work (PR #32): a checked R and conda image, no network, and
+only the case's data files are uploaded.
+
+- It costs Modal credits, also for a practice run. So it is refused while paid calls are off. It
+  never moves the work back to your machine on its own: it fails with the reason.
+- Each run may cost at most `GLHF_MODAL_MAX_USD` (default $2), and Modal runs count in the $20
+  daily limit.
+- Each test says where it ran (Docker or Modal, with the sandbox id). The Compare screen and the
+  Agent Log show it.
+- Set up once: `modal token new`, then `uv sync --group modal --python 3.12` in
+  `glhf/bixbench_v1`. `npm run doctor` shows what is missing.
+
+Tested with fakes only; no run has used Modal yet. Details:
+[docs/configuration.md](docs/configuration.md#where-the-swarms-analyses-run-analysis_backend).
 
 ## What is in the app
 

@@ -97,6 +97,13 @@ export function NewRun({ open, status, onClose, onStarted, onOpenRun }: Props) {
         {step !== "confirm" ? (
           <>
             <p className="muted small">Runs on this computer, on the small demo task. It needs Docker to be running. Benchmark tasks and cloud runs start from the command line.</p>
+            {status?.analysis?.backend === "modal" && (
+              <p className="newrun-cost" role="note" data-testid="analyses-on-modal">
+                <b>The analyses run on Modal.</b> The engine is set to ANALYSIS_BACKEND=modal: every command and test of this run executes in a Modal sandbox, billed by Modal{status.analysis.modalMaxUsd ? ` (at most $${status.analysis.modalMaxUsd} per run)` : ""}, also for a practice run.{" "}
+                {off ? "Paid calls are off, so the engine will refuse the run. To run the analyses on this computer, set ANALYSIS_BACKEND=local." : "Starting it needs the engine's token."}
+              </p>
+            )}
+            {status?.analysis?.error && <p className="newrun-error" role="note">{status.analysis.error}</p>}
 
             <fieldset className="newrun-field">
               <legend>Who does the work</legend>

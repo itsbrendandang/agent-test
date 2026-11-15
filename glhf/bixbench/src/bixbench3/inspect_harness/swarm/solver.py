@@ -84,6 +84,7 @@ from .tools import (
     required_columns,
     resolve_issue,
     run_registered_test,
+    sandbox_backend,
     save_ledger,
     search_docs,
     triage_claim,
@@ -869,6 +870,9 @@ def glhf_swarm(
                 "token_share": TOKEN_SHARE["relevance"],
             },
             test_results="run by the harness from the registered script",
+            # Where every command, check and registered test of this run executes: local Docker,
+            # or a Modal sandbox (ANALYSIS_BACKEND=modal). Each test.executed event repeats it.
+            analysis_backend=sandbox_backend(),
             engine=engine,
             flags=flags.event() if engine == "claims" else None,
         )

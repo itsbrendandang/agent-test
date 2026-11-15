@@ -16,7 +16,7 @@ import { swarmScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
 import { fmtDuration, fmtScore, fmtTokens, plainDuration, plainLimit, plainWhen } from "@/lib/format"
 import {
-  isDemo, isLive, useSwarm,
+  analysesWhere, isDemo, isLive, sandboxWords, useSwarm,
   type GlhfRun, type Ledger, type LedgerClaim, type LedgerEvent, type ScoreCell, type ScoreRow, type Solver,
 } from "@/swarm/api"
 import { CancelRun } from "@/swarm/CancelRun"
@@ -125,6 +125,11 @@ function describe(e: LedgerEvent): string | undefined {
     case "test.recorded":
       return `Tested ${text(e.claim)} (${text(e.name)}). ${e.contradicts ? "The result went against the statement" : "The result did not go against the statement"} (p = ${num(Number(e.p))}). The statement now: ${plainVerdict(e.verdict)}.`
     case "test.registered": return `Planned a test of ${text(e.claim)} (${text(e.name)}) before seeing any result: ${text(e.method)}`
+    case "test.executed": {
+      // Where each test ran: Docker on the machine that ran the run, or a Modal sandbox. Older runs do not say.
+      const where = sandboxWords(e.backend, e.sandbox_id)
+      return where ? `Ran the test of ${text(e.claim)} (${text(e.name)}) in ${where}: ${e.status === "ok" ? "it gave a result" : `no result (${text(e.status)})`}.` : undefined
+    }
     case "replication.failed": return `${text(e.claim)} could not be reproduced independently: ${text(e.note)}`
     case "issue.raised": return `Found a problem, ${text(e.issue)} (${text(e.severity)}): ${text(e.problem)}`
     case "issue.resolved": return `${e.status === "fixed" ? "Fixed" : "Closed without a fix:"} problem ${text(e.issue)}`
@@ -253,7 +258,8 @@ export function SwarmView() {
                   Started {plainWhen(run.startedAt)}
                   {run.finishedAt !== undefined && <> · took {plainDuration(run.finishedAt - run.startedAt)}</>}
                   {run.settings?.timeLimit !== undefined && <> · {plainLimit(run.settings.timeLimit)}</>}
-                  {swarmScripted(run) && " · cost nothing (practice run)"}
+                  {run.settings?.analysisBackend === "modal" && <span data-testid="run-analyses"> · analyses on Modal</span>}
+                  {swarmScripted(run) && run.settings?.analysisBackend !== "modal" && " · cost nothing (practice run)"}
                 </span>
               </p>
             </>
@@ -486,6 +492,8 @@ export function SwarmView() {
               <dt>Task</dt><dd>{taskName(run.task)}</dd>
               <dt>Who</dt><dd>{solverName(run.solver)}</dd>
               <dt>Where</dt><dd>{run.mode === "cloud" ? "Cloud VM" : "This machine"}</dd>
+              <dt>Analyses ran</dt><dd>{analysesWhere(run)}</dd>
+              {run.modal && <><dt>Modal cost</dt><dd>${run.modal.usd.toFixed(4)} for {run.modal.sandboxes} sandbox{run.modal.sandboxes === 1 ? "" : "es"} (cap ${run.modal.maxUsd}; Modal's bill is the authority)</dd></>}
               <dt>Model</dt><dd>{modelWords(run.model)}</dd>
               {Object.entries(run.roleModels).map(([role, model]) => (
                 <div key={role} style={{ display: "contents" }}><dt>{role}</dt><dd>{modelWords(model)}</dd></div>

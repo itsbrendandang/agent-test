@@ -15,6 +15,28 @@ function open(status: GlhfStatus | undefined) {
 const submit = (form: ReturnType<typeof open>["form"]) => form.getByRole("button", { hidden: true, name: /^(Start|Review)/ })
 const field = (form: ReturnType<typeof open>["form"], name: RegExp) => form.getByLabelText(name) as HTMLInputElement
 
+describe("analyses on Modal", () => {
+  it("says before the start that the analyses run on Modal, are billed, and what the cap is", () => {
+    const { form } = open({ ...PAID_ON, analysis: { backend: "modal", modalMaxUsd: 2 } })
+    const note = form.getByTestId("analyses-on-modal")
+    expect(note).toHaveTextContent("The analyses run on Modal.")
+    expect(note).toHaveTextContent("billed by Modal (at most $2 per run), also for a practice run")
+    expect(note).toHaveTextContent("needs the engine's token")
+  })
+  it("says that the engine will refuse it while paid calls are off, and how to run here instead", () => {
+    const { form } = open({ ...PAID_OFF, analysis: { backend: "modal", modalMaxUsd: 2 } })
+    expect(form.getByTestId("analyses-on-modal")).toHaveTextContent("set ANALYSIS_BACKEND=local")
+  })
+  it("says nothing when the analyses run on this computer", () => {
+    const { form } = open({ ...PAID_ON, analysis: { backend: "local", modalMaxUsd: null } })
+    expect(form.queryByTestId("analyses-on-modal")).toBeNull()
+  })
+  it("shows why the setting is refused", () => {
+    const { form } = open({ ...PAID_ON, analysis: { backend: null, modalMaxUsd: null, error: 'ANALYSIS_BACKEND must be "local" or "modal"' } })
+    expect(form.getByText(/ANALYSIS_BACKEND must be/)).toBeInTheDocument()
+  })
+})
+
 describe("paid calls off", () => {
   it("offers the scripted model only, and says why and who can change it", () => {
     const { form } = open(PAID_OFF)

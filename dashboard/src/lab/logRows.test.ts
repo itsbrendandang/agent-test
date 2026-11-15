@@ -102,4 +102,14 @@ describe("full event log", () => {
     expect(sparse.every((r) => !r.text.includes("p =") && !r.text.includes("e =") && !r.text.includes("Contradicts the statement:"))).toBe(true)
     expect(sparse[1].text).toContain("id not recorded")
   })
+  it("says where each test ran: a Modal sandbox with its id, or Docker", () => {
+    const rows = eventRows([
+      { kind: "test.executed", claim: "C1", name: "Permutation", status: "ok", exit_code: 0, backend: "modal", sandbox_id: "sb-7" },
+      { kind: "test.executed", claim: "C2", name: "Row count", status: "timeout", backend: "docker", sandbox_id: null },
+      { kind: "test.executed", claim: "C3", name: "Old run", status: "ok" },
+    ], "swarm")
+    expect(rows[0].text).toBe("Ran test Permutation for statement C1. Ran in a Modal sandbox (sb-7). Status: ok. Exit code: 0.")
+    expect(rows[1].text).toBe("Ran test Row count for statement C2. Ran in a Docker sandbox. Status: timeout.")
+    expect(rows[2].text).toBe("Ran test Old run for statement C3. Status: ok.")
+  })
 })

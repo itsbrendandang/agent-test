@@ -8,7 +8,7 @@
     "serve": "node src/server.ts",
     "typecheck": "tsc --noEmit",
     "preflight": "node src/preflight-cli.ts",
-    "test": "PAID_SWITCH_LOCKED=1 node --test \"test/*.test.ts\"",
+    "test": "PAID_SWITCH_LOCKED=1 ANALYSIS_BACKEND=local node --test \"test/*.test.ts\"",
     "lint": "oxlint src test"
   },
   "dependencies": {
