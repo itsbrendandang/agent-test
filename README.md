@@ -176,7 +176,8 @@ a run that has one).
 
 The **Agent Log** shows every event of one run as a **group chat**. Each agent turn is a message beside the agent's
 picture and name. Longer reasoning opens with **Show thinking**; other long text opens with **Show more**. Tool
-calls, searches and system steps are small notes between the messages. One toolbar holds the search box, the
+calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the
+newest message. One toolbar holds the search box, the
 **Agent** and **Kind of step** menus (each choice with its number of events), Clear and Download (JSON or CSV). The
 run menu at the top lists runs in progress, then finished ones, next to **Follow newest**. Click a face or a name to
 see only that agent's messages, then follow the link to its card in Agents.
@@ -185,8 +186,8 @@ see only that agent's messages, then follow the link to its card in Agents.
 
 A **Team review** is the drug board: a lead scientist and seven members discuss a written brief over rounds, and the
 lead writes a recommendation. In every round the scout gathers sources first, then the **evidence verifier** rechecks
-each source the scout cited and searches for what it missed; the lead reads its report before deciding. The screen shows the recommendation first, then how many statements were checked and
-how each one did (supported, contradicted, insufficient evidence), who took part, and the discussion round by round.
+each source the scout cited and searches for what it missed; the lead reads its report before deciding. The screen
+shows the recommendation first, then how many statements were checked and how each one did (supported, contradicted, insufficient evidence), who took part, and the discussion round by round.
 Each member opens its messages in the Agent Log; each source and checked statement has an "In the graph" link.
 
 ![Team review: the recommendation, the counts of checked statements, and who took part](docs/images/team-review.png)
