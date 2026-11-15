@@ -2,7 +2,7 @@
 // not this machine, every provider key in the process is a fake, and each server gets its own environment object, so
 // "paid calls on" below means a fake fetch handed to the handler, never a real call.
 import assert from "node:assert/strict"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, type IncomingMessage, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"

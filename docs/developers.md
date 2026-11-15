@@ -332,8 +332,7 @@ npm run check -- --all    # adds the Python suites (harness, BixBench v1 adapter
 each engine test file on its own with a time limit, prints one line per part, and ends with exit
 code 1 if a part needs attention. Use it before you commit and after you pull.
 
-`npm test` (harness tests, type checks, engine tests in one go) **hangs today**, because one engine
-test file does not exit. Use `npm run check` until that is fixed. To run one engine test file:
+`npm test` runs the harness tests, the type checks and the engine tests in one go. To run one engine test file:
 `cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts`.
 
 **`main` is not fully green today.** Measured on commit `1197442` with a clean checkout (`npm run check`):
