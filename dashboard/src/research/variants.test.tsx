@@ -29,7 +29,7 @@ const COMPARE = {
 const withVariants = (): ResearchEvent[] => { const real = lines(S_REAL); const end = real.findIndex((e) => e.type === "research.finished"); return [...real.slice(0, end), { type: "variants", ...VARIANTS }, ...real.slice(end)] }
 function Shown({ events, first }: { events: ResearchEvent[]; first?: InspectorTab }) {
   const [tab, setTab] = useState(first)
-  return <Inspector id="a-1" state={foldAnswer(events)} events={events} tab={tab} onTab={setTab} />
+  return <Inspector id="a-1" state={foldAnswer(events)} tab={tab} onTab={setTab} />
 }
 beforeEach(() => { vi.unstubAllGlobals() })
 
@@ -44,8 +44,8 @@ describe("known variants", () => {
   })
   it("get their own tab only when the answer has some, also from a saved record", () => {
     const real = lines(S_REAL)
-    expect(tabsOf(foldAnswer(real), real)).not.toContain("variants")
-    expect(tabsOf(foldAnswer(withVariants()), withVariants())).toContain("variants")
+    expect(tabsOf(foldAnswer(real))).not.toContain("variants")
+    expect(tabsOf(foldAnswer(withVariants()))).toContain("variants")
     expect(fromRecord({ id: "a", question: "q", status: "done", sources: [], statements: [], steps: [], searches: [], variants: VARIANTS })?.variants?.accession).toBe("P01116")
   })
   it("show what the source reports, its citation, the predicted confidence change, labelled as predicted; View shows the variant beside the reference", async () => {
