@@ -1,24 +1,29 @@
-// The Overview page: the numbers come from the engine's three lists, a practice run is never counted as research
-// (whatever the app's mode), and the page says so when nothing was run or the engine is away.
-import { render, screen, waitFor, within } from "@testing-library/react"
+// The Overview page: the question box with the Agent Lab under it (idle until a question is sent from this page), and
+// one line of counts from the engine's three lists, in which a practice run is never counted as research.
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { forgetScripted } from "@/lib/scripted"
 import { routes } from "@/test/engine"
 import { OverviewView } from "./OverviewView"
 
-beforeEach(() => forgetScripted())
+const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
+beforeEach(() => {
+  forgetScripted(); streams.length = 0
+  vi.stubGlobal("EventSource", class { url: string; onmessage?: (m: { data: string }) => void; onerror?: () => void; constructor(url: string) { this.url = url; streams.push(this) } close() {} })
+})
 const NOW = Date.now(), HOUR = 3_600_000
 const sse = (event: object) => `data: ${JSON.stringify({ key: "run", at: 0, ...event })}\n\n`
 const started = (mock: boolean) => new Response(sse({ type: "run.started", mock, question: "Q" }), { status: 200, headers: { "content-type": "text/event-stream" } })
 
-function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid?: unknown }) {
+function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid?: unknown }, more: Parameters<typeof routes>[0] = {}) {
   const onOpen = vi.fn()
   routes({
     "GET /api/runs": { status: 200, body: lists.board ?? [] },
     "GET /api/research": { status: 200, body: lists.answers ?? { items: [] } },
     "GET /api/glhf/runs": { status: 200, body: lists.swarm ?? [] },
     "GET /api/paid": { status: 200, body: lists.paid ?? { paid: false, caps: { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 0, exaUsedUsd: 0.035, exaCeilingUsd: 40 } } },
+    ...more,
   })
   const real = globalThis.fetch
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -29,75 +34,95 @@ function show(lists: { board?: unknown; answers?: unknown; swarm?: unknown; paid
   render(<OverviewView onOpen={onOpen} />)
   return onOpen
 }
-const tile = (name: string) => screen.getByText(name).closest(".ov-tile") as HTMLElement
+const counts = () => screen.getByLabelText("Totals").textContent ?? ""
 
 describe("Overview", () => {
-  it("counts research and practice apart, by kind, with a chart and its table", async () => {
-    show({
+  it("counts research and practice apart in one line, and points to Saved research", async () => {
+    const onOpen = show({
       board: [{ id: "b-live", brief: "kras.md", status: "done", startedAt: NOW - 2 * HOUR }, { id: "b-practice", brief: "kras.md", status: "done", startedAt: NOW - 3 * HOUR }],
       answers: { items: [{ id: "a1", question: "Does it work?", status: "done", mode: "real", startedAt: NOW - HOUR }, { id: "a2", question: "A practice one", status: "running", mode: "demo", startedAt: NOW }] },
       swarm: [{ id: "s1", solver: "glhf", task: "demo", phase: "done", model: "mock", modelClass: "scripted", startedAt: NOW - 4 * HOUR }, { id: "s2", solver: "single", task: "demo", phase: "failed", model: "mock", modelClass: "scripted", startedAt: NOW - 5 * HOUR }],
     })
-    await waitFor(() => expect(within(tile("All runs")).getByText("6")).toBeTruthy())
     // The team reviews say how they were made in their first event: wait for both to be read.
-    await waitFor(() => expect(within(tile("Research runs")).getByText("2")).toBeTruthy())
-    expect(within(tile("Practice runs")).getByText("4")).toBeTruthy()
-    expect(within(tile("In progress")).getByText("1")).toBeTruthy()
-    expect(tile("All runs").textContent).toContain("1 failed.")
-    const kinds = screen.getByRole("region", { name: "By kind" })
-    expect(kinds.textContent).toContain("Research answers2")
-    expect(kinds.textContent).toContain("1 research, 1 practice")
-    expect(kinds.textContent).toContain("Benchmark runs2")
-    expect(kinds.textContent).toContain("0 research, 2 practice")
-    expect(screen.getByRole("img", { name: /Runs started on each of the last 14 days: 6 in all/ })).toBeTruthy()
-    expect(screen.getByRole("table").textContent).toMatch(/Research.*Practice.*All/)
-    // The activity log: newest first under a day pill, each entry with an agent's face, who did what, and its own label.
-    const log = screen.getByRole("region", { name: "Activity log" })
-    expect(within(log).getByText("Today")).toBeTruthy()
-    const rows = within(log).getAllByRole("listitem")
-    expect(rows).toHaveLength(6)
-    expect(rows[0].textContent).toContain("Reporter")
-    expect(rows[0].textContent).toContain("is working on")
-    expect(rows[0].textContent).toContain("A practice one")
-    expect(rows[0].textContent).toContain("Practice")
-    expect(rows[1].textContent).toContain("wrote an answer to")
-    expect(rows[1].textContent).toContain("Does it work?")
-    expect(rows[1].textContent).toContain("Live research")
-    expect(rows[2].textContent).toContain("Lead Scientist")
-    expect(rows[2].textContent).toContain("led a team review of")
-    expect(rows[4].textContent).toContain("Team of nine")
-    expect(rows[4].textContent).toContain("the demo task")
-    expect(rows[5].textContent).toContain("One agent")
-    expect(rows[5].textContent).toContain("failed on")
-    expect(rows[5].getAttribute("data-failed")).toBe("true")
-    expect(rows[0].querySelector("svg[data-agent]")).toBeTruthy()
+    await waitFor(() => expect(counts()).toContain("2 research runs, 4 practice, 1 in progress, 1 failed."))
+    await userEvent.click(screen.getByRole("button", { name: "See everything in Saved research" }))
+    expect(onOpen).toHaveBeenCalledWith("Runs")
+    // The old statistics block is gone: no tiles, no chart, no activity log.
+    expect(screen.queryByText("Research runs")).toBeNull()
+    expect(screen.queryByText("By kind")).toBeNull()
+    expect(screen.queryByRole("region", { name: "Activity log" })).toBeNull()
   })
 
   it("a practice run is not research even when it is the only thing there", async () => {
     show({ answers: { items: [{ id: "a2", question: "A practice one", status: "done", mode: "demo", startedAt: NOW }] } })
-    await waitFor(() => expect(within(tile("Practice runs")).getByText("1")).toBeTruthy())
-    expect(within(tile("Research runs")).getByText("0")).toBeTruthy()
-  })
-
-  it("says so when nothing was run, and points to Research and to Saved research", async () => {
-    const onOpen = show({})
-    await screen.findByText("Nothing has been run yet")
-    expect(screen.queryByRole("img")).toBeNull()
-    await userEvent.click(screen.getByRole("button", { name: "Go to Research" }))
-    expect(onOpen).toHaveBeenCalledWith("Home")
+    await waitFor(() => expect(counts()).toContain("0 research runs, 1 practice, 0 in progress."))
   })
 
   it("shows the engine-offline card when no list can be read", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline") }))
     render(<OverviewView onOpen={() => {}} />)
     await waitFor(() => expect(document.querySelector(".page")?.textContent).toMatch(/engine/i))
-    expect(screen.queryByText("Research runs")).toBeNull()
+    expect(screen.queryByLabelText("Totals")).toBeNull()
+  })
+})
+
+describe("the Agent Lab under the question box", () => {
+  const lab = () => document.querySelector(".ov-lab") as HTMLElement
+  it("is idle until a question is sent; Send starts the answer on this page and the lab follows that answer", async () => {
+    const onOpen = show({}, { "POST /api/research": { status: 202, body: { id: "a-20261115000000-0000abcd", thread: "t-1", mode: "demo" } } })
+    await screen.findByText("Your research team is ready")
+    expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
+    expect(lab().querySelector(".lab-both")).toBeTruthy() // the same lab as the Agent Lab page, not a look-alike
+    expect(screen.queryByRole("region", { name: /hERG/ })).toBeNull()
+    await userEvent.type(screen.getByLabelText("Ask a research question"), "Is hERG a risk for KRAS G12C inhibitors?")
+    await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
+    await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is working on your question."))
+    expect(onOpen).not.toHaveBeenCalled() // the page stays: no jump to Research
+    expect(sessionStorage.getItem("open.ask")).toBeNull()
+    expect(screen.getByRole("heading", { name: "Is hERG a risk for KRAS G12C inhibitors?" })).toBeTruthy()
+    expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("")
+    // The answer's own events move the lab: a specialist the engine added joins as a visitor, then works.
+    const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
+    const feed = (events: object[]) => act(() => { for (const stream of streams.filter((x) => /\/api\/research\//.test(x.url))) for (const e of events) stream.onmessage?.({ data: JSON.stringify(e) }) })
+    await waitFor(() => expect(streams.some((x) => /\/api\/research\/a-20261115000000-0000abcd\/events/.test(x.url))).toBe(true))
+    await feed([
+      { seq: 1, at: 1, type: "research.started", id: "a-20261115000000-0000abcd", question: "Is hERG a risk for KRAS G12C inhibitors?", mode: "demo" },
+      { seq: 2, at: 2, type: "specialists", items: [who] },
+      { seq: 3, at: 3, type: "step.started", step: "specialist:toxicologist", kind: "write", label: "Toxicologist: reading 3 sources with its method notes", agent: "specialist:toxicologist" },
+    ])
+    await waitFor(() => expect(lab().textContent).toContain("Toxicologist"))
+    // When the answer ends, the line says so and the counts are read again.
+    const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
+    const before = reads()
+    await feed([{ seq: 4, at: 4, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
+    await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
+    await waitFor(() => expect(reads()).toBeGreaterThan(before))
+  })
+
+  it("an engine without direct answers: the question is handed to Research, as before", async () => {
+    const onOpen = show({}, { "POST /api/research": { status: 404, body: { error: "not found" } } })
+    await screen.findByText("Your research team is ready")
+    await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
+    await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("Home"))
+    expect(JSON.parse(sessionStorage.getItem("open.ask") ?? "null")).toMatchObject({ question: "Does it work?", send: true })
+    sessionStorage.removeItem("open.ask")
+  })
+
+  it("a refusal is said on the page and nothing is started", async () => {
+    show({}, { "POST /api/research": { status: 429, body: { error: "too many", field: "rate" } } })
+    await screen.findByText("Your research team is ready")
+    await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
+    await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
+    expect((await screen.findByRole("alert")).textContent).toContain("Too many questions in a short time.")
+    expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("Does it work?") // kept, to send again
+    expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
   })
 })
 
 describe("the welcome on the home page", () => {
-  it("a starter question fills the box, and the send button hands the question to Research to start", async () => {
-    const onOpen = show({})
+  it("a starter question fills the box and the team perks up; the agents are named in text", async () => {
+    show({})
     await screen.findByText("Your research team is ready")
     const box = screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
     const ask = screen.getByRole("button", { name: /^Send/ }) as HTMLButtonElement
@@ -106,14 +131,7 @@ describe("the welcome on the home page", () => {
     expect(box.value).toBe("What GLP-1s are working in the market right now?")
     expect(document.activeElement).toBe(box)
     expect(document.querySelector(".ov-hero")?.getAttribute("data-eager")).toBe("true") // the team perks up
-    const posts = () => (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls.filter(([, init]) => init?.method && init.method !== "GET")
-    await userEvent.click(ask)
-    expect(onOpen).toHaveBeenCalledWith("Home")
-    // The question is handed to Research marked "send": Research starts the search through its own Send path.
-    expect(JSON.parse(sessionStorage.getItem("open.ask") ?? "null")).toMatchObject({ question: "What GLP-1s are working in the market right now?", send: true })
     expect(document.querySelector(".ov-hero .search-composer")).toBeTruthy() // the same composer as Research, not a look-alike
-    expect(posts()).toHaveLength(0) // this page itself sends nothing to the engine
-    sessionStorage.removeItem("open.ask")
     // The agents are named in text for a screen reader; the moving picture is hidden from it.
     expect(document.querySelector(".ov-stage")?.getAttribute("aria-hidden")).toBe("true")
     expect(screen.getByText("Scout: finds sources")).toBeTruthy()
