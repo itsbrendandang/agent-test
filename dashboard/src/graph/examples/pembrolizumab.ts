@@ -9,8 +9,9 @@
 // team roles show who does each part in a real review. Nothing here is invented: no NCT id, citation, notice or date
 // that is not in the linked record. When a free record does not say what a correction changed, the source says so.
 import type { BoardEvent, EvidenceItem, RosterMember, SearchProvider, Verdict } from "@/board/api"
+import { GRAPH_EXAMPLE_ID } from "@/lib/links"
 
-export const EXAMPLE_ID = "example:pembrolizumab"
+export const EXAMPLE_ID = GRAPH_EXAMPLE_ID
 export const RETRIEVED_ON = "2026-11-15"
 export const EXAMPLE_TITLE = "Example: a cancer drug from biomanufacturing to FDA approval (pembrolizumab)"
 /** The question the example answers: the lead frames the review with it. */

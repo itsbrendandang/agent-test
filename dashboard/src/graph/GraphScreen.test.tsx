@@ -7,6 +7,7 @@ import type { BoardEvent } from "@/board/api"
 import { BOARD_EVENTS, EVIL, PRACTICE_EVENTS, ROSTER, SWARM_DETAIL, SINGLE_DETAIL } from "./fixtures"
 import { graphLink } from "@/lib/links"
 import { claimNodeId, sourceNodeId } from "./model"
+import { EXAMPLE_ID, SOURCES } from "./examples/pembrolizumab"
 
 // jsdom has no WebGL: the renderer is replaced by a recorder, and WebGL support is switched per test.
 const fake = vi.hoisted(() => ({
@@ -673,6 +674,17 @@ describe("Graph view: addresses and links to the other views", () => {
     expect(panel).toHaveTextContent("hERG of acrylamides") // a source: hidden in the calm first picture, shown for the link
     expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:r1")
     expect(location.hash).toBe(graphLink("board", "r1", sourceNodeId("https://example.org/a")))
+  })
+  it("opens the built-in example and the node an address names, and keeps that address", async () => {
+    routes(lists)
+    const at = graphLink("board", EXAMPLE_ID, sourceNodeId(SOURCES.letter2014.url))
+    location.hash = at
+    render(<WorldsView />)
+    const panel = await screen.findByTestId("node-panel")
+    expect(panel).toHaveTextContent(SOURCES.letter2014.title)
+    expect(screen.getByRole("combobox", { name: /run/i })).toHaveValue("board:example:pembrolizumab")
+    expect(screen.getByTestId("example-banner")).toBeInTheDocument()
+    expect(location.hash).toBe(at)
   })
   it("puts the run and the selected node in the address, and follows an address that changes", async () => {
     routes({ ...lists, ...swarmRoutes })
