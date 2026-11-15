@@ -200,7 +200,8 @@ of an answer in progress.
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names
 only the biology word, never a person in the search. When none is about biology, or the feed
-cannot be read, curated biology questions are shown. On Overview and on Research a click fills
+cannot be read, curated biology questions are shown. The cancer-drug question of the Graph
+example always comes first. On Overview and on Research a click fills
 the box; nothing is sent until you press Send. If the engine cannot be reached, the older example questions stay.
 
 Research answers search the literature in six free sources at once: Europe PMC (PubMed and
