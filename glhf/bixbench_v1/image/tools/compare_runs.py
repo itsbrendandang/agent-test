@@ -38,7 +38,11 @@ def steps(run_dir: Path) -> list[dict[str, Any]]:
 
 def files(run_dir: Path) -> dict[str, int]:
     root = run_dir / "outputs"
-    return {p.relative_to(root).as_posix(): p.stat().st_size for p in sorted(root.rglob("*")) if p.is_file()}
+    return {
+        p.relative_to(root).as_posix(): p.stat().st_size
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
 
 
 def compare(docker: Path, modal: Path) -> dict[str, Any]:
@@ -48,7 +52,9 @@ def compare(docker: Path, modal: Path) -> dict[str, Any]:
     phases = lambda run: [(p["kind"], p.get("phase")) for p in run["phases"]]  # noqa: E731
     answers = lambda d: json.loads((d / "outputs" / "answers.json").read_text())["answers"]  # noqa: E731
     differing_steps = [
-        {"step": i, "docker": x, "modal": y} for i, (x, y) in enumerate(zip(sa, sb, strict=False)) if x != y
+        {"step": i, "docker": x, "modal": y}
+        for i, (x, y) in enumerate(zip(sa, sb, strict=False))
+        if x != y
     ]
     result = {
         "status": [a["status"], b["status"]],
@@ -86,7 +92,12 @@ def compare(docker: Path, modal: Path) -> dict[str, Any]:
 
 def main() -> int:
     docker, modal, target = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-    report: dict[str, Any] = {"docker": str(docker), "modal": str(modal), "model": "mock (scripted)", "runs": {}}
+    report: dict[str, Any] = {
+        "docker": str(docker),
+        "modal": str(modal),
+        "model": "mock (scripted)",
+        "runs": {},
+    }
     for run_file in sorted(docker.glob("*/*/run.json")):
         key = run_file.parent.relative_to(docker).as_posix()
         if not (modal / key / "run.json").exists():
@@ -96,8 +107,10 @@ def main() -> int:
     report["all_same_mechanics"] = all(r["same_mechanics"] for r in report["runs"].values())
     target.write_text(json.dumps(report, indent=1) + "\n")
     for key, run in report["runs"].items():
-        print(f"{key:28} same mechanics: {run['same_mechanics']}  steps {run.get('steps')} files {run.get('files')} "
-              f"tokens {run.get('total_tokens')} seconds {run.get('seconds')} modal USD {run.get('modal_sandbox_usd')}")
+        print(
+            f"{key:28} same mechanics: {run['same_mechanics']}  steps {run.get('steps')} files {run.get('files')} "
+            f"tokens {run.get('total_tokens')} seconds {run.get('seconds')} modal USD {run.get('modal_sandbox_usd')}"
+        )
         for diff in run.get("differing_steps", [])[:3]:
             print("   differs:", json.dumps(diff)[:600])
     print("ALL SAME:", report["all_same_mechanics"])

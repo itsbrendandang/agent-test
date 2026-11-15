@@ -296,7 +296,7 @@ async def assemble_outputs(board: Board, outputs: list[ExpectedOutput]) -> list[
                     break
             if source is not None:
                 break
-        entry = {"artifact": output.artifact_id, "path": output.sandbox_path}
+        entry: dict[str, object] = {"artifact": output.artifact_id, "path": output.sandbox_path}
         if source is None:
             entry |= {"from": None, "note": "no claim produced it; left missing, never made up"}
         else:

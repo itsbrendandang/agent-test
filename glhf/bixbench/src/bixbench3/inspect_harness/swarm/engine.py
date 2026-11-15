@@ -266,7 +266,11 @@ async def run_claims(
         held = retriage(board, held, enabled=flags.retriage)
         for record in board.in_state(State.SENT_BACK):
             board.move(record.id, State.IN_WORKUP, ENGINE, f"revise after round {n}")
-        await each(lambda r, n=n: workup(r, f"revise {n}"), board.in_state(State.IN_WORKUP))
+
+        async def revise(record: ClaimRecord, n: int = n) -> None:
+            await workup(record, f"revise {n}")
+
+        await each(revise, board.in_state(State.IN_WORKUP))
 
     # -- close -------------------------------------------------------------------------------------
     stopped = stopped or stop_reason()
