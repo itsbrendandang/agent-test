@@ -4,6 +4,7 @@
 //  - a statement's mark comes only from a statement.checked event (the final stage when there is one);
 //  - a search that did not run is never shown as done: its reason is shown instead.
 import type { Verdict } from "@/board/api"
+import { PROVIDERS } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
 export interface Source { n: number; url: string; title: string; provider: Provider; note?: string }
@@ -151,8 +152,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
   return s
 }
 
-const PROVIDER_VERB: Record<string, string> = { exa: "the web", europepmc: "PubMed and preprints", fixture: "the example sources" }
-export const providerPlace = (p: Provider) => PROVIDER_VERB[p] ?? p
+export const providerPlace = (p: Provider) => PROVIDERS[p]?.place ?? p
 
 /** How one step ended, or what it is doing, in a few words. Never "done" for a step that failed or found nothing. */
 export function stepLine(st: Step): string {

@@ -5,7 +5,7 @@ import { retryEngine, type Shell } from "@/lib/shell"
 import { STATE_KIND, type RunState } from "@/lib/status"
 
 
-import type { Verdict as BoardVerdict } from "@/board/api"
+import type { SearchProvider, Verdict as BoardVerdict } from "@/board/api"
 import { Provenance } from "@/components/Provenance"
 import { provenanceOf } from "@/lib/provenance"
 import { MARK_ABOUT, MARK_GLYPH, MARK_WORD, markCount, markOf, MARKS } from "@/lib/words"
@@ -132,10 +132,18 @@ export function MarksLegend({ who }: { who?: string }) {
 /** The same chip under its older name. */
 export const Verdict = MarkChip
 
+/** A database's plain label and its home page. These return records, not papers. */
+const DATABASE: Record<string, [string, string]> = {
+  chembl: ["ChEMBL record", "https://www.ebi.ac.uk/chembl/"], clinicaltrials: ["ClinicalTrials.gov record", "https://clinicaltrials.gov"],
+  openfda: ["FDA label or report counts (openFDA)", "https://open.fda.gov"], opentargets: ["Open Targets record", "https://platform.opentargets.org"],
+  uniprot: ["UniProt record", "https://www.uniprot.org"], pubchem: ["PubChem record", "https://pubchem.ncbi.nlm.nih.gov"],
+}
 /** Where sources came from. Exa is credited only for a live Exa search; a practice run's sources are examples. */
-export function SearchCredit({ provider }: { provider: "exa" | "fixture" | "europepmc" | undefined }) {
+export function SearchCredit({ provider }: { provider: SearchProvider | undefined }) {
   if (provider === "exa") return <span className="search-credit" data-provider="exa">Search powered by <a href="https://exa.ai" target="_blank" rel="noopener noreferrer">Exa</a></span>
   if (provider === "fixture") return <span className="search-credit" data-provider="fixture">Example sources (practice run)</span>
   if (provider === "europepmc") return <span className="search-credit" data-provider="europepmc">Found in PubMed and preprints (<a href="https://europepmc.org" target="_blank" rel="noopener noreferrer">Europe PMC</a>)</span>
+  const db = provider ? DATABASE[provider] : undefined
+  if (db) return <span className="search-credit" data-provider={provider}><a href={db[1]} target="_blank" rel="noopener noreferrer">{db[0]}</a></span>
   return null
 }

@@ -1,7 +1,7 @@
 // Home: a chat box for starting research, and what it can use. A question goes to the engine (POST /api/chat); the
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import "@/research/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
@@ -12,15 +12,18 @@ import { HeaderSlot } from "@/components/HeaderSlot"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type EffortId, type ProviderId } from "@/home/api"
-import { CatalogPanel } from "@/home/CatalogPanel"
-import { boardScriptedWhy, chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
+import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
-import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
 import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
 import { ResearchAnswer } from "@/research/Answer"
+import { useSeenEvents } from "@/research/api"
+import { Inspector } from "@/research/Inspector"
+import { InspectorPane, InspectorToggle } from "@/research/InspectorPane"
+import { loadInspector, saveInspector, tabsOf, useNarrow, type InspectorTab } from "@/research/inspectorState"
+import { foldAnswer } from "@/research/model"
 import { Working } from "@/research/Working"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { PRACTICE_SHORT } from "@/lib/words"
@@ -41,9 +44,10 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [again, setAgain] = useState(0)
   const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
   const [chosenEffort, setChosenEffort] = useState(loadEffort)
-  const [boardStatus, setBoardStatus] = useState<Parameters<typeof boardScriptedWhy>[0]>() // GET /api/status: what the board would run on
   const [stopNote, setStopNote] = useState<string>() // what the engine answered to Stop
-  const [panel, setPanel] = useState(false) // the optional details panel: recent results and setup
+  const [pane, setPane] = useState(loadInspector) // the inspector: shown or not, and how wide; remembered
+  const [inspect, setInspect] = useState<{ id?: string; tab?: InspectorTab }>({}) // which answer and tab; none = the latest answer
+  const narrow = useNarrow()
   const [copied, setCopied] = useState<number>()
   const [statuses, setStatuses] = useState<Record<string, string>>({}) // each direct answer's status, as its own events report it
   const box = useRef<HTMLTextAreaElement>(null)
@@ -55,11 +59,6 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
     let stale = false
     getCatalog().then((c) => { if (!stale) { setCatalog(c); setWhyNone(undefined) } },
       (error: unknown) => { if (!stale) { setCatalog(null); setWhyNone(error instanceof ChatRefused && error.status !== 0 ? error.message : undefined) } })
-    return () => { stale = true }
-  }, [again])
-  useEffect(() => {
-    let stale = false
-    fetch(`${ENGINE}/api/status`).then((r) => (r.ok ? r.json() : undefined), () => undefined).then((status) => { if (!stale) setBoardStatus(status) })
     return () => { stale = true }
   }, [again])
   useEffect(() => saveTurns(turns), [turns])
@@ -206,9 +205,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
     </div>
   )
 
+  // The inspector shows one answer: the one asked for, else the latest. It reads the events that answer received.
+  const answers = turns.flatMap((t) => (t.role === "assistant" && "research" in t ? [t.research.id] : []))
+  const inspected = inspect.id && answers.includes(inspect.id) ? inspect.id : answers[answers.length - 1]
+  const seenEvents = useSeenEvents(inspected)
+  const seenState = useMemo(() => (seenEvents.length ? foldAnswer(seenEvents) : undefined), [seenEvents])
+  const canInspect = !!inspected && tabsOf(seenState, seenEvents).length > 0
+  const showPane = pane.open && canInspect
+  const showInspector = (open: boolean) => { const next = { ...pane, open }; setPane(next); saveInspector(next) }
+
   return (
     <div className="page search" data-wide data-empty={empty || undefined}>
-      <div className="search-cols" data-panel={panel || undefined}>
+      <div className="search-cols" data-inspector={(showPane && !narrow) || undefined}>
         <section className="search-main" aria-label="Search">
           {empty ? (
             <header className="search-hero">
@@ -220,7 +228,10 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               {/* The shell's header row names the place; this view adds the conversation's title and its one action there. */}
               <h1 className="sr-only">Research conversation</h1>
               <HeaderSlot area="title"><span className="header-title" title={firstQuestion}>{firstQuestion}</span></HeaderSlot>
-              <HeaderSlot area="actions"><button type="button" className="btn search-new" onClick={clear}>New search</button></HeaderSlot>
+              <HeaderSlot area="actions">
+                <button type="button" className="btn search-new" onClick={clear}>New search</button>
+                {canInspect && <InspectorToggle open={showPane} onToggle={() => showInspector(!showPane)} />}
+              </HeaderSlot>
             </>
           )}
 
@@ -232,6 +243,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
                       <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer}
+                        onInspect={(tab) => { setInspect({ id: t.research.id, tab }); showInspector(true) }}
                         onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
                         onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
                         onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
@@ -319,16 +331,12 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               )}
             </div>
           )}
-          <p className="search-more">
-            <button type="button" className="link-btn" aria-expanded={panel} aria-controls="search-panel" onClick={() => setPanel(!panel)}>{panel ? "Hide details" : "Recent results and setup"}</button>
-            {empty && <> · <button type="button" className="link-btn" onClick={openHelp}>How this works</button></>}
-          </p>
+          {empty && <p className="search-more"><button type="button" className="link-btn" onClick={openHelp}>How this works</button></p>}
         </section>
-        {panel && (
-          <div className="search-panel" id="search-panel" role="region" aria-label="Recent results and setup">
-            <Checked onOpen={openRun} />
-            <CatalogPanel catalog={catalog} why={whyNone} boardWhy={catalog ? boardScriptedWhy(boardStatus, catalog.providers) : undefined} onRetry={() => { setCatalog(undefined); setAgain((n) => n + 1) }} />
-          </div>
+        {showPane && inspected && seenState && (
+          <InspectorPane narrow={narrow} width={pane.width} onClose={() => showInspector(false)} onWidth={(width) => { const next = { ...pane, width }; setPane(next); saveInspector(next) }}>
+            <Inspector id={inspected} state={seenState} events={seenEvents} tab={inspect.tab} onTab={(tab) => setInspect({ id: inspected, tab })} />
+          </InspectorPane>
         )}
       </div>
     </div>

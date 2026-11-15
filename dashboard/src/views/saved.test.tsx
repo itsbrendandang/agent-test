@@ -103,7 +103,7 @@ describe("a row", () => {
   it("says what it is, when, and a result only where the record has one", async () => {
     show(false)
     const live = await rowOf("b-live")
-    await waitFor(() => expect(live).toHaveTextContent("204 statements checked in 3 rounds"))
+    await waitFor(() => expect(live).toHaveTextContent("204 statements in 3 rounds")) // the list does not know how many were checked, so it does not say "checked"
     expect(live).toHaveTextContent("Team review"); expect(live).toHaveTextContent("14 Nov 21:08")
     const swarm = await rowOf("s-mock")
     expect(swarm).toHaveTextContent("Task run, team of nine"); expect(swarm).toHaveTextContent("Score 1.000 out of 1"); expect(swarm).toHaveTextContent("Demo task")

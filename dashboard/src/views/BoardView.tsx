@@ -3,7 +3,7 @@
 import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
-import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
+import { DATABASES, get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
@@ -13,7 +13,7 @@ import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
 import { uncheckedReasons } from "@/lib/verdict"
-import { BOARD_JOB, checkedOf, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
+import { BOARD_JOB, checkedOf, inShort, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
@@ -111,7 +111,8 @@ export function BoardView() {
   const providerOf = (e: { provider?: SearchProvider }): SearchProvider | undefined => e.provider ?? (startedAs === true ? "fixture" : startedAs === false ? "exa" : undefined)
   const spent = events.reduce((n, e) => n + (e.type === "member.replied" && typeof e.usd === "number" ? e.usd : 0), 0)
   const litSearches = evidence.filter((e) => providerOf(e) === "europepmc").length
-  const webSearches = evidence.filter((e) => { const p = providerOf(e); return p !== "europepmc" && p !== "fixture" }).length // a practice run's example sources are not searches
+  const dbSearches = evidence.filter((e) => { const p = providerOf(e); return !!p && DATABASES.includes(p) }).length
+  const webSearches = evidence.filter((e) => { const p = providerOf(e); return p !== "europepmc" && p !== "fixture" && !(p && DATABASES.includes(p)) }).length // a practice run's example sources are not searches
   const cap = (n: number | undefined) => (n ? ` of ${n}` : "")
   const current = rounds.at(-1)?.[1]
   const members = roster.filter((m) => m.role === "member")
@@ -134,6 +135,9 @@ export function BoardView() {
     catch (e) { setError(`This review was not resumed: ${e instanceof Error ? e.message : String(e)}`) }
   }
   const memo = sections(memoText)
+  // The decision's first sentence is the line to read; the rest of it follows in normal size. Cut by code, never rewritten.
+  const decisionText = plain(bullets(memo["decision"])[0])
+  const decision = { first: inShort(decisionText, 220), rest: decisionText.slice(inShort(decisionText, 220).length).trim() }
   const maxRounds = status?.meeting.max_rounds ?? 4
 
   if (problem) return (
@@ -175,7 +179,7 @@ export function BoardView() {
       <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`} data-agent={g.member}>
         <AgentAvatar name={g.member} size={32} className="thread-search-face" />
         <p>
-          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : "searched the web"}
+          <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : g.provider && DATABASES.includes(g.provider) ? "looked up database records" : "searched the web"}
           {g.provider && <> · <SearchCredit provider={g.provider} /></>}
         </p>
         <ul>
@@ -186,7 +190,7 @@ export function BoardView() {
   }
   const sources = [...new Map(evidence.flatMap((e) => e.items.map((i) => [i.url, { ...i, provider: i.provider ?? providerOf(e) }] as const))).values()]
   const sourceProviders = [...new Set(sources.map((x) => x.provider).filter((p): p is SearchProvider => !!p))]
-  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider, quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
+  const checksOf = (list: Of<"claim.checked">[]): Checked[] => list.map((c) => ({ key: c.key, verdict: c.verdict, claim: c.claim, sourceProvider: sources.find((x) => x.url === c.source)?.provider as Checked["sourceProvider"], quote: c.quoteFound === undefined ? undefined : { found: c.quoteFound, text: /^quoted: "(.*)"/s.exec(c.note ?? "")?.[1] }, why: c.note || (c.checkedBy === "scripted" || startedAs ? "This was a practice run, so no real check was made. In a real run the reason is written here." : undefined), source: c.source, by: checkerName(c) }))
   const startedEvent = events.find((e): e is Of<"run.started"> => e.type === "run.started")
   const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
@@ -230,7 +234,7 @@ export function BoardView() {
                 {runRow && <>Started {plainWhen(runRow.startedAt)}</>}
                 {done && <> · took {plainDuration(done.minutes * 60_000)} · {startedAs === true ? plainCost(done.usd, true) : spentWords(done.usd)}</>}
                 {!done && startedAs === false && status && <> · <span data-testid="spent">{spentWords(spent)} so far · {runLimit(status.meeting.max_usd)}</span></>}
-                {webSearches + litSearches > 0 && <> · <span data-testid="search-count">{live ? "Searching: " : "Searched: "}{webSearches}{cap(status?.meeting.max_searches)} web searches, {litSearches}{cap(status?.meeting.max_literature_searches)} literature searches</span></>}
+                {webSearches + litSearches + dbSearches > 0 && <> · <span data-testid="search-count">{live ? "Searching: " : "Searched: "}{webSearches}{cap(status?.meeting.max_searches)} web searches, {litSearches}{cap(status?.meeting.max_literature_searches)} literature searches{dbSearches > 0 && `, ${dbSearches} database look-up${dbSearches === 1 ? "" : "s"}`}</span></>}
               </span>
             </p>
           </>
@@ -259,8 +263,14 @@ export function BoardView() {
         {memoText && (
           <div className="story-decision" role="group" aria-label="Decision">
             <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
-            <p className="decision-text">{plain(bullets(memo["decision"])[0]) || "See the written decision below."}</p>
-            {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
+            <p className="decision-text">{decision.first || "See the written decision below."}</p>
+            {decision.rest && <p>{decision.rest}</p>}
+            {memo["rationale"] && (
+              <details className="decision-why">
+                <summary>The reasoning behind it</summary>
+                <div className="memo"><Streamdown>{memo["rationale"]}</Streamdown></div>
+              </details>
+            )}
           </div>
         )}
       </section>
@@ -314,7 +324,7 @@ export function BoardView() {
                   <span className="source-title">{url ? <a href={url} target="_blank" rel="noreferrer noopener">{src.title || url}</a> : src.title || src.url}</span>
                   {/\[preprint\]\s*$/i.test(src.title ?? "") && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   <span className="muted small">
-                    {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", src.studyType && `kind of study: ${src.studyType}`].filter(Boolean).join(" · ")}
+                    {[url ? (new URL(url).hostname === "api.fda.gov" ? "openFDA query" : new URL(url).hostname.replace(/^www\./, "")) : "not a web address", src.studyType && `kind of study: ${src.studyType}`].filter(Boolean).join(" · ")}
                     {screened(src.relevance) && <> · <span data-testid="screened" title="A screening model read the source and judged whether it bears on the question. It is a judgement in words, not a measured score.">{screened(src.relevance)}</span></>}
                     {src.provider && <> · <SearchCredit provider={src.provider} /></>}
                   </span>

@@ -7,9 +7,11 @@ import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { hasWords } from "@/lib/format"
 import { isLive, latestSwarmRun, useSwarm } from "@/swarm/api"
 import { ROLES, roleOf, type RoleCatalog } from "@/swarm/roles"
-import { Buddy } from "@/components/Buddy"
+import { AgentAvatar } from "@/lab/AgentAvatar"
 
-// Crew editor: name, role and look for each desktop character. No AI agents are wired to them yet.
+// Who does the work: the nine roles of the swarm, then the team members, specialists and methods the engine lists.
+// Each agent's picture comes from the one shared mapping (lab/identity.ts), so it is the same here, in a team review
+// and in the Lab.
 export function AgentsView() {
   const [filter, setFilter] = useState("")
   const [catalog, setCatalog] = useState<Catalog>()
@@ -25,7 +27,7 @@ export function AgentsView() {
     + (catalog?.agents.filter((a) => hasWords(agentText(a), filter)).length ?? 0) + (catalog?.skills.filter((k) => hasWords(skillText(k), filter)).length ?? 0)
   return (
     <div className="page">
-      <PageHead title="Agents and skills" about="Who does the work: the nine roles of the swarm, the board members, the specialists and the skills. Use the box to filter them." />
+      <PageHead title="Agents" about="Who does the work: the nine roles of a task run, then the team members, specialists and methods of a team review." />
       <div className="exp-bar">
         <input type="search" name="agents-filter" aria-label="Filter roles, agents and skills" autoComplete="off" value={filter}
           placeholder="Filter by name, role, tool or skill…" onChange={(e) => setFilter(e.currentTarget.value)} />
@@ -62,10 +64,10 @@ function SwarmTeam({ filter }: { filter: string }) {
     <>
       <header className="section-head">
         <div>
-          <h2>Swarm team</h2>
+          <h2>The nine roles of a task run</h2>
           <p className="muted small">
-            Nine roles, in the order they run. Each is a separate agent with its own instructions; they share only the files and the ledger.
-            {run ? <> Status is from the latest swarm run, <RunId id={run.id} />.</> : !offline && runs ? " No swarm run yet: start one in the Compare view to see which roles ran." : ""}
+            In the order they run. Each is a separate agent with its own instructions; they share only the files and the team's notes.
+            {run ? <> Status is from the latest run by the team, <RunId id={run.id} />.</> : !offline && runs ? " No run by the team yet: start one on Compare to see which roles ran." : ""}
           </p>
         </div>
       </header>
@@ -79,7 +81,7 @@ function SwarmTeam({ filter }: { filter: string }) {
           return (
             <article key={r.key} className="cast-card card-surface team-card" data-active={active === r.key || undefined}>
               <div className="team-top">
-                <Buddy species={r.species} mood={active === r.key ? "working" : started.has(r.key) ? "happy" : "sleeping"} size={64} />
+                <AgentAvatar name={r.key} size={40} />
                 <div>
                   <h2>{i + 1}. {r.name}</h2>
                   <p className="small">{r.does}.</p>

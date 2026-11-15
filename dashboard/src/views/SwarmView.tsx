@@ -6,6 +6,7 @@ import { Streamdown } from "streamdown"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
+import { AgentAvatar } from "@/lab/AgentAvatar"
 import { EngineOffline, MarkChip, PageHead, RunId, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
 import { provenanceOf } from "@/lib/provenance"
@@ -277,8 +278,8 @@ export function SwarmView() {
             </li>
           ) : ROLES.map((r, i) => (
             <li key={r.key} data-step={step(r.key)} title={r.does} aria-current={step(r.key) === "now" ? "step" : undefined}>
-              <span>{i + 1} {r.name}</span>
-              <span className="swarm-step">{run ? STEP_TEXT[step(r.key)] : "○ no run yet"}</span>
+              <AgentAvatar name={r.key} size={24} />
+              <span className="board-who"><span>{i + 1} {r.name}</span><span className="swarm-step">{run ? STEP_TEXT[step(r.key)] : "○ no run yet"}</span></span>
             </li>
           ))}
         </ol>
@@ -321,7 +322,7 @@ export function SwarmView() {
           <Conversation className="thread-inline" aria-label="What each role did, in order">
             <ConversationContent className="thread-list">
               {activity(ledger).map((entry) => (
-                <TeamMessage key={entry.phase} name={`${entry.role?.name ?? entry.phase}${entry.round ? `, round ${entry.round}` : ""}`} job={entry.role?.does}
+                <TeamMessage key={entry.phase} agent={entry.role?.key} name={`${entry.role?.name ?? entry.phase}${entry.round ? `, round ${entry.round}` : ""}`} job={entry.role?.does}
                   short={entry.lines.at(-1) ?? "Did its part. It added nothing to the team's shared notes."} text={entry.lines.join("\n")}
                   fullLabel={`Show everything this role recorded (${entry.lines.length})`} checks={entry.checks} flag={entry.flag}
                   state={entry.phase === activePhase && live ? <span className="pill" data-kind="info">working now</span> : undefined} />

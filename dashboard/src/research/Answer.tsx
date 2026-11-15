@@ -5,17 +5,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { Provenance } from "@/components/Provenance"
-import { SearchCredit } from "@/components/Shared"
 import { provenanceOf } from "@/lib/provenance"
 import { plainDuration } from "@/lib/format"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
+import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
 import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
 import { copyText, foldAnswer, preparation, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
 import { Working } from "./Working"
 
-const KNOWN = ["exa", "europepmc", "fixture"]
 const money = (usd: number) => (usd === 0 ? "nothing" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const STOPPED: Record<string, string> = {
   cap: "It stopped at its spending limit, so it is shorter than planned.",
@@ -36,9 +35,11 @@ interface Props {
   onStatus?: (status: AnswerState["status"]) => void
   /** Take a queued follow-up out again before it starts. */
   onRemove?: () => void
+  /** Open the inspector on this answer, at a tab. */
+  onInspect?: (tab: "evidence" | "results" | "activity") => void
 }
 
-export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove }: Props) {
+export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus, onRemove, onInspect }: Props) {
   const { events, lost } = useResearchEvents(id)
   const s = useMemo(() => foldAnswer(events), [events])
   const key = useId().replace(/[^a-z0-9]/gi, "")
@@ -227,7 +228,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
                       <span className="source-title">{url ? <a href={url} target="_blank" rel="noopener noreferrer">{src.title || url}</a> : src.title || src.url}</span>
                       <span className="muted small">
                         {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", identifierOf(src.url), ...other].filter(Boolean).join(" · ")}
-                        {" · "}{KNOWN.includes(src.provider) ? <SearchCredit provider={src.provider as "exa" | "europepmc" | "fixture"} /> : <span className="search-credit">Found in {src.provider}</span>}
+                        {" · "}<ProviderCredit provider={src.provider} />
                       </span>
                       {preprint && <span className="source-preprint">Preprint: not peer reviewed</span>}
                       {s.cited && <span className="source-use small" data-cited={s.cited.includes(src.n)}>{s.cited.includes(src.n) ? "Cited in the answer" : "Selected, but not cited in the answer"}</span>}
@@ -259,6 +260,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {canCopy && s.markdown && <button type="button" className="link-btn" onClick={copy}>{copied ? "Copied" : "Copy answer"}</button>}
           {latest && onAgain && (s.status === "done" || s.status === "cancelled") && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}
           {onReview && s.status === "done" && <button type="button" className="link-btn" onClick={onReview}>Have a team review this</button>}
+          {onInspect && (s.sources.length > 0 || s.statements.length > 0) && <button type="button" className="link-btn" onClick={() => onInspect("evidence")}>Inspect the evidence</button>}
         </div>
       )}
     </>

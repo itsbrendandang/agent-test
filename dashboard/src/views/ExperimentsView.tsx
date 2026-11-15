@@ -82,7 +82,7 @@ export function ExperimentsView({ onOpen }: { onOpen: (view: "Home" | "Compare" 
     const run = swarmRuns[h.id], review = reviews[h.id]
     const state = runState(h.status, h.kind !== "swarm" || h.score !== undefined)
     const result = h.kind === "swarm" ? (h.score !== undefined ? <span title="From the scoring program, out of 1">Score <span className="mono">{fmtScore(h.score)}</span> out of 1</span> : undefined)
-      : h.kind === "board" && review && state === "done" ? <><span className="mono">{review.claims}</span> statement{review.claims === 1 ? "" : "s"} checked in <span className="mono">{review.rounds}</span> round{review.rounds === 1 ? "" : "s"}</> : undefined
+      : h.kind === "board" && review && state === "done" ? <><span className="mono">{review.claims}</span> statement{review.claims === 1 ? "" : "s"} in <span className="mono">{review.rounds}</span> round{review.rounds === 1 ? "" : "s"}</> : undefined
     return {
       key: `${h.kind}:${h.id}`,
       title: h.kind === "answer" ? h.title : h.kind === "board" ? questions[h.id] ?? runTitle(h.title) : runTitle(h.title),

@@ -55,7 +55,7 @@ describe("counts that are honest about what was not checked", () => {
     expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 9 statements checked.")
     expect(found.getByText("2 supported")).toBeInTheDocument(); expect(found.getByText("0 contradicted")).toBeInTheDocument()
     expect(found.getByText("1 insufficient evidence")).toBeInTheDocument(); expect(found.getByText("6 not checked")).toBeInTheDocument()
-    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/every statement|all statements|9 statements checked/i)
+    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/every statement|all (of the )?statements/i)
   })
   it("gives each reason with its count, built from the check records' own notes, and the counts add up", async () => {
     await open()

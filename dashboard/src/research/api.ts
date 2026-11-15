@@ -1,7 +1,7 @@
 // Calls for a direct, sourced answer: start one (POST /api/research), follow its events, read a saved one.
 // Starting one in Real mode needs the session token, like every action that can cost money; engineFetch asks for
 // it and sends the question again, so the question is never lost.
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { ENGINE } from "@/lib/engine"
 import { engineFetch } from "@/lib/token"
 import type { ResearchEvent } from "./model"
@@ -36,6 +36,17 @@ export async function startResearch(question: string, effort: "quick" | "standar
 }
 
 /** Every event of one answer, replayed then live. `lost` is true when the stream could not be opened or broke before the end. */
+// What each answer's stream has delivered so far, so that another part of the page (the inspector) reads the same
+// events as the answer itself, over the one connection the answer holds.
+const seen = new Map<string, ResearchEvent[]>()
+const watchers = new Set<() => void>()
+const NONE: ResearchEvent[] = []
+function publish(id: string, events: ResearchEvent[]) { if (seen.get(id) === events) return; seen.set(id, events); for (const w of watchers) w() }
+/** The events an answer on this page has received. Empty until that answer is on the page. */
+export function useSeenEvents(id: string | undefined): ResearchEvent[] {
+  return useSyncExternalStore((w) => { watchers.add(w); return () => { watchers.delete(w) } }, () => (id ? seen.get(id) ?? NONE : NONE))
+}
+
 export function useResearchEvents(id: string | undefined): { events: ResearchEvent[]; lost: boolean } {
   const [got, setGot] = useState<{ id: string; events: ResearchEvent[]; lost: boolean }>()
   useEffect(() => {
@@ -52,6 +63,7 @@ export function useResearchEvents(id: string | undefined): { events: ResearchEve
     source.onerror = () => { if (!ended) setGot((old) => ({ id, events: old?.id === id ? old.events : [], lost: true })) }
     return () => source.close()
   }, [id])
+  useEffect(() => { if (got && got.id === id) publish(got.id, got.events) }, [got, id])
   return useMemo(() => (got && got.id === id ? { events: got.events, lost: got.lost } : { events: [], lost: false }), [got, id])
 }
 

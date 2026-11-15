@@ -1,5 +1,5 @@
 // Home as a person uses it, against a stand-in engine. Nothing here reaches the network.
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TokenPrompt } from "@/components/TokenPrompt"
@@ -7,7 +7,16 @@ import type { Catalog } from "@/home/api"
 import { TOKEN_HEADER } from "@/lib/token"
 import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, PLAN, reply, SCRIPTED_PLAN } from "@/test/home"
+import { CatalogPanel } from "@/home/CatalogPanel"
+import { boardScriptedWhy } from "@/home/chat"
 import { HomeView } from "./HomeView"
+
+/** The setup panel on its own (it is shown in Settings): what can be used, from the engine's catalog and status. */
+function setup(catalog: Catalog | null, status?: Parameters<typeof boardScriptedWhy>[0], why?: string) {
+  const onRetry = vi.fn()
+  const view = render(<CatalogPanel catalog={catalog} why={why} boardWhy={catalog ? boardScriptedWhy(status, catalog.providers) : undefined} onRetry={onRetry} />)
+  return { view, onRetry, panel: within(screen.getByRole("complementary", { name: "What this can use" })) }
+}
 
 /** Event streams the page opened (board run progress). jsdom has no EventSource. */
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
@@ -24,7 +33,6 @@ function home(catalog: Catalog | "down", table: Table = {}) {
   const sent = routes({ ...(catalog !== "down" && { "GET /api/chat/catalog": { status: 200, body: catalog } }), ...((catalog !== "down" || "POST /api/chat" in table) && { "POST /api/research": { status: 404, body: { error: "not found" } } }), ...table })
   const onOpen = vi.fn()
   const view = render(<><TokenPrompt /><HomeView onOpen={onOpen} /></>)
-  fireEvent.click(screen.getByRole("button", { name: "Recent results and setup" })) // the optional panel: closed until asked for
   const box = () => screen.getByLabelText("Ask a research question") as HTMLTextAreaElement
   const user = userEvent.setup()
   const ask = async (text: string) => { await user.type(box(), `${text}{Enter}`) }
@@ -574,41 +582,36 @@ describe("effort", () => {
 })
 
 describe("what this can use", () => {
-  it("lists providers and Exa with key present or missing, and never a key", async () => {
-    const t = home(CATALOG_ON)
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+  it("lists providers and Exa with key present or missing, and never a key", () => {
+    const { panel, view } = setup(CATALOG_ON)
     const row = (name: string) => panel.getByText(name).closest("li")!
-    await waitFor(() => expect(row("Claude (Anthropic)")).toHaveTextContent("key present"))
+    expect(row("Claude (Anthropic)")).toHaveTextContent("key present")
     expect(row("OpenAI")).toHaveTextContent("key missing")
     expect(row("Web search (Exa)")).toHaveTextContent("key missing")
     expect(panel.getByText("Real: costs money")).toBeInTheDocument()
-    expect(t.view.container.querySelectorAll("input[type=password], input[type=text], input[type=search]")).toHaveLength(0)
+    expect(view.container.querySelectorAll("input[type=password], input[type=text], input[type=search]")).toHaveLength(0)
   })
-  it("says paid calls are off and how a person turns them on", async () => {
-    home(CATALOG_OFF)
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByText("Demo: practice runs only")).toBeInTheDocument()
+  it("says paid calls are off and how a person turns them on", () => {
+    const { panel } = setup(CATALOG_OFF)
+    expect(panel.getByText("Demo: practice runs only")).toBeInTheDocument()
     expect(panel.getByRole("region", { name: "Paid calls" })).toHaveTextContent("Real")
     // a key that is present is not shown as usable while paid calls are off
     const claude = panel.getByText("Claude (Anthropic)").closest("li")!
     expect(within(claude).getByText("key present · off")).toHaveAttribute("data-kind", "neutral")
     expect(panel.getByText("OpenAI").closest("li")).toHaveTextContent("key missing")
   })
-  it("says plainly when board runs can only be scripted, and why", async () => {
-    home(CATALOG_ON, { "GET /api/status": { status: 200, body: { mock: true, paidCalls: true, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: false }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } } } })
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByRole("note")).toHaveTextContent("OpenAI key missing: board reviews are practice runs only.")
+  it("says plainly when board runs can only be scripted, and why", () => {
+    const { panel } = setup(CATALOG_ON, { mock: true, paidCalls: true, keys: { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: false }, models: { lead: "anthropic/claude-sonnet-5-5", rival: "openai/gpt-5-mini" } })
+    expect(panel.getByRole("note")).toHaveTextContent("OpenAI key missing: board reviews are practice runs only.")
   })
-  it("says nothing of the kind when the board can use real models", async () => {
-    home(CATALOG_ON, { "GET /api/status": { status: 200, body: { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } } } })
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    await panel.findByText("Real: costs money")
+  it("says nothing of the kind when the board can use real models", () => {
+    const { panel } = setup(CATALOG_ON, { mock: false, paidCalls: true, keys: { ANTHROPIC_API_KEY: true }, models: { lead: "anthropic/claude-sonnet-5-5" } })
+    expect(panel.getByText("Real: costs money")).toBeInTheDocument()
     expect(panel.queryByRole("note")).toBeNull()
   })
-  it("groups agents as Board and Specialists, with triggers", async () => {
-    home(CATALOG_ON)
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
-    const board = (await panel.findByText("Board")).closest("details")!
+  it("groups agents as Board and Specialists, with triggers", () => {
+    const { panel } = setup(CATALOG_ON)
+    const board = panel.getByText("Board").closest("details")!
     expect(board).toHaveTextContent("(2)")
     expect(board).toHaveTextContent("Lead Scientist")
     expect(board).toHaveTextContent("Critic (Scientific Reviewer)")
@@ -617,75 +620,41 @@ describe("what this can use", () => {
     expect(specialists).toHaveTextContent("Used when: the question is about a safety margin")
     expect(board).not.toHaveTextContent("Toxicologist")
   })
-  it("marks a skill that is not installed as index only", async () => {
-    home(CATALOG_ON)
-    const panel = within(await screen.findByRole("complementary", { name: "What this can use" }))
+  it("marks a skill that is not installed as index only", () => {
+    const { panel } = setup(CATALOG_ON)
     const skill = (name: string) => panel.getByText(name).closest("li")!
-    await waitFor(() => expect(skill("admet-benchmarks")).toHaveTextContent("known by name only: not installed"))
+    expect(skill("admet-benchmarks")).toHaveTextContent("known by name only: not installed")
     expect(skill("herg-triage")).not.toHaveTextContent("known by name only")
     expect(panel.getByText(/1 installed of 2/)).toBeInTheDocument()
   })
-  it("says the engine is not running when the catalog cannot be read, and tries again", async () => {
-    const t = home("down")
-    const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByText("The app's engine isn't running")).toBeInTheDocument()
-    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON } })
-    await t.user.click(panel.getByRole("button", { name: "Try again" }))
-    expect(await panel.findByText("Real: costs money")).toBeInTheDocument()
+  it("says the engine is not running when the catalog cannot be read, and offers to try again", async () => {
+    const { panel, onRetry } = setup(null)
+    expect(panel.getByText("The app's engine isn't running")).toBeInTheDocument()
+    await userEvent.setup().click(panel.getByRole("button", { name: "Try again" }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
-})
-
-describe("what was checked", () => {
-  const BOARD = [{ id: "r-new", brief: "kras.md", rounds: 0, startedAt: 2, status: "running", claims: 0 }, { id: "r-done", brief: "kras.md", rounds: 3, startedAt: 1, status: "done", claims: 3 }]
-  const ROWS = [
-    { task: "demo", model: "mock", swarm: { id: "s-only", phase: "done", startedAt: 3, extras: [], score: 1 }, note: "no matching baseline" },
-    { task: "demo", model: "mock", timeLimit: 1800, single: { id: "single-1", phase: "done", startedAt: 1, extras: [], score: 1 }, swarm: { id: "swarm-1", phase: "done", startedAt: 2, extras: [], score: 1 }, diff: 0 },
-  ]
-  it("shows the latest finished review's verdict counts with its own scripted label, and the like-for-like row", async () => {
-    const t = home(CATALOG_ON, { "GET /api/runs": { status: 200, body: BOARD }, "GET /api/glhf/scoreboard": { status: 200, body: ROWS } })
-    const strip = within(screen.getByRole("region", { name: "What was checked" }))
-    const review = await strip.findByRole("button", { name: /Latest review/ })
-    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/runs/r-done/events"))).toBe(true)) // the finished one, not the newest
-    await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: true })
-    for (const verdict of ["verified", "verified", "contradicted", "unsupported"]) await emit({ type: "claim.checked", round: 1, member: "m", claim: `c-${verdict}-${Math.random()}`, kind: "k", verdict, checker: "jev" })
-    expect(review).toHaveTextContent(/Practice/)
-    expect(review).toHaveTextContent(/2 (held up|supported)/)
-    expect(review).toHaveTextContent(/1 (was proven wrong|contradicted)/)
-    expect(review).toHaveTextContent(/1 (had too little evidence|insufficient evidence)/)
-    expect(review).toHaveTextContent("of 4 statements checked")
-    const pair = strip.getByRole("button", { name: /One agent or a team\?/ })
-    expect(pair).toHaveTextContent("1.000 vs 1.000 · a tie")
-    expect(pair).toHaveTextContent(/Practice.*(demo case|Demo task)/)
-    expect(strip.getByText(/No model grades its own work/)).toBeInTheDocument()
-    await t.user.click(pair)
-    expect(sessionStorage.getItem("open.swarm")).toBe("swarm-1")
-    expect(t.onOpen).toHaveBeenLastCalledWith("Compare")
-    await t.user.click(review)
-    expect(sessionStorage.getItem("open.board")).toBe("r-done")
-    expect(t.onOpen).toHaveBeenLastCalledWith("Board")
-  })
-  it("labels a real review real even though paid calls are off now", async () => {
-    home(CATALOG_OFF, { "GET /api/runs": { status: 200, body: [BOARD[1]] } })
-    const review = await within(screen.getByRole("region", { name: "What was checked" })).findByRole("button", { name: /Latest review/ })
-    await emit({ type: "run.started", runId: "r-done", brief: "kras", title: "KRAS", mock: false })
-    expect(review).toHaveTextContent(/real model|Live research/)
-    expect(review).not.toHaveTextContent("scripted")
-  })
-  it("says so when nothing has been checked yet", async () => {
-    home(CATALOG_ON, { "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/scoreboard": { status: 200, body: [] } })
-    expect(await within(screen.getByRole("region", { name: "What was checked" })).findByText(/Nothing has been checked yet/)).toBeInTheDocument()
+  it("says the engine has no chat routes, not that it is not running, when it answered but has no catalog", () => {
+    const { panel } = setup(null, undefined, "not found")
+    expect(panel.queryByText("The app's engine isn't running")).toBeNull()
   })
 })
 
 describe("an engine that was started before the chat routes existed", () => {
-  it("says the engine has no chat routes, not that it is not running", async () => {
+  it("says so next to the box and keeps the question", async () => {
     const t = home("down", { "GET /api/chat/catalog": { status: 404, body: { error: "not found" } }, "POST /api/chat": { status: 404, body: { error: "not found" } } })
-    const panel = within(screen.getByRole("complementary", { name: "What this can use" }))
-    expect(await panel.findByText(/running, but it has no chat routes yet/)).toBeInTheDocument()
-    expect(panel.queryByText("The app's engine isn't running")).toBeNull()
     await t.ask("q")
     await waitFor(() => expect(t.box()).toHaveAccessibleDescription(/it has no chat routes yet\. Stop the app and start it again/))
     expect(t.box()).toHaveValue("q")
+  })
+})
+
+describe("the conversation has no setup panel", () => {
+  it("shows no setup cards, key status or recent-results strip on Research: those are in Settings and Saved research", async () => {
+    home(CATALOG_ON)
+    await screen.findByRole("radio", { name: "Standard" })
+    expect(screen.queryByRole("complementary", { name: "What this can use" })).toBeNull()
+    expect(screen.queryByRole("region", { name: "What was checked" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Recent results and setup" })).toBeNull()
   })
 })
 

@@ -12,6 +12,7 @@ import { HomeView } from "@/views/HomeView"
 import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
 import { identifierOf, markOf } from "./marks"
+import { ProviderCredit } from "./ProviderCredit"
 import { copyText, foldAnswer, fromRecord, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
@@ -114,6 +115,7 @@ describe("the answer on the page", () => {
     expect(sources.getAllByRole("listitem")).toHaveLength(4)
     expect(sources.getAllByRole("link", { name: "Europe PMC" })[0]).toHaveAttribute("href", "https://europepmc.org")
     expect(sources.getAllByRole("link", { name: "Exa" })[0]).toHaveAttribute("href", "https://exa.ai")
+    expect(sources.getAllByRole("link", { name: "Exa" })[0].closest(".search-credit")).toHaveTextContent("Found through Exa (web search)")
     const paper = sources.getByRole("link", { name: /Semaglutide and Cardiovascular Outcomes/ })
     expect(paper).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/37952131/"); expect(paper).toHaveAttribute("target", "_blank"); expect(paper).toHaveAttribute("rel", "noopener noreferrer")
     expect(sources.getByText("Preprint: not peer reviewed")).toBeInTheDocument()
@@ -148,7 +150,7 @@ describe("the answer on the page", () => {
     expect(screen.getAllByRole("button", { name: /^Example check: Supported\./ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull() // no mark is offered as a real check
     expect(screen.getByRole("status")).toHaveTextContent("Example checks, not real ones:")
-    expect(container).toHaveTextContent("Example sources (practice run)")
+    expect(container).toHaveTextContent("Example source (practice run)")
     expect(screen.queryByRole("link", { name: "Exa" })).toBeNull(); expect(container).not.toHaveTextContent("powered by Exa")
     expect(container).toHaveTextContent("Practice: nothing was spent.")
     await userEvent.setup().click(screen.getAllByRole("button", { name: /^Example check/ })[0])
@@ -634,5 +636,32 @@ describe("a team review as the same activity (Deep)", () => {
     const broke = reviewActivity([...events, ev(9500, { type: "run.failed", error: "The provider refused the model." })])
     expect(broke.steps.at(-1)).toMatchObject({ status: "failed", error: "The provider refused the model." }); expect(broke.failed).toBe("The provider refused the model.")
     expect(reviewActivity([])).toEqual({ steps: [], working: false, seconds: undefined, failed: undefined })
+  })
+})
+
+describe("where a source was found", () => {
+  it.each([
+    ["exa", "Found through Exa (web search)", "https://exa.ai"], ["europepmc", "Found in PubMed and preprints (Europe PMC)", "https://europepmc.org"],
+    ["chembl", "ChEMBL record", "https://www.ebi.ac.uk/chembl/"], ["clinicaltrials", "ClinicalTrials.gov record", "https://clinicaltrials.gov"],
+    ["openfda", "FDA label or report counts (openFDA)", "https://open.fda.gov"], ["opentargets", "Open Targets record", "https://platform.opentargets.org"],
+    ["uniprot", "UniProt record", "https://www.uniprot.org"], ["pubchem", "PubChem record", "https://pubchem.ncbi.nlm.nih.gov"],
+  ])("%s reads '%s' and links to its own site in a new tab", (provider, label, link) => {
+    const { container } = render(<ProviderCredit provider={provider} />)
+    expect(container).toHaveTextContent(new RegExp(`^${label.replace(/[()]/g, "\\$&")}$`))
+    const a = screen.getByRole("link")
+    expect(a).toHaveAttribute("href", link); expect(a).toHaveAttribute("target", "_blank"); expect(a).toHaveAttribute("rel", "noopener noreferrer")
+    if (provider !== "exa") expect(container).not.toHaveTextContent("Exa") // Exa is credited only for what Exa found
+  })
+  it("a practice source is an example with no link, and an unknown provider is named as the engine named it", () => {
+    const a = render(<ProviderCredit provider="fixture" />)
+    expect(a.container).toHaveTextContent(/^Example source \(practice run\)$/); expect(a.container.querySelector("a")).toBeNull()
+    expect(render(<ProviderCredit provider="somewhere-new" />).container).toHaveTextContent("Found in somewhere-new")
+    expect(render(<ProviderCredit provider="" />).container).toBeEmptyDOMElement()
+  })
+  it("the generated real stream credits each source to the search that found it", async () => {
+    await show(lines(S_REAL))
+    const state = foldAnswer(lines(S_REAL))
+    const rows = within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")
+    for (const [i, src] of state.sources.entries()) expect(rows[i].querySelector(".search-credit")).toHaveAttribute("data-provider", src.provider)
   })
 })

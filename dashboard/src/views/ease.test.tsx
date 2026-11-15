@@ -41,14 +41,12 @@ describe("first visit", () => {
     await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1)) // filled and sent, one click: a direct answer
     expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: examples[0].textContent, effort: "standard" })
   })
-  it("has no setup cards, model names, key status or agent lists until they are asked for", async () => {
+  it("has no setup cards, model names, key status or agent lists: those are in Settings", async () => {
     home(CATALOG_ON)
     await screen.findByRole("radio", { name: "Standard" })
     expect(screen.queryByRole("complementary", { name: "What this can use" })).toBeNull()
     // nothing technical in the open; the one model list sits inside the closed "Research options"
     expect(screen.queryAllByText(/key present|key missing|claude-|gpt-|ANTHROPIC|\.env/i).filter((e) => !e.closest("details:not([open])"))).toEqual([])
-    await userEvent.setup().click(screen.getByRole("button", { name: "Recent results and setup" }))
-    expect(await screen.findByRole("complementary", { name: "What this can use" })).toBeInTheDocument()
   })
   it("explains Demo mode once, in the owner's words", async () => {
     home(CATALOG_OFF)

@@ -52,4 +52,4 @@
 .board-steps li[data-step="done"] .swarm-step { color: #0d5f37; }
 .ledger-stats span { display: block; }
 .ledger-stats div { padding: 6px 4px; }
-@media (max-width: 640px) { .ledger-stats { grid-template-columns: repeat(2, 1fr); } .board-steps li { min-width: 0; flex: 1 1 30%; } }
+@media (max-width: 640px) { .ledger-stats { grid-template-columns: repeat(2, 1fr); } .board-steps li { min-width: 0; flex: 1 1 45%; } }

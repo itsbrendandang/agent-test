@@ -13,14 +13,16 @@ export interface RosterMember {
   modes?: Record<string, string>
 }
 export interface RunSummary { id: string; brief: string; rounds: number; startedAt: number; status: "done" | "running" | "paused" | "failed"; claims: number; /** Why a failed run stopped, in plain words. */ error?: string; /** Present when the run searched. */ search?: { searches: number; provider?: SearchProvider } }
-/** "exa": a live web search. "europepmc": a free literature search. "fixture": a practice run's example sources, not a search. */
-export type SearchProvider = "exa" | "fixture" | "europepmc"
+/** "exa": a live web search. "europepmc": a free literature search. The six databases return records, not papers. "fixture": a practice run's example sources, not a search. */
+export type SearchProvider = "exa" | "fixture" | "europepmc" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
+/** The public databases a scout can look records up in. */
+export const DATABASES: readonly SearchProvider[] = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"]
 /** `paidCalls` false: the engine's NO_PAID_CALLS switch is on, so the board runs with scripted models only. */
 export interface Status { mock: boolean; paidCalls?: boolean; keys: Record<string, boolean>; meeting: { max_minutes: number; max_usd: number; max_rounds: number; max_searches?: number; max_literature_searches?: number } }
 
 // Mirrors engine/src/events.ts
 /** A source a search kept. `relevance` and `studyType` are what the engine recorded; the title and URL are untrusted. */
-export interface EvidenceItem { url: string; title: string; studyType?: string; relevance?: number; provider?: SearchProvider }
+export interface EvidenceItem { url: string; title: string; studyType?: string; relevance?: number; provider?: SearchProvider; /** The query that found it (newer runs). */ query?: string }
 export type BoardEvent = { key: string; at: number } & (
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
   | { type: "round.started"; round: number; message: string; final: boolean }
