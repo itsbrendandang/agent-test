@@ -14,7 +14,7 @@ import { agentIdentity } from "./identity"
 import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import { HYPOTHESES_NOTE, sidesLine } from "@/research/hypothesisWords"
 import {
-  CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
+  CHARACTER_IDS, LOG_KEPT, ROOMS, TRIPS_KEPT, characterOf, clip, plural,
   type Activity, type CharacterId, type LabModel, type LabState, type LogKind, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
 } from "./model"
 
@@ -149,6 +149,12 @@ export function visitorRoom(nameAndTitle: string): RoomId {
   return "bench"
 }
 
+const eventRoom = (value: unknown, fallback: string): RoomId => ROOMS.find((r) => r.id === value)?.id ?? visitorRoom(fallback)
+const methodTitles = (value: unknown): string[] => Array.isArray(value) ? value.flatMap((m) => {
+  const title = str((m as { title?: unknown } | null)?.title)
+  return title ? [clip(title, 160)] : []
+}) : []
+
 const NO_TASK = /^\s*no task\.?\s*$/i
 
 /** Events of the same millisecond are put in the order the engine emits them, so the model does not depend on the order they arrive in. */
@@ -205,7 +211,11 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
         for (const raw of e.members as Record<string, unknown>[]) {
           const member = str(raw?.name); if (!member) continue
           roster.add(member)
-          if (raw.source === "specialist" || !BOARD_MEMBER[member]) visitor(member, str(raw.title), str(raw.why))
+          if (raw.source === "specialist" || !BOARD_MEMBER[member]) {
+            const v = visitor(member, str(raw.title), str(raw.why))
+            v.room = eventRoom(raw.room, `${member} ${str(raw.title) ?? ""}`)
+            v.methods = methodTitles(raw.methods)
+          }
           else if (str(raw.title)) {
             // the caption is the engine's own title for the member (identity.ts), unless that is the character's name
             const id = BOARD_MEMBER[member], short = agentIdentity(member, { title: str(raw.title) }).short
@@ -429,7 +439,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         for (const item of Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []) {
           const agent = str(item?.agent), title = str(item?.title) ?? str(item?.name)
           if (!agent || !title || visitors.has(agent)) continue
-          const v: Visitor = { id: agent, name: title, title, why: clip(str(item.why) ?? "", 200) || undefined, room: visitorRoom(`${str(item.name) ?? ""} ${title}`), state: "idle", doing: "Joined this answer. Waiting for the sources.", since: at }
+          const v: Visitor = { id: agent, name: title, title, why: clip(str(item.why) ?? "", 200) || undefined, room: eventRoom(item.room, `${str(item.name) ?? ""} ${title}`), methods: methodTitles(item.methods), state: "idle", doing: "Joined this answer. Waiting for the sources.", since: at }
           visitors.set(agent, v); m.visitors.push(v)
           b.log(at, `${title} joined this answer as a method specialist.${v.why ? ` ${v.why}` : ""}`, title)
         }

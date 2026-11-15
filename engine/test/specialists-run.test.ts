@@ -98,7 +98,7 @@ test("a practice run from a plan with specialists: they are real members, labell
     ["target-safety-druggability-analyst", "member", "specialist"], ["medicinal-chemist", "member", "specialist"],
   ])
   const [analyst, chemist] = rosters[0].members.slice(-2)
-  assert.deepEqual(Object.keys(analyst).sort(), ["methods", "name", "role", "source", "title", "why"])
+  assert.deepEqual(Object.keys(analyst).sort(), ["methods", "name", "role", "room", "source", "title", "why"])
   assert.equal(analyst.title, "Target safety druggability analyst"); assert.deepEqual(analyst.methods, [{ name: "target-tractability-druggability", title: "Target tractability druggability" }])
   assert.match(analyst.why, /share words with the question: kras, herg \(read as safety\)/)
   assert.equal(chemist.title, "Medicinal Chemist"); assert.deepEqual(chemist.methods, []); assert.match(chemist.why, /ic50 \(read as potency\)/)

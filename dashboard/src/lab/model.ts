@@ -170,7 +170,7 @@ export interface Activity {
 }
 
 /** A method specialist that joined a team review: shown as a visitor in the room that fits, under its real name. */
-export interface Visitor { id: string; name: string; title: string; why?: string; room: RoomId; state: LabState; doing: string; since?: number }
+export interface Visitor { id: string; name: string; title: string; why?: string; methods?: string[]; room: RoomId; state: LabState; doing: string; since?: number }
 
 /** What kind of step a line of the activity log is about: it picks the mark on the log's rail. */
 export type LogKind = "search" | "screen" | "write" | "check" | "handoff" | "failed" | "warn" | "done" | "note"
@@ -343,4 +343,3 @@ export function activeRooms(model: LabModel): RoomId[] {
   }
   return ROOMS.map((r) => r.id).filter((id) => on.has(id))
 }
-
