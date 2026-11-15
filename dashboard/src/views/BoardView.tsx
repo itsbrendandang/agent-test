@@ -7,13 +7,14 @@ import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type 
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
+import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
 import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
 import { uncheckedReasons } from "@/lib/verdict"
-import { BOARD_JOB, checkedOf, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
+import { BOARD_JOB, checkedOf, leadSentence, MARK_WORD, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
@@ -34,6 +35,7 @@ function sections(md: string): Record<string, string> {
 }
 const bullets = (s = "") => s.split("\n").map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim()).filter(Boolean)
 const plain = (s = "") => s.replace(/[*_`]+/g, "").trim()
+const SHORT_REASONING = 600 // characters: reasoning up to this length is open on arrival
 const ABOUT = "A team of AI agents discusses a research brief. A separate check tests their statements against sources, and the lead writes the decision."
 
 // The cheap model's ruling settled the claim ("jev" is the same thing in runs made before the checker changed).
@@ -259,8 +261,18 @@ export function BoardView() {
         {memoText && (
           <div className="story-decision" role="group" aria-label="Decision">
             <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
-            <p className="decision-text">{plain(bullets(memo["decision"])[0]) || "See the written decision below."}</p>
-            {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
+            {(() => {
+              // The recommendation is one sentence to scan; what the memo adds to it follows in body text.
+              const [lead, rest] = leadSentence(plain(bullets(memo["decision"])[0]))
+              return <><p className="decision-text">{lead || "See the written decision below."}</p>{rest && <p className="decision-rest">{rest}</p>}</>
+            })()}
+            {memo["rationale"] && (
+              // The memo's reasoning is Markdown (lists, tables): it is drawn as such, never flattened into one paragraph.
+              <details className="decision-why" open={memo["rationale"].length <= SHORT_REASONING || undefined}>
+                <summary>Why the team recommends this</summary>
+                <SafeMarkdown className="decision-whyb">{memo["rationale"]}</SafeMarkdown>
+              </details>
+            )}
           </div>
         )}
       </section>

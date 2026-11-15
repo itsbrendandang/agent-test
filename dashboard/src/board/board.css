@@ -9,7 +9,7 @@
 .progress span { display: block; height: 100%; background: var(--text); transition: width .5s ease; }
 .decision { padding: 24px 28px; display: flex; flex-direction: column; gap: 12px; }
 .eyebrow { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
-.board .decision-text { font-size: 28px; font-weight: 650; line-height: 1.2; text-transform: none; letter-spacing: 0; color: var(--text); }
+.board .decision-text { font-size: 20px; font-weight: 650; line-height: 1.35; text-transform: none; letter-spacing: 0; color: var(--text); }
 .decision p { font-size: 13px; line-height: 1.55; }
 .trust { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .decision-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-top: 1px solid var(--edge); padding-top: 12px; }

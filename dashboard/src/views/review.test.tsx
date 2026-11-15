@@ -6,6 +6,7 @@ import { agentIdentity } from "@/lab/identity"
 import { forgetScripted } from "@/lib/scripted"
 import { uncheckedReasons } from "@/lib/verdict"
 import { routes } from "@/test/engine"
+import { leadSentence } from "@/lib/words"
 import { BoardView } from "./BoardView"
 
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
@@ -55,7 +56,7 @@ describe("counts that are honest about what was not checked", () => {
     expect(found.getByTestId("checked-count")).toHaveTextContent("3 of 9 statements checked.")
     expect(found.getByText("2 supported")).toBeInTheDocument(); expect(found.getByText("0 contradicted")).toBeInTheDocument()
     expect(found.getByText("1 insufficient evidence")).toBeInTheDocument(); expect(found.getByText("6 not checked")).toBeInTheDocument()
-    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/every statement|all statements|9 statements checked/i)
+    expect(screen.getByRole("region", { name: "What happened" })).not.toHaveTextContent(/every statement|all statements|(?<!of )9 statements checked/i)
   })
   it("gives each reason with its count, built from the check records' own notes, and the counts add up", async () => {
     await open()
@@ -108,5 +109,13 @@ describe("one picture per agent, left of its label", () => {
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getByTestId("screened")).toHaveTextContent(/^Relevant$/)
     expect(screen.getByRole("region", { name: "Sources" })).not.toHaveTextContent(/relevance \d|0 to 1/)
+  })
+})
+
+describe("the recommendation is one sentence to scan", () => {
+  it("cuts at the first sentence end, and not inside a number or an abbreviation", () => {
+    expect(leadSentence("No-Go for both. Neither passes all four criteria.")).toEqual(["No-Go for both.", "Neither passes all four criteria."])
+    expect(leadSentence("CMP-0423 fails at 180 nM, a 1.8x gap. It passes solubility.")).toEqual(["CMP-0423 fails at 180 nM, a 1.8x gap.", "It passes solubility."])
+    expect(leadSentence("Go with conditions")).toEqual(["Go with conditions", ""])
   })
 })

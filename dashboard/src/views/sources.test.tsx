@@ -240,11 +240,13 @@ describe("the rows of a saved-research search", () => {
     const rows = within(await screen.findByRole("list", { name: "Matching saved runs" }))
     await waitFor(() => expect(rows.getAllByRole("button")[0]).toHaveTextContent("Should we advance a KRAS G12C hit that has a hERG liability?")) // the real question, capitals kept, not the cut file name
     const [real, demo, team] = rows.getAllByRole("button")
-    await waitFor(() => expect(real).toHaveTextContent("Review · today at 4:51 pm · real model"))
-    expect(demo).toHaveTextContent("Review · yesterday at 4:51 pm · practice run")
+    // How each was made is the shared badge (an icon and a word), read from the run's own record.
+    await waitFor(() => expect(real.querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "live"))
+    expect(real).toHaveTextContent("Review · today at 4:51 pm"); expect(real).toHaveTextContent("Live research")
+    expect(demo).toHaveTextContent("Review · yesterday at 4:51 pm"); expect(demo.querySelector("[data-provenance]")).toHaveAttribute("data-provenance", "practice")
     expect(real).toHaveAttribute("title", expect.stringContaining("Should we advance a KRAS G12C hit that has a hERG liability?")) // the whole title, if the row has to shorten it
     expect(team).toHaveTextContent("Team of nine on the demo task")
-    expect(team).toHaveTextContent("One agent or a team · today at 4:51 pm · practice run")
+    expect(team).toHaveTextContent("One agent or a team · today at 4:51 pm"); expect(team.querySelector("[data-provenance]")).toHaveTextContent("Practice")
     for (const row of [real, demo, team]) expect(row).not.toHaveTextContent(/that h$|that h ·|04bb17d2/)
   })
 })

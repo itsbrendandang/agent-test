@@ -794,3 +794,20 @@ dialog.how { margin: auto; }
 .source-rests li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 [data-found="false"] { color: #9c1414; font-weight: 600; }
 
+
+/* team review: the recommendation is one sentence to scan; its reasoning is Markdown behind a disclosure */
+.story-decision .decision-text { max-width: 60ch; text-wrap: pretty; }
+.story-decision .decision-rest { font-size: 15px; line-height: 1.6; max-width: 75ch; }
+.decision-why { font-size: 15px; }
+.decision-why > summary { cursor: pointer; width: fit-content; min-height: 24px; font-size: 13px; font-weight: 600; color: var(--text-muted); border-radius: 4px; }
+.decision-why > summary:hover { color: var(--text); }
+.decision-why > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.decision-whyb { margin-top: var(--space-2); max-width: 75ch; line-height: 1.6; overflow-x: auto; }
+/* a narrow header keeps every control inside the window: the conversation title gives up its place, the
+   "Next run" words stay for screen readers (the switch carries the same name), and the buttons get tighter */
+@media (max-width: 479px) {
+  .app-header-title { display: none; }
+  .app-place { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .app-header .next-run-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .app-header-actions .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
+}
