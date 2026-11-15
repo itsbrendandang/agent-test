@@ -91,6 +91,27 @@ function header(line: string): Omit<Found, "sequence"> {
   return name ? { name } : {}
 }
 
+/** The longest letters of a line a wrapped sequence continues after (FASTA and GenBank wrap at 60, some at 50). */
+const WRAPPED_LINE = 40
+
+/**
+ * The residues of a run of capital blocks, up to the first block that does not continue it: a block after a space must
+ * follow a block of ten (a listing in blocks of ten), a block after a line break must follow a line of at least
+ * WRAPPED_LINE letters, and a block of fewer than ten after a line break must not run on into a sentence ("I want ...").
+ */
+function listing(run: string, after: string): string {
+  const parts = run.split(/([ \t\d]*\n[ \t\d]*|[ \t\d]+)/)
+  let letters = parts[0], line = parts[0].length
+  for (let i = 1; i < parts.length; i += 2) {
+    const block = parts[i + 1], prev = parts[i - 1], newline = parts[i].includes("\n")
+    const next = i + 2 < parts.length ? parts[i + 2] + parts[i + 3][0] : after.slice(0, 80)
+    if (newline ? line < WRAPPED_LINE || (block.length < 10 && /^[ \t]+[A-Za-z]/.test(next)) : prev.length !== 10) break
+    letters += block
+    line = newline ? block.length : line + block.length
+  }
+  return letters
+}
+
 /**
  * The amino-acid sequences written in a text: FASTA records, a single run of at least MIN_SEQUENCE capitals, and blocks
  * of capitals split by spaces or line breaks ("MKTAYIAKQR QISFVKSHFS ..."). Words, gene symbols and DNA are not taken.
@@ -115,9 +136,8 @@ export function sequencesIn(text: string): Found[] {
   // A run of capitals, maybe split into blocks by spaces or line breaks (numbers between blocks, as in a GenBank listing, are allowed).
   const all = rest.join("\n")
   for (const m of all.matchAll(/[A-Z]{10,}(?:(?:[ \t\d]*\n[ \t\d]*|[ \t\d]+)[A-Z]+(?!\w))*/g)) {
-    const end = m.index + m[0].length
-    if (/\w/.test(all[m.index - 1] ?? "") || /\w/.test(all[end] ?? "")) continue
-    add(((s) => (s ? { sequence: s } : undefined))(asSequence(m[0].replace(/[\s\d]+/g, ""))))
+    if (/\w/.test(all[m.index - 1] ?? "") || /\w/.test(all[m.index + m[0].length] ?? "")) continue
+    add(((s) => (s ? { sequence: s } : undefined))(asSequence(listing(m[0], all.slice(m.index + m[0].length)))))
   }
   return out
 }

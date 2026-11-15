@@ -73,6 +73,12 @@ test("sequences written in a text: FASTA with UniProt's header, one run, blocks 
   assert.deepEqual(sequencesIn(`Fold this:\n${THIOREDOXIN}\nThe protein is small.`), [{ sequence: THIOREDOXIN }], "a capitalised word on the next line")
   assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} Is it stable?`), [{ sequence: THIOREDOXIN }], "a capitalised word after a space")
   assert.deepEqual(sequencesIn(`Sequence: ${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}\nIs it stable?`), [{ sequence: THIOREDOXIN }], "blocks, then a capitalised word")
+  assert.deepEqual(sequencesIn(`Fold this:\n${THIOREDOXIN}\nI want to know its fold.`), [{ sequence: THIOREDOXIN }], "a one-letter word on the next line is not a residue")
+  assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} A small protein`), [{ sequence: THIOREDOXIN }], "a one-letter word after a space is not a residue")
+  assert.deepEqual(sequencesIn(`${THIOREDOXIN} KRAS binds it`), [{ sequence: THIOREDOXIN }], "a gene symbol after a space is not a residue")
+  assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60, 104)}\n${THIOREDOXIN.slice(104)}\nThanks.`), [{ sequence: THIOREDOXIN }], "wrapped lines, the last one short")
+  const genbank = THIOREDOXIN.match(/.{1,60}/g)!.map((l, i) => `${String(i * 60 + 1).padStart(9)} ${l.match(/.{1,10}/g)!.join(" ")}`).join("\n")
+  assert.deepEqual(sequencesIn(`ORIGIN\n${genbank}\n//`), [{ sequence: THIOREDOXIN }], "a numbered listing in blocks of ten")
 })
 
 test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
