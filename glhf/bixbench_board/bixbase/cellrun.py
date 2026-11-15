@@ -168,6 +168,9 @@ def list_text(target: Path, path: str) -> str:
     return header + ("\n" + "\n".join(rows) if rows else "\n(empty)")
 
 
+MAX_READ_CHARS = 20_000  # same as a cell's output limit (sandbox.MAX_OUTPUT_CHARS)
+
+
 def read_text(target: Path, path: str, offset: int = 0, limit: int = 200) -> str:
     if not target.is_file():
         return f"ERROR: {path} is not a file"
@@ -180,6 +183,9 @@ def read_text(target: Path, path: str, offset: int = 0, limit: int = 200) -> str
     footer = ""
     if offset + limit < len(lines):
         footer = f"\n...[{len(lines) - offset - limit} more lines]"
+    if len(body) > MAX_READ_CHARS:  # a few very long lines can still be megabytes
+        footer = f"\n...[cut at {MAX_READ_CHARS} of {len(body)} characters; use run_code to read it]" + footer
+        body = body[:MAX_READ_CHARS]
     return f"{target} ({len(lines)} lines)\n{body}{footer}"
 
 
