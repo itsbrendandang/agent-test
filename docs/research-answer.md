@@ -55,8 +55,8 @@ The prompts are plain files you can read and edit: `engine/src/research/prompts/
 
 Exa returns a picture (`image`) with some web pages, in the same response. The answer keeps it on its source
 (`image` in the record, the `sources` event and `sources.json`). No extra request is made and nothing more is paid.
-Only an `https` address of at most 1,000 characters is kept (`imageUrl` in `engine/src/research/text.ts`). The Search
-screen and the Overview show the pictures in a strip under the answer text. Each picture links to its source page and
+Only an `https` address of at most 1,000 characters is kept (`imageUrl` in `engine/src/research/text.ts`). The Research
+screen shows the pictures in a strip under the answer text. Each picture links to its source page and
 shows its number and site. A picture that does not load is left out. An answer with no picture, also one saved before
 this field, shows no strip. Europe PMC and the databases give no pictures.
 
