@@ -55,15 +55,17 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
     : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
     : lab.status === "cancelled" ? "The answer was stopped."
     : "The team is working on your question. Nothing here moves unless the engine reports it."
-  const ask = async (question: string, effort: "quick" | "standard") => {
+  const ask = async (question: string, effort: "quick" | "standard"): Promise<boolean> => {
     setRefused(undefined)
     try {
       const started = await startResearch(question, effort)
       setAsked({ id: started.id, question })
+      return true
     } catch (error) {
       // An engine without direct answers (or with them switched off): Research makes its team-review plan for the question, as before.
-      if (error instanceof ResearchRefused && error.status === 404 && !error.field) { setAsk(question, { send: true, effort }); onOpen("Home"); return }
+      if (error instanceof ResearchRefused && error.status === 404 && !error.field) { setAsk(question, { send: true, effort }); onOpen("Home"); return true }
       setRefused(error instanceof Error ? error.message : String(error))
+      return false
     }
   }
 

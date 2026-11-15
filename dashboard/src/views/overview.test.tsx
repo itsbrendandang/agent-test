@@ -115,6 +115,7 @@ describe("the Agent Lab under the question box", () => {
     await userEvent.type(screen.getByLabelText("Ask a research question"), "Does it work?")
     await userEvent.click(screen.getByRole("button", { name: /^Send/ }))
     expect((await screen.findByRole("alert")).textContent).toContain("Too many questions in a short time.")
+    expect((screen.getByLabelText("Ask a research question") as HTMLTextAreaElement).value).toBe("Does it work?") // kept, to send again
     expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team is at its desks.")
   })
 })

@@ -28,7 +28,7 @@ const TEAM: { name: string; does: string }[] = [
 ]
 const MAX = 2000
 
-export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Start the answer on this page. Absent: the question is handed to Research. */ onAsk?: (question: string, effort: "quick" | "standard") => void | Promise<void> }) {
+export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Start the answer on this page. Absent: the question is handed to Research. */ onAsk?: (question: string, effort: "quick" | "standard") => Promise<boolean> }) {
   const [text, setText] = useState("")
   const [focused, setFocused] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
@@ -47,7 +47,7 @@ export function Hero({ onOpen, onAsk }: { onOpen: (view: View) => void; /** Star
     if (!question) { box.current?.focus(); return }
     const level = catalog ? effortInEffect(catalog, effort) : effort
     // Deep is a team review (Research makes its plan); Quick and Standard are direct answers, started on the page.
-    if (onAsk && (level === "quick" || level === "standard")) { void onAsk(question.slice(0, MAX), level); return }
+    if (onAsk && (level === "quick" || level === "standard")) { void onAsk(question.slice(0, MAX), level).then((started) => { if (started) setText("") }); return } // a refused question stays in the box
     setAsk(question.slice(0, MAX), { send: true, effort: level })
     onOpen("Home")
   }
