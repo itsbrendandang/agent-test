@@ -65,7 +65,9 @@ this field, shows no strip. Europe PMC and the databases give no pictures.
 Code (not a model) lists the proteins of an answer as `proteins` in the record and the `proteins` event
 (`engine/src/structure/proteins.ts`). It looks in three places: the answer's UniProt sources (accession, protein, gene,
 organism with its strain, length); an amino-acid sequence or a UniProt accession written in the question or the
-answer (one run of letters, blocks of ten, or FASTA; a UniProt FASTA header gives the name and organism); and a test
+answer (a FASTA record, where a UniProt header gives the name and organism; a line with only residues, as one run
+or blocks of ten, joined with the next lines only when they are wrapped at the same 50 to 80 letters; or one run of
+at least 30 capitals inside a sentence); and a test
 protein, when the question is that test protein's own question (its chip). Other questions never get a test protein. At most 8 are listed. An answer saved before the field gets them worked out when it is read.
 Nothing is fetched while the answer is made.
 

@@ -57,40 +57,37 @@ test("a UniProt source gives its accession, protein, gene, organism with the str
   assert.equal(fromSource({ n: 1, url: "https://evil.example/uniprotkb/P01116/entry", title: "x", provider: "uniprot", text: UNIPROT_TEXT }), undefined, "only UniProt's own address")
 })
 
-test("sequences written in a text: FASTA with UniProt's header, one run, blocks of ten; never words, codes or DNA", () => {
+test("sequences written in a text: FASTA with UniProt's header, one run, listings; never words, codes or DNA", () => {
   const fasta = `Fold this:\n>sp|P0AA25|THIO_ECOLI Thioredoxin 1 OS=Escherichia coli (strain K12) OX=83333 GN=trxA PE=1 SV=2\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60)}\n`
   assert.deepEqual(sequencesIn(fasta), [{ sequence: THIOREDOXIN, accession: "P0AA25", name: "Thioredoxin 1", organism: "Escherichia coli (strain K12)", gene: "trxA" }])
-  assert.deepEqual(sequencesIn(`The protein ${THIOREDOXIN} is small.`), [{ sequence: THIOREDOXIN }])
-  const blocks = THIOREDOXIN.match(/.{1,10}/g)!.join(" ")
-  assert.deepEqual(sequencesIn(`Sequence: ${blocks}.`), [{ sequence: THIOREDOXIN }])
   assert.deepEqual(sequencesIn(`>my protein\n${THIOREDOXIN.toLowerCase()}`), [{ sequence: THIOREDOXIN, name: "my protein" }], "a lower-case FASTA record")
+  assert.deepEqual(sequencesIn(`The protein ${THIOREDOXIN} is small.`), [{ sequence: THIOREDOXIN }], "a run inside a sentence")
+  const blocks = THIOREDOXIN.match(/.{1,10}/g)!.join(" ")
+  assert.deepEqual(sequencesIn(`Sequence:\n${blocks}.`), [{ sequence: THIOREDOXIN }], "blocks of ten, then a full stop")
+  for (const close of [")", ","]) assert.deepEqual(sequencesIn(`Thioredoxin (\n${blocks}${close}\na small protein.`), [{ sequence: THIOREDOXIN }], `blocks of ten, then ${close}`)
+  assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60)}.\nThanks.`), [{ sequence: THIOREDOXIN }], "lines wrapped at 60, the short last one ending in a full stop")
+  const genbank = THIOREDOXIN.match(/.{1,60}/g)!.map((l, i) => `${String(i * 60 + 1).padStart(9)} ${l.match(/.{1,10}/g)!.join(" ")}`).join("\n")
+  assert.deepEqual(sequencesIn(`ORIGIN\n${genbank}\n//`), [{ sequence: THIOREDOXIN }], "a numbered listing in blocks of ten")
   for (const none of [
     "KRAS TP53 EGFR BRAF and ALK are genes.", "> A quoted line of a Markdown answer.\n> Another quoted line.",
     "ATGCGTACGTAGCTAGCTAGCTAGCTAGCATCGATCGATCGTAGCTAGCTAG", "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG AGAIN AND AGAIN",
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "MSDKIIHLTDDSFDTDVLKADG",
   ]) assert.deepEqual(sequencesIn(none), [], none)
   assert.deepEqual(sequencesIn(`x${THIOREDOXIN}`), [], "glued to a word before")
-  assert.deepEqual(sequencesIn(`Fold this:\n${THIOREDOXIN}\nThe protein is small.`), [{ sequence: THIOREDOXIN }], "a capitalised word on the next line")
-  assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} Is it stable?`), [{ sequence: THIOREDOXIN }], "a capitalised word after a space")
-  assert.deepEqual(sequencesIn(`Sequence: ${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}\nIs it stable?`), [{ sequence: THIOREDOXIN }], "blocks, then a capitalised word")
-  assert.deepEqual(sequencesIn(`Fold this:\n${THIOREDOXIN}\nI want to know its fold.`), [{ sequence: THIOREDOXIN }], "a one-letter word on the next line is not a residue")
-  assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} A small protein`), [{ sequence: THIOREDOXIN }], "a one-letter word after a space is not a residue")
-  assert.deepEqual(sequencesIn(`${THIOREDOXIN} KRAS binds it`), [{ sequence: THIOREDOXIN }], "a gene symbol after a space is not a residue")
-  assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN}\nKRAS-G12D binds it.`), [{ sequence: THIOREDOXIN }], "a gene symbol with punctuation on the next line")
-  for (const word of ["OK.", "NOTE: small.", "TP53."]) assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN}\n${word}`), [{ sequence: THIOREDOXIN }], word)
-  const hundred = THIOREDOXIN.slice(0, 100).match(/.{10}/g)!.join(" ")
-  for (const words of [" A small protein", " I want its fold", " KRAS-G12D"]) assert.deepEqual(sequencesIn(`${hundred}${words}`), [{ sequence: THIOREDOXIN.slice(0, 100) }], words)
-  assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60, 104)}\n${THIOREDOXIN.slice(104)}\nThanks.`), [{ sequence: THIOREDOXIN }], "wrapped lines, the last one short")
-  const genbank = THIOREDOXIN.match(/.{1,60}/g)!.map((l, i) => `${String(i * 60 + 1).padStart(9)} ${l.match(/.{1,10}/g)!.join(" ")}`).join("\n")
-  assert.deepEqual(sequencesIn(`ORIGIN\n${genbank}\n//`), [{ sequence: THIOREDOXIN }], "a numbered listing in blocks of ten")
+  for (const word of ["KRAS", "TP53.", "NOTE: small.", "CONCLUSION: it folds.", "A small protein", "I want its fold.", "KRAS-G12D binds it.", "Is it stable?"]) {
+    assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN}\n${word}\n`), [{ sequence: THIOREDOXIN }], `next line: ${word}`)
+    assert.deepEqual(sequencesIn(`Fold ${THIOREDOXIN} ${word}`), [{ sequence: THIOREDOXIN }], `same line: ${word}`)
+    assert.deepEqual(sequencesIn(`Fold:\n${THIOREDOXIN.slice(0, 60)}\n${THIOREDOXIN.slice(60)}\n${word}`), [{ sequence: THIOREDOXIN }], `after a wrapped listing: ${word}`)
+  }
+  const KRAS = testProteins().find((t) => t.id === "kras-g12c")!.sequence
+  assert.deepEqual(sequencesIn(`WILDTYPE\n${THIOREDOXIN}\nMUTANT\n${KRAS}\n`), [{ sequence: THIOREDOXIN }, { sequence: KRAS }], "label lines between two sequences")
 })
 
 test("sequencesIn takes linear time on a long run of capitals glued to a letter or a digit", () => {
   for (const tail of ["a", "1", "_"]) {
     const started = performance.now()
-    assert.deepEqual(sequencesIn(`${"MKTAYIAKQRQISFVKSHFSRQ".repeat(20)}${tail}`), [], tail)
-    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")}${tail}`).map((f) => f.sequence), [THIOREDOXIN.slice(0, 100)], `blocks, the last glued to ${tail}: that block is not taken`)
-    assert.deepEqual(sequencesIn(`${THIOREDOXIN.match(/.{1,10}/g)!.join(" ")} ${tail}`).map((f) => f.sequence), [THIOREDOXIN.slice(0, 100)], `blocks, then ${tail}: a short last block with more on its line is not taken`)
+    assert.deepEqual(sequencesIn(`${"MKTAYIAKQRQISFVKSHFSRQ".repeat(2000)}${tail}`), [], tail)
+    assert.deepEqual(sequencesIn(`${THIOREDOXIN}${tail}`), [], `glued to ${tail}`)
     assert.ok(performance.now() - started < 500, `${tail}: ${Math.round(performance.now() - started)} ms`)
   }
 })
