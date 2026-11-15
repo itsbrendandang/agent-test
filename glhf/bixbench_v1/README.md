@@ -354,6 +354,8 @@ Seurat, msigdbr, ReactomePA. An x86-64 host would need emulation or its own buil
 
 ## The sandbox on Modal (`--sandbox modal`)
 
+To run sets on Modal from a VM, step by step, see [`MODAL-RUNBOOK.md`](MODAL-RUNBOOK.md).
+
 What it is. With `--sandbox modal` the analysis of a run (the commands the solver runs on the
 capsule's data) happens in a [Modal](https://modal.com) Sandbox and not in local Docker.
 Everything else stays where the command runs: Inspect, the model calls, the question file, the
