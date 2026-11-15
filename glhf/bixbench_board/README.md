@@ -100,6 +100,24 @@ Earlier runs, not comparable with these: the single-agent baseline scored 0.260 
 macOS without R. A 5-member board ran once (2026-11-15); it is not the board this folder runs now,
 and its numbers are not a result.
 
+The uncapped conditions (the second baseline report): no token or time limit, tool calls
+capped at 10^9. Leave out `--budget-tokens` and `--budget-seconds`:
+
+```bash
+.venv/bin/python run.py --solver board --sandbox modal --studies $STUDIES --repeats 3 --seed 0 \
+  --budget-tool-calls 1000000000 --workers 60 --modal-usd-cap 20 --out runs/board_uncapped
+```
+
+- **Request timeout.** Each model request times out after 60 s (`BIXBASE_REQUEST_TIMEOUT_S`).
+  With no token limit a board's context can pass 1M tokens, and one reply can take longer.
+  Set `BIXBASE_REQUEST_TIMEOUT_S=600` for uncapped runs.
+- **Rate limits.** `--workers 60` on the app's tiers can pass the Anthropic organisation's limit
+  on concurrent requests (error 429). A run that fails this way ends without answers.
+- **Run again.** `--skip-existing` with the same `--out` runs again only the runs whose
+  `result.json` has an `error`, and keeps the others. `summarize.py` reads every `result.json`.
+- `read_file` returns at most 200 lines and at most 20,000 characters (`MAX_READ_CHARS` in
+  `bixbase/cellrun.py`), so a file with very long lines cannot fill a prompt.
+
 Do not commit `runs/` or `data/`.
 
 ## Code cells on Modal (`--sandbox modal`)

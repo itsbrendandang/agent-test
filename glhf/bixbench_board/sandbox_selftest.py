@@ -6,6 +6,7 @@
      after its whole timeout) and the child is stopped
   3. an ordinary cell: output, exit code and new files as before
   4. cells run at the same time (parallel members) each get their own number
+  5. read_file stops at MAX_READ_CHARS, even when the file has only a few very long lines
 
 Each check runs with and without the read-only wrapper (bubblewrap on Linux, sandbox-exec on
 macOS) when that wrapper is installed.
@@ -108,10 +109,22 @@ def test_cells_at_the_same_time_get_their_own_numbers(tmp: Path) -> None:
         print(f"test 4 OK ({label}): 6 cells at once, 6 numbers, 6 outputs")
 
 
+def test_read_file_stops_at_the_character_limit(tmp: Path) -> None:
+    for label, box in _boxes(tmp):
+        (box.data_dir / "wide.csv").write_text(("x," * 300_000 + "\n") * 3)
+        text = box.read_file("DATA_DIR/wide.csv")
+        assert len(text) < cellrun.MAX_READ_CHARS + 500, len(text)
+        assert f"cut at {cellrun.MAX_READ_CHARS} of" in text, text[-200:]
+        (box.data_dir / "small.txt").write_text("a\nb\n")
+        assert box.read_file("DATA_DIR/small.txt").endswith("1\ta\n2\tb")
+        print(f"test 5 OK ({label}): 1.8 MB in 3 lines comes back as {len(text)} characters")
+
+
 if __name__ == "__main__":
     tmp = Path(tempfile.mkdtemp(prefix="sandbox-selftest-"))
     test_timeout_kills_the_cell_and_its_children(tmp)
     test_a_finished_cell_returns_at_once_and_its_children_stop(tmp)
     test_an_ordinary_cell_is_unchanged(tmp)
     test_cells_at_the_same_time_get_their_own_numbers(tmp)
+    test_read_file_stops_at_the_character_limit(tmp)
     print("\nall sandbox self-tests passed")
