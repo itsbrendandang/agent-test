@@ -12,7 +12,7 @@
 
 /* The lab: a card with one line on top (what the team is doing, and the controls), then the scene and its panel. */
 .research-lab { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 100%; max-width: 800px; margin: 0 auto; border: 1px solid var(--edge, #dedbd2); border-radius: var(--radius-card, 12px); background: var(--surface, #fdfcfa); }
-.research-lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px 6px 12px; min-height: 44px; font-size: 13px; }
+.research-lab-bar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px 6px 12px; min-height: 44px; font-size: 13px; }
 .research-lab-title { font-weight: 650; color: var(--text, #1d1c19); }
 .research-lab-status { white-space: nowrap; }
 .research-lab-status[data-status="running"] > span:first-child { color: var(--success, #0d5f37); }
