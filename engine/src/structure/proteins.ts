@@ -97,15 +97,19 @@ const WRAPPED_LINE = 40
 /**
  * The residues of a run of capital blocks, up to the first block that does not continue it: a block after a space must
  * follow a block of ten (a listing in blocks of ten), a block after a line break must follow a line of at least
- * WRAPPED_LINE letters, and a block of fewer than ten after a line break must not run on into a sentence ("I want ...").
+ * WRAPPED_LINE letters, and a block of fewer than ten must end the listing: nothing but whitespace (or, in a listing in
+ * blocks of ten, a full stop) follows it on its line, so a short word after a sequence ("I want ...", "KRAS-G12D", "NOTE:") is not taken.
  */
 function listing(run: string, after: string): string {
   const parts = run.split(/([ \t\d]*\n[ \t\d]*|[ \t\d]+)/)
   let letters = parts[0], line = parts[0].length
   for (let i = 1; i < parts.length; i += 2) {
     const block = parts[i + 1], prev = parts[i - 1], newline = parts[i].includes("\n")
-    const next = i + 2 < parts.length ? parts[i + 2] + parts[i + 3][0] : after.slice(0, 80)
-    if (newline ? line < WRAPPED_LINE || (block.length < 10 && /^[ \t]+[A-Za-z]/.test(next)) : prev.length !== 10) break
+    if (newline ? line < WRAPPED_LINE : prev.length !== 10) break
+    if (block.length < 10) {
+      const ends = i + 2 < parts.length ? parts[i + 2].includes("\n") : (newline ? /^[ \t]*(?:\n|$)/ : /^\.?[ \t]*(?:\n|$)/).test(after)
+      if (!ends) break
+    }
     letters += block
     line = newline ? block.length : line + block.length
   }
