@@ -1,0 +1,183 @@
+# The model registry of the open-model grid. Checked by `uv run openmodels models` and by tests.
+# status: smoke-tested (served and ran one capsule with both solvers), served (answered the key
+# and tool-call checks), prepared (a vendor model: addressed, priced, never run by an agent),
+# waiting (needs an app file or an owner decision), not-deployed (decided against, see notes).
+
+prices:
+  # Read on 2026-11-14 with `modal billing rates` (the command prints the rates of this
+  # workspace; the same figures as modal.com/pricing). USD.
+  read_from: "modal billing rates, 2026-11-14 (same figures as modal.com/pricing)"
+  gpu_per_hour:
+    T4: 0.59
+    L4: 0.80
+    A10G: 1.10
+    L40S: 1.95
+    A100-40GB: 2.10
+    A100-80GB: 2.50
+    RTX-PRO-6000: 3.03
+    H100: 3.95
+    H200: 4.54
+    B200: 6.25
+    B300: 7.10
+  cpu_core_per_hour: 0.0473
+  memory_gib_per_hour: 0.008
+  volume_gib_per_month: 0.09
+
+models:
+  # ---- the three contestants ------------------------------------------------------------------
+  - name: qwen3.6-35b-a3b
+    kind: modal-app
+    status: waiting
+    inspect_model: openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8
+    hf_repo: Qwen/Qwen3.6-35B-A3B-FP8
+    revision: c653bba46dfa06e9658dcc0b0dc87fe4685f14a2
+    gated: false
+    license: apache-2.0
+    weights_gb: 37.5
+    app_file: apps/qwen36_35b_a3b.py
+    app_name: openmodels-qwen36-35b-a3b
+    gpu: L40S
+    gpu_count: 1
+    cpu: 4
+    memory_gib: 32
+    price_per_second: 0.000665   # (1.95 + 4 x 0.0473 + 32 x 0.008) / 3600 = 2.395 USD an hour
+    startup_timeout_seconds: 1200
+    scaledown_seconds: 300
+    context_length: 131072
+    max_output_tokens: 16384
+    tool_call_parser: qwen3_coder
+    reasoning_parser: qwen3
+    notes: >-
+      WAITING FOR THE OWNER: Modal refuses every GPU type on this account with "Please add a
+      payment method to use L40S GPU functions" (tried 2026-11-14; credit alone is not enough).
+      So it has never been served: no tool-call check and no smoke test were possible.
+      Done without a GPU: the weights are in the Volume openmodels-hf-cache (37.49 GB, this
+      revision, fetched with no token); vLLM 0.33.0's source defines all 15 flags and both
+      parsers the app passes; the endpoint lock was tested on a CPU stand-in.
+      35B parameters, 3B active per token. Modal's own example serves it with SGLang on 2 H100
+      (7.90 USD an hour) for low latency; one L40S (1.95) is the cheapest GPU on Modal that
+      should hold the FP8 weights (35 GiB) and a 131,072-token context (about 2.7 GB of cache).
+      That it fits is computed from the model's config, not measured. If it does not fit, the
+      next choices are A100-80GB (2.50) and H100 (3.95; the GPU vLLM's recipe names).
+
+  - name: claude-opus-5-5
+    kind: api
+    status: prepared
+    inspect_model: anthropic/claude-opus-5-5
+    context_length: 1000000
+    usd_per_mtok:
+      input: 4.0
+      cached_input: 0.2
+      cache_write: 5.0
+      output: 20.0
+      source: "engine/node_modules/@earendil-works/pi-ai/dist/providers/data/anthropic.json (pi-ai 1.5.2), id claude-opus-5-5; board/config.yaml line 52 says the same 4 / 20"
+    notes: Paid vendor model on the owner's key. Never run by an agent.
+
+  - name: gpt-6.1-sol
+    kind: api
+    status: prepared
+    inspect_model: openai/gpt-6.1-sol
+    context_length: 272000
+    usd_per_mtok:
+      input: 2.0
+      cached_input: 0.1
+      cache_write: 2.5
+      output: 10.0
+      source: "engine/node_modules/@earendil-works/pi-ai/dist/providers/data/openai.json (pi-ai 1.5.2), id gpt-6.1-sol; a higher tier (4 / 0.2 / 15) applies above 272,000 input tokens, which a run here cannot reach"
+    notes: >-
+      Paid vendor model on the owner's key. Never run by an agent. "OpenAI Sol" is read as the
+      newest Sol id on the account (gpt-6.1-sol); that choice is an assumption.
+
+  # ---- Kimi: looked at, not deployed ----------------------------------------------------------
+  - name: kimi-k3.1-pro
+    kind: not-deployed
+    status: not-deployed
+    hf_repo: moonshotai/Kimi-K3.1-Pro
+    revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
+    gated: false
+    license: "other (Kimi K3.1 Pro License)"
+    weights_gb: 1561.3
+    context_length: 1048576
+    tool_call_parser: kimi_k3
+    reasoning_parser: kimi_k3
+    notes: >-
+      2.8 trillion parameters (104B active), released already quantised (MXFP4 weights). vLLM's
+      recipe needs 1,874 GB of GPU memory and a nightly vLLM (0.34): at least 7 B300 (288 GB
+      each), 49.70 USD an hour, over the 10 USD an hour limit. Not deployed. Options: Modal's
+      Shared Endpoint for this model (2.00 / 0.20 cached / 10.00 USD per million tokens; plan
+      credit cannot pay for it), or Moonshot's own API (needs a key from the owner). See README.
+
+  - name: kimi-k3
+    kind: not-deployed
+    status: not-deployed
+    hf_repo: moonshotai/Kimi-K3
+    revision: f831ab66814297da540d832a5235f8e904f29d06
+    gated: false
+    license: "other (Kimi K3 License)"
+    weights_gb: 1560.9
+    context_length: 1048576
+    tool_call_parser: kimi_k3
+    reasoning_parser: kimi_k3
+    notes: >-
+      Same size as K3.1 Pro (2.8T parameters), so the same answer. Modal Shared Endpoint price:
+      3.00 / 0.30 cached / 15.00 USD per million tokens. Older and smaller: Kimi K2.6 (1.03T
+      parameters, 595 GB; nvidia/Kimi-K2.6-NVFP4 is the same size on disk), still 3 B300 or more.
+
+  # ---- optional extras: no app file yet -------------------------------------------------------
+  - name: ministral-3-8b
+    kind: not-deployed
+    status: waiting
+    hf_repo: mistralai/Ministral-3-8B-Instruct-2512
+    revision: 5b26027e7b19eeb4b7352e1fed3926375dd2cb4d
+    gated: false
+    license: apache-2.0
+    weights_gb: 20.8
+    gpu: L40S
+    tool_call_parser: mistral
+    notes: Candidate extra (cheapest). Modal's example uses an H100; an L40S holds it. No app file yet.
+
+  - name: gemma-4-26b-a4b
+    kind: not-deployed
+    status: waiting
+    hf_repo: google/gemma-4-26B-A4B-it
+    revision: 4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+    gated: false
+    license: apache-2.0
+    weights_gb: 51.6
+    gpu: A100-80GB
+    tool_call_parser: gemma4
+    reasoning_parser: gemma4
+    notes: Candidate extra. Modal's example uses an H200; the weights need an 80 GB GPU. No app file yet.
+
+  - name: nemotron-3-nano-30b-a3b
+    kind: not-deployed
+    status: waiting
+    hf_repo: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+    revision: 6efb4a2a1c1fa277ce7b3df7a1416255011b1c99
+    gated: false
+    license: "other (NVIDIA open model licence)"
+    weights_gb: 19.3
+    gpu: B200
+    notes: NVFP4 weights need a Blackwell GPU (B200, 6.25 USD an hour). Modal's example uses SGLang. Not planned.
+
+  - name: deepseek-v4-flash
+    kind: not-deployed
+    status: waiting
+    hf_repo: deepseek-ai/DeepSeek-V4-Flash-0731
+    revision: 7872f01b1d1fe23eabc4c98b48bffcef5a386062
+    gated: false
+    license: mit
+    weights_gb: 166.9
+    gpu: B300
+    notes: Needs a B300 (7.10 USD an hour) and SGLang in Modal's example. Not planned.
+
+  - name: inkling-small
+    kind: not-deployed
+    status: waiting
+    hf_repo: thinkingmachines/Inkling-Small-NVFP4
+    revision: b6a99534467840620d411e4cd4ad5819b2610d9c
+    gated: false
+    license: apache-2.0
+    weights_gb: 170.7
+    gpu: B300
+    notes: Needs a B300 (7.10 USD an hour) and SGLang in Modal's example. Not planned.

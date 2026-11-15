@@ -1,0 +1,7 @@
+# The endpoint key (a Modal proxy token). Never commit it.
+.secrets/
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
