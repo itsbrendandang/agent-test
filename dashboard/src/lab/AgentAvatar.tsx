@@ -2,8 +2,8 @@
 // conversation. Which face an agent has is decided in identity.ts and nowhere else. It is decoration by default
 // (aria-hidden): put the agent's label next to it as text. No CSS file is needed.
 import { memo } from "react"
-import { agentIdentity } from "./identity"
-import { MascotHead, type FaceShape } from "./Mascot"
+import { agentIdentity, type FaceShape } from "./identity"
+import { MascotHead } from "./Mascot"
 
 /** The square of each shape's drawing that holds the head: x, y, size (in the character's 50 x 56 drawing). */
 const BOX: Record<FaceShape, [number, number, number]> = {

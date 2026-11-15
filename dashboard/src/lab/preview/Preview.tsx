@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react"
 import { answerLab, boardLab, swarmLab } from "../adapter"
 import { PRACTICE_ANSWER, PRACTICE_REVIEW } from "../fixtures/practice"
 import { CANCELLED_ANSWER, REAL_ANSWER, REVIEW_WITH_VISITOR, SWARM_NOTES, SWARM_RUN, fixtureModel } from "../fixtures/streams"
+import { AgentAvatar } from "../AgentAvatar"
+import { SPECIALISTS, agentIdentity } from "../identity"
 import { Lab } from "../Lab"
 
 const query = new URLSearchParams(window.location.search)
@@ -27,6 +29,16 @@ export function Preview() {
     if (play && play in STREAMS) return answerLab(STREAMS[play as keyof typeof STREAMS].slice(0, n), "preview")
     return fixtureModel({}, now)
   }, [n, total, now])
+  if (query.has("avatars")) {
+    const names = ["lead-scientist", "scout", "proposer", "experimenter", "pilot", "methods-auditor", "critic", "reviser", "finisher", "reporter", "first-pass", "librarian", ...SPECIALISTS, "someone-new"]
+    return (
+      <div className="page" style={{ height: "100vh" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+          {names.map((n) => <div key={n} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><AgentAvatar name={n} size={24} /><AgentAvatar name={n} size={32} /><AgentAvatar name={n} size={40} /><span>{agentIdentity(n).label}</span></div>)}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="page" data-wide style={{ height: "100vh" }}>
       <p className="muted small">Preview (development only): {play ? `${play}, event ${n} of ${total}` : "hand-written fixture model"}</p>

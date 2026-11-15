@@ -2,11 +2,9 @@
 // mushroom, flame, mountain, fuzzy, acorn, owl), each in the colour Anh gave its teammate. Pure SVG, decoration only:
 // the teammate's name and state are always in text beside it.
 import type { ReactNode } from "react"
-import type { Shape } from "./model"
+import type { FaceShape } from "./identity"
 
 const INK = "#1d1c19"
-/** Anh's eight shapes, and one plain shape for an agent this app has no character for. */
-export type FaceShape = Shape | "generic"
 
 function body(shape: FaceShape, color: string): ReactNode {
   switch (shape) {

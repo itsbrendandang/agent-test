@@ -244,7 +244,7 @@
 .thread-team > .thread-face { grid-column: 1; grid-row: 1 / span 2; align-self: start; padding-top: 1px; }
 .thread-team > .thread-who, .thread-team > div { grid-column: 2; min-width: 0; }
 .thread-team[data-wrong] > div { border-left: 3px solid #c9302c; padding-left: 10px; }
-.agent-face { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; overflow: hidden; color: #242421; font-weight: 700; line-height: 1; }
+.agent-face { display: inline-flex; align-items: center; justify-content: center; flex: none; line-height: 0; }
 .agent-face svg { width: 100%; height: 100%; display: block; }
 @media (max-width: 480px) {
   .thread-team { grid-template-columns: 24px minmax(0, 1fr); column-gap: 8px; }

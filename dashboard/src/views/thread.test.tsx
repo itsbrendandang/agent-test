@@ -8,6 +8,7 @@ import { plainCost, plainDuration, plainLimit, plainTitle, plainWhen, runTitle }
 import { forgetScripted } from "@/lib/scripted"
 import { inShort, safeUrl, splitReply } from "@/lib/words"
 import { routes } from "@/test/engine"
+import { agentIdentity } from "@/lab/identity"
 import { CATALOG_ON } from "@/test/home"
 import { AgentsView } from "./AgentsView"
 import { BoardView } from "./BoardView"
@@ -156,7 +157,7 @@ describe("every agent's message shows that agent's own label and face", () => {
     expect(message).toHaveAttribute("data-agent", agent)
     const face = container.querySelector(".thread-face .agent-face")!
     expect(face).toHaveAttribute("data-face", agent) // this agent's face, not another's and not the neutral one
-    expect(face).toHaveAttribute("aria-hidden", "true") // the label is the text
+    expect(face.querySelector("svg")).toHaveAttribute("aria-hidden", "true") // the picture is decoration; the label is the text
     expect(face).toHaveStyle({ width: "32px", height: "32px" }) // a fixed box: nothing moves when it is drawn
     expect(message.firstElementChild).toHaveClass("thread-face") // on the left, before the label
     expect(within(message).getByText(label)).toBeInTheDocument()
@@ -166,9 +167,22 @@ describe("every agent's message shows that agent's own label and face", () => {
     expect([...container.querySelectorAll(".agent-face")].map((f) => f.getAttribute("data-face"))).toEqual(["methods-auditor", "critic", "critic"])
   })
   it("an agent that is not known gets the neutral face and keeps its own name", () => {
-    const { container } = render(<TeamMessage name="Bulk RNA-seq Analyst" agent="bulk-rnaseq-analyst" text="x" />)
+    const { container } = render(<TeamMessage name="Somebody New" agent="zz-nobody-known" text="x" />)
     expect(container.querySelector(".agent-face")).toHaveAttribute("data-face", "neutral")
-    expect(screen.getByRole("article", { name: "Bulk RNA-seq Analyst" })).toHaveTextContent("Bulk RNA-seq Analyst")
+    expect(screen.getByRole("article", { name: "Somebody New" })).toHaveTextContent("Somebody New")
+  })
+  it("draws the app's one shared character for each agent: the same shape and colour as in the Lab", () => {
+    for (const [agent, label] of ROSTER_NAMES) {
+      const { container, unmount } = render(<TeamMessage name={label} agent={agent} text="x" />)
+      const who = agentIdentity(agent)
+      const picture = container.querySelector(".agent-face svg")!
+      expect(picture).toHaveAttribute("data-face", `${who.shape}:${who.colour}`)
+      expect(picture).toHaveAttribute("aria-hidden", "true")
+      unmount()
+    }
+    // no two different agents of the roster share both shape and colour
+    const faces = ROSTER_NAMES.map(([agent]) => { const w = agentIdentity(agent); return `${w.shape}:${w.colour}` })
+    expect(new Set(faces).size).toBe(faces.length)
   })
 })
 

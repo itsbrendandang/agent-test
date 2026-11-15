@@ -9,7 +9,10 @@ import { Loading } from "@/components/Crew"
 import { Provenance } from "@/components/Provenance"
 import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
+import { AgentAvatar } from "@/lab/AgentAvatar"
+import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
+import { uncheckedReasons } from "@/lib/verdict"
 import { BOARD_JOB, checkedOf, MARK_WORD, markCounts, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
@@ -36,6 +39,8 @@ const ABOUT = "A team of AI agents discusses a research brief. A separate check 
 // The cheap model's ruling settled the claim ("jev" is the same thing in runs made before the checker changed).
 const firstPass = (c: { checker?: string }) => c.checker === "first-pass" || c.checker === "jev"
 
+/** What the screening model said about a source. The engine records only "yes" (1) or "partly" (0.5): words, never a score. */
+const screened = (relevance: unknown): string | undefined => (relevance === 1 ? "Relevant" : relevance === 0.5 ? "Partly relevant" : undefined)
 /** "Scout (Data Inspector)" -> the name and the plain job. */
 const nameAndJob = (title: string) => { const m = /^(.*?)\s*\((.+)\)\s*$/.exec(title); return m ? { name: m[1], job: m[2] } : { name: title, job: undefined } }
 /** Who ruled on a statement, in plain words. The model id, when the run recorded one, is kept. */
@@ -116,6 +121,8 @@ export function BoardView() {
   // The run's own roster names everyone who spoke in it, also method specialists that the engine's standing roster does not list.
   const ran = events.find((e): e is Of<"run.roster"> => e.type === "run.roster")?.members ?? []
   const title = (name: string) => ran.find((m) => m.name === name)?.title ?? roster.find((m) => m.name === name)?.title ?? plainTitle(name)
+  // Who is listed as taking part: the run's own roster when it recorded one (it also names specialists), else the engine's.
+  const took: { name: string; title: string }[] = ran.some((m) => m.role === "member") ? ran.filter((m) => m.role === "member") : members
   const specialist = (name: string) => ran.find((m) => m.name === name)?.source === "specialist"
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const scripted = startedAs ?? status?.mock ?? false
@@ -139,7 +146,10 @@ export function BoardView() {
   // One plain sentence about where the run is, and when it is over, what happened in it.
   const spoke = new Set(events.flatMap((e) => (e.type === "member.replied" ? [e.member] : []))).size
   const marks = { supported: count("verified"), contradicted: count("contradicted"), insufficient: count("unsupported"), unchecked: count("unchecked") }
-  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}${claims.length ? `: ${markCounts(marks)}` : ""}.`
+  const checked = claims.length - marks.unchecked
+  // Never a bare total: how many statements there were, and how many of them a check actually ruled on.
+  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}${claims.length ? `; ${checked} of them ${checked === 1 ? "was" : "were"} checked` : ""}.`
+  const whyNot = uncheckedReasons(claims)
   const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
   const headline = !status ? "Loading the review…"
@@ -162,7 +172,8 @@ export function BoardView() {
       else groups.push({ member: e.member, provider, list: [e] })
     }
     return groups.map((g) => (
-      <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`}>
+      <div key={g.list[0].key} className="thread-search" role="note" aria-label={`${who(g.member).name} searched`} data-agent={g.member}>
+        <AgentAvatar name={g.member} size={32} className="thread-search-face" />
         <p>
           <b>{who(g.member).name}</b> {g.provider === "fixture" ? "looked up sources" : g.provider === "europepmc" ? "searched the research literature" : "searched the web"}
           {g.provider && <> · <SearchCredit provider={g.provider} /></>}
@@ -225,6 +236,23 @@ export function BoardView() {
           </>
         )}
         <p className="story-headline" role="status">{headline}</p>
+        {claims.length > 0 && (
+          <div className="check-summary" role="group" aria-label="What the checks found">
+            <p className="check-line">
+              <b data-testid="checked-count">{checkedOf(checked, claims.length)}.</b>
+              <MarkChip verdict="verified" count={marks.supported} />
+              <MarkChip verdict="contradicted" count={marks.contradicted} />
+              <MarkChip verdict="unsupported" count={marks.insufficient} />
+              {marks.unchecked > 0 && <MarkChip verdict="unchecked" count={marks.unchecked} />}
+            </p>
+            {whyNot.length > 0 && (
+              <p className="check-why" data-testid="unchecked-why">
+                Of the {marks.unchecked} not checked: {whyNot.map((w, i) => <span key={w.note} title={w.note ? `The check's own note: ${w.note}` : undefined}>{i > 0 && "; "}<span className="mono">{w.n}</span> {w.plain}</span>)}.
+              </p>
+            )}
+            <MarksLegend who="A separate checker decides each mark; the team does not grade itself." />
+          </div>
+        )}
         {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was contradicted." : `${wrong} statements were contradicted.`} Look for the marked messages below.</p>}
         {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. If it names a model or a key, check them in Settings (or ask the person who runs the engine). After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
@@ -233,25 +261,17 @@ export function BoardView() {
             <p className="story-eyebrow">What the team recommends {startedAs && <span className="story-practice">(practice text, not a real recommendation)</span>}</p>
             <p className="decision-text">{plain(bullets(memo["decision"])[0]) || "See the written decision below."}</p>
             {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
-            <p className="trust">
-              <MarkChip verdict="verified" count={marks.supported} />
-              <MarkChip verdict="contradicted" count={marks.contradicted} />
-              <MarkChip verdict="unsupported" count={marks.insufficient} />
-              {marks.unchecked > 0 && <MarkChip verdict="unchecked" count={marks.unchecked} />}
-              <span className="muted small" data-testid="checked-count">{checkedOf(claims.length - marks.unchecked, claims.length)}</span>
-            </p>
-            <MarksLegend who="A separate checker decides each mark; the team does not grade itself." />
           </div>
         )}
       </section>
 
-      {runId && members.length > 0 && (
+      {runId && took.length > 0 && (
         <ol className="board-steps" aria-label="Who took part">
-          {members.map((m) => {
+          {took.map((m) => {
             // From the run's own events: a member who never replied did not take part, also when the roster lists them.
             const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
             const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
-            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><span>{nameAndJob(m.title).name}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></li>
+            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><AgentAvatar name={m.name} size={24} /><span className="board-who"><span>{agentIdentity(m.name, { title: m.title }).short}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></span></li>
           })}
         </ol>
       )}
@@ -294,8 +314,8 @@ export function BoardView() {
                   <span className="source-title">{url ? <a href={url} target="_blank" rel="noreferrer noopener">{src.title || url}</a> : src.title || src.url}</span>
                   {/\[preprint\]\s*$/i.test(src.title ?? "") && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   <span className="muted small">
-                    {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", src.studyType && `kind of study: ${src.studyType}`,
-                      typeof src.relevance === "number" && `relevance ${src.relevance.toFixed(2)} (as the engine scored it, 0 to 1)`].filter(Boolean).join(" · ")}
+                    {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", src.studyType && `kind of study: ${src.studyType}`].filter(Boolean).join(" · ")}
+                    {screened(src.relevance) && <> · <span data-testid="screened" title="A screening model read the source and judged whether it bears on the question. It is a judgement in words, not a measured score.">{screened(src.relevance)}</span></>}
                     {src.provider && <> · <SearchCredit provider={src.provider} /></>}
                   </span>
                   {resting.length > 0 && (
