@@ -17,6 +17,8 @@ export interface AgentDef {
   deliverable?: string
   /** Roles this one agent can play, as mode id -> role title (e.g. pilot -> "Pilot"). The lead names one per round. */
   modes?: Record<string, string>
+  /** Set only for a method specialist added to one run (specialists.ts): why it was chosen and the methods whose notes it reads. Never read from a board agent file. */
+  specialist?: { why: string; methods: { name: string; title: string }[] }
   prompt: string
 }
 

@@ -140,12 +140,7 @@ sample.
 
 | Feature | Status |
 |---|---|
-<<<<<<< HEAD
-| Full run with scripted models | Works (`npm run board` without `OPENROUTER_API_KEY`). |
-| Board roster: five agents (`board/agents/`: lead, proposer, experimenter with three modes, methods auditor, critic, reporter) and code checks for Scout (brief), Finisher (memo sections) and the shared record | Prompts only. Ran with scripted models only (`DRUG_BOARD_MOCK=1 npm run board`). Modes and the Finisher check have automated tests (`engine/test/board-modes.test.ts`, `engine/test/board-core.test.ts`). Members reply all at once, not in order, and have no tools (no code, no search). Never run with a real model. |
-=======
 | Full run with scripted models | Works (`npm run board` with paid calls off, the default). |
-| Board roster: the nine roles of our own swarm (`board/agents/`), plus the Lead Scientist | Prompts only. Ran with scripted models only (`DRUG_BOARD_MOCK=1 npm run board`). Members reply all at once, not in order, and have no tools (no code, no search). Never run with a real model. |
->>>>>>> 2144730ecb318bc73f504e6ecbb0407f4b86e930
+| Board roster (`board/config.yaml`, `board/agents/`): the Lead Scientist, the scout (the only member that searches) and five members: proposer, experimenter (three modes: Pilot, full run, Reviser), methods auditor, critic, reporter. Code checks the brief's sections and the memo's sections (the Finisher check) | Prompts only; no member runs code. Ran with scripted models only (`DRUG_BOARD_MOCK=1 npm run board`). Modes and the Finisher check have automated tests (`engine/test/board-modes.test.ts`, `engine/test/board-core.test.ts`). The scout replies first, then the others reply at the same time. Never run with a real model. |
 | Full run with real models | Not verified. The repository holds no record of a finished live run. |
 | Watch mode (`watch:` in `board/config.yaml`) | Not implemented. The key is read but no code uses it. |

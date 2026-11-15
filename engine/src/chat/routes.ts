@@ -2,6 +2,7 @@
 //
 //   GET  /api/chat/catalog            providers, agents, skills, effort levels. Never a key.
 //   GET  /api/chat/search?q=          keyword search over runs, agents and skills. No model.
+//   GET  /api/chat/roster?run=<id>    who takes part in a run: board members and the specialists a plan added.
 //   POST /api/chat {messages}         an answer from past runs, or a Plan for a new board run. Starts nothing.
 //   POST /api/chat/plans/:id/start    {confirm: true}: starts the plan's board run, once.
 //
@@ -17,7 +18,9 @@ import { PaidCallsOff, paidCallsOff } from "../paid.ts"
 import { type BoardRun, search } from "../search.ts"
 import { boardMembers, buildCatalog, type Catalog, loadSkills, PROVIDER_KEY, type ProviderId, providers } from "./catalog.ts"
 import { callModel, type Fetch, prompt, readReply, type Turn } from "./model.ts"
-import { agentsFor, checkBrief, claimStart, DEFAULT_EFFORT, derive, effortOf, efforts, type EffortId, isEffort, type Limits, loadPlan, MAX_BRIEF, overridesApplied, type Plan, planFrom, savePlan, within } from "./plan.ts"
+import { loadSpecialists } from "../specialists.ts"
+import { rosterFor } from "./roster.ts"
+import { agentsFor, checkBrief, claimStart, DEFAULT_EFFORT, derive, effortOf, efforts, type EffortId, isEffort, type Limits, loadPlan, MAX_BRIEF, methodSkills, overridesApplied, type Plan, planFrom, savePlan, within } from "./plan.ts"
 
 export interface ChatDeps {
   config: BoardConfig
@@ -107,7 +110,9 @@ function chooseModel(body: Record<string, unknown>, deps: ChatDeps): { provider:
 }
 
 function planReply(plan: Plan, lead: string): string {
-  return [lead, `${plan.agents.length} agents at the ${plan.effort} effort level.`, NOTHING_STARTED, plan.paid ? "" : SCRIPTED_RUN].filter(Boolean).join(" ")
+  const guests = plan.agents.filter((a) => a.source === "specialist")
+  const invited = guests.length ? `${guests.length} of them ${guests.length === 1 ? "is a method specialist" : "are method specialists"} (${guests.map((g) => g.title).join(", ")}): no tools, method notes only.` : ""
+  return [lead, `${plan.agents.length} agents at the ${plan.effort} effort level.`, invited, NOTHING_STARTED, plan.paid ? "" : SCRIPTED_RUN].filter(Boolean).join(" ")
 }
 
 /** No model: a keyword answer for a question about past runs, a template plan for a new one. */
@@ -134,6 +139,8 @@ async function chat(req: IncomingMessage, body: Record<string, unknown>, deps: C
     const { members } = boardMembers(deps.config)
     const catalog = {
       members: members.map((m) => ({ name: m.name, title: m.title, deliverable: m.deliverable })),
+      // Specialists a plan may add: only those that can take part, with only the methods that have notes (a name-only skill is never offered).
+      specialists: loadSpecialists().filter((s) => s.takesPart).map((s) => ({ name: s.name, title: s.title, does: s.does.slice(0, 300), methods: s.methods.map((m) => m.name) })),
       skills: loadSkills().filter((s) => s.installed).map((s) => ({ name: s.name, description: s.description.slice(0, 200) })),
       briefSections: deps.config.brief.required_sections,
     }
@@ -169,12 +176,13 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
   const effort = effortOf(config, (body.effort as EffortId | undefined) ?? record.plan.effort)
   const { lead, members } = boardMembers(config)
   let agents = agentsFor(effort, record.ranked, lead, members)
+  const full = agents
   if (body.agents !== undefined) {
     if (!Array.isArray(body.agents) || body.agents.some((a) => typeof a !== "string")) throw bad("agents", "agents must be a list of agent names from the plan")
     const unknown = (body.agents as string[]).filter((a) => !agents.some((p) => p.name === a))
     if (unknown.length) throw bad("agents", `not in this plan at the ${effort.id} level: ${unknown.slice(0, 5).join(", ")}`)
     agents = agents.filter((a) => a.name === lead.name || (body.agents as string[]).includes(a.name)) // the lead always stays
-    if (agents.length < 2) throw bad("agents", "keep at least one member besides the lead")
+    if (agents.filter((a) => a.source !== "specialist").length < 2) throw bad("agents", "keep at least one board member besides the lead")
   }
   const limits: Limits = { ...effort.limits }
   if (body.limits !== undefined) {
@@ -209,14 +217,20 @@ async function startPlan(req: IncomingMessage, id: string, body: Record<string, 
     throw error instanceof BriefRejected ? Object.assign(error, { field: "brief" }) : error
   }
   const derived = derive(deps, effort, agents, members)
-  const plan: Plan = { ...record.plan, effort: effort.id, brief, agents, limits, search: derived.search, models: derived.models, estimate: derived.estimate }
+  // The plan's skills follow its agents: the method notes of a specialist that was taken out are taken out too.
+  const dropped = methodSkills(full).filter((s) => !methodSkills(agents).some((k) => k.name === s.name)).map((s) => s.name)
+  const skills = [...record.plan.skills.filter((s) => !dropped.includes(s.name)), ...methodSkills(agents).filter((s) => !record.plan.skills.some((k) => k.name === s.name))]
+  const plan: Plan = { ...record.plan, effort: effort.id, brief, agents, skills, limits, search: derived.search, models: derived.models, estimate: derived.estimate }
   savePlan(config, { ...record, plan, runId, startedAt: Date.now() })
   // For board.ts, once it reads them: this run's members and limits. Written before the run is launched.
   const dir = runDir(config, runId)
-  if (existsSync(dir)) writeFileSync(`${dir}/overrides.json`, JSON.stringify({ planId: id, effort: effort.id, board: agents.slice(1).map((a) => a.name), meeting: { max_usd: limits.maxUsd, max_minutes: limits.maxMinutes, max_rounds: limits.maxRounds }, modelTier: effort.modelTier, maxSearches: effort.search.maxSearches }, null, 2))
+  // `specialists` (only when the plan has some): board.ts adds them as members with no tools (specialists.ts runSpecialists checks every name and method again).
+  const guests = agents.filter((a) => a.source === "specialist")
+  if (existsSync(dir)) writeFileSync(`${dir}/overrides.json`, JSON.stringify({ planId: id, effort: effort.id, board: agents.slice(1).filter((a) => a.source !== "specialist").map((a) => a.name), meeting: { max_usd: limits.maxUsd, max_minutes: limits.maxMinutes, max_rounds: limits.maxRounds }, modelTier: effort.modelTier, maxSearches: effort.search.maxSearches,
+    ...(guests.length ? { specialists: guests.map((a) => ({ name: a.name, why: a.why, methods: (a.methods ?? []).map((m) => m.name) })) } : {}) }, null, 2))
   deps.launch(runId)
   const warnings = [...new Set(derived.warnings)]
-  return { status: 201, body: { kind: "board", id: runId, scripted: mock, effort: effort.id, limits, agents: agents.map((a) => a.name),
+  return { status: 201, body: { kind: "board", id: runId, scripted: mock, effort: effort.id, limits, agents: agents.map((a) => a.name), ...(guests.length ? { specialists: guests.map((a) => a.name) } : {}),
     note: mock ? "Started as a practice run: the replies are fixed example text written in advance, not research. Nothing is spent." : `Started with real models. ${overridesApplied() ? `It stops at $${limits.maxUsd}.` : `It stops at the config cap, $${config.meeting.max_usd}.`}`,
     ...(warnings.length ? { warnings } : {}) } }
 }
@@ -237,12 +251,13 @@ export function chatSearch(query: string, kind: (typeof KINDS)[number], limit: n
   }
   const has = (text: string) => words.every((w) => text.toLowerCase().includes(w))
   if (kind === "all" || kind === "agent") for (const a of catalog.agents) {
-    if (!has([a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" "), a.source].join(" "))) continue
-    results.push({ kind: "agent", id: `${a.source}:${a.name}`, title: plain(a.title, 200), excerpt: plain([a.source === "board" ? "Board member." : "Specialist profile (draft, not run by any code).", a.trigger && `Called when: ${a.trigger}`, a.deliverable && `Delivers: ${a.deliverable}`].filter(Boolean).join(" "), 400) })
+    if (!has([a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" "), a.source, ...(a.methods ?? []).flatMap((m) => [m.name, m.title])].join(" "))) continue
+    const what = a.source === "board" ? "Board member." : a.takesPart ? `Method specialist: a plan can add it to a board review (no tools; ${a.fullTextMethods ?? 0} method note(s)).` : `Specialist profile, not used on the board. ${a.whyNot ?? ""}`
+    results.push({ kind: "agent", id: `${a.source}:${a.name}`, title: plain(a.title, 200), excerpt: plain([what, a.trigger && `Called when: ${a.trigger}`, a.deliverable && `Delivers: ${a.deliverable}`].filter(Boolean).join(" "), 400) })
   }
   if (kind === "all" || kind === "skill") for (const s of catalog.skills) {
-    if (!has(`${s.name} ${s.description}`)) continue
-    results.push({ kind: "skill", id: s.name, title: plain(s.name, 200), excerpt: plain(`${s.installed ? "Installed." : "Not installed (index only)."} ${s.description}`, 400), status: s.installed ? "installed" : "not installed" })
+    if (!has(`${s.name} ${s.title} ${s.description}`)) continue
+    results.push({ kind: "skill", id: s.name, title: plain(s.title || s.name, 200), excerpt: plain(`${s.installed ? "Installed." : "Not installed (index only)."} ${s.description}`, 400), status: s.installed ? "installed" : "not installed" })
   }
   return results.slice(0, limit)
 }
@@ -254,6 +269,8 @@ export async function handleChat(req: IncomingMessage, res: ServerResponse, part
   try {
     trust(req, deps, "scripted", "the chat routes")
     if (route === "catalog" && req.method === "GET") return json(200, { ...buildCatalog(deps.config, deps.env), efforts: efforts(deps.config), defaultEffort: DEFAULT_EFFORT })
+    // The members of one run (the lead, the board members it kept, the specialists a plan added), or of the config when no run is named.
+    if (route === "roster" && req.method === "GET") return json(200, rosterFor(deps.config, new URL(req.url ?? "/", "http://x").searchParams.get("run")))
     if (route === "search" && req.method === "GET") {
       const params = new URL(req.url ?? "/", "http://x").searchParams
       const q = (params.get("q") ?? "").replace(/\s+/g, " ").trim(), kind = params.get("kind") ?? "all", limit = params.get("limit") === null ? 20 : Number(params.get("limit"))

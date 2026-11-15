@@ -75,7 +75,7 @@ Use your own keys. Keys are never in the repository and are not shared between t
 `npm run preflight` checks them with the vendors for free.
 
 **A key alone does not allow spending.** Paid calls are off until the person who pays turns them on:
-with the Demo/Real switch in the app's status line (it lasts until the engine restarts), or with the
+with the Demo/Real switch in the app's Settings (it lasts until the engine restarts), or with the
 line `NO_PAID_CALLS=0` in `.env` and a restart of the engine.
 
 | Question | Answer |
@@ -109,25 +109,59 @@ npm run dashboard   # terminal 2, then open http://localhost:5317
 
 ## 5. Run the tests
 
-Run this before every commit:
+Run this before every commit and after every pull:
 
 ```bash
-npm test
+npm run check
 ```
 
-| Part | Command | Tests |
-|---|---|---|
-| Everything below except the adapter | `npm test` | |
-| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | 2,368 |
-| Engine | `npm run test:engine` | 283 pass, 5 fail, one file does not finish |
-| Type checks (engine and dashboard) | `npm run typecheck` | |
-| BixBench v1 adapter (not part of `npm test`) | `cd glhf/bixbench_v1 && uv run pytest -q tests` | 200 |
-| Dashboard (not part of `npm test`) | `npm --prefix dashboard test` | 415 |
+It takes about two minutes, never spends money, and prints one line per part (`ok` or `FAIL`):
+merge-conflict markers, the two type checks, the engine tests and the dashboard tests.
+`npm run check -- --fast` does only the first two (a few seconds). `npm run check -- --all` adds
+the Python suites (several minutes).
 
-The counts are for the committed files at commit `58c0935`. Files that are not committed yet
-add more; see the table in [README.md](README.md#tests).
+`npm test` hangs today, because one engine test file (`app.test.ts`) does not exit. `npm run check`
+runs each engine test file on its own with a time limit, so it always ends.
+
+| Part | Command | In `npm run check` |
+|---|---|---|
+| Merge-conflict markers left in a file | `npm run check -- --fast` | yes |
+| Type checks (engine and dashboard) | `npm run typecheck` | yes |
+| Engine, all files | `npm run check` | yes |
+| Engine, one file | `cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts` | |
+| Dashboard | `npm --prefix dashboard test` | yes |
+| Harness (swarm, grader) | `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests` | with `--all` |
+| BixBench v1 adapter | `cd glhf/bixbench_v1 && uv run pytest -q tests` | with `--all` |
+| Datasets catalogue | `cd datasets && uv run --no-project --with pytest pytest -q` | with `--all` |
+
+The current counts and the known failures are in [README.md](README.md#tests). `main` is not
+fully green today; do not add to the failures. If `npm run check` shows a failure you did not
+cause, say so in your commit message or to the team, and do not "fix" a test by deleting it.
 
 Some tests start a Docker sandbox. They are skipped when Docker is not running.
+
+### A working day
+
+```bash
+git pull                 # 1. get the team's changes
+npm run setup            # 2. only if a package.json or uv.lock changed
+npm start                # 3. start (or restart) the engine and the app; an engine left running across a pull can fail
+npm run check -- --fast  # 4. your copy type-checks and has no half-finished merge
+# ... work ...
+npm run check            # 5. before you commit
+git status --short       # 6. look at what will go in, then commit and push
+```
+
+Three things that have gone wrong here, and how to avoid them:
+
+- **A merge committed with `<<<<<<<` markers in it.** After resolving a conflict, run
+  `npm run check -- --fast`. It lists every file that still has markers.
+- **The team list changed and the engine was not restarted.** The engine reads `board/config.yaml`
+  and `board/agents/` when it starts. After a pull, restart it.
+- **The scout was removed from the team list.** The scout is the only member that searches. Without
+  it a review has no sources and no statement about the literature can be checked. If you change
+  the `board:` list in `board/config.yaml`, keep the scout, and run the board tests
+  (`cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-real-run.test.ts test/board-direct.test.ts`).
 
 ### Tests and the paid-calls switch
 

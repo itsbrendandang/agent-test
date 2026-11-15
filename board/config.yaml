@@ -23,7 +23,7 @@ memory:
   max_notes: 40            # newest notes kept per member; the file is read into that member's next run
 
 watch:
-  enabled: false           # rerun the board's searches on a schedule (no member searches today)
+  enabled: false           # rerun the scout's searches on a schedule (not built: no code reads this yet)
   every_hours: 24          # new evidence that changes a verdict reopens the debate
 
 brief:
@@ -89,7 +89,8 @@ checkers:
   timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member
-  - proposer                 # members still reply in parallel each round; the lead names each one's task
+  - scout                    # MUST STAY, and first: the only member that searches. Without it a review gathers no sources and no statement about published work can be checked
+  - proposer                 # members still reply in parallel each round (the scout replies before the others); the lead names each one's task
   - experimenter             # one agent, three modes (Pilot, full run, Reviser) named by the lead
   - methods-auditor
   - critic

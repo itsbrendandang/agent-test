@@ -24,33 +24,50 @@ export function mockLeadTurn(ctx: TranscriptContext): Step {
   const results = ctx.messages.filter((m) => m.role === "toolResult")
   const last = results.at(-1)
   if (last && "toolName" in last && last.toolName === "write_memo") return { text: "Memo written. The board has finished." }
-  const rounds = results.filter((m) => "toolName" in m && m.toolName === "converse").length
+  // A round the engine refused for its modes (a roster without the Experimenter, as a narrowed plan can have) was not
+  // run: it is not counted here, and the same round is asked again without modes.
+  const refused = (m: (typeof results)[number]) => /^Round not run, and not counted/.test(text(m))
+  const rounds = results.filter((m) => "toolName" in m && m.toolName === "converse" && !refused(m)).length
+  const modes = (m: Record<string, string>) => (last && refused(last) ? {} : { modes: m })
   const wrapUp = last ? /WRAP UP/.test(text(last)) : false
   if (rounds >= 3 || (wrapUp && rounds >= 1 && /final positions/i.test(text(last!)))) {
     return { text: "Writing the memo.", tool: { name: "write_memo", args: { decision: "Go with conditions", memo: MOCK_MEMO } } }
   }
   if (wrapUp || rounds === 2) return { text: "Time to close.", tool: { name: "converse", args: { message: "We are at our limit. Final positions: one statement each, Go or No-Go, and the one condition you would attach.", final: true } } }
-  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Experimenter (revise): fix what the checkers flagged. Methods Auditor and Critic: review the claims on your own. Reporter: draft the supported findings and the rejection log. Proposer: no task.", final: false, modes: { experimenter: "revise" } } } }
+  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Experimenter (revise): fix what the checkers flagged. Methods Auditor and Critic: review the claims on your own, against the Scout's sources where a claim is about published work. Reporter: draft the supported findings and the rejection log. Scout, Proposer: no task.", final: false, ...modes({ experimenter: "revise" }) } } }
   return {
     text: "Framing: Go only if one candidate has a credible path to the criteria and a differentiation story against the approved drugs.",
-    tool: { name: "converse", args: { message: "Round 1. Proposer: triage the claims, with priority and budget share. Experimenter (pilot): test each claim on a subsample. Methods Auditor, Critic, Reporter: no task this round.", final: false, modes: { experimenter: "pilot" } } },
+    tool: { name: "converse", args: { message: "Round 1. Scout: search for published evidence on the main question, then report the data and the sources. Proposer: triage the claims, with priority and budget share. Experimenter (pilot): test each claim on a subsample. Methods Auditor, Critic, Reporter: no task this round.", final: false, ...modes({ experimenter: "pilot" }) } },
   }
 }
 
 const NO_TASK = "No task.\n\nCLAIMS"
 const MEMBER_REPLIES: Record<string, (round: number) => string> = {
+  // The scout searches first (mockMemberTurn below), then reports. Its sources are the example sources above: a practice run reaches no search engine.
+  scout: (r) => r === 1 ? `The search gave three example sources on KRAS G12C inhibitors, hERG and resistance. The brief has one assay table for two candidates; no raw data files came with it, so no file could be checked for damage.\n\nCLAIMS\n- [brief] The brief gives six assays for each of CMP-0423 and CMP-0517 (source: brief)\n- [literature] Approved covalent KRAS G12C inhibitors give objective response rates near 37 to 41 percent in previously treated patients (source: https://example.org/mock/kras-g12c-clinical-review)` : NO_TASK,
   proposer: (r) => r === 1 ? `Triage: (1) CMP-0517 fails the hERG margin, high, 40%. (2) CMP-0423 passes solubility and clearance, high, 40%. (3) Either candidate covers resistance mutants, low, 20%.\n\nCLAIMS\n- [brief] CMP-0517 pERK IC50 is 95 nM in H358 (source: brief)\n- [brief] CMP-0423 pERK IC50 is 180 nM in H358 (source: brief)` : NO_TASK,
   experimenter: (r) => r === 1 ? `Pilot: a script for the assay table and the SMILES descriptors, not run (no code tool yet). From the brief, CMP-0423 passes solubility and CMP-0517 fails it.\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)\n- [brief] CMP-0423 shows no resistance liability (source: brief)` :
     `Revise: dropped my claim that CMP-0423 has no resistance liability; the checker contradicted it and the brief has no resistance data. Claim 3 stays open.\n\nCLAIMS\n- [brief] CMP-0423 kinetic solubility is 12 uM (source: brief)`,
-  "methods-auditor": (r) => r === 1 ? NO_TASK : `Each claim is compared with its criterion. The hERG margin step is present; resistance testing is missing from the plan.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
-  critic: (r) => r === 1 ? NO_TASK : `Supported: CMP-0517 fails the hERG margin. Rejected: CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)`,
+  "methods-auditor": (r) => r === 1 ? NO_TASK : `Each claim is compared with its criterion. The hERG margin step is present; resistance testing is missing from the plan.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)\n- [literature] Adding polarity reduced hERG binding in most matched pairs (source: https://example.org/mock/herg-acrylamide)`,
+  critic: (r) => r === 1 ? NO_TASK : `Supported: CMP-0517 fails the hERG margin. Rejected: CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)\n- [literature] Piperazine-linked quinazolines show no resistance liability (source: https://example.org/mock/resistance-mechanisms)`,
   reporter: (r) => r === 1 ? NO_TASK : `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
 }
 
-/** Real members open with "In short:" (board/context/writing-style.md); the scripted ones do the same, from their first sentence. */
+/** Real members open with "In short:" (board/context/writing-style.md); the scripted ones do the same, from their first sentence. Every scripted reply does, "No task." included. */
 const inShort = (reply: string) => `In short: ${reply.split("\n")[0].split(/(?<=[.!?])\s/)[0]}\n\n${reply}`
 
+/**
+ * What a method specialist says in a practice run. Fixed text that says it is fixed text: no method was applied, so it
+ * names no analysis result, no number and no claim (an empty CLAIMS section), in every round and in final positions.
+ */
+export const MOCK_SPECIALIST_REPLY = (title: string) => `In short: This is fixed example text for a practice run, not a method result.
+
+Practice run: the ${title} is a method specialist, and in a practice run its reply is written in advance. No method was applied, no data was read and nothing was analysed. In a real run this reply would name the analysis that could settle the question, its pitfalls, and what the data in the brief can and cannot support.
+
+CLAIMS`
+
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
+  if (agent.specialist) return { text: MOCK_SPECIALIST_REPLY(agent.title) }
   const last = ctx.messages.at(-1)
   const round = Number(/Round (\d+)/.exec(ctx.messages.filter((m) => m.role === "user").map(text).at(-1) ?? "")?.[1] ?? 1)
   if (last?.role === "user" && agent.tools.includes("exa_search") && round === 1) {
@@ -61,7 +78,7 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
     return { text: inShort(`${position}\n\nCLAIMS`) }
   }
   const reply = (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round)
-  return { text: reply === NO_TASK ? reply : inShort(reply) }
+  return { text: inShort(reply) }
 }
 
 export const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)

@@ -30,6 +30,8 @@ export interface BoardConfig {
     timeout_seconds?: number
   }
   board: string[]
+  /** Limits of the research answer (research/types.ts limitsOf reads and bounds them). Every key is optional. */
+  research?: Record<string, unknown>
 }
 
 export function loadConfig(file = resolve(ROOT, "board/config.yaml")): BoardConfig {

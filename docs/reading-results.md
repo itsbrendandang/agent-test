@@ -17,7 +17,7 @@ Each local run has a folder `glhf/runs/<run-id>/`. Run folders are not in git.
 | `outputs/` | The agents | The artifacts that were graded. |
 | `outputs/METHODS.md` | Reporter, or the single agent | What was run, what failed, what differs from the guidance. |
 | `outputs/glhf/FINDINGS.md` | Code (`ledger.py`) | Swarm only. See below. |
-| `outputs/glhf/ledger.json` | Code (`ledger.py`) | Swarm only. Every claim, registered test, result, e-value, issue and event. |
+| `outputs/glhf/ledger.json` | Code (`ledger.py`) | Swarm only. Every claim, registered test (script, hash, relevance judgement, the harness's run), result, e-value, issue and event. The roles' working copy; the copy that counts is `ledger.json` next to `run.json`. |
 | `outputs/glhf/lessons.md` | Code (`memory.py`) | Only with `--memory`. The lessons of this run that passed the filter. They are also queued for approval. |
 | `outputs/glhf/scripts/`, `plan.md`, `notebook.md` and others | The roles | Swarm only. Working files copied from the sandbox. |
 
@@ -60,28 +60,41 @@ not a benchmark score.
 
 Code computes every verdict (`swarm/ledger.py`). No model decides a verdict.
 
-The Critic works in two steps, each with its own tool:
+A test goes through four steps. A model does the first two. Code does the last two.
 
-1. **Register.** Before it runs any test of a claim, the Critic registers each test with the
-   tool `register_falsification_test`: a name, what it will run, and which outcome would
-   contradict the claim.
-2. **Record.** The Critic runs the tests and reports each p-value (under the claim's null
-   hypothesis) with the tool `record_falsification_test`, under the registered name.
+1. **Register.** The Critic writes the test as a script file and registers it with the tool
+   `register_falsification_test`: a name, what the script does, which outcome would contradict
+   the claim, the test's own null hypothesis, and the script's path. Code reads the file and
+   records its content and its SHA-256 hash.
+2. **Judge relevance.** After the Critic's turn, one separate model call (the relevance judge,
+   `swarm/relevance.py`) rates each registered test: if the claim's null hypothesis were true,
+   would the test's null be true too? It sees the claim and the registration. It has no tools
+   and never sees a result or another role's reasoning. The score is on a rubric from 0.1 to
+   1.0. A test counts from 0.8.
+3. **Run.** Code (the harness) runs the registered script in the sandbox. The file must still
+   have the registered hash. The result is the last line of the output, which must be exactly
+   `GLHF_RESULT p_value=<number in [0, 1]> contradicts=<true|false>`.
+4. **Verdict.** Code computes it.
 
-Code does the rest.
+The Critic does not run the registered tests and does not report their p-values. A p-value
+typed in by a role is refused, unless it contradicts the claim.
 
 Let `m` be the number of registered claims in the run, and `alpha = 0.1`.
 
-### Registration
+### Registration, relevance and the run
 
 | Rule | Detail |
 |---|---|
 | Tests per claim | At most 3 registered tests (`MAX_TESTS`). |
-| When registration closes | At the claim's first result. After that, no test can be added. |
-| A result that favours the claim | Accepted only under a registered name. Without registration it is refused. |
-| A result that contradicts the claim | Always accepted: registered or not, over the limit of 3 or not, also a repeat. `FINDINGS.md` marks it "not pre-registered" when it was not registered. |
-| One result per test name | A second favourable result with the same name is refused. The first result stands. Names are compared without case, spaces and punctuation. |
-| A registered test with no result | Counts as `e = 0`. The claim cannot be supported while one is missing. |
+| What a test is | A script file under `/workspace/` ending in `.py`, `.sh` or `.R`, at most 64 KB. Its content is kept in the ledger. |
+| When registration closes | At the claim's first result or first run, also a run that failed. After that, no test can be added. |
+| Relevance | Judged once, after registration and before the run. A test scored under 0.8, or not scored, is still run and recorded but counts as `e = 0`: it cannot support and cannot refute. `FINDINGS.md` marks it "NOT RELEVANT". |
+| A test nobody judged | Is not run. It counts as `e = 0`. The ledger has a `relevance.skipped` or `relevance.failed` event with the reason. |
+| A result that favours the claim | Accepted only from the harness's run of a registered script. A typed-in one is refused. |
+| A result that contradicts the claim | From the harness, like any result. A role may also type one in with `record_falsification_test`: always accepted, registered or not, over the limit of 3 or not. `FINDINGS.md` marks it "typed in by a role, not pre-registered". |
+| One run per test | The first run stands. |
+| A run with no result | The script changed after registration, is missing, ended with an error, ran too long (5 minutes at most), or printed no result line. Counts as `e = 0`, and the claim cannot be supported. The ledger keeps the status, the command, the exit code, the runtime and the end of the output. |
+| A registered test that was never run | Counts as `e = 0`. The claim cannot be supported while one is missing. |
 
 ### From p-value to verdict
 
@@ -90,8 +103,9 @@ Let `m` be the number of registered claims in the run, and `alpha = 0.1`.
 | p-value floor | A p-value below `1e-6` counts as `1e-6`. |
 | e-value of a test | `e = 0.5 / sqrt(p)`. With the floor, one test gives at most `e = 500`. |
 | A test that contradicts the claim | Counts as `e = 0.5`. |
-| Combined e-value | The **arithmetic mean** of the e-values: all recorded results, plus `0` for each registered test with no result. It is not the product. |
-| **Refuted** | A contradicting test has `p < alpha / m`, or the Critic reports a failed replication. Checked first. |
+| A test judged not relevant, or with no result | Counts as `e = 0`. |
+| Combined e-value | The **arithmetic mean** of the e-values: all recorded results, plus `0` for each registered test with no result. It is not the product. This rule did not change. |
+| **Refuted** | A relevant contradicting test, or one typed in by a role, has `p < alpha / m`, or the Critic reports a failed replication. Checked first. |
 | **Untested** | The claim has no result. |
 | **Supported** | Every registered test has a result, and the mean e-value is at least `m / alpha`. Example: 4 claims need a mean of 40. |
 | **Insufficient** | The claim has a result but is not refuted and not supported. It is not a finding. |
@@ -108,28 +122,48 @@ This holds **under any dependence** between a claim's registered tests. The test
 to be independent. The reason: the mean of e-values is an e-value for any dependence; a product
 is one only for independent tests, and code cannot check independence.
 
-The guarantee needs two assumptions:
+The guarantee needs these assumptions:
 
-| Assumption | Why code cannot check it |
+| Assumption | What code checks, and what it cannot |
 |---|---|
-| Each reported p-value is a valid p-value from code that was run. | A model reports the number. Code cannot compute it again. |
-| No test was run in private before it was registered. | Code sees only the tool calls, not what the model tried before. |
+| Each counted p-value is a valid p-value. | Code checks that the number came from running the registered script, unchanged since registration, and that nobody typed it. Code cannot check that the script is a meaningful test. A script can print a constant or compute an invalid p-value. |
+| The test's null follows from the claim's null. | The relevance judge rates this before the run. It is a model's reading, not a proof. It can be wrong, and the Critic's own description of the test reaches it. |
+| The test was not chosen or tuned on the data it tests. | Code checks that the script did not change after registration and that no test was added after a result. Code cannot see what the model ran, or looked at, before it registered the script. |
 
 What is **not** controlled:
 
-- A wrong or dishonest p-value.
-- Tests that were tried in private and registered afterwards.
+- A script that is not a real test.
+- A wrong relevance judgement. The ledger records when the judge and the Proposer are on the
+  same vendor (`same_vendor_as_proposer`), because they may then share blind spots.
+- Scripts tried in private and registered afterwards. In the simulation, a model that tries
+  100 scripts and registers the best one gets a true-null claim supported in 22% of runs
+  with one claim. This did not change.
 - The refuted verdict. One mistaken contradicting test can refute a true claim. There is no
   error bound for refutation.
 - Insufficient and untested claims: these verdicts say only that support was not reached.
 
 `FINDINGS.md` states the guarantee, the assumptions and these limits in every run. The method
-follows Popper (Huang et al., ICML 2025), as cited in `swarm/ledger.py`.
+follows Popper (Huang et al., arXiv:2502.09858), as cited in `swarm/ledger.py` and
+`swarm/relevance.py`. Two differences from the paper: we use the mean of e-values, not the
+product, and a failed test counts as zero instead of being skipped.
 
-Tested with automated tests, including a simulation of the error rate
-(`glhf/bixbench/tests/unit/test_glhf_ledger.py`). The real-model swarm run on the demo case
-(see [status.md](status.md)) used the older rules (product, no registration). No real-model
-run has used registration and the mean yet.
+### Reading a test in `ledger.json`
+
+Read `<run folder>/ledger.json` (written by the solver process), not the copy under
+`outputs/glhf/`.
+
+| Field | Meaning |
+|---|---|
+| `claims[].registered[]` | One entry per registered test: `name`, `method`, `by`, `test_null`, `script_path`, `script_sha256`, `script_bytes`, `script` (the registered content), `relevance`, `run`. |
+| `registered[].relevance` | `null` until judged. Then `score` (or `null` when the judge gave no usable answer), `relevant`, `reason`, `threshold`, `judge`, `judge_model`, `proposer_model`, `same_vendor_as_proposer`. |
+| `registered[].run` | `null` until run. Then `status` (`ok`, `changed`, `missing`, `failed`, `timeout`, `unparsable`), `command`, `exit_code`, `seconds`, `output_tail`, `sha256_at_run`, `p_value`, `contradicts`, `detail`. Only `ok` has a result. |
+| `claims[].tests[]` | The results that enter the mean: `name`, `p_value`, `contradicts`, `note`, `by`, `registered`, `e_value`, and now `source` (`harness` or `model`) and `counts` (`false`: judged not relevant, worth 0). |
+| Events | `test.registered` (now with `test_null`, `script_path`, `script_sha256`, `script_bytes`), `test.relevance`, `test.executed`, `test.recorded` (now with `source`, `counts`), `test.not_run`, `relevance.skipped`, `relevance.failed`, and the phase events of `relevance N`. |
+
+Tested with automated tests, including a simulation of the false-support rate with a table of
+before and after ([DESIGN.md](../glhf/docs/DESIGN.md#simulation-of-false-support)), and with
+the scripted demo. No real-model run has used these rules yet. The real-model swarm run on the
+demo case (see [status.md](status.md)) used the older rules (product, no registration).
 
 ## Scoreboard
 

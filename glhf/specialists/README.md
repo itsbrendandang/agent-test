@@ -1,9 +1,16 @@
-# Specialist profiles (draft, not wired into the solver)
+# Specialist profiles and method skills
 
 Nine profiles for the full workflow, each taken from one portfolio of the drug-candidate board
-(`board/agents/`). They keep the board's two habits: members talk to each other, and nothing counts until
-it is a checked proof point. **Status: these files are instructions only. No code loads them yet, and no
-run, scripted or real, has used them.**
+(`board/agents/`), and under `skills/` the method library: 100 method skills grouped into 19 method agents.
+They keep the board's two habits: members talk to each other, and nothing counts until it is a checked proof point.
+
+**Status.** The drug board can use them, as text. A plan drafted in the Home chat adds a specialist to one board
+review when the question shares words with its trigger or with the notes of one of its methods
+(`engine/src/specialists.ts`, `engine/src/chat/plan.ts`). The specialist is then a board member for that run, with
+**no tools**: it cannot run code. Only practice (scripted) runs have used this; no real model has. **The swarm in
+`glhf/bixbench` does not use these files.** The rules below under "When a specialist is called", "Conversation" and
+"Proof points" describe the full workflow the profiles were written for; on the board the member protocol of
+`board/` applies instead (see "On the drug board").
 
 The board portfolios named in `based_on` were replaced by the swarm roles on 2026-11-14. The old
 files are in git history (for example `git show d8f249d:board/agents/skeptic.md`).
@@ -23,11 +30,36 @@ files are in git history (for example `git show d8f249d:board/agents/skeptic.md`
 Residents (experimenters) and nurses (plain-code data checks) are the existing swarm roles and are not
 repeated here.
 
-## Skill agents (draft, instructions only)
+## On the drug board
 
-`skills/` groups the 100 Biomni Skill Hub skills into 19 role agents (`skills/README.md`, `skills/skills-map.json`): 18 files in `skills/` and `literature-evidence-synthesist` above, which absorbed the skill agent with the same job. `python3 glhf/specialists/verify_skills.py` checks that every skill has exactly one owner. **Status: the skill
-packages (scripts, references, assets) are not installed, 38 of the 100 skills have no Overview text at all, these agents are instructions
-only and are not wired into any solver, and nothing routes work to them yet.** The other eight profiles carry no skills. Reviewer profiles and executor skill agents in the same domain were kept apart on purpose (`skills/README.md`, "Reviewer and executor pairs").
+| Profile | Can a plan add it? | Why not |
+|---|---|---|
+| `admet`, `medicinal-chemist`, `target-biologist`, `toxicologist` | yes, with no method notes | |
+| `literature-evidence-synthesist` | yes, with the notes of its 3 methods that have text | |
+| `chief` | no | the board's lead does this job |
+| `attending-skeptic` | no | the board's Critic does this job, on the other vendor's model |
+| `contrarian` | no | it is called once per question by rule, not by what the question is about |
+| `methods-librarian` | no | it needs a documentation search tool, and specialists on the board have no tools |
+
+What a chosen specialist gets, in this order: a fixed frame (it cannot run code or install anything; it says which
+analysis would settle the question, the pitfalls, and what the brief's data can and cannot support; it challenges other
+members by name; it reports no result that is not in the brief or in the sources the board found); its Purpose and
+Instructions from its file; the notes of the methods that matched the question; then what every board member gets (its
+deliverable, the CLAIMS format, the shared context with the writing style, the brief). The "Conversation" and "Proof
+points" sections of a profile are not sent: the board's own protocol replaces them. The `tools` and `model` lines of a
+profile are not used: on the board a specialist has no tools and runs on the `strong` tier.
+
+A specialist takes a place inside the plan's member limit; it never adds one, and no spend cap is raised.
+
+## Method agents (`skills/`)
+
+`skills/` groups the 100 method skills of the method library into 19 method agents (`skills/README.md`,
+`skills/skills-map.json`): 18 files in `skills/` and `literature-evidence-synthesist` above, which absorbed the method
+agent with the same job. `python3 glhf/specialists/verify_skills.py` checks that every skill has exactly one owner.
+**Status: the skill packages (scripts, references, assets) are not installed, and 38 of the 100 skills have no text at
+all. The board reads the notes of 58 skills as text; nothing is executed. The swarm does not use them.** The other eight
+profiles carry no skills. Reviewer profiles and executor method agents in the same domain were kept apart on purpose
+(`skills/README.md`, "Reviewer and executor pairs").
 
 ## When a specialist is called
 
@@ -64,6 +96,7 @@ the rejection log, with the member who raised it.
 
 ## Not decided
 
-- Whether `board/` is removed. Nothing here depends on it staying, but these files cite it as their source.
-- Which two or three specialists to wire first. The solver is being changed by another piece of work.
-- The effect of any of this on accuracy: untested, and it needs real-model runs to test.
+- Whether the swarm should use the specialists. Today only the board does, and only as text.
+- The trigger rules above ("When a specialist is called") are not code. The board chooses a specialist by word match
+  when a plan is drafted, once per run.
+- The effect of any of this on a review or on accuracy: untested, and it needs real-model runs to test.

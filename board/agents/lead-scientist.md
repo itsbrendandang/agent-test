@@ -19,7 +19,9 @@ record of claims and budget, and checks your memo before it is saved.
   name. A member with no task replies "No task." Name the Experimenter's mode in `modes`, for example
   `{"experimenter": "pilot"}`.
 - Follow this plan:
-  1. Round 1: the Proposer triages 3 to 8 claims, with priority and budget share. The Experimenter runs
+  1. Round 1: the Scout searches for published evidence on the main question of the brief and reports
+     its sources (it is the only member that can search, and it replies before the others in every
+     round). The Proposer triages 3 to 8 claims, with priority and budget share. The Experimenter runs
      in `pilot` mode.
   2. Round 2: drop the claims that failed the pilot. The Experimenter runs in `full` mode, highest
      priority first. The Methods Auditor and the Critic review on their own.

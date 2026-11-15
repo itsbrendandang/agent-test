@@ -1,18 +1,35 @@
-# Biomni skills grouped into 19 role agents (draft, instructions only)
+# Method skills grouped into 19 method agents
 
-The 100 skills in the Biomni Skill Hub catalog (`.agents/skills/biomni-lab/references/catalog.md`) are grouped here into
-19 role agents (18 files here; `literature-evidence-synthesist` is in `../`, merged with a specialist profile: see "Merged agent"). Two sibling passes proposed groupings for skills 1-50 (`part1.md`, 14 groups) and 51-100 (`part2.md`, 10 groups);
+The method library is a list of 100 method skills for computational biology and drug discovery. They are grouped here
+into 19 method agents (18 files here; `literature-evidence-synthesist` is in `../`, merged with a specialist profile: see
+"Merged agent"). Two passes proposed groupings for skills 1-50 (`part1.md`, 14 groups) and 51-100 (`part2.md`, 10 groups);
 this directory reconciles them. Each skill has exactly one primary agent. `skills-map.json` holds the same mapping for code.
+
+Where the skill text was copied from is recorded in `docs/proposals/licenses.md` and in the per-skill source lines of
+each agent file. Those lines are the provenance record: do not delete them. The engine removes them when it builds a
+prompt (`engine/src/specialists.ts`), so no prompt, plan, event or API response carries them.
 
 ## Status (read this first)
 
-- **The skill packages (scripts, references, assets) are NOT installed.** Only the hub Overview text was copied, and for 38 skills not even that.
-- **These agents are instructions only.** They are not wired into any solver, the engine or the dashboard.
-- **Nothing routes work to them yet.** No run, scripted or real, has used them, and their effect on any result is untested.
-- Nothing here states a benchmark score. No Overview reports one.
-- For the 38 index-only skills the hub showed "No markdown preview is available for this skill yet." Their agent entries say so and give a name and category only.
-- Only 15 of the 62 full-text skills have a skill-specific hub link in the source copy; every other skill's recorded URL is the hub's general listing (`https://biomni.phylo.bio/skills?section=marketplace`).
-- The nine specialist profiles in `../*.md` are instructions only too. One of them, `literature-evidence-synthesist`, now also carries skills (see "Merged agent"); the other eight carry none.
+- **Used by the drug board, as text.** A plan drafted in the Home chat can add a method agent to one board review when
+  the question shares words with the notes of one of its methods. The agent then takes part as a board member: its own
+  conversation, the member protocol, **no tools**. It reads the notes of the matched methods (at most 4 methods, 1,200
+  characters each, 8,000 characters for its whole prompt) and says which analysis would settle the question, the
+  pitfalls, and what the brief's data can support. Code: `engine/src/specialists.ts`, `engine/src/chat/plan.ts`.
+  Tests: `engine/test/specialists-*.test.ts`. Only practice (scripted) runs have used this; no real model has.
+- **Nothing is executed.** The skill packages (scripts, references, assets) are NOT installed. Only the overview text of
+  each skill was copied, and for 38 skills not even that.
+- **58 methods can be read.** 62 skills have text. The engine never loads four of them: skill 11 (its text describes a way
+  round a paywall), skills 96 and 97 (billed multi-machine compute), and skill 63 (a tool of the outside product the list
+  came from). They stay in the files and in the map.
+- **38 skills are a name only.** Their entries give a name and a category. The engine never loads them, never names them
+  as something an agent can do, and never chooses an agent because of them.
+- **The swarm does not use any of this.** The benchmark solver in `glhf/bixbench` loads no skill file and no method agent.
+- Nothing here states a benchmark score, and the effect of the notes on any result is untested.
+- Only 15 of the 62 skills with text have a skill-specific link in the source copy; every other skill's recorded URL is
+  the source's general listing.
+- The nine specialist profiles in `../*.md` are described in `../README.md`. One of them, `literature-evidence-synthesist`,
+  also carries skills (see "Merged agent"); the other eight carry none.
 
 ## Agents
 
@@ -39,7 +56,7 @@ this directory reconciles them. Each skill has exactly one primary agent. `skill
 | [`workflow-and-method-engineer`](workflow-and-method-engineer.md) | Nextflow pipelines, skill-package authoring and method-development loops. | 6 | 5 | 1 |
 | **Total (19 agents)** | | **100** | **62** | **38** |
 
-Full text = the hub showed an Overview (62 skills). Index only = it did not (38 skills). Totals are computed from the source files, not from the two proposals.
+Full text = the source showed an overview text (62 skills). Index only = it did not (38 skills): a name and a category. Totals are computed from the source files, not from the two proposals.
 
 ## Merged agent
 
@@ -62,13 +79,13 @@ A specialist profile in `../` reviews (it "sees the question, the data report an
 | `toxicologist` | `clinical-and-experimental-design-analyst` (survival, cohorts), `target-safety-druggability-analyst` (FAERS) |
 | `target-biologist` | `statistical-geneticist`, `single-cell-core-analyst`, `bulk-rnaseq-analyst`, `omics-biomarker-integrator` |
 
-Nothing enforces this yet: no code loads or calls any of these agents. It is a rule for whoever wires them.
+On the drug board nobody runs an analysis (no member has a code tool), so a profile and a method agent of the same domain can both be chosen for one review; both only advise. The rule matters once an agent can execute: the swarm does not load these files today.
 
 Check the whole mapping with `python3 glhf/specialists/verify_skills.py` (every one of the 100 skills assigned to exactly one agent; files, map and this table agree).
 
 ## Files
 
-- One `<agent>.md` per role (18 here; `literature-evidence-synthesist` is in `../`, with its specialist profile on top): scope, when to route and when not to, each owned skill (its own scope, declared inputs and outputs, hub URL, `package: not installed`, full instructions or index only, licence flag), and what the agent cannot do.
+- One `<agent>.md` per role (18 here; `literature-evidence-synthesist` is in `../`, with its specialist profile on top): scope, when to route and when not to, each owned skill (its own scope, declared inputs and outputs, the source link, `package: not installed`, full instructions or index only, licence flag), and what the agent cannot do. The engine reads the scope, inputs, outputs and flag of a skill with text, and the routing and limit lines that are about such a skill.
 - `skills-map.json`: `agent_to_skills`, `skill_to_agent`, and `skill_text` (full or index_only) per skill name.
 - `part1.md`, `part2.md`: the two input proposals with the per-skill tables. Kept unchanged as the evidence for this reconciliation.
 
@@ -104,12 +121,13 @@ Each agent file repeats the flag in its skill entry. The strongest, from the ski
 - Ambiguous: 79 and 88 (CellMarker 2.0).
 - Cost, not licence: 96 and 97 describe multi-machine and GPU compute and 96 names three paid LLM stages. This conflicts with the repo rule against starting billed cloud runs, so no agent should start them unless the user asks.
 - Skill 11 describes a "paywall-circumventing" library reconstruction; it needs review before anyone adopts it.
-- "None stated" in a skill entry means the Overview raises no flag. It does not mean the source is cleared.
+- The engine enforces the last two points for the board: skills 11, 96 and 97 are never loaded into a prompt, by number, by name and by what their text says (`WITHHELD` in `engine/src/specialists.ts`, tested).
+- "None stated" in a skill entry means the skill text raises no flag. It does not mean the source is cleared.
 
 ## What is still open
 
-- Whether any of the 38 index-only skills exist as packages: their Overviews were not shown.
+- Whether any of the 38 index-only skills exist as packages: their overview texts were not shown.
 - What the packages contain: nothing was downloaded or installed.
-- How Biomni tools and paths map into GLHF; the Overviews do not say.
-- Which agents, if any, to wire first and how they would be selected by code. That is a separate piece of work, and the board's rule that verdicts come from `swarm/ledger.py` and not from a model still applies.
-- Whether any of this improves accuracy: untested.
+- How the tools and paths the skill texts assume map into this repository; the texts do not say.
+- Whether the swarm should use the method agents, and how. The board selects them by word match (`matchSpecialists` in `engine/src/specialists.ts`); the swarm does not use them, and its rule that verdicts come from `swarm/ledger.py` and not from a model still applies.
+- Whether any of this improves a board review or any accuracy figure: untested. No real model has run a method agent.

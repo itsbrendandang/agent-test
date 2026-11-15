@@ -28,6 +28,7 @@ import { bool, map, obj, opt, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { type AgentDef, instructionsFor, loadAgent, loadRoster } from "./agents.ts"
+import { rosterEntries, runSpecialists } from "./specialists.ts"
 import { type Brief, loadBrief } from "./brief.ts"
 import { type Claim, parseClaims, shortSummary, stripClaims } from "./claims.ts"
 import { claudeCodeCheck, computedCanRun, literatureCheck, NOT_RERUN, openaiCheck } from "./checkers.ts"
@@ -536,9 +537,12 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
   if (state.failed) { delete state.failed; saveState(config, state) } // resumed: try again with the config as it is now
   const brief = loadBrief(state.briefFile, config.brief.required_sections)
   const lead = loadAgent(config, "lead-scientist")
-  const roster = loadRoster(config)
+  // A chat plan can add method specialists to this run (overrides.json `specialists`). They are normal members with no
+  // tools, and only as many as the plan left free: a run never has more members than the config's roster.
+  const roster = [...loadRoster(config), ...runSpecialists(config, runId, base.board.length - config.board.length)]
   const log = new EventLog(`${runDir(config, runId)}/events.jsonl`)
   onLog?.(log)
+  log.emit("roster", { type: "run.roster", members: rosterEntries(lead, roster) }) // same key on a resume: readers keep the last
   // A model id or key a vendor refuses ends the run at once (no retries, nothing more spent), with a plain message.
   let stopOnFatal!: (error: Error) => void
   const fatal = new Promise<never>((_, reject) => { stopOnFatal = reject })

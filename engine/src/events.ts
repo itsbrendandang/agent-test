@@ -12,6 +12,7 @@ export type Checker = "first-pass" | "jev" | "openai" | "anthropic" | "claude-co
 export type BoardEvent =
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
   | { type: "run.resumed"; runId: string }
+  | { type: "run.roster"; members: RosterEntry[] /** who takes part in this run: the lead first, then the members in speaking order (key "roster") */ }
   | { type: "lead.framed"; text: string }
   | { type: "round.started"; round: number; message: string; final: boolean }
   | { type: "member.replied"; round: number; member: string; mode?: string; text: string; usd: number; summary?: string /** the "In short:" line the reply opened with, when it did */ }
@@ -25,6 +26,9 @@ export type BoardEvent =
 /** `provider`: where the source came from: "exa" (a live Exa search), "europepmc" (a free literature search, literature.ts) or "fixture" (a practice run's example source). Absent in runs recorded before this field. */
 export type SearchProvider = "exa" | "europepmc" | "fixture"
 export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider }
+
+/** One member of a run. `source`: "board" (a file in board/agents) or "specialist" (a method specialist a plan added for this run: `why` it was chosen and the `methods` whose notes it reads). */
+export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }
 
 export type Stamped = BoardEvent & { key: string; at: number }
 

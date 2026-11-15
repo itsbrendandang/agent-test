@@ -11,8 +11,13 @@ documents are in `docs/`.
 
 - `npm run setup`: install everything. `npm run doctor`: what is missing on this machine.
 - `npm run demo`: scripted swarm run on the demo case (needs Docker, no keys). It is free.
-- `npm test`: harness tests, type checks and engine tests. Run it before committing. It does
-  not run the adapter tests: `cd glhf/bixbench_v1 && uv run pytest -q tests`.
+- `npm run check`: the health report. Merge-conflict markers, type checks, engine tests (one file
+  at a time, with a time limit) and dashboard tests. It forces paid calls off. Run it before
+  committing. `-- --fast`: markers and type checks only. `-- --all`: adds the Python suites.
+- `npm test`: harness tests, type checks and engine tests in one go. It hangs today (one engine
+  test file does not exit); use `npm run check`. Neither runs the adapter tests unless you pass
+  `--all`: `cd glhf/bixbench_v1 && uv run pytest -q tests`.
+- One engine test file: `cd engine && PAID_SWITCH_LOCKED=1 node --test test/<name>.test.ts`.
 - `npm run engine` (port 8787) and `npm run dashboard` (port 5317).
 - Harness only: `cd glhf/bixbench && uv run pytest -q tests && uv run ruff check src tests`.
 - Engine only: `npm run test:engine`. Type checks only: `npm run typecheck`.
@@ -50,6 +55,19 @@ documents are in `docs/`.
   - A test that exercises paid-allowed logic with fakes must set `NO_PAID_CALLS=0` inside
     that test (or at the top of that test file). This is the only place where an agent may
     set the value, and the test must not reach the network.
+- **A running engine may be someone's live engine.** The engine on `127.0.0.1:8787` may be in Real
+  mode with a person's keys. Do not send it a `POST`, do not restart it and do not stop it. For
+  your own tests start your own engine on another port with paid calls off and locked:
+  `NO_PAID_CALLS=1 PAID_SWITCH_LOCKED=1 DRUG_BOARD_PORT=8811 GLHF_RUNS_DIR=/tmp/<you>/glhf node engine/src/server.ts`.
+- **Shared files.** `board/config.yaml`, `board/agents/*.md`, `engine/src/board.ts`,
+  `engine/src/agents.ts`, `engine/src/app.ts`, `engine/src/mock.ts` and `package.json` are edited
+  by several people and agents. Re-read the file right before you edit it, keep the edit small,
+  and never resolve a merge by taking one whole side of these files.
+- **The team list keeps its searcher.** The `board:` list in `board/config.yaml` must include the
+  scout (the only member with `exa_search` and `literature_search`). A review without it gathers
+  no sources. A board review is not a benchmark run, so the rule below about web search for
+  benchmark agents does not apply to it.
+- Never commit a file with merge-conflict markers. `npm run check -- --fast` finds them.
 - Never read, download or reference `gs://bixbench3-ground-truth` or any published result of a
   benchmark paper while working on a solver, a prompt or a run. It holds the answers.
 - Benchmark agents get no open web search. The optional `search_docs` tool (`--exa`) is limited
@@ -109,7 +127,12 @@ documents are in `docs/`.
 - Engine request handler and request checks: `engine/src/app.ts`, `engine/src/http.ts`.
   `engine/src/server.ts` only listens. Board run lock: `engine/src/runlock.ts`.
 - Search and Ask over runs: `engine/src/search.ts`, `engine/src/ask.ts`.
-- Drug board: `engine/src/board.ts`, `board/config.yaml`.
+- Drug board (the team review): `engine/src/board.ts`, `board/config.yaml` (limits, models, the
+  team list), `board/agents/` (one file per member). The scout's searches: `engine/src/exa.ts`,
+  `engine/src/exaledger.ts` (spend record and ceiling), `engine/src/literature.ts` (free).
+- The chat on the Search screen: `engine/src/chat/` (catalogue, plans, routes),
+  `dashboard/src/views/HomeView.tsx`, `dashboard/src/home/`.
+- Health report: `scripts/check.mjs` (`npm run check`).
 - Swarm view: `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/` (New run form:
   `NewRun.tsx`).
 - Exa search tool (drug board): `engine/src/exa.ts`. Exa's own guidance is the installed skill

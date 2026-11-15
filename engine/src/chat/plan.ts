@@ -10,12 +10,17 @@ import * as board from "../board.ts"
 import { BriefRejected, loadBrief } from "../brief.ts"
 import { type BoardConfig, path } from "../config.ts"
 import { HttpError, isSafeId } from "../http.ts"
+import { clean, loadSpecialists, matchSpecialists, MAX_METHODS, methodsFor, namesOrigin, type Specialist, SPECIALIST_TIER } from "../specialists.ts"
 import { boardMembers, type CatalogSkill, loadSkills, type Member } from "./catalog.ts"
 
 export type EffortId = "quick" | "standard" | "deep"
 export interface Limits { maxUsd: number; maxMinutes: number; maxRounds: number }
 export interface Effort { id: EffortId; label: string; description: string; limits: Limits; agents: number | "all"; modelTier: string; search: { exa: boolean; maxSearches: number } }
-export interface PlanAgent { name: string; title: string; why: string }
+/**
+ * One agent of a plan. `source` is "specialist" for a method specialist the plan adds to this one run (absent or
+ * "board": a board member). A specialist carries the `methods` whose notes it will read; it has no tools.
+ */
+export interface PlanAgent { name: string; title: string; why: string; source?: "board" | "specialist"; methods?: { name: string; title: string }[] }
 export interface Plan {
   id: string
   question: string
@@ -53,11 +58,11 @@ const flat = (text: unknown, max: number) => String(text ?? "").replace(/\s+/g, 
 export function efforts(config: BoardConfig): Effort[] {
   const m = config.meeting, usd = Math.min(m.max_usd, m.daily_usd)
   return [
-    { id: "quick", label: "Quick", description: "The lead, the member that searches, a member that makes checkable claims and the best-matched other member; one round, the cheap model tier, a few searches.",
+    { id: "quick", label: "Quick", description: "The lead, the member that searches, a member that makes checkable claims and the best-matched others (a method specialist when one fits); one round, the cheap model tier, a few searches.",
       limits: { maxUsd: round2(usd * 0.2), maxMinutes: Math.max(1, Math.round(m.max_minutes / 3)), maxRounds: 1 }, agents: 3, modelTier: "cheap", search: { exa: true, maxSearches: 4 } },
-    { id: "standard", label: "Standard", description: "The lead and every member that matches the question, each on the model tier in its own file, about half the rounds the config allows.",
+    { id: "standard", label: "Standard", description: "The lead, the Critic and the members and method specialists that match the question, each on its own model tier, about half the rounds the config allows.",
       limits: { maxUsd: round2(usd * 0.6), maxMinutes: Math.max(1, Math.ceil(m.max_minutes * 2 / 3)), maxRounds: Math.max(1, Math.ceil(m.max_rounds / 2)) }, agents: "all", modelTier: "per agent", search: { exa: true, maxSearches: 12 } },
-    { id: "deep", label: "Deep", description: "Every member that matches plus the Critic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",
+    { id: "deep", label: "Deep", description: "The members and method specialists that match plus the Critic on the other vendor's model, the strong tier, and the full caps in board/config.yaml.",
       limits: { maxUsd: round2(usd), maxMinutes: m.max_minutes, maxRounds: m.max_rounds }, agents: "all", modelTier: "strong", search: { exa: true, maxSearches: 30 } },
   ]
 }
@@ -85,23 +90,64 @@ export function rankAgents(question: string, members: Member[]): PlanAgent[] {
   return ranked
 }
 
-/** The agents for an effort level: the lead, then the ranked members cut or extended as the level says. */
-export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, members: Member[]): PlanAgent[] {
-  // At every effort level a plan has the member that gathers evidence (the one with the search tool) and at least one
-  // member that makes checkable statements (one whose deliverable is claims to test, else the first other member). Without
-  // them a run has nothing to check a claim against, or nothing to check. They come first; the best-matched members fill
-  // the rest of the places. This only picks from the roster: it never adds a name that is not on the board.
+/** The specialists that may be put on the board, best match first, as plan agents with the methods they would read. */
+export function rankSpecialists(question: string, specialists: Specialist[] = loadSpecialists()): PlanAgent[] {
+  return matchSpecialists(question, specialists).map((m) => ({
+    name: m.specialist.name, title: m.specialist.title, source: "specialist" as const, methods: m.methods.map((x) => ({ name: x.name, title: x.title })),
+    why: `${m.methods.length ? `Its method notes (${m.methods.map((x) => x.title).join("; ")})` : "Its profile"} share${m.methods.length ? "" : "s"} words with the question: ${m.words.slice(0, 5).join(", ")}. It has no tools: it says which analysis would settle the question and what the data can support.`,
+  }))
+}
+
+/** How many members (the lead not counted) a plan of this effort level may have: the level's own number, and never more than the board's roster. Specialists count against it. */
+export const memberLimit = (effort: Effort, members: Member[]): number => (effort.agents === "all" ? members.length : Math.min(effort.agents, members.length))
+
+/** A stored or suggested specialist entry, checked against the specialists as they are now: unknown ones and ones that may not take part are dropped, and only methods it really owns are kept. */
+function checkedSpecialist(a: PlanAgent, specialists: Specialist[], members: Member[]): PlanAgent | undefined {
+  const s = specialists.find((x) => x.name === a.name && x.takesPart)
+  if (!s || members.some((m) => m.name === a.name)) return undefined
+  const methods = (Array.isArray(a.methods) ? a.methods : []).flatMap((x) => s.methods.filter((m) => m.name === x?.name)).filter((m, i, all) => all.indexOf(m) === i).slice(0, MAX_METHODS).map((m) => ({ name: m.name, title: m.title }))
+  if (s.kind === "methods" && !s.role.length && !methods.length) return undefined // a name-only skill, or none at all, never puts a method agent on the board
+  const why = clean(a.why, 300)
+  return { name: s.name, title: s.title, why: why || "Its notes fit the question.", source: "specialist", methods }
+}
+
+/**
+ * The agents for an effort level: the lead, then the members.
+ * - Always: the member that gathers evidence (the one with the search tool) and a member that makes checkable statements
+ *   (one whose deliverable is claims to test, else the first other member). Without them a run has nothing to check a
+ *   claim against, or nothing to check. At standard and deep also the Critic.
+ * - The other places, up to memberLimit, go to the ranked board members and the ranked specialists. Specialists get at
+ *   most half of those places (rounded up), so the board's own roles are not all pushed out.
+ * Nothing here raises a limit: a specialist takes a place, it does not add one. It only picks names that are on the board
+ * or are specialists that may take part.
+ */
+export function agentsFor(effort: Effort, ranked: PlanAgent[], lead: Member, members: Member[], specialists: Specialist[] = loadSpecialists()): PlanAgent[] {
+  const board = ranked.filter((a) => a.source !== "specialist" && members.some((m) => m.name === a.name))
+  const invited = ranked.filter((a) => a.source === "specialist").map((a) => checkedSpecialist(a, specialists, members)).filter((a): a is PlanAgent => Boolean(a))
+    .filter((a, i, all) => all.findIndex((x) => x.name === a.name) === i)
   const gatherer = members.find((m) => m.tools.includes("exa_search"))
   const claimMaker = members.find((m) => m !== gatherer && /claim/i.test(m.deliverable ?? "")) ?? members.find((m) => m !== gatherer)
+  const critic = effort.id === "quick" ? undefined : members.find((m) => m.name === "critic")
   const required: PlanAgent[] = []
-  if (gatherer) required.push(ranked.find((a) => a.name === gatherer.name) ?? { name: gatherer.name, title: gatherer.title, why: "Added at every effort level: the only member that can search, so the others have sources to cite." })
-  if (claimMaker) required.push(ranked.find((a) => a.name === claimMaker.name) ?? { name: claimMaker.name, title: claimMaker.title, why: "Added at every effort level: makes statements that can be checked, and proven wrong, against the evidence." })
-  const rest = ranked.filter((a) => !required.some((r) => r.name === a.name))
-  let chosen = effort.agents === "all" ? [...required, ...rest] : [...required, ...rest].slice(0, Math.max(effort.agents, required.length))
-  const critic = members.find((m) => m.name === "critic")
-  if (effort.id === "deep" && critic && !chosen.some((a) => a.name === "critic")) chosen.push({ name: "critic", title: critic.title, why: "Deep effort always adds the Critic, which runs on the other vendor's model." })
-  chosen = chosen.filter((a) => members.some((m) => m.name === a.name))
-  return [{ name: lead.name, title: lead.title, why: "Leads every board run and writes the memo." }, ...chosen]
+  const need = (m: Member | undefined, why: string) => { if (m && !required.some((r) => r.name === m.name)) required.push(board.find((a) => a.name === m.name) ?? { name: m.name, title: m.title, why }) }
+  need(gatherer, "Added at every effort level: the only member that can search, so the others have sources to cite.")
+  need(claimMaker, "Added at every effort level: makes statements that can be checked, and proven wrong, against the evidence.")
+  need(critic, "Added at standard and deep effort: tries to disprove the claims the board makes, on the other vendor's model.")
+  const free = Math.max(0, memberLimit(effort, members) - required.length)
+  const guests = invited.slice(0, Math.ceil(free / 2))
+  const rest = board.filter((a) => !required.some((r) => r.name === a.name)).slice(0, free - guests.length)
+  const chosen = [...required, ...rest].map((a) => ({ ...a, source: "board" as const }))
+  // Board members in the roster's speaking order would hide the ranking; they stay in rank order, and the specialists come last, as they speak last in the run.
+  return [{ name: lead.name, title: lead.title, why: "Leads every board run and writes the memo.", source: "board" }, ...chosen, ...guests]
+}
+
+/** The method notes a plan's specialists read, as plan skills (the same shape as an installed skill). */
+export function methodSkills(agents: PlanAgent[]): Plan["skills"] {
+  const out: Plan["skills"] = []
+  for (const a of agents) for (const m of a.source === "specialist" ? a.methods ?? [] : []) {
+    if (!out.some((s) => s.name === m.name)) out.push({ name: m.name, why: `Method notes read by the ${a.title} (text only: no package is installed and nothing is run).` })
+  }
+  return out
 }
 
 // ── The brief ────────────────────────────────────────────────────────────────────────────────────
@@ -200,17 +246,21 @@ export interface Suggestion { briefTitle?: unknown; sections?: unknown; agents?:
 /** The parts of a plan that follow from the effort level, the agents and the engine's state. Never from a client or a model. */
 export function derive(ctx: PlanContext, effort: Effort, agents: PlanAgent[], members: Member[]): Pick<Plan, "search" | "models" | "limits" | "estimate" | "paid"> & { warnings: string[] } {
   const { config, mock, env } = ctx
-  const chosen = members.filter((m) => agents.some((a) => a.name === m.name))
+  const chosen = members.filter((m) => agents.some((a) => a.name === m.name && a.source !== "specialist"))
+  const guests = agents.filter((a) => a.source === "specialist")
   const searchers = chosen.filter((m) => m.tools.includes("exa_search"))
   const cap = config.meeting.max_usd
   const warnings: string[] = []
-  const tiers = effort.modelTier === "per agent" ? [...new Set(chosen.map((m) => config.models[m.tier as keyof BoardConfig["models"]]).filter(Boolean))]
-    : chosen.map((m) => (effort.id === "deep" && m.name === "critic" ? config.models.rival : config.models[effort.modelTier as keyof BoardConfig["models"]])).filter((v, i, all) => all.indexOf(v) === i)
+  // A specialist runs on the tier fixed in specialists.ts, whatever the level says.
+  const guestTier = guests.length ? [config.models[SPECIALIST_TIER]] : []
+  const tiers = (effort.modelTier === "per agent" ? [...chosen.map((m) => config.models[m.tier as keyof BoardConfig["models"]]), ...guestTier]
+    : [...chosen.map((m) => (effort.id === "deep" && m.name === "critic" ? config.models.rival : config.models[effort.modelTier as keyof BoardConfig["models"]])), ...guestTier]).filter((v, i, all) => Boolean(v) && all.indexOf(v) === i)
   if (mock) warnings.push("Practice run: the board's replies are fixed example text written in advance, not research, and its search returns example sources.")
   else {
     if (searchers.length && !env.EXA_API_KEY) warnings.push("No EXA_API_KEY is set: members with the search tool get example sources, not live search results.")
     warnings.push("Board models are called directly at Anthropic and OpenAI (board/config.yaml), whichever provider wrote this plan.")
   }
+  if (guests.length) warnings.push(`${guests.length} method specialist(s) take part as board members for this run: ${guests.map((g) => g.title).join(", ")}. They have no tools and cannot run code: they say which analysis would settle the question, its pitfalls and what the data can support, and report no result of their own. They take places inside this level's member limit; no limit or spend cap is raised.${mock ? " In a practice run their replies are fixed example text too." : ""}`)
   if (!overridesApplied()) warnings.push(`Not applied yet: a board run today uses every member in board/config.yaml (${members.length}), each on its own model tier, with the config's limits ($${cap}, ${config.meeting.max_minutes} min, ${config.meeting.max_rounds} rounds) and no cap on searches. This plan's agents, limits, model tier and search cap are saved with the run (overrides.json) but board.ts does not read them.`)
   else warnings.push("This plan's agents and limits are applied to the run. Its model tier and search cap are not: each agent runs on its own model tier and searches are not counted.")
   return {
@@ -231,20 +281,27 @@ export function planFrom(ctx: PlanContext, question: string, effortId: EffortId,
   const q = briefLine(question, 2_000)
   const effort = effortOf(config, effortId)
   const { lead, members } = boardMembers(config)
+  const specialists = loadSpecialists()
   const warnings: string[] = []
 
-  // Agents: a model's picks count only when they name a board member; otherwise the word match decides.
+  // Agents: a model's picks count only when they name a board member or a specialist that may take part; otherwise the
+  // word match decides. A specialist the model picked reads the methods that match the question (else its first ones).
   const picked: PlanAgent[] = []
   let invented = 0
   for (const item of Array.isArray(suggestion.agents) ? suggestion.agents.slice(0, 30) : []) {
     const name = typeof item === "string" ? item : (item as { name?: unknown } | null)?.name
+    const said = flat((item as { why?: unknown } | null)?.why, 240)
+    const why = said && !namesOrigin(said) ? said : "Chosen by the model."
     const m = members.find((x) => x.name === name)
-    if (!m) { invented++; continue }
-    if (!picked.some((p) => p.name === m.name)) picked.push({ name: m.name, title: m.title, why: flat((item as { why?: unknown } | null)?.why, 240) || "Chosen by the model." })
+    const s = m ? undefined : specialists.find((x) => x.name === name && x.takesPart)
+    if (!m && !s) { invented++; continue }
+    if (picked.some((p) => p.name === name)) continue
+    if (m) picked.push({ name: m.name, title: m.title, why, source: "board" })
+    else if (s) picked.push({ name: s.name, title: s.title, why, source: "specialist", methods: methodsFor(q, s).map((x) => ({ name: x.name, title: x.title })) })
   }
-  if (invented) warnings.push(`${invented} agent name(s) the model gave are not board members and were removed.`)
-  const ranked = picked.length ? picked : rankAgents(q, members)
-  const agents = agentsFor(effort, ranked, lead, members)
+  if (invented) warnings.push(`${invented} agent name(s) the model gave are not board members or specialists that can take part, and were removed.`)
+  const ranked = picked.length ? picked : [...rankAgents(q, members), ...rankSpecialists(q, specialists)]
+  const agents = agentsFor(effort, ranked, lead, members, specialists)
 
   // Skills: only installed ones. Nothing in a board run loads a skill file, so the reason says what the link is.
   const usesSearch = members.some((m) => agents.some((a) => a.name === m.name) && m.tools.includes("exa_search"))
@@ -258,6 +315,7 @@ export function planFrom(ctx: PlanContext, question: string, effortId: EffortId,
   }
   if (badSkills) warnings.push(`${badSkills} skill name(s) the model gave are unknown or not installed and were removed.`)
   if (!chosenSkills.length && usesSearch && installed.some((s) => s.name === "build-with-exa")) chosenSkills.push({ name: "build-with-exa", why: "The board's search tool follows this skill's request shape (engine/src/exa.ts). The run does not load the skill file." })
+  for (const skill of methodSkills(agents)) if (!chosenSkills.some((s) => s.name === skill.name)) chosenSkills.push(skill)
 
   const derived = derive(ctx, effort, agents, members)
   const id = randomBytes(8).toString("hex")

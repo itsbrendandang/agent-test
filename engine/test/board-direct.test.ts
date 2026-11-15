@@ -599,7 +599,7 @@ test("the practice run (default roster, the example brief) still shows every ver
   assert.ok(has("contradicted"), "proven wrong: without one the product's main feature is hidden")
   assert.ok(has("unsupported"), "not enough evidence")
   assert.ok(has("unsupported", "openai") || has("verified", "claude-code"), "escalated to a second checker")
-  // Five members, and those with no task in a round reply "No task." (no claims): fewer rows than the nine-member board had.
+  // Six members (the scout and five others), and those with no task in a round reply "No task." (no claims).
   assert.ok(rows.length >= 8 && events.length >= 25, `a practice run is not a handful of events (claims ${rows.length}, events ${events.length})`)
   assert.ok(rows.every((r) => typeof r.source === "string"), "every row records the source it cited")
   // The product's main path: a statement about published work, checked against a source the scout found and screened.
@@ -609,12 +609,26 @@ test("the practice run (default roster, the example brief) still shows every ver
   assert.ok(events.some((e) => e.type === "evidence.triaged"), "and there was an evidence step")
 })
 
-test("the practice run has no search step: no board member has exa_search (the Scout is code, AGENTS.md: no open web search for benchmark agents)", async () => {
-  const config = tempConfig({ max_minutes: 5 })
+test("the default roster has a member that searches; a roster without one still runs cleanly, with no evidence step", async () => {
+  // The guard: a roster edit must not silently remove the board's evidence again.
+  const searchers = loadRoster(loadConfig()).filter((a) => a.tools.some((t) => ["exa_search", "literature_search", "database_search"].includes(t)))
+  assert.ok(searchers.length > 0, "board/config.yaml `board:` has no member with a search tool (the scout). Without one a review gathers no sources and no statement about published work can be checked: put `- scout` back as the first line")
+  assert.equal(loadConfig().board[0], "scout", "the scout is first on the roster")
+  assert.ok(searchers.some((a) => a.tools.includes("exa_search")), "the member that searches has exa_search: every review opens with a web search")
+  // A roster with no searcher (a temp config that removes the scout) is still a valid run: no evidence step, and a
+  // statement about published work is then recorded as not in the evidence pool, never checked against nothing.
+  const base = tempConfig({ max_minutes: 5 })
+  const config = { ...base, board: base.board.filter((name) => !searchers.some((a) => a.name === name)) }
+  assert.ok(loadRoster(config).every((a) => !a.tools.includes("exa_search")), "no searcher on this roster")
   const id = await startRun(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), { config, mock: true })
   await runBoard(id, undefined, { config, mock: true })
-  assert.ok(loadRoster(config).every((a) => !a.tools.includes("exa_search")), "no searcher on the roster")
+  const state = loadState(config, id)
+  assert.equal(state.finished, true)
+  assert.ok(existsSync(join(config.paths.runs, id, "memo.md")), "a memo was written")
   assert.ok(!EventLog.read(join(config.paths.runs, id, "events.jsonl")).some((e) => e.type === "evidence.triaged"), "no evidence step")
+  assert.deepEqual(state.evidence, {})
+  const literature = state.ledger.filter((r) => r.kind === "literature")
+  assert.ok(literature.length > 0 && literature.every((r) => r.verdict === "unsupported" && /not in the screened evidence pool/.test(r.note ?? "")), "with no pool, a literature claim is unsupported, not verified")
 })
 
 test("the engine never leaves fetch as the real one", () => { assert.notEqual(globalThis.fetch, realFetch) })

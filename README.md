@@ -6,14 +6,6 @@ Built by Brendan Dang, Anh Lam and Josh Bustamante.
 
 ## What this is
 
-<<<<<<< HEAD
-1. **GLHF swarm** (the main project). A solver with nine roles for Edison's BixBench3 benchmark.
-   The nine roles are nine phases with their own instructions. They use four model groups, and
-   by default all four use the same model.
-   Only the solver is ours. The sandbox, time limit, grader and judge are the benchmark's own code.
-2. **Drug candidate board** (the older project). A lead scientist agent and five research agents (our own
-   swarm: nine roles, some as agent modes and some as code; prompts only so far) that write a memo. See [docs/drug-board.md](docs/drug-board.md).
-=======
 You ask a science question. A team of AI agents works on it. Then every statement they make is
 checked, and you see which ones held up.
 
@@ -193,10 +185,15 @@ cp .env.example .env    # then open .env and paste your keys after the = signs
 npm run preflight       # free: checks the keys and model names with the vendors, prints the limits
 ```
 
-Then start the app and switch from **Demo** to **Real** in the status line at the top. The switch
-shows the spending limits, asks you to tick "I understand this costs money", and asks for the engine's
-session token (the engine prints where it is when it starts). Real stays on until the engine
-restarts or you switch back. `.env` is ignored by git; do not commit it or paste keys in chat.
+Then start the app and switch from **Demo** to **Real** in Settings. The switch shows the spending
+limits, asks you to tick "I understand this costs money", and asks for the engine's session token
+(the engine prints where it is when it starts). Real stays on until the engine restarts or you
+switch back. `.env` is ignored by git; do not commit it or paste keys in chat.
+
+**After every `git pull`:** stop the app (Ctrl+C) and run `npm start` again. The engine reads the
+team list and its settings when it starts, so an engine left running across a pull can answer with
+errors. If a pull changed `package.json` files, run `npm run setup` first. Then `npm run check`
+tells you in about two minutes if your copy is healthy (see [Tests](#tests)).
 
 Other ways to start:
 
@@ -218,16 +215,18 @@ docker compose up --build   # everything in containers; wait for "glhf tracker r
 
 | View | What it shows |
 |---|---|
-| Home | A chat box. Ask about past runs, or ask a research question and get a plan you can start. |
-| Runs | Every run, with search. |
+| Search | A chat box. Ask about saved research, or ask a research question and get a plan you can start. |
+| Saved research | Every run, with search. |
 | Compare | The swarm and the single agent on the same task, side by side. Start a run here. |
 | Board | One board review: what each member said, and how each statement was checked. |
 | Agents | The roles and what each one did. |
 | Graph | One run as a 3D graph of who said what and what held up. |
 | Settings | Engine state, Demo or Real mode, session token. |
 
-The app is being simplified now into a search-first screen (Home becomes "Search", Runs becomes
-"Saved research"). The table describes the views; names and details on screen may differ.
+Search is being rebuilt now into a chat workspace: a question gets a direct answer with numbered
+sources, and you can watch each step (search, screening, writing, checking) as it happens. Until
+that lands, a research question in Real mode returns a short reply and a plan for a team review.
+In the code the two first views keep their old names (`HomeView.tsx`, `ExperimentsView.tsx`).
 
 ## The Mac app (paused)
 
@@ -280,23 +279,24 @@ The rest of this page is for developers and teammates.
 1. **GLHF swarm.** A solver with nine roles for Edison's BixBench3 benchmark. The nine roles are
    nine phases with their own instructions. Only the solver is ours. The sandbox, time limit,
    grader and judge are the benchmark's own code.
-2. **Board review.** A lead scientist agent and nine members discuss a written brief in rounds
-   and the lead writes a memo. The members have the same nine role names as the swarm, but here
-   they are prompts only and run no code. One member, the scout, can search: the literature
-   (PubMed and preprints through Europe PMC, free) and the web (Exa, paid). It replies first, so
-   the others see its sources. Each statement a member makes is checked by a model from a
-   different vendor, which must quote the source. See
+2. **Board review.** A lead scientist agent and six members discuss a written brief in rounds
+   and the lead writes a memo. The members are the scout, proposer, experimenter (one agent with
+   three modes: Pilot, full run, Reviser), methods auditor, critic and reporter. They are prompts
+   only and run no code. One member, the scout, can search: the web (Exa, paid) and the literature
+   (PubMed and preprints through Europe PMC, free). It replies first, so the others see its
+   sources. Each statement a member makes is checked by a model from a different vendor, which
+   must quote the source. The team is the `board:` list in `board/config.yaml`; **keep the scout
+   on it**, or a review gathers no sources. See
    [docs/drug-board.md](docs/drug-board.md).
 
 Both are tracked by one engine (`engine/`, port 8787) and shown in one app (`dashboard/`, port 5317).
->>>>>>> 2144730ecb318bc73f504e6ecbb0407f4b86e930
 
 ## Paid calls are off on a new clone
 
 A new clone can only do scripted runs (`--model mock`). They cost nothing. Everything that
 costs money is refused by the engine until a person turns it on, in one of two ways:
 
-- **In the app:** the Demo/Real switch in the status line (`GET`/`POST /api/paid`). It needs the
+- **In the app:** the Demo/Real switch in Settings (`GET`/`POST /api/paid`). It needs the
   session token and a confirmation, checks that the keys are present, writes an audit line for
   every change, and goes back to the `.env` value when the engine restarts.
 - **In `.env`:** write the line below and start the engine again.
@@ -335,8 +335,9 @@ Read this first. It says what was really done.
 | Swarm and single agent on the demo case, scripted model | Works. Covered by automated tests and `npm run demo`. |
 | Swarm and single agent on the demo case, real model | Done once each. Both scored 1.0. The swarm used about 15 times the tokens of the single agent. |
 | Board review, scripted | Works. A practice run with the default members shows statements that hold up, one proven wrong, and some with too little evidence. |
-| Board review, real models | **Never run.** The board calls Anthropic and OpenAI directly. `npm run preflight` found the configured model names on both accounts (a free check). The cost per review and the quote check are not proven with a real run. |
-| Evidence for the board | Built, tested with practice runs and fake network only. The scout has two search tools: `literature_search` (Europe PMC, free; one live query was tried by hand) and `exa_search` (paid, at most 20 a run and $40 in total). Results are screened and shown to the other members. **No real review has used them.** |
+| Board review, real models | **Never run.** The board calls Anthropic and OpenAI directly. `npm run preflight` found the configured model names on both accounts (a free check). One real chat question was answered with a plan (a small model call). The cost per review and the quote check are not proven with a real run. |
+| A direct answer with sources in Search | **Being built.** Not in `main` yet. |
+| Evidence for the board | Built, tested with practice runs and fake network only. The scout has two search tools: `literature_search` (Europe PMC, free; one live query was tried by hand) and `exa_search` (paid, at most 20 a run and $40 in total; one live search was made by hand to check the key). Results are screened and shown to the other members. **No real review has used them.** |
 | A real BixBench3 task | **Not done.** There is no benchmark score to report. |
 | Cloud run on Google Cloud | **Not done.** Google Cloud is not set up. |
 | Public BixBench dataset (`futurehouse/BixBench` v1.5, 205 questions, 59 data capsules) | Adapter built and tested with the scripted model. A small pilot with a real model ran (3 capsules, 8 questions) with the older swarm. The swarm was changed after it; the changes are tested with the scripted model only. **The full run is not done.** See [BixBench v1 adapter](#bixbench-v1-adapter). |
@@ -487,7 +488,7 @@ Known limits:
 |---|---|---|
 | [Exa](https://exa.ai) | Search. Documentation search for the swarm (`--exa`), and web search for the board's scout, with spend limits. The app shows "Search powered by Exa" on real Exa results only. | The swarm's search was tested with live searches. The board's has not been used in a real review. |
 | [past.dev](https://past.dev) | Long-term memory for the swarm (`--memory` with `PAST_API_KEY`). Only lessons that a person approved are sent. | Sending and recalling lessons is tested against the live API. It has not been used inside a full swarm run. |
-| [Modal](https://modal.com) | Cloud computing. | Planned only. No code in this repository uses Modal. |
+| [Modal](https://modal.com) | Cloud computing: serving open models to compare against Claude and OpenAI models on BixBench v1, running the benchmark's sandbox, and hosting the app. | Being built (`deploy/`, `glhf/openmodels/`). Nothing is deployed and nothing in `main` uses Modal yet. |
 
 ## Where things are
 
@@ -514,7 +515,9 @@ Known limits:
 | `glhf/specialists/` | Domain specialist profiles and skill agents. Instructions only. Nothing runs them. |
 | `bixbench/` | A teammate's separate single-agent baseline for BixBench v1. Not used for our comparison. |
 | `datasets/` | A catalogue of 1,262 public biology and chemistry datasets with their licences. Pointers only, no data. No code reads it yet. See [datasets/README.md](datasets/README.md). |
-| `scripts/start.mjs` | What `npm start` runs. |
+| `scripts/start.mjs`, `scripts/check.mjs` | What `npm start` and `npm run check` run. |
+| `deploy/`, `glhf/openmodels/` | Modal: hosting the app, and serving open models for the benchmark. Being built. |
+| `downloads/` | The paused Mac app's installer (54 MB). |
 | `Dockerfile`, `docker-compose.yml`, `docker/` | The container setup. |
 | `docs/` | Reference documents (list below). |
 
@@ -522,6 +525,7 @@ Known limits:
 
 | Document | Content |
 |---|---|
+| [docs/codebase.md](docs/codebase.md) | How the code base is organised: what each folder is, what is in use or being built, where new code goes, how to check your copy. |
 | [docs/status.md](docs/status.md) | What was tested, and how. |
 | [docs/running.md](docs/running.md) | Commands, flags, run control (pair, cancel), Docker, cloud runs, who can start a run, HTTP API. |
 | [docs/configuration.md](docs/configuration.md) | Keys, environment variables, ports, `board/config.yaml`. |
@@ -541,21 +545,29 @@ Known limits:
 ## Tests
 
 ```bash
-npm test                                         # harness tests, type checks, engine tests
-cd glhf/bixbench_v1 && uv run pytest -q tests    # BixBench v1 adapter
-npm --prefix dashboard test                      # dashboard
+npm run check             # about 2 minutes: conflict markers, type checks, engine tests, dashboard tests
+npm run check -- --fast   # a few seconds: conflict markers and type checks only
+npm run check -- --all    # adds the Python suites (harness, BixBench v1 adapter, datasets); several minutes
 ```
 
-**`main` is not fully green today**: five engine tests fail and one engine test file does not finish.
+`npm run check` never spends money: it forces paid calls off and locks the in-app switch. It runs
+each engine test file on its own with a time limit, prints one line per part, and ends with exit
+code 1 if a part needs attention. Use it before you commit and after you pull.
 
-| Part | Last known state |
+`npm test` (harness tests, type checks, engine tests in one go) **hangs today**, because one engine
+test file does not exit. Use `npm run check` until that is fixed. To run one engine test file:
+`cd engine && PAID_SWITCH_LOCKED=1 node --test test/board-core.test.ts`.
+
+**`main` is not fully green today.** Measured on commit `6a6d416` with a clean checkout:
+
+| Part | State |
 |---|---|
 | Engine type check | Clean. |
-| Engine tests | 283 pass, 5 fail, and `app.test.ts` does not finish, so `npm test` hangs. The failures are in the run tracker and the request handler and are being fixed. The board, chat, paid-switch and literature tests all pass. |
-| Dashboard | Type check clean, 415 tests pass. |
-| Harness (`glhf/bixbench/tests`) | 2,368 pass. |
-| BixBench v1 adapter | 200 pass. |
-| Datasets catalogue | 231 pass (`cd datasets && uv run --no-project --with pytest pytest`). |
+| Engine tests | 290 pass, 12 fail in 22 files, and `app.test.ts` does not finish. Seven of the failures are in the board tests (`board-real-run`, `board-direct`): a merge took the scout off the team list, so a practice review gathered no sources. That is being fixed. The other five are in the run tracker and the request handler (`glhf-tracker`, `glhf-runs`, `bixv1-budget`, `app`) and are being fixed too. |
+| Dashboard | Type check clean, 450 tests pass. |
+| Harness (`glhf/bixbench/tests`) | 2,368 pass (last full run; not repeated for this commit). |
+| BixBench v1 adapter | 200 pass (last full run; not repeated for this commit). |
+| Datasets catalogue | 231 pass (last full run; not repeated for this commit). |
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](docs/status.md).

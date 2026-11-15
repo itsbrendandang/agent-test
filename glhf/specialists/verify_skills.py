@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that every one of the 100 Biomni skills is assigned to exactly one agent.
+"""Check that every one of the 100 method skills is assigned to exactly one agent.
 
 Run from anywhere: python3 glhf/specialists/verify_skills.py
 Reads only files in this repo (no network, no keys). Exit code 1 on any failure.

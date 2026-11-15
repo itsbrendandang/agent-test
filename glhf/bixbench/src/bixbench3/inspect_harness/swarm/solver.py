@@ -1251,7 +1251,7 @@ def glhf_swarm(
                 if entry.script_sha256 and entry.relevance is not None and entry.run is None
             ]
             for position, (claim_id, entry) in enumerate(todo):
-                share = clock.left() * EXECUTE_SHARE / (len(todo) - position)
+                share = review_left() * EXECUTE_SHARE / (len(todo) - position)
                 seconds = int(min(TEST_SECONDS, share))
                 if seconds < MIN_TEST_SECONDS:
                     ledger.log(
@@ -1442,11 +1442,12 @@ def glhf_swarm(
                         f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
                         f"Current ledger:\n{ledger.summary()}",
                     )
-                    if critique.ran:
-                        # What the critic registered is now fixed (script and hash). First the
-                        # relevance judge, which sees no result; then the harness runs the tests.
-                        await judge_relevance(n)
-                        await run_registered_tests(n)
+                    # What the critic registered is now fixed (script and hash). First the
+                    # relevance judge, which sees no result; then the harness runs the tests.
+                    # Also when the critic was cut off or skipped: a test registered earlier and
+                    # not yet judged is asked about again. Each step skips itself without budget.
+                    await judge_relevance(n)
+                    await run_registered_tests(n)
                     step = review_step(critique, len(ledger.open_issues()))
                     if critique.completed:
                         critiques_completed += 1

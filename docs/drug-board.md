@@ -11,13 +11,8 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 > **Status.** The board runs from brief to memo on scripted models (no keys). With `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `NO_PAID_CALLS=0` in `.env` it calls those two providers directly. This repository holds no record of a finished run with real models, and none of the model ids, the structured-output format or the cost per run has been tried with a paid call, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
-<<<<<<< HEAD
-brief.md ──▶ Lead Scientist ──converse──▶ 5 board members (parallel, each its own durable conversation)
-                 ▲                            │ no member searches today (tools: [])
-=======
-brief.md ──▶ Lead Scientist ──converse──▶ 9 board members (parallel, each its own durable conversation)
-                 ▲                            │ only the scout searches (exa_search)
->>>>>>> 2144730ecb318bc73f504e6ecbb0407f4b86e930
+brief.md ──▶ Lead Scientist ──converse──▶ 6 board members (the scout first, then the others in parallel; each its own durable conversation)
+                 ▲                            │ only the scout searches (exa_search, literature_search)
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: cheap first pass ─(unsettled)─▶ OpenAI / Claude Code
              ──write_memo──▶ memo.md + verification_ledger.json
@@ -65,14 +60,14 @@ Claude Code (the checker for computed claims) uses your existing `claude` login.
 ## The board (`board/agents/*.md`)
 
 The board runs our own swarm. It will compete with the BixBench swarm, which is the baseline, at equal
-compute. **Status: prompts only, scripted runs only.** The nine roles of the plan are covered by **five
+compute. **Status: prompts only, scripted runs only.** The nine roles of the plan are covered by **six
 model agents and three code checks**. Fewer agents means fewer model calls: every member is called every
 round, and each call resends its whole conversation.
 
 | Role | Done by | Task | Model tier |
 |---|---|---|---|
 | Lead Scientist | agent `lead-scientist` | Frames the question, gives each member its task and mode, writes the memo | lead (Opus) |
-| Scout | code | The brief check before anything runs (`loadBrief`, `brief.required_sections`). There is no dataset to inspect yet. | none |
+| Scout | agent `scout`, and code | The only member that searches. It opens every review with a search on the brief's main question and reports the sources the others can cite. It is first in `board:` and must stay: a test fails if the roster has no member with a search tool. The brief check before anything runs is code (`loadBrief`, `brief.required_sections`). There is no dataset to inspect yet. | cheap |
 | Proposer (triage) | agent `proposer` | 3 to 8 claims, each with a priority and a share of the budget | strong |
 | Pilot | agent `experimenter`, mode `pilot` | Subsample test; claims that fail early are dropped | strong |
 | Experimenter | agent `experimenter`, mode `full` | The analysis per claim, highest priority first | strong |
@@ -93,17 +88,19 @@ remembers what the Pilot did. Limit: one mode per member per round.
 
 Other limits:
 
-- Every member gets every round **at the same time**. The engine does not run the roles in order. The
-  lead follows a round plan in its prompt, and a member with no task replies "No task."
-- Members have **no tools**: no code, no file access, no search. Results that were not run are marked
-  "not run". No member has open web search, because benchmark agents get none (see `AGENTS.md`).
+- Every member gets every round. The scout replies first; the others then reply **at the same time**. The
+  engine does not run the other roles in order. The lead follows a round plan in its prompt, and a member
+  with no task replies "No task."
+- Only the scout has tools, and only search tools. No member can run code or read files. Results that were
+  not run are marked "not run". (The rule "no open web search" in `AGENTS.md` is about the benchmark swarm
+  under `glhf/`; a board review is not a benchmark run.)
 - The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
 
 To add or bench a member, add or remove a line under `board:` in `board/config.yaml` and add an agent file. Tiers map to `<vendor>/<model>` ids in `models:` (Anthropic or OpenAI only), so changing a model is a one-line edit. Keep `rival` (the Critic) on a different vendor from `lead`.
 
 ## How it stays cheap
 
-1. **A cheap model before the expensive ones.** Every Exa result is screened by the `cheap` tier (relevant? reports results? study type?) before a member reads it, in one call per search. A result already in the pool, or already dropped for the same key question, is not screened again. (No member searches today, so this step does not run; see "What a real run checks" below.)
+1. **A cheap model before the expensive ones.** Every Exa result is screened by the `cheap` tier (relevant? reports results? study type?) before a member reads it, in one call per search. A result already in the pool, or already dropped for the same key question, is not screened again.
 2. **A cheap model makes the first check of each claim.** Members end each reply with a `CLAIMS` section. The first pass reads the cited source and answers in strict JSON: `supports`, `contradicts`, `not_stated` or `unclear`, **with a quote** of the source passage. Code then decides (`engine/src/triage.ts`):
    - `supports` is **verified** only if the quote is really in the source text (case and spacing aside), is at least 20 characters, and contains every number of the claim (digits inside names such as CMP-0517 or H358 are ignored; a minus sign counts);
    - `contradicts` is **contradicted** only if its quote is in the source;
@@ -193,3 +190,36 @@ statement is "verified" only when the quoted passage is in the abstract. Limits:
 per run (default 20); abstracts only, not full papers; preprints are marked `[preprint]`. A practice run reaches no
 network and gets the example sources. A query that finds nothing is tried again with fewer words. Not yet done: a real
 board run that uses it, and listing it in the Home catalogue.
+
+## Method specialists (from a chat plan)
+
+A plan drafted in the Home chat can add **method specialists** to one board review. A specialist is a profile or a
+method agent from `glhf/specialists/` (the **Method library**: 58 method skills with notes, held by 19 method agents,
+plus four domain profiles with no notes). The code is `engine/src/specialists.ts` (loading, cleaning, the
+instructions) and `engine/src/chat/plan.ts` (choosing).
+
+**What is wired**
+
+| Step | What happens | Code |
+|---|---|---|
+| Choosing | The question's words are compared with each method's notes and each profile's trigger. A word of a method's name or of a trigger counts 2, another shared word 1; 2 points on one method (or on the profile) are needed. A few question words are read through a short list (`ALIASES`: "hERG" is read as "safety"); the plan's reason shows it. With a model (AI mode) the model may name specialists; every name is checked against the catalog and unknown ones are dropped. | `matchSpecialists`, `planFrom` |
+| Places | A specialist takes a place **inside** the level's member limit (Quick: 3 members; Standard and Deep: the size of the roster). The lead, the scout and the proposer always stay; the Critic stays at Standard and Deep. Specialists get at most half of the places that are left, rounded up. No limit and no spend cap is raised. | `agentsFor`, `memberLimit` |
+| Running | The start writes the chosen specialists into the run's `overrides.json`. `board.ts` adds them to the roster for that run only (`runSpecialists` checks every name and method again, and adds no more than the free places). Each is a normal member: its own durable conversation, the shared context, "In short:", the CLAIMS section, a blind first round, and its claims are checked like anyone's. It has **no tools** and runs on the `strong` tier. | `runSpecialists`, `runLocked` |
+| Instructions | First a fixed frame: it cannot run code or install anything; it says which analysis would settle the question, the pitfalls, and what the brief's data can and cannot support; it challenges other members by name; it reports no result that is not in the brief or in the sources the board found; decision support only, no synthesis route for a hazardous compound. Then its role, then the notes of the matched methods. **Caps:** at most 4 methods, 1,200 characters per method, 8,000 characters for the specialist's whole own prompt (the deliverable, CLAIMS format, shared context and brief come after, as for every member). | `specialistPrompt` |
+| Events | Every run writes one `run.roster` event (key `roster`): the lead and the members, each with `source` (`board` or `specialist`), and for a specialist a plain title, one line of why it was chosen and its methods. `GET /api/chat/roster?run=<id>` returns the same with tier and tools. | `rosterEntries`, `chat/roster.ts` |
+| Practice runs | A specialist's scripted reply is fixed text that says so ("This is fixed example text for a practice run, not a method result."), with no number and no claim. | `MOCK_SPECIALIST_REPLY` in `mock.ts` |
+
+**Rules enforced in code** (tests: `engine/test/specialists-load.test.ts`, `specialists-plan.test.ts`, `specialists-run.test.ts`)
+
+- Skill 11 (its text describes a way round a paywall) and skills 96 and 97 (billed multi-machine compute) are never loaded: by number, by name and by what their text says. One more skill is left out because it is a tool of the outside product the list came from.
+- A skill that is a name only (38 of the 100) is never loaded, never shown as something a specialist can do, and never the reason a specialist is chosen.
+- Method notes are treated as data. Each field is one line, cleaned and cut. URLs, install, download and run instructions for packages that are not here, and every line that names where the text came from are removed before the text reaches a prompt, a plan, an event or an API response. The files keep those lines as the provenance record (`docs/proposals/licenses.md`).
+- A specialist file cannot set tools, a model tier, a mode or a limit: these are fixed in `specialists.ts`.
+
+**What is not wired, and not verified**
+
+- **The swarm in `glhf/bixbench` does not use the specialists or the method skills.** Only the drug board does.
+- Nothing is executed. The skill packages are not installed and no member has a code tool. The notes are short (a scope, what the method needs, what it would produce, flags): they are not the long procedure texts.
+- **No real model has run a specialist.** Everything above was tested with scripted models. Whether a model keeps to the frame, and whether a specialist improves a review, is not known.
+- The choice is a word match. It can miss (a question about a method whose skill is a name only gets no specialist for it) and it can pick a neighbour (a "differential expression" question gets the bulk RNA-seq agent with its notes on counts, deconvolution and consensus signatures, because the differential-expression skill itself is a name only).
+- `GET /api/roster?run=<id>` (the board's own roster route) is served by `rosterFor` in `engine/src/chat/roster.ts` once `app.ts` calls it; until then use `GET /api/chat/roster?run=<id>`.

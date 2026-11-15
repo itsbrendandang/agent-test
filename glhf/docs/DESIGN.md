@@ -42,7 +42,7 @@ flowchart TD
     PI --> K0[Format check of the pilot outputs, code only]
     K0 --> E[4. Experimenter<br/>full run, every artifact]
     E --> AU[5. Methods Auditor<br/>scripts against the Method Guidance]
-    AU --> C[6. Critic<br/>registers tests, runs them,<br/>raises issues]
+    AU --> C[6. Critic<br/>writes and registers test scripts,<br/>raises issues<br/>then: relevance judge, harness runs the tests]
     C --> Q{Open blocking or<br/>major issue?}
     Q -->|yes| V[7. Reviser<br/>fix, rerun, resolve the issue]
     V -->|next round| AU
@@ -63,7 +63,8 @@ while enough review time is left (see "Time budget").
 | 3 | Pilot | `pilot` | Runs the whole pipeline on a subsample into `work/glhf/pilot/outputs`. Pilot files never go to `/outputs`. | none | `experimenter` |
 | 4 | Experimenter | `experiment` | Runs the full analysis. Writes every artifact. | none | `experimenter` |
 | 5 | Methods Auditor | `audit N` | Compares the scripts with the Method Guidance. Writes `adherence.md`. | `raise_issue` | `critic` |
-| 6 | Critic | `critique N` | Registers tests for each claim, then runs them. Checks outputs and scripts. | `raise_issue`, `register_falsification_test`, `record_falsification_test`, `report_failed_replication` | `critic` |
+| 6 | Critic | `critique N` | Writes each test of a claim as a script and registers it. Does not run the registered tests and does not report their p-values. Checks outputs and scripts. | `raise_issue`, `register_falsification_test`, `record_falsification_test` (contradicting results only), `report_failed_replication` | `critic` |
+| | Relevance judge | `relevance N` | Not one of the nine roles: one model call per review round, after the Critic, with no tools and no sandbox. Rates whether each registered test bears on its claim. Sees the claim and the registration, never a result. Instructions: `swarm/relevance.py`. | none (code records its answer) | `critic` by default (`relevance_model` on the solver) |
 | 7 | Reviser | `revise N` | Fixes open issues and reruns later steps. | `resolve_issue` | `experimenter` |
 | 8 | Finisher | `finish` | Rescues an artifact that is missing or unreadable. Real data only. | none | `experimenter` |
 | 9 | Reporter | `report` | Writes `METHODS.md` from the scripts that ran. With `--memory`, also writes lessons. Code queues them for a person to approve. | none | `reporter` |
@@ -86,6 +87,8 @@ The swarm uses 97% of the run's time limit. This is "the run" in the table.
 | Experimenter | 45% of the run |
 | Methods Auditor | 10% of the review time left, each round |
 | Critic | 30% of the review time left, each round |
+| Relevance judge | 5% of the review time left after the Critic, each round; at most 2% of the token budget; floor 20 seconds and about 10,000 tokens |
+| Registered tests (run by code, no tokens) | Up to half of the review time then left, shared by the tests waiting; at most 5 minutes a test; a test with less than 10 seconds is not started |
 | Reviser | 60% of the review time left (90% in the last round) |
 | Finisher | 5% of the run is kept for it. At least 5 minutes on runs of 20 minutes or more. |
 | Reporter | 5% of the run is always kept for it. |
@@ -93,6 +96,10 @@ The swarm uses 97% of the run's time limit. This is "the run" in the table.
 Other rules:
 
 - Time that a phase does not use goes to the next phases.
+- The relevance judge is part of review. Its floor is protected like any other: the Critic
+  may not spend it, in any round. If the plan has no review, it has no judge. If the judge is
+  skipped for budget, the ledger records `relevance.skipped`, the tests are not run, and they
+  cannot support a claim.
 - A phase with less than 10 seconds is skipped.
 - A review round starts only if enough review time is left: 15 minutes, or 15% of the run if
   that is less (`min_review_seconds` in `solver.py`). For the default local run of 1,800 seconds
@@ -210,21 +217,28 @@ Known limits:
 
 ## 3. From claim to verdict
 
-No model decides a verdict. The Critic first registers its tests, then runs them and reports
-the p-values. `swarm/ledger.py` does the rest.
+No model decides a verdict, and no model reports a p-value that counts as support.
+
+1. The Critic writes each test as a script and registers it (path, content, SHA-256 hash).
+2. A separate model call, the relevance judge, rates whether the test bears on the claim. It
+   sees the claim and the registration. It never sees a result.
+3. Code (the harness) runs the registered script in the sandbox and reads the p-value from the
+   last line of its output.
+4. `swarm/ledger.py` computes the verdict.
 
 ```mermaid
 flowchart LR
-    A[Claim + null hypothesis] --> R[Critic registers at most 3 tests<br/>name, method, what would contradict<br/>tool: register_falsification_test]
-    R --> B[Critic runs every registered test<br/>permutation, held-out data,<br/>other method, negative control]
-    B --> C[p-value, floor 1e-6<br/>tool: record_falsification_test]
-    C --> D[e = 0.5 / sqrt p<br/>contradicting test: e = 0.5<br/>registered test with no result: e = 0]
+    A[Claim + null hypothesis] --> R[Critic registers at most 3 test scripts<br/>name, method, test's null, path, SHA-256<br/>tool: register_falsification_test]
+    R --> J[Relevance judge: one model call, no tools<br/>sees claim + registration, no result<br/>score 0.1 to 1.0, needs 0.8]
+    J --> B[Harness runs the registered content<br/>file must still have the registered hash]
+    B --> C[Last line of stdout:<br/>GLHF_RESULT p_value=... contradicts=...<br/>p-value floor 1e-6]
+    C --> D[e = 0.5 / sqrt p<br/>contradicting test: e = 0.5<br/>no result, or not relevant: e = 0]
     D --> E[Arithmetic mean of the e-values]
     E --> F{Verdict}
-    F -->|contradicting test with p < 0.1 / m<br/>or failed replication, checked first| H[Refuted]
+    F -->|relevant contradicting test with p < 0.1 / m<br/>or failed replication, checked first| H[Refuted]
     F -->|every registered test has a result<br/>and mean >= m / 0.1| G[Supported]
     F -->|otherwise| I[Insufficient<br/>not a finding]
-    X[Contradicting result that was not registered] -->|always accepted| C
+    X[Contradicting result typed in by a role] -->|always accepted, never as support| D
 ```
 
 A claim with no result at all is untested.
@@ -232,41 +246,78 @@ A claim with no result at all is untested.
 `m` is the number of registered claims. `alpha` is 0.1 and is shared by all claims
 (Bonferroni correction).
 
-| Constant | Value | In `ledger.py` |
+| Constant | Value | Where |
 |---|---|---|
-| Error level | 0.1 | `ALPHA` |
+| Error level | 0.1 | `ALPHA` in `ledger.py` |
 | Calibrator | 0.5, so `e = 0.5 * p^(-0.5)` | `KAPPA` |
 | p-value floor | `1e-6`, so one test gives at most `e = 500` | `P_FLOOR` |
-| Registered tests per claim | at most 3, one result per test name | `MAX_TESTS` |
+| Registered tests per claim | at most 3, one run per test | `MAX_TESTS` |
+| Relevance threshold | 0.8 on the rubric 0.1, 0.2, 0.4, 0.6, 0.8, 1.0 | `RELEVANCE_THRESHOLD` |
+| Result line | `GLHF_RESULT p_value=<number in [0, 1]> contradicts=<true|false>` | `RESULT_LINE` |
+| Largest registered script | 64 KB; the content is kept in the ledger | `MAX_SCRIPT_BYTES` |
+| Longest run of one test | 300 seconds | `TEST_SECONDS` in `tools.py` |
 
-Registration rules (`register_test` and `record_test` in `ledger.py`):
+Rules (`register_test`, `judge_relevance`, `record_run` and `record_test` in `ledger.py`;
+`run_registered_test` in `tools.py`; `relevance.py`):
 
 | Rule | Reason |
 |---|---|
-| A test is registered before the claim has any result. Registration closes at the first result. | The tests that count are fixed before their outcomes are known. The best few of many cannot be picked afterwards. |
-| A favourable result is accepted only under a registered name. | Same reason. |
-| A registered test with no result counts as `e = 0` and blocks support. | A bad result cannot be left out. |
-| A contradicting result is always accepted, registered or not, also over the limit of 3. | It can only lower the mean, and it can refute. |
+| A test is a script file under `/workspace/` (`.py`, `.sh` or `.R`). Its path, content and SHA-256 hash are recorded at registration, before the claim has any result. Registration closes at the first result or the first run, also a failed run. | The tests that count are fixed before their outcomes are recorded. The best few of many cannot be picked afterwards, and a test cannot be reworked after its result is seen. |
+| Relevance is judged after registration and before the run, once. The ledger refuses a run without a judgement and a judgement after a run. | The judge cannot be influenced by a result, and a judgement cannot be changed to fit one. |
+| A test scored under 0.8, or not scored, is still run and recorded, but counts as `e = 0`. It cannot support and cannot refute. | A test about something else can come out "significant" whatever the claim. This is Assumption 1 of the Popper paper; removing its relevance checker raised the false-support rate there. |
+| The harness runs the test, not a model. The file at the registered path must still have the registered hash. The registered content itself is given to the interpreter. | The number comes from the registered file, unchanged. Nobody typed it. |
+| The result is the last non-empty line of standard output, in one fixed format. | Code can parse it. A model misreading its own output is the most common failure in the Popper paper (35.9% of failures). |
+| A script that changed, is missing, exits with an error, runs too long or prints no result line has no result. It counts as `e = 0` and blocks support, like a registered test that was never run. The command, exit code, runtime and the end of the output are kept in the ledger. | A bad result cannot be turned into "no result" to get it out of the mean. The reason is visible. |
+| A result typed in by a role is accepted only when it contradicts the claim. It is always accepted then: registered or not, over the limit of 3 or not. | It can only lower the mean, and it can refute. A typed-in favourable result is refused. |
 
 Why the mean and not the product: the mean of e-values is an e-value under any dependence
 between the tests. A product is an e-value only if the tests are independent, and code cannot
 check that. The cost: evidence does not multiply, so one strong test is worth more than
 several weak tests.
 
-What the rules give: a claim whose null hypothesis is true is marked supported with probability
-at most `alpha / m`, under any dependence between its registered tests.
+### What the rules give, and what they do not
 
-This needs two assumptions: each reported p-value is a valid p-value from code that was run,
-and no test was run in private before it was registered.
+A claim whose null hypothesis is true is marked supported with probability at most
+`alpha / m`, under any dependence between its registered tests, **if** each counted script
+computes a valid p-value under a null that follows from the claim's null, and the script was
+not chosen or tuned on the data it tests.
 
-What is not controlled: a wrong or dishonest p-value, tests tried in private and registered
-afterwards, and the refuted verdict (one mistaken contradicting test can refute a true claim).
-Code cannot check these, because a model reports the p-values. `FINDINGS.md` says so in every
-run.
+| | |
+|---|---|
+| Code now proves | The p-value was produced by running the registered file. The file did not change after registration. No model typed the number. The relevance judgement was made before the run. |
+| Code cannot prove | That the script is a meaningful test. It can print a constant, or compute an invalid p-value. |
+| Code cannot prove | That the relevance judgement is right. It is one model reading a description and a script: a filter, not a proof. In the Popper paper the same kind of judge agreed only moderately with human raters (Spearman 0.55). Text written by the Critic reaches the judge. |
+| Code cannot prove | That the model did not run the script, or look at the data, before registering it. The sandbox is the model's own workshop. A model that tries 100 scripts and registers the best one gets the same p-value from the harness. |
+| Not controlled | The refuted verdict. One mistaken contradicting test can refute a true claim. |
+| Recorded, not prevented | The judge and the Proposer on the same vendor (`same_vendor_as_proposer` in the ledger). Same vendor can mean the same blind spots. |
 
-`tests/unit/test_glhf_ledger.py` checks the rules, including a simulation of the error rate.
-No real-model run has used these rules yet; the real-model run on the demo case used the older
-product rule.
+`FINDINGS.md` says this in every run.
+
+### Simulation of false support
+
+`tests/unit/test_glhf_ledger.py` runs true-null claims through the ledger's own entry points.
+The table gives the share of runs in which at least one true-null claim was marked supported
+(20,000, 6,000 and 3,000 runs for 1, 8 and 20 claims; fixed seeds). "Before" is the rule set
+of commit `4084a3a` (a model typed the p-values, no relevance check). The bound is 0.1.
+
+| Critic's behaviour | Before: 1 / 8 / 20 claims | Now: 1 / 8 / 20 claims |
+|---|---|---|
+| Three independent registered tests per claim | 0.0009 / 0 / 0 | 0.0009 / 0 / 0 |
+| One test registered three times | 0.0020 / 0.0003 / 0.0003 | 0.0020 / 0.0003 / 0.0003 |
+| 100 tests in private, tries to record the best without registering it | 0.0018 / 0.0002 / 0 | 0.0018 / 0.0002 / 0 |
+| Lets only favourable registered tests through | 0 / 0 / 0 | 0 / 0 / 0 |
+| Types in `p = 1e-6`, runs nothing | **1.0 / 1.0 / 1.0** | 0 / 0 / 0 |
+| Reworks the registered script 100 times, keeps the best | **0.219 / 0.033 / 0.011** | 0 / 0 / 0 |
+| Registers a test that rejects whatever the claim (not relevant) | **1.0 / 1.0 / 1.0** | 0 / 0 / 0 if the judge catches it; 0.15 / 0.72 / 0.96 if the judge misses 15% of such tests; 0.51 / 1.0 / 1.0 if it misses half |
+| Tries 100 scripts in private **before** registering, registers the best | **0.224 / 0.027 / 0.014** | **0.224 / 0.027 / 0.014** (unchanged: code cannot see this) |
+
+Read the last two rows carefully. The relevance row is exactly as good as the judge: the
+miss rates 15% and 50% are assumptions for the simulation, not measurements. The last row is
+the limit that remains. In the first four rows the rate is far below 0.1 because the mean
+rule is conservative.
+
+No real-model run has used these rules yet. The real-model run on the demo case used the
+older product rule, and the scripted demo proves the plumbing only.
 
 The full table of rules is in
 [docs/reading-results.md](../../docs/reading-results.md#verdict-rules).
@@ -293,7 +344,7 @@ The full table of rules is in
 | `outputs/<artifacts>` | Graded against the reference tables. |
 | `outputs/METHODS.md` | What was run, deviations, failures. |
 | `outputs/glhf/FINDINGS.md` | Supported, refuted and not established claims. Fixed and open issues. |
-| `outputs/glhf/ledger.json` | Every claim, registered test, result, e-value, issue and event. |
+| `outputs/glhf/ledger.json` | Every claim, registered test (with its script, hash, relevance judgement and the harness's run), result, e-value, issue and event. This is the roles' working copy; the copy that counts is `<run folder>/ledger.json`, written by the solver process. |
 | `outputs/glhf/scripts/`, `plan.md`, `notebook.md`, `deviations.md`, `sample_sheet.tsv`, `data_report.md`, `pilot_report.md`, `adherence.md` | Working files, copied if they exist. |
 | `outputs/glhf/lessons.md` | Only with `--memory`. The lessons of this run that passed the filter. The same lines are queued in `lessons.pending.md` of the memory folder, for a person to approve. |
 

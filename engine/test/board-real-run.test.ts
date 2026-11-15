@@ -134,6 +134,7 @@ test("the member that searches replies first; the others get the sources in thei
     for (const row of db.prepare(`select * from ${table.name}`).all()) if (JSON.stringify(row, (_k, v) => (v instanceof Uint8Array ? Buffer.from(v).toString("utf8") : v)).includes("Sources the board has found so far")) withEvidence++
   assert.ok(withEvidence >= 3, `the non-searching members were given the sources (found in ${withEvidence} stored entries)`)
   const state = loadState(cfg, id)
+  assert.equal(state.rounds, 3, "a roster without the Experimenter still runs its three rounds: the scripted lead asks a refused round again without modes")
   const literature = state.ledger.filter((r) => r.kind === "literature")
   assert.ok(literature.length >= 2 && literature.every((r) => r.source && state.evidence[r.source]), "each literature claim cites a source that is in the pool")
   assert.ok(literature.some((r) => r.verdict === "verified" && r.quoteFound === true), "one holds up against its source")
