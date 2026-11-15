@@ -158,7 +158,7 @@ Files are read as UTF-8 and a byte-order mark at the start is dropped, as the gr
 | Fatal problem | missing file, empty file, cannot be parsed, wrong delimiter, row-key column not in the header | yes |
 | Other problem | duplicate or blank row keys, rows with a different number of columns | no; the roles see it and the Critic can raise an issue |
 | Warning | one column only, header with no rows, empty JSON, more than half of the sampled cells empty or NA | no |
-| Warning (names and formats) | a column that the task's Required Outputs names for the file is not in the header, or differs only in case, spaces or `_`; row keys with spaces at the start or end; Ensembl IDs with a version suffix (`.12`), or a mix with and without; numbers written as `1,234`; infinite values | no |
+| Warning (names and formats) | a column that the task's Required Outputs names for the file is not in the header, or differs only in case, spaces, `_`, `.` or `-`; row keys with spaces at the start or end; Ensembl IDs with a version suffix (`.12`), or a mix with and without; numbers written as `1,234`; infinite values | no |
 
 The grader matches column names and row keys as exact strings, so each of these can give an
 artifact a score of zero. Code reads the column names from the task text (`required_columns` in
