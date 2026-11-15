@@ -35,7 +35,7 @@ import { PaidCallsOff, paidCallsOff, refusePaid } from "../paid/paid.ts"
 import { missingKeys } from "../providers.ts"
 import { take } from "../runlock.ts"
 import { FirstPass } from "../board/triage.ts"
-import { demoBrain } from "./demo.ts"
+import { demoBrain, pacedDemoBrain } from "./demo.ts"
 import { type Database, Interrupted, modelNames, type PipelineDeps, realBrain, runAnswer } from "./pipeline.ts"
 import { type Match, matchSpecialists } from "../specialists.ts"
 import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThreadId, listArtifacts, listRecords, loadRecord, newAnswerId, newThreadId, readArtifact, ResearchLog, saveRecord, threadLines, threadRecords } from "./store.ts"
@@ -67,6 +67,8 @@ export interface ResearchDeps {
   specialists?: (question: string) => Match[]
   /** Tests: called right after a step's outcome was stored (its key). Returning "stop" stops this process's work at that exact point, as a killed engine would. */
   onStored?: (key: string) => void | "stop"
+  /** A demo answer's writer gives its text a few words at a time, this many milliseconds apart (demo.ts pacedDemoBrain). Default 0: all at once. The engine (app.ts) sets DEMO_PACE_MS. */
+  demoPaceMs?: number
 }
 
 /** A refusal that names the input it is about. */
@@ -195,7 +197,7 @@ export function createResearch(deps: ResearchDeps) {
           let pipeline: PipelineDeps
           if (record.mode === "demo") {
             pipeline = {
-              ...shared, brain: demoBrain, firstPass: () => new FirstPass(undefined as never, config, true),
+              ...shared, brain: pacedDemoBrain(deps.demoPaceMs ?? 0), firstPass: () => new FirstPass(undefined as never, config, true),
               exa: async () => { throw new Error("a demo answer does not search") }, literature: async () => { throw new Error("a demo answer does not search") },
               fixtures: (query) => exaSearch(query, "", true), // the board's example sources (mock.ts); no network
               paidOff: () => false,
@@ -360,7 +362,10 @@ export function createResearch(deps: ResearchDeps) {
     }
     saveRecord(config, record) // the record first: a question that was accepted is on disk before anything else happens
     if (ahead.length) new ResearchLog(config, record.id).emit("queued", { type: "research.queued", after: record.after as string })
-    else working.add(record.id) // it takes its place now, so the next request in this same moment sees it
+    else {
+      working.add(record.id) // it takes its place now, so the next request in this same moment sees it
+      writeFileSync(eventsFile(config, record.id), "", { flag: "a" }) // its event log exists before the reply, so a stream opened at once gets 200, not 204
+    }
     launch(record.id)
     resume() // and anything an earlier process left: a real answer that was waiting for paid calls to be on again
     json(res, 202, { id: record.id, thread, mode: record.mode, ...(ahead.length ? { queued: true, after: record.after } : {}) })

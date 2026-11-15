@@ -1269,6 +1269,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       if (whyNot) { endFor("write", whyNot, "No answer was written. The sources that were found are listed."); throw new Stop(whyNot) }
       // The draft is streamed as it is written, up to the NEXT STEPS line, which a program reads and a person never sees.
       // After a restart in the middle of the writing, the text is written again and is not streamed a second time.
+      // A piece is sent every 400 characters or 200 ms, whichever comes first, so a live view shows the text as it comes.
       const streamed = log.has("answer.delta:0")
       let all = "", sent = 0, piece = 0, last = performance.now()
       const flush = (final: boolean) => {
@@ -1278,7 +1279,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (upTo > sent) { emit(`answer.delta:${piece++}`, { type: "answer.delta", text: all.slice(sent, upTo) }); sent = upTo; last = performance.now() }
       }
       let reply: { text: string; truncated: boolean }
-      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 500) flush(false) }, short)) } catch (error) {
+      try { reply = await model("write", { system, user }, () => brain.write(system, user, signal, (text) => { all += text; if (all.length - sent >= 400 || performance.now() - last >= 200) flush(false) }, short)) } catch (error) {
         const stop = error instanceof StepFailed ? undefined : asStop(error)
         if (stop) endFor("write", stop.reason, "No answer was written. The sources that were found are listed.")
         else if (!(error instanceof Interrupted)) end("write", "failed", { error: `The writer did not answer (${message(error)}).`, consequence: "No answer was written." })

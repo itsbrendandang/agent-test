@@ -69,7 +69,7 @@ export const demoBrain: Brain = {
   criticIndependent: true,
   worstCase: () => 0,
   plan: fixed(JSON.stringify({ key_question: "KRAS G12C inhibitors: response, hERG and resistance (demo)", medical: false, researchable: true, web: [{ query: "demo", objective: "demo" }], literature: ["demo example"] })),
-  write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_COMPARISON : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } },
+  write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_COMPARISON : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } }, // all at once: see pacedDemoBrain
   specialistModel: "scripted",
   specialist: fixed(DEMO_SPECIALIST),
   section: async (system) => ({ text: DEMO_SECTIONS[/Yours is (H\d)\./.exec(system)?.[1] ?? "H1"] ?? "", usd: 0, truncated: false }),
@@ -79,3 +79,39 @@ export const demoBrain: Brain = {
   revise: async (_system, user) => { const views = methodViews(user); return { text: views ? DEMO_REVISED.replace("\n\nSwitch to Real", `\n\n${views}\n\nSwitch to Real`) : DEMO_REVISED, usd: 0, truncated: false } },
   rejudge: fixed(JSON.stringify({ notes: [{ note: 1, status: "resolved", why: "Demo text: the sentence is no longer in the answer." }] })),
 }
+
+/** The pause between two pieces of the demo writer's text, in milliseconds, in a running engine (app.ts). */
+export const DEMO_PACE_MS = 60
+
+/**
+ * The demo brain whose writer gives its text a few words at a time, `paceMs` apart, as a model streams its reply. The
+ * live answer chat then shows a demo answer being written, through the same answer.delta events as a real one. This is
+ * the scripted writer's own output while its step runs: a finished answer is never streamed again (pipeline.ts sends
+ * the draft once, and a replay after a restart does not repeat it). The lines after NEXT STEPS, which nobody sees,
+ * come in one piece. A cancelled answer stops the writing at once, as a real model does: nothing more is sent. paceMs 0 is demoBrain itself.
+ */
+export function pacedDemoBrain(paceMs: number): Brain {
+  if (!(paceMs > 0)) return demoBrain
+  return {
+    ...demoBrain,
+    write: async (system, user, signal, onDelta) => {
+      const text = tests(system, user) ? DEMO_COMPARISON : DEMO_DRAFT
+      const cut = text.search(/\nNEXT STEPS/)
+      const shown = cut >= 0 ? text.slice(0, cut) : text
+      const words = shown.match(/\s*\S+\s*/g) ?? [shown]
+      for (let i = 0; i < words.length; i += 2) {
+        if (i > 0 && !signal.aborted) await pause(paceMs, signal)
+        if (signal.aborted) throw new Error("the demo writer was stopped")
+        onDelta(words.slice(i, i + 2).join(""))
+      }
+      if (shown.length < text.length) onDelta(text.slice(shown.length))
+      return { text, usd: 0, truncated: false }
+    },
+  }
+}
+
+const pause = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
+  const timer = setTimeout(done, ms)
+  function done() { clearTimeout(timer); signal.removeEventListener("abort", done); resolve() }
+  signal.addEventListener("abort", done, { once: true })
+})

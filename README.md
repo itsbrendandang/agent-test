@@ -161,6 +161,17 @@ uses one search, at most 3 sources and a short answer written with little thinki
 statement is still checked once. It has no hypotheses, specialists, critic or revision. See
 [docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
 
+**The answer is written in real time.** While a research answer is made, its text appears as the
+writer writes it, under quiet lines that say what the team is doing ("Searching the web: found 6,
+kept 4."). The text comes from the engine's own event stream (`answer.delta` pieces; see
+[docs/research-answer.md](docs/research-answer.md#the-api)), not from the page. A reconnect or a reload continues the stream where it stopped. A
+finished answer is shown at once; it is never typed out again. In Demo mode the scripted writer
+gives its fixed text a few words at a time, so the same view can be tried for free. The chat view
+for one answer is `dashboard/src/research/LiveChat.tsx` (the AI Elements Conversation and Message,
+with the text drawn by streamdown with raw HTML, images and non-web links turned off). Research uses
+its status lines and live text for the running answer. Other screens can open it as a live preview
+of an answer in progress.
+
 **Try asking** shows biology questions under the question box on Overview and Research. They
 come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
 hour). A word rule keeps the biology and health searches; no model is called. A question names

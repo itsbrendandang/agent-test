@@ -350,6 +350,13 @@ prepare, hypothesize, search, evaluate, write, check, review, revise, save; stat
 `research.finished`, `research.failed`, `research.cancelled`. The exact shapes are in
 `engine/src/research/types.ts`. Example streams made by the code are in `engine/test/fixtures/research/`.
 
+`answer.delta` carries the draft while the writer writes it: a piece at least every 400 characters or 200 ms,
+up to the NEXT STEPS line, which nobody sees. Joined, the pieces are the draft as it was streamed; `answer.written`
+then gives the finished draft. After a restart in the middle of the writing the text is not streamed a second
+time. A demo answer's scripted writer gives its fixed text a few words at a time (`pacedDemoBrain` in
+`engine/src/research/demo.ts`, `DEMO_PACE_MS` apart in a running engine; tests pass `demoPaceMs`), so the
+dashboard's live view works in Demo mode too. Tests: `engine/test/research-live.test.ts`.
+
 ## Where an answer is stored
 
 `board/runs/.research/<id>/` (the runs folder can be moved with `DRUG_BOARD_RUNS_DIR`): `record.json`,
