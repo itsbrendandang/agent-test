@@ -21,3 +21,14 @@ export function showing(kind: "swarm" | "board", id: string | undefined) {
 }
 /** The address that opens this run. */
 export const linkTo = (kind: "swarm" | "board", id: string) => `${window.location.origin}${window.location.pathname}#${viewOfKind(kind)}/${encodeURIComponent(id)}`
+
+/** A saved answer the Search screen should show when it opens (set by Saved research). Read once, then cleared. */
+const ANSWER = "open.answer"
+export const setOpenAnswer = (id: string, question: string) => sessionStorage.setItem(ANSWER, JSON.stringify({ id, question }))
+export function takeOpenAnswer(): { id: string; question: string } | undefined {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(ANSWER) ?? "null") as { id?: unknown; question?: unknown } | null
+    if (saved) window.setTimeout(() => sessionStorage.removeItem(ANSWER), 0)
+    return saved && typeof saved.id === "string" && /^[\w.-]{1,120}$/.test(saved.id) && typeof saved.question === "string" ? { id: saved.id, question: saved.question } : undefined
+  } catch { return undefined }
+}

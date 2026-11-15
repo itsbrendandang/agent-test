@@ -4,6 +4,7 @@ import { setCharactersShown, useCharacters } from "@/crew/store"
 import { ModeSwitch } from "@/components/PaidSwitch"
 import { problemOf, readEngine, type Problem } from "@/lib/engine"
 import { PAID_CHANGED } from "@/lib/paidSwitch"
+import { openHelp } from "@/lib/shell"
 import { ChatRefused, getCatalog, type Catalog } from "@/home/api"
 import { CatalogPanel } from "@/home/CatalogPanel"
 import { EngineOffline, PageHead } from "@/components/Shared"
@@ -56,6 +57,11 @@ export function SettingsView() {
       <PageHead title="Settings" about={isDesktop ? "What the engine on this machine can use, and the API keys kept by the desktop app." : "What the engine on this machine can use. Keys are set in its .env file, never in this page."} />
       <EngineSection />
       <SetupDetails />
+      <section className="keys" aria-labelledby="help-title">
+        <h2 id="help-title">Help</h2>
+        <p className="muted small">Four plain steps: you ask, a team discusses, every statement is checked, you get an answer.</p>
+        <button type="button" className="btn" onClick={openHelp}>How this works</button>
+      </section>
       <section className="keys" aria-labelledby="look-title">
         <h2 id="look-title">Appearance</h2>
         <label className="newrun-check">

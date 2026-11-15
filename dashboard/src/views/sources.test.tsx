@@ -11,6 +11,7 @@ import { routes } from "@/test/engine"
 import { PlanCard } from "@/home/PlanCard"
 import { CATALOG_ON, PLAN, SCRIPTED_PLAN } from "@/test/home"
 import { BoardView } from "./BoardView"
+import { HomeView } from "./HomeView"
 
 const streams: { url: string; onmessage?: (m: { data: string }) => void; close: () => void }[] = []
 beforeEach(() => {
@@ -209,5 +210,48 @@ describe("the plan card", () => {
   it("says nothing when the engine does not report what it would search with", () => {
     card(PLAN, undefined, true)
     expect(screen.queryByTestId("plan-search")).toBeNull()
+  })
+})
+
+describe("the sources under a Search answer", () => {
+  const sse = (event: object) => `data: ${JSON.stringify({ key: "k", at: 0, ...event })}\n\n`
+  it("each row can be told apart and trusted: the run's own title, when it ran, and real or practice, all from its record", async () => {
+    const started = new Date(); started.setHours(16, 51, 0, 0)
+    routes({
+      "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/status": { status: 200, body: {} }, "POST /api/research": { status: 404, body: { error: "not found" } },
+      "POST /api/chat": { status: 200, body: { reply: "Two reviews mention it.", mode: "keyword", runs: [
+        { kind: "board", id: "b-real", title: "Drug board · chat-should-we-advance-a-kras-g12c-hit-that-h-04bb17d2", why: "contains: herg" },
+        { kind: "board", id: "b-demo", title: "Drug board · chat-should-we-advance-a-kras-g12c-hit-that-h-1060e203", why: "contains: herg" },
+        { kind: "swarm", id: "s-demo", title: "Task demo · swarm · mock", why: "contains: demo" },
+      ] } },
+      "GET /api/runs": { status: 200, body: [{ id: "b-real", brief: "x.md", rounds: 1, startedAt: started.getTime(), status: "done", claims: 0 }, { id: "b-demo", brief: "x.md", rounds: 1, startedAt: started.getTime() - 86_400_000, status: "done", claims: 0 }] },
+      "GET /api/glhf/runs": { status: 200, body: [{ id: "s-demo", model: "mock", solver: "glhf", task: "demo", phase: "done", startedAt: started.getTime() }] },
+    })
+    const plain = globalThis.fetch
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      const m = /\/api\/runs\/(b-[a-z]+)\/events$/.exec(String(url))
+      return m ? Promise.resolve(new Response(sse({ type: "run.started", runId: m[1], brief: "x", title: "Should we advance a KRAS G12C hit that has a hERG liability?", mock: m[1] === "b-demo" }), { status: 200 })) : plain(url, init)
+    }))
+    render(<HomeView onOpen={() => {}} />)
+    await userEvent.setup().type(screen.getByRole("textbox", { name: "Ask a research question" }), "herg{Enter}")
+    const rows = within(await screen.findByRole("list", { name: "Saved research this answer used" }))
+    await waitFor(() => expect(rows.getAllByRole("button")[0]).toHaveTextContent("Should we advance a KRAS G12C hit that has a hERG liability?")) // the real question, capitals kept, not the cut file name
+    const [real, demo, team] = rows.getAllByRole("button")
+    await waitFor(() => expect(real).toHaveTextContent("Review · today at 4:51 pm · real model"))
+    expect(demo).toHaveTextContent("Review · yesterday at 4:51 pm · practice run")
+    expect(real).toHaveAttribute("title", expect.stringContaining("Should we advance a KRAS G12C hit that has a hERG liability?")) // the whole title, if the row has to shorten it
+    expect(team).toHaveTextContent("Team of nine on the demo task")
+    expect(team).toHaveTextContent("One agent or a team · today at 4:51 pm · practice run")
+    for (const row of [real, demo, team]) expect(row).not.toHaveTextContent(/that h$|that h ·|04bb17d2/)
+  })
+})
+
+describe("the confirm step names every search the review would use", () => {
+  it("says the free literature search is used when the engine says the team has it, and not otherwise", async () => {
+    routes({})
+    const { rerender } = render(<PlanCard plan={PLAN} state={{ state: "open" }} paidCalls literature onState={() => {}} onOpenRun={() => {}} />)
+    expect(screen.getAllByText("Research papers (Europe PMC)")[0].nextElementSibling).toHaveTextContent("used when the Scout searches (free)")
+    rerender(<PlanCard plan={PLAN} state={{ state: "open" }} paidCalls onState={() => {}} onOpenRun={() => {}} />)
+    expect(screen.queryByText("Research papers (Europe PMC)")).toBeNull()
   })
 })

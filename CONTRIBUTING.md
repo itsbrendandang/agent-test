@@ -134,7 +134,7 @@ runs each engine test file on its own with a time limit, so it always ends.
 | BixBench v1 adapter | `cd glhf/bixbench_v1 && uv run pytest -q tests` | with `--all` |
 | Datasets catalogue | `cd datasets && uv run --no-project --with pytest pytest -q` | with `--all` |
 
-The current counts and the known failures are in [README.md](README.md#tests). `main` is not
+The current counts and the known failures are in [README.md](docs/developers.md#tests). `main` is not
 fully green today; do not add to the failures. If `npm run check` shows a failure you did not
 cause, say so in your commit message or to the team, and do not "fix" a test by deleting it.
 

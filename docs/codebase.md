@@ -92,7 +92,7 @@ npm run check             # about 2 minutes
 
 One line per part: merge-conflict markers, type checks, engine tests, dashboard tests. It never
 spends money. `-- --fast` takes a few seconds; `-- --all` adds the Python suites. The numbers for
-`main` today, and what is failing and why, are in [README.md](../README.md#tests).
+`main` today, and what is failing and why, are in [README.md](developers.md#tests).
 
 Known problems on `main` today:
 

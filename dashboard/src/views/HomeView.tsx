@@ -16,14 +16,21 @@ import { boardScriptedWhy, chatRequest, effortFacts, effortInEffect, EXAMPLES, l
 import { EffortPicker } from "@/home/EffortPicker"
 import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
-import { runTitle } from "@/lib/format"
-import { setOpen, viewOfKind } from "@/lib/open"
+import { useStickToBottomContext } from "use-stick-to-bottom"
+import { plainDuration, plainWhen, runTitle } from "@/lib/format"
+import { ResearchRefused, startResearch } from "@/research/api"
+import { ResearchAnswer } from "@/research/Answer"
+import { boardTitles, useBoardScripted } from "@/lib/scripted"
+import { PRACTICE_SHORT } from "@/lib/words"
+import { setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
+import { openHelp } from "@/lib/shell"
 
 const AUTO = "auto"
 type Problem = { message: string; control: "box" | "model" | "effort" }
 
 export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => void }) {
-  const [turns, setTurns] = useState<Turn[]>(loadTurns)
+  // A saved answer opened from Saved research is shown as its question and the answer; otherwise this session's conversation.
+  const [turns, setTurns] = useState<Turn[]>(() => { const saved = takeOpenAnswer(); return saved ? [{ id: 1, role: "user", content: saved.question }, { id: 2, role: "assistant", content: "", research: saved }] : loadTurns() })
   const [text, setText] = useState("")
   const [sending, setSending] = useState<string>() // the question that is waiting for its reply
   const [problem, setProblem] = useState<Problem>()
@@ -37,6 +44,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [copied, setCopied] = useState<number>()
   const box = useRef<HTMLTextAreaElement>(null)
   const asking = useRef<AbortController | undefined>(undefined)
+  const thread = useRef<string | undefined>(undefined) // the engine's id for this conversation of direct answers
+  const [canAnswer, setCanAnswer] = useState<"unknown" | "here" | "missing">("unknown") // whether this engine can answer directly
 
   useEffect(() => {
     let stale = false
@@ -62,21 +71,39 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   })()
   const pickEffort = (id: EffortId) => { setChosenEffort(id); saveEffort(id); if (problem?.control === "effort") setProblem(undefined) }
 
-  const send = async (question: string) => {
+  /**
+   * Quick and Standard get a direct, sourced answer on this page (POST /api/research). Deep, and "Have a team
+   * review this", make a plan for a team review, which starts nothing until it is confirmed (POST /api/chat).
+   * An engine without the answer route gets the plan path for every depth.
+   */
+  const send = async (question: string, how: "auto" | "review" = "auto") => {
     if (sending !== undefined) return
     const no = refuseText(question)
     if (no) { setProblem({ message: no, control: "box" }); box.current?.focus(); return }
     const asked = question.trim()
-    const request = chatRequest(turns, asked, choice)
     setProblem(undefined); setSending(asked); setText("")
     const stop = (asking.current = new AbortController())
+    const direct = how === "auto" && effort !== "deep" && canAnswer !== "missing"
     try {
+      if (direct) {
+        try {
+          const started = await startResearch(asked, effort === "quick" ? "quick" : "standard", thread.current)
+          if (stop.signal.aborted) return
+          thread.current = started.thread; setCanAnswer("here")
+          setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: "", research: { id: started.id, question: asked } }] })
+          return
+        } catch (error) {
+          if (!(error instanceof ResearchRefused) || error.status !== 404 || error.field) throw error
+          setCanAnswer("missing") // an older engine: it can plan a review but not answer directly
+        }
+      }
+      const request = chatRequest(turns, asked, how === "review" ? { ...choice, effort: choice.effort } : choice)
       const reply = await sendChat(request)
       if (stop.signal.aborted) return
       setTurns((old) => { const id = (old.at(-1)?.id ?? 0) + 1; return [...old, { id, role: "user", content: asked }, { id: id + 1, role: "assistant", content: reply.reply, reply, ...(request.effort && { effort: request.effort }), ...(reply.plan && { plan: { state: "open" } as PlanState }) }] })
     } catch (error) {
       if (stop.signal.aborted) return
-      const refused = error instanceof ChatRefused ? error : new ChatRefused(String(error), 0)
+      const refused = error instanceof ChatRefused ? error : error instanceof ResearchRefused ? new ChatRefused(error.message, error.status, error.field) : new ChatRefused(String(error), 0)
       // Nothing was added to the conversation: the question goes back into the box, with the reason next to the control it is about.
       setText(asked)
       setProblem({ message: refused.message, control: refused.field === "provider" || refused.field === "model" ? "model" : refused.field === "effort" ? "effort" : "box" })
@@ -86,7 +113,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   }
 
   // Enter sends, Shift+Enter is a new line, and Enter that confirms an input-method choice (Japanese, Chinese, Korean) does not send: PromptInputTextarea does this.
-  const clear = () => { asking.current?.abort(); setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
+  const clear = () => { asking.current?.abort(); thread.current = undefined; setTurns([]); setSending(undefined); setProblem(undefined); setText(""); box.current?.focus() }
   const openRun = (kind: "swarm" | "board", id: string) => { setOpen(kind, id); onOpen(viewOfKind(kind)) }
   /** The plan of one reply, asked for again at another effort. The reply is replaced only when a new plan arrives. */
   const replan = async (turnId: number, next: EffortId): Promise<string | undefined> => {
@@ -104,6 +131,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const empty = turns.length === 0 && sending === undefined
   const level = efforts.find((e) => e.id === effort)
   const demo = catalog?.paidCalls === false
+  const cap = effort === "quick" || effort === "standard" ? catalog?.research?.[effort] : undefined
   const lastAnswer = turns.findLast((t) => t.role === "assistant")?.id
   /** Ask the question of this answer again. The earlier answer stays; the new one is added below it. */
   const retry = (turnId: number) => { const at = turns.findIndex((t) => t.id === turnId); const asked = turns.slice(0, at).findLast((t) => t.role === "user"); if (asked) void send(asked.content) }
@@ -136,7 +164,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
       {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
       <div className="search-under">
-        <span className="muted small" id="home-box-help">Enter sends. Shift+Enter adds a line.</span>
+        <span className="muted small" id="home-box-help">
+          {effort === "deep" ? <>Deep plans a team review and asks you before anything starts{level ? `: at most $${level.limits.maxUsd.toFixed(2)} and ${plainDuration(level.limits.maxMinutes * 60_000)}` : ""}.</>
+            : effort ? <>{effort === "quick" ? "Quick" : "Standard"} answers on this page, with sources{cap ? `: at most $${cap.maxUsd.toFixed(2)} and ${plainDuration(cap.maxSeconds * 1000)}` : ""}.{demo && " In Demo it is example text."}</>
+            : "Enter sends. Shift+Enter adds a line."}
+        </span>
         <details className="search-options" open={problem?.control === "effort" || problem?.control === "model" || undefined}>
           <summary>Research options</summary>
           <div className="search-optionsb">
@@ -178,8 +210,18 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
           {!empty && (
             <Conversation className="search-log" aria-live="polite" aria-label="Messages">
+              <StartAtQuestion answers={turns.filter((t) => t.role === "assistant").length} />
               <ConversationContent className="search-thread">
-                {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : (
+                {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
+                  <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
+                    <MessageContent>
+                      <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer}
+                        onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
+                        onReview={sending === undefined ? () => void send(t.research.question, "review") : undefined}
+                        onDone={(done) => setTurns((old) => old.map((o) => (o.id === t.id && o.content !== done.markdown ? { ...o, content: done.markdown } : o)))} />
+                    </MessageContent>
+                  </Message>
+                ) : (
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
                       <p className="answer-kind">
@@ -198,7 +240,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                       )}
                       {t.reply.plan && (
                         <PlanCard key={t.reply.plan.id} plan={t.reply.plan} state={t.plan ?? { state: "open" }} paidCalls={catalog?.paidCalls}
-                          searchProvider={catalog?.search.provider} efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
+                          searchProvider={catalog?.search.provider} literature={catalog?.search.literature?.available} efforts={efforts} effort={t.reply.plan.effort ?? t.effort} onEffort={(id) => replan(t.id, id)}
                           onState={(s) => setPlan(t.id, s)} onOpenRun={(id) => openRun("board", id)} />
                       )}
                       <div className="answer-actions">
@@ -211,7 +253,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {sending !== undefined && (
                   <>
                     <UserMessage>{sending}</UserMessage>
-                    <Loading>{catalog?.paidCalls ? "Writing an answer. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the answer…"}</Loading>
+                    <Loading>{effort !== "deep" && canAnswer !== "missing" ? "Starting…" : catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the answer…"}</Loading>
                   </>
                 )}
               </ConversationContent>
@@ -227,11 +269,19 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
               </Suggestions>
               {demo && <p className="search-demo" role="note"><b>Demo mode.</b> AI answers and web search are unavailable. You can search saved research.</p>}
-              {catalog === null && <p className="search-demo" role="alert">{whyNone ?? "The app's engine isn't running. Start it with: npm start. Your question stays in the box."} <button type="button" className="link-btn" onClick={() => { setCatalog(undefined); setAgain((n) => n + 1) }}>Try again</button></p>}
+              {catalog === null && (
+                <p className="search-demo" role="alert">
+                  {whyNone
+                    ? <>Something went wrong inside the app's engine, so the depth options are missing. You can still ask a question. <span className="muted small" title={whyNone}>(Details: {whyNone})</span></>
+                    : "The app's engine isn't running. Start it with: npm start."}{" "}
+                  <button type="button" className="link-btn" onClick={() => { setCatalog(undefined); setAgain((n) => n + 1) }}>Try again</button>
+                </p>
+              )}
             </div>
           )}
           <p className="search-more">
             <button type="button" className="link-btn" aria-expanded={panel} aria-controls="search-panel" onClick={() => setPanel(!panel)}>{panel ? "Hide details" : "Recent results and setup"}</button>
+            {empty && <> · <button type="button" className="link-btn" onClick={openHelp}>How this works</button></>}
           </p>
         </section>
         {panel && (
@@ -245,25 +295,74 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   )
 }
 
-/** The saved research an answer used, as numbered rows. The first five show; the rest are one press away. */
+/**
+ * When an answer arrives, the reader starts at its beginning: the question it answers goes to the top of the
+ * visible area, with the label and the first lines of the answer under it. (While waiting, the list follows the
+ * newest line as usual, and the "latest" button stays for long threads.)
+ */
+function StartAtQuestion({ answers }: { answers: number }) {
+  const { stopScroll } = useStickToBottomContext()
+  const seen = useRef(answers)
+  useEffect(() => {
+    if (answers <= seen.current) { seen.current = answers; return }
+    seen.current = answers
+    stopScroll() // or the list would pull itself back to the bottom as the answer lays out
+    const go = () => { const asked = document.querySelectorAll(".search-thread .thread-user"); asked[asked.length - 1]?.scrollIntoView?.({ block: "start" }) }
+    go(); const later = window.requestAnimationFrame(go); const settle = window.setTimeout(go, 120)
+    return () => { window.cancelAnimationFrame(later); window.clearTimeout(settle) }
+  }, [answers, stopScroll])
+  return null
+}
+
+interface Listed { startedAt?: number; scripted?: boolean; solver?: string; task?: string }
+/**
+ * The saved research an answer used, as numbered rows a person can tell apart: the question it was about (the
+ * run's own title when it has one), when it ran, and whether it was real or a practice run, each from the run's
+ * own record. The first five show; the rest are one press away.
+ */
 function SourceRows({ runs, onOpen }: { runs: NonNullable<ChatReply["runs"]>; onOpen: (kind: "swarm" | "board", id: string) => void }) {
   const [all, setAll] = useState(false)
+  const [listed, setListed] = useState<Record<string, Listed>>({})
+  useEffect(() => {
+    let stale = false
+    const read = (path: string) => fetch(ENGINE + path).then((r) => (r.ok ? r.json() : []), () => [])
+    void Promise.all([read("/api/runs"), read("/api/glhf/runs")]).then(([board, swarm]: unknown[]) => {
+      if (stale) return
+      const out: Record<string, Listed> = {}
+      for (const r of Array.isArray(board) ? (board as { id?: unknown; startedAt?: unknown }[]) : []) if (typeof r?.id === "string") out[`board:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined }
+      for (const r of Array.isArray(swarm) ? (swarm as { id?: unknown; startedAt?: unknown; model?: unknown; solver?: unknown; task?: unknown }[]) : [])
+        if (typeof r?.id === "string") out[`swarm:${r.id}`] = { startedAt: typeof r.startedAt === "number" ? r.startedAt : undefined, scripted: typeof r.model === "string" ? r.model === "mock" : undefined }
+      setListed(out)
+    })
+    return () => { stale = true }
+  }, [])
   const shown = all ? runs : runs.slice(0, 5)
+  const boardIds = shown.filter((r) => r.kind === "board").map((r) => r.id)
+  const flags = useBoardScripted(boardIds)
+  const titles = boardTitles(boardIds)
   return (
     <>
       <ol className="source-rows" aria-label="Saved research this answer used">
-        {shown.map((r, i) => (
-          <li key={`${r.kind}:${r.id}`}>
-            <button type="button" onClick={() => onOpen(r.kind, r.id)} title={`Run id: ${r.id}`}>
-              <span className="source-n" aria-hidden="true">{i + 1}</span>
-              <span className="source-what">
-                <b>{runTitle(r.title)}</b>
-                <span className="muted small">{[r.kind === "swarm" ? "One agent or a team" : "Review", r.why].filter(Boolean).join(" · ")}</span>
-              </span>
-              <span className="source-open small" aria-hidden="true">Open</span>
-            </button>
-          </li>
-        ))}
+        {shown.map((r, i) => {
+          const row = listed[`${r.kind}:${r.id}`]
+          const scripted = r.kind === "board" ? flags[r.id] : row?.scripted
+          const title = (r.kind === "board" && titles[r.id]) || runTitle(r.title)
+          return (
+            <li key={`${r.kind}:${r.id}`}>
+              <button type="button" onClick={() => onOpen(r.kind, r.id)} title={`${title}\nRun id: ${r.id}`}>
+                <span className="source-n" aria-hidden="true">{i + 1}</span>
+                <span className="source-what">
+                  <b>{title}</b>
+                  <span className="muted small">
+                    {[r.kind === "swarm" ? "One agent or a team" : "Review", row?.startedAt !== undefined && plainWhen(row.startedAt), scripted === true ? PRACTICE_SHORT : scripted === false ? "real model" : undefined].filter(Boolean).join(" · ")}
+                  </span>
+                  {r.why && <span className="muted small source-why">{r.why}</span>}
+                </span>
+                <span className="source-open small" aria-hidden="true">Open</span>
+              </button>
+            </li>
+          )
+        })}
       </ol>
       {runs.length > 5 && <button type="button" className="link-btn source-all" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${runs.length}`}</button>}
     </>

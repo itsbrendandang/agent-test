@@ -24,6 +24,8 @@ export interface EvidenceItem { url: string; title: string; studyType?: string; 
 export type BoardEvent = { key: string; at: number } & (
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
   | { type: "round.started"; round: number; message: string; final: boolean }
+  /** Who took part in this run, in speaking order. Runs recorded before this event existed have none. */
+  | { type: "run.roster"; members: { name: string; title: string; role: "lead" | "member"; source?: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }[] }
   | { type: "member.replied"; round: number; member: string; text: string; /** What this reply cost. */ usd?: number; /** The sentence after "In short:", when the member wrote one. */ summary?: string }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; provider?: SearchProvider; items: EvidenceItem[] }
   | never

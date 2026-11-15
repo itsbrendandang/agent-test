@@ -35,7 +35,7 @@ export function AgentCatalog({ catalog, filter }: { catalog: Catalog; filter: st
           <ul className="catalog-skills">
             {skills.map((s) => (
               <li key={s.name} className="card-surface">
-                <b>{s.name}</b>
+                <b>{s.title || s.name}</b>
                 {!s.installed && <span className="pill" data-kind="waiting">known by name only: not installed</span>}
                 <span className="small">{s.description}</span>
               </li>

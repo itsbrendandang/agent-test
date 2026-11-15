@@ -1,7 +1,7 @@
 # Running GLHF
 
 All commands run from the repository root. Words such as swarm, single agent, phase and demo
-case are defined in the [README](../README.md#words-used-in-these-documents).
+case are defined in the [README](developers.md#words-used-in-these-documents).
 
 ## npm scripts
 

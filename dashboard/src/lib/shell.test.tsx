@@ -1,29 +1,14 @@
-import { render, screen, within } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
-import { StatusLine } from "@/components/StatusLine"
-import type { Shell } from "./shell"
+import { render, screen } from "@testing-library/react"
+import { describe, expect, it } from "vitest"
+import { ModeIndicator } from "@/components/PaidSwitch"
 import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
-describe("StatusLine", () => {
-  it.each([
-    [{ engine: "online", paid: "off" }, "Engine online", "Demo mode"],
-    [{ engine: "online", paid: "on" }, "Engine online", "Real mode"],
-    [{ engine: "offline", paid: "unknown" }, "Engine not running", "Mode not known"],
-    [{ engine: "unknown", paid: "unknown" }, "Engine: checking", "Mode not known"],
-  ] as const)("has one compact indicator that says what the engine can do: %j", (shell, engine, mode) => {
-    render(<StatusLine shell={shell as Shell} onOpenSettings={() => {}} />)
-    const line = screen.getByRole("group", { name: "Status" })
-    expect(line).toHaveTextContent("AI Scientist Bot")
-    expect(line).toHaveTextContent(engine)
-    expect(within(line).getByRole("button", { name: mode })).toBeInTheDocument()
-    expect(line).not.toHaveTextContent(/Paid calls|practice runs only/) // one short label, not an explanation
-  })
-  it("links to Settings", async () => {
-    const onOpenSettings = vi.fn()
-    render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={onOpenSettings} />)
-    await userEvent.setup().click(screen.getByRole("button", { name: "Settings" }))
-    expect(onOpenSettings).toHaveBeenCalled()
+describe("the one status indicator", () => {
+  it.each([["off", "Demo mode", "Demo"], ["on", "Real mode", "Real"], ["unknown", "Mode not known", "?"]] as const)("says %s as '%s', small", (paid, name, chip) => {
+    render(<ModeIndicator paid={paid} short />)
+    const button = screen.getByRole("button", { name })
+    expect(button).toHaveTextContent(chip)
+    expect(button).toHaveAttribute("data-state", paid)
   })
 })
 

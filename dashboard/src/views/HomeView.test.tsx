@@ -19,7 +19,9 @@ const emit = (event: object) => act(() => { for (const s of streams) s.onmessage
 
 type Table = Parameters<typeof routes>[0]
 function home(catalog: Catalog | "down", table: Table = {}) {
-  const sent = routes({ ...(catalog !== "down" && { "GET /api/chat/catalog": { status: 200, body: catalog } }), ...table })
+  // These tests cover the plan path (POST /api/chat): what Deep uses, and what every depth uses on an engine that
+  // cannot answer directly. So this stand-in engine has no /api/research. The direct answer has its own tests.
+  const sent = routes({ ...(catalog !== "down" && { "GET /api/chat/catalog": { status: 200, body: catalog } }), ...((catalog !== "down" || "POST /api/chat" in table) && { "POST /api/research": { status: 404, body: { error: "not found" } } }), ...table })
   const onOpen = vi.fn()
   const view = render(<><TokenPrompt /><HomeView onOpen={onOpen} /></>)
   fireEvent.click(screen.getByRole("button", { name: "Recent results and setup" })) // the optional panel: closed until asked for
@@ -81,14 +83,14 @@ describe("sending", () => {
     let answer!: (r: { status: number; body: unknown }) => void
     const t = home(CATALOG_ON, { "POST /api/chat": () => new Promise((done) => { answer = done }) })
     await t.ask("Slow question")
-    expect(await screen.findByText(/Writing an answer\. A real model usually takes about ten seconds/)).toBeInTheDocument()
+    expect(await screen.findByText(/Starting…|Writing a plan\. A real model usually takes about ten seconds/)).toBeInTheDocument()
     expect(screen.getByText("Slow question")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled()
     await t.user.type(t.box(), "Another{Enter}")
     expect(t.chats()).toHaveLength(1)
     answer(reply({ reply: "Done" }))
     expect(await screen.findByText("Done")).toBeInTheDocument()
-    expect(screen.queryByText(/Writing an answer\. A real model usually takes about ten seconds/)).toBeNull()
+    expect(screen.queryByText(/Starting…|Writing a plan\. A real model usually takes about ten seconds/)).toBeNull()
   })
   it("when the engine cannot be reached: says so, keeps the question in the box, adds nothing to the conversation", async () => {
     const t = home(CATALOG_ON)

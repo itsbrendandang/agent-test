@@ -7,7 +7,7 @@ import { engineFetch } from "@/lib/token"
 export type ProviderId = "anthropic" | "openai"
 export interface Provider { id: ProviderId; keyPresent: boolean; models: string[] }
 export interface CatalogAgent { name: string; title: string; source: "board" | "specialist"; role: string; tools: string[]; trigger?: string; deliverable?: string }
-export interface CatalogSkill { name: string; description: string; installed: boolean }
+export interface CatalogSkill { name: string; /** What a person reads; the name is an id. */ title?: string; description: string; installed: boolean }
 export type EffortId = "quick" | "standard" | "deep"
 /** How much work a question gets: the limits, how many agents, which model tier and how much search. Set by the engine. */
 export interface Effort {
@@ -19,6 +19,8 @@ export interface Catalog {
   paidCalls: boolean
   providers: Provider[]
   /** usedUsd / ceilingUsd: what the engine has recorded as spent on Exa, and the lifetime ceiling it enforces. */
+  /** The most one direct answer may cost and take, per depth, when the engine reports it. */
+  research?: Partial<Record<"quick" | "standard", { maxUsd: number; maxSeconds: number }>>
   search: { exa: { keyPresent: boolean; usedUsd?: number; ceilingUsd?: number }; /** What a run started now would search with. */ provider?: "exa" | "fixture"; literature?: { provider: string; free: boolean; keyNeeded: boolean; available: boolean } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]

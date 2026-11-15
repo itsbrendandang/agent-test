@@ -28,9 +28,11 @@ interface Props {
   onOpenRun: (id: string) => void
   /** What a run started now would search with, from the catalog. */
   searchProvider?: "exa" | "fixture"
+  /** The engine says a team member has the free literature search (Europe PMC). */
+  literature?: boolean
 }
 
-export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffort, onState, onOpenRun, searchProvider }: Props) {
+export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffort, onState, onOpenRun, searchProvider, literature }: Props) {
   // The Scout is the member that searches. The credit says what it would search with if started now.
   const searches = plan.search.exa || plan.agents.some((a) => a.name === "scout")
   const uid = useId()
@@ -137,6 +139,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
           <dl className="home-facts">
             {level && <><dt>Effort</dt><dd>{level.label}</dd></>}
             <dt>Web search (Exa)</dt><dd>{plan.search.exa ? "used (a paid service)" : "not used"}</dd>
+            {literature && <><dt>Research papers (Europe PMC)</dt><dd>{plan.paid ? "used when the Scout searches (free)" : "not searched in a practice run"}</dd></>}
             <dt>Models</dt><dd>lead <code>{plan.models.lead}</code> · members <code>{plan.models.members}</code> · checker <code>{plan.models.checker}</code></dd>
             <dt>Limits</dt><dd>at most ${plan.limits.maxUsd.toFixed(2)}, {plainDuration(plan.limits.maxMinutes * 60_000)} and {plan.limits.maxRounds} round{plan.limits.maxRounds === 1 ? "" : "s"} of discussion</dd>
             <dt>Estimated cost</dt><dd>{estimateText(plan)} <span className="muted small">({plan.estimate.basis})</span></dd>
@@ -174,6 +177,7 @@ export function PlanCard({ plan, state, paidCalls, efforts = [], effort, onEffor
             <dt>What runs</dt><dd>A board review with {chosen.length} agent{chosen.length === 1 ? "" : "s"}: {chosen.map((a) => a.title).join(", ") || "none"}</dd>
             <dt>Models</dt><dd>lead <code>{plan.models.lead}</code> · members <code>{plan.models.members}</code> · checker <code>{plan.models.checker}</code></dd>
             <dt>Exa search</dt><dd>{plan.search.exa ? "used (a paid service)" : "not used"}</dd>
+            {literature && <><dt>Research papers (Europe PMC)</dt><dd>{plan.paid ? "used when the Scout searches (free)" : "not searched in a practice run"}</dd></>}
           </dl>
           <div className="newrun-row">
             {limit("maxUsd", "Most it may cost (US dollars)", 0.01)}

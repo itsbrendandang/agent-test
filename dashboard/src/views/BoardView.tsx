@@ -112,7 +112,10 @@ export function BoardView() {
   const live = !finished && events.length > 0
   const done = events.find((e): e is Of<"run.finished"> => e.type === "run.finished")
   const failed = events.find((e): e is Of<"run.failed"> => e.type === "run.failed")
-  const title = (name: string) => roster.find((m) => m.name === name)?.title ?? name
+  // The run's own roster names everyone who spoke in it, also method specialists that the engine's standing roster does not list.
+  const ran = events.find((e): e is Of<"run.roster"> => e.type === "run.roster")?.members ?? []
+  const title = (name: string) => ran.find((m) => m.name === name)?.title ?? roster.find((m) => m.name === name)?.title ?? plainTitle(name)
+  const specialist = (name: string) => ran.find((m) => m.name === name)?.source === "specialist"
   // Scripted or real is a fact of the run on screen (its run.started event). The engine's state now only says what a new review would use.
   const scripted = startedAs ?? status?.mock ?? false
   const nextWhy = `${boardScriptedWhy(status) ?? "The engine is in practice mode: board reviews are practice runs only"}.`
@@ -175,7 +178,7 @@ export function BoardView() {
   const question = startedEvent?.title || (runRow ? plainTitle(runRow.brief) : runId ? plainTitle(runId) : "")
   const state = failed ? "failed" : runState(runRow?.status ?? (done ? "done" : "running"))
   const wrong = count("contradicted")
-  const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: BOARD_JOB[member] ?? t.job?.toLowerCase() } }
+  const who = (member: string) => { const t = nameAndJob(title(member)); return { name: t.name, job: specialist(member) ? "method specialist: reads method notes, has no tools and runs nothing" : BOARD_JOB[member] ?? t.job?.toLowerCase() } }
 
   return (
     <div className="page board">

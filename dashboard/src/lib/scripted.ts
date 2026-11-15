@@ -10,8 +10,10 @@ export type Scripted = boolean | undefined
 /** A swarm run records its model; "mock" is the scripted model. */
 export const swarmScripted = (run: { model?: unknown } | undefined): Scripted => (typeof run?.model === "string" ? run.model === "mock" : undefined)
 
-/** A board run says it in its first event, run.started {mock}. Reads the event stream only until that event. */
-export async function boardScripted(id: string, signal?: AbortSignal): Promise<Scripted> {
+/** What a board run says about itself in its first event, run.started: whether it was a practice run, and its title. */
+export interface RunStart { scripted: Scripted; title?: string }
+/** Reads the event stream only until that first event. */
+export async function boardStart(id: string, signal?: AbortSignal): Promise<RunStart | undefined> {
   const stop = new AbortController()
   signal?.addEventListener("abort", () => stop.abort())
   try {
@@ -25,8 +27,8 @@ export async function boardScripted(id: string, signal?: AbortSignal): Promise<S
       for (const line of text.split("\n")) {
         if (!line.startsWith("data:")) continue
         try {
-          const event = JSON.parse(line.slice(5)) as { type?: unknown; mock?: unknown }
-          if (event.type === "run.started") return typeof event.mock === "boolean" ? event.mock : undefined
+          const event = JSON.parse(line.slice(5)) as { type?: unknown; mock?: unknown; title?: unknown }
+          if (event.type === "run.started") return { scripted: typeof event.mock === "boolean" ? event.mock : undefined, title: typeof event.title === "string" && event.title.trim() ? event.title.trim().slice(0, 300) : undefined }
         } catch { /* a line still being received */ }
       }
       if (done) break
@@ -34,10 +36,12 @@ export async function boardScripted(id: string, signal?: AbortSignal): Promise<S
     return undefined
   } catch { return undefined } finally { stop.abort() } // the stream stays open for live runs: close it once we know
 }
+export const boardScripted = async (id: string, signal?: AbortSignal): Promise<Scripted> => (await boardStart(id, signal))?.scripted
 
 const known = new Map<string, Scripted>()
+const starts = new Map<string, RunStart>()
 /** For tests. */
-export const forgetScripted = () => known.clear()
+export const forgetScripted = () => { known.clear(); starts.clear() }
 /** The engine allows only so many event streams at once, so the runs are read a few at a time. */
 const AT_ONCE = 4
 
@@ -50,7 +54,9 @@ export function useBoardScripted(ids: string[]): Record<string, Scripted> {
     const todo = (key ? key.split("\n") : []).filter((id) => !known.has(id))
     const worker = async () => {
       for (let id = todo.shift(); id !== undefined && !stop.signal.aborted; id = todo.shift()) {
-        const flag = await boardScripted(id, stop.signal)
+        const start = await boardStart(id, stop.signal)
+        if (start) starts.set(id, start)
+        const flag = start?.scripted
         if (flag !== undefined) { known.set(id, flag); setTick((n) => n + 1) } // a run that could not be read is tried again later
       }
     }
@@ -59,3 +65,6 @@ export function useBoardScripted(ids: string[]): Record<string, Scripted> {
   }, [key])
   return Object.fromEntries(ids.map((id) => [id, known.get(id)]))
 }
+
+/** The title each of these board runs gave itself (the question that was asked), for the ones already read by useBoardScripted. */
+export const boardTitles = (ids: string[]): Record<string, string | undefined> => Object.fromEntries(ids.map((id) => [id, starts.get(id)?.title]))

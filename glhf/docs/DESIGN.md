@@ -1,7 +1,7 @@
 # GLHF swarm: design
 
 This page describes the swarm as the code runs it. Words such as role, phase, claim and ledger
-are defined in the [README](../../README.md#words-used-in-these-documents).
+are defined in the [README](../../docs/developers.md#words-used-in-these-documents).
 
 Status: the swarm has run with a real model on the demo case only. No BixBench3 task has been
 run. See [docs/status.md](../../docs/status.md).

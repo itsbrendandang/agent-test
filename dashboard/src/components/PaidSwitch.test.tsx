@@ -4,11 +4,10 @@ import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ModeLabel } from "@/components/Shared"
-import { StatusLine } from "@/components/StatusLine"
 import { useShell } from "@/lib/shell"
 import { keepToken } from "@/lib/token"
 import { routes, to } from "@/test/engine"
-import { ModeSwitch } from "./PaidSwitch"
+import { ModeIndicator, ModeSwitch } from "./PaidSwitch"
 
 const CAPS = { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 1.5, exaUsedUsd: 0, exaCeilingUsd: 40 }
 const DEMO = { paid: false, source: "env", locked: false, board: "scripted", missingKeys: [], missing: [], caps: CAPS }
@@ -22,9 +21,9 @@ const show = (table: Parameters<typeof routes>[0], paid: "off" | "on" = "off", l
 afterEach(() => vi.useRealTimers())
 
 describe("the control", () => {
-  it("the status line has one compact indicator; pressing it opens the switch, a radio group that shows the state", async () => {
+  it("the chip at the foot of the rail is compact; pressing it opens the switch, a radio group that shows the state", async () => {
     routes({})
-    render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={() => {}} />)
+    render(<ModeIndicator paid="off" short />)
     expect(screen.queryByRole("radiogroup")).toBeNull() // compact until asked for
     await userEvent.setup().click(screen.getByRole("button", { name: "Demo mode" }))
     const group = screen.getByRole("radiogroup", { name: "Mode: Demo or Real" })
@@ -148,7 +147,7 @@ describe("switching to Demo is immediate", () => {
 })
 
 describe("the state is the engine's, read again and again", () => {
-  function Line() { return <StatusLine shell={useShell(1000)} onOpenSettings={() => {}} /> }
+  function Line() { const shell = useShell(1000); return <ModeIndicator paid={shell.paid} locked={shell.locked} short /> }
   it("a change made elsewhere shows up on the next poll, and nothing is stored in the browser", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let paidCalls = false

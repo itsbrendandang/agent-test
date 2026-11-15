@@ -25,3 +25,7 @@ export function useShell(everyMs = 10_000): Shell {
   }, [everyMs])
   return shell
 }
+
+/** Open the "How this works" panel from anywhere (the link under the Search examples, the row in Settings). */
+export const HELP = "app.help"
+export const openHelp = () => window.dispatchEvent(new Event(HELP))

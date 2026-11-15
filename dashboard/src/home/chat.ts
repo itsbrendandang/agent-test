@@ -33,6 +33,9 @@ export type PlanState = { state: "open" } | { state: "discarded" } | { state: "e
 /** One line of the conversation as kept for the session. An assistant turn keeps the whole reply. */
 export type Turn = { id: number; role: "user"; content: string }
   | { id: number; role: "assistant"; content: string; reply: ChatReply; plan?: PlanState; /** The effort the question was asked with. */ effort?: EffortId }
+  /** A direct, sourced answer: the engine keeps it; the page follows its events by id. `content` is its text once finished. */
+  | { id: number; role: "assistant"; content: string; research: { id: string; question: string } }
+export type ReplyTurn = Extract<Turn, { reply: ChatReply }>
 export interface Choice { provider?: ProviderId; model?: string; effort?: EffortId }
 
 /** Common API key shapes. A key must never be typed into the chat: it would be sent to the engine and to a model. */
@@ -145,7 +148,8 @@ export function loadTurns(): Turn[] {
     const saved: unknown = JSON.parse(sessionStorage.getItem(STORE) ?? "[]")
     if (!Array.isArray(saved)) return []
     return saved.filter((t): t is Turn => !!t && typeof t.id === "number" && typeof t.content === "string"
-      && (t.role === "user" || (t.role === "assistant" && !!t.reply && typeof t.reply.reply === "string" && t.reply.mode in MODE_LABEL)))
+      && (t.role === "user" || (t.role === "assistant" && (("reply" in t && !!t.reply && typeof t.reply.reply === "string" && t.reply.mode in MODE_LABEL)
+        || ("research" in t && !!t.research && typeof t.research.id === "string" && /^[\w.-]{1,120}$/.test(t.research.id) && typeof t.research.question === "string")))))
   } catch { return [] }
 }
 export const saveTurns = (turns: Turn[]) => {
@@ -186,5 +190,5 @@ export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; 
 
 // ---- the words the Agents view filter looks in
 export const agentText = (a: CatalogAgent) => [a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" ")].join(" ")
-export const skillText = (s: CatalogSkill) => `${s.name} ${s.description} ${s.installed ? "installed" : "index only not installed"}`
+export const skillText = (s: CatalogSkill) => `${s.title ?? ""} ${s.name} ${s.description} ${s.installed ? "installed" : "index only not installed"}`
 

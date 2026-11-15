@@ -179,8 +179,8 @@ A first-time visitor gets from opening the app to a finished result, and underst
 
 ## Demo and Real
 
-The status line has one control on every view: a radio group "Demo | Real" that always shows the engine's state,
-with plain words beside it (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in
+There is no bar across the top. One small chip at the foot of the rail says "Demo" or "Real" on every view
+(`ModeIndicator`); pressing it opens the switch, a radio group "Demo | Real" with plain words beside it (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in
 `src/lib/paidSwitch.ts`; the same control is in Settings).
 
 - Demo: "Practice runs. Fixed example answers. Free." Real: "Real AI models and web search. Costs money."

@@ -97,7 +97,7 @@ export function CatalogPanel({ catalog, why, boardWhy, onRetry }: Props) {
                 <ul>
                   {catalog.skills.map((s) => (
                     <li key={s.name}>
-                      <b>{s.name}</b>
+                      <b>{s.title || s.name}</b>
                       {!s.installed && <span className="pill" data-kind="waiting">known by name only: not installed</span>}
                       <span className="small">{s.description}</span>
                     </li>

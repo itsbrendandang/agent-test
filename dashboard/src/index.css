@@ -414,7 +414,7 @@ td { border-bottom: 1px solid var(--line); }
 /* design review: verdicts readable without colour; a demo score is not the headline */
 .home-brief .memo h1, .home-brief .memo h2 { font-size: 13px; font-weight: 650; margin-top: 8px; }
 /* ---- shell: one status line on top, a rail of views on the left, the view ---- */
-.app { display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
+.app { display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; }
 .statusline { grid-column: 1 / -1; margin: 0; padding: 6px 20px; border-bottom: 1px solid var(--edge); font-size: 13px; color: var(--text); }
 .statusline [data-state="offline"] { color: #9c1414; font-weight: 600; }
 .statusline [data-state="on"] { color: #7a4300; font-weight: 600; }
@@ -434,7 +434,7 @@ td { border-bottom: 1px solid var(--line); }
 .page[data-wide] > * { max-width: none; }
 
 @media (max-width: 1000px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .rail { flex-direction: row; justify-content: space-between; gap: 2px; padding: 4px 8px; border-right: 0; border-bottom: 1px solid var(--edge); overflow: visible; }
   .rail-mark, .rail .side-crew { display: none; }
   .rail-item { flex: 1 1 0; width: auto; min-width: 0; padding: 6px 0 5px; font-size: 12px; }
@@ -815,3 +815,57 @@ dialog.how { margin: auto; }
 .home-plan-limits dd { margin: 0; font-size: 15px; font-weight: 650; }
 @media (max-width: 640px) { .home-plan-limits { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .md [data-streamdown="strong"], .md span[class*="font-semibold"], .md .font-semibold { font-weight: 650; }
+
+.search-thread .thread-user { scroll-margin-top: 10px; }
+.search-log > div { scroll-padding-top: 10px; }
+.search-thread { padding-top: 10px !important; }
+.source-what b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.source-why { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 520px) { .source-what b { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
+
+/* no bar on top: the Demo / Real chip sits at the foot of the rail (at the end of the row on a narrow window) */
+.rail-mode { margin-top: auto; padding: 6px 0 2px; display: flex; justify-content: center; }
+.rail .rail-mode + .side-crew { margin-top: 6px; }
+.rail-mode .mode-pill { padding: 3px 9px; }
+.search-more .link-btn + .link-btn { margin-left: 0; }
+@media (max-width: 1000px) { .rail-mode { margin-top: 0; padding: 0 0 0 4px; align-self: center; } .rail-mode .mode-pill { padding: 2px 7px; font-size: 12px; } }
+.home-latest { left: 50%; right: auto; transform: translateX(-50%); }
+
+/* ---- a direct, sourced answer ---- */
+.answer-cite { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin: 0 1px; border: 0; border-radius: 9px; background: #e6e0cf; color: var(--text); font: 600 11px/1 var(--ui-font-sans); vertical-align: 2px; cursor: pointer; }
+.answer-cite:hover { background: var(--ink); color: #fffdf6; }
+.answer-cite:focus-visible, .answer-mark:focus-visible { outline: 2px solid #3f7cc4; outline-offset: 2px; }
+.answer-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0 2px; border-radius: 50%; border: 1px solid transparent; font: 700 11px/1 var(--ui-font-sans); vertical-align: 2px; cursor: pointer; }
+.answer-mark[data-outcome="holds"] { background: #cdf2dd; color: #0d5f37; }
+.answer-mark[data-outcome="fails"] { background: #ffd5d5; color: #9c1414; }
+.answer-mark[data-outcome="unknown"] { background: #ffe3bd; color: #7a4300; }
+.answer-mark[aria-expanded="true"] { border-color: var(--ink); }
+.answer [data-mode="scripted"] ~ * .answer-mark, .answer-demo .answer-mark { border-style: dashed; border-color: #8a8478; }
+.answer-check { margin: 0; }
+.answer-check .answer-cite { margin-right: 4px; }
+.answer-summary { font-size: 13px; line-height: 1.5; color: var(--text); }
+.answer-unplaced { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.answer-sourcelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.answer-sourcelist li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; scroll-margin: 12px; transition: background .4s; }
+.answer-sourcelist li + li { border-top: 1px solid var(--edge); }
+.answer-sourcelist li[data-lit] { background: #fff3c4; }
+.answer-sourcelist .source-title { font-size: 15px; font-weight: 600; }
+.answer-sourcelist .source-what b, .answer-sourcelist .source-title { white-space: normal; }
+.answer-foot { line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .answer-sourcelist li { transition: none; } }
+
+.answer-opening { font-size: 15px; color: var(--text-muted); }
+.answer-working { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.answer-working .btn { padding: 4px 12px; }
+.answer-steps { font-size: 13px; }
+.answer-steps summary { cursor: pointer; color: var(--text-muted); }
+.answer-steps ol { list-style: none; margin: 8px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--edge); display: flex; flex-direction: column; gap: 4px; }
+.answer-steps li[data-status="failed"] { color: #9c1414; }
+.answer-steps li[data-status="running"] { font-weight: 600; }
+.answer-next { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--edge); }
+.page .answer-next h2 { font-size: 16px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--text); }
+.answer-next ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.answer-next li { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); }
+.answer-next-text { font-size: 15px; line-height: 1.5; }
+.answer-files a { text-decoration: underline; margin-right: 12px; }
+.answer-sourcelist li[data-unused] { opacity: .75; }

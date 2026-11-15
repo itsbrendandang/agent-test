@@ -4,7 +4,6 @@ import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { HowItWorks } from "@/components/HowItWorks"
-import { StatusLine } from "@/components/StatusLine"
 import { lastRun, linkTo, showing } from "@/lib/open"
 import { forgetScripted } from "@/lib/scripted"
 import { initialView, rememberView, runOfHash, viewOfHash } from "@/nav"
@@ -23,7 +22,7 @@ const emit = (event: object) => act(() => { for (const s of streams) s.onmessage
 describe("first visit", () => {
   const home = (catalog: unknown) => {
     const sent = routes({ "GET /api/chat/catalog": { status: 200, body: catalog }, "GET /api/status": { status: 200, body: {} }, "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/scoreboard": { status: 200, body: [] },
-      "POST /api/chat": { status: 200, body: { reply: "ok", mode: "scripted" } } })
+      "POST /api/chat": { status: 200, body: { reply: "ok", mode: "scripted" } }, "POST /api/research": { status: 202, body: { id: "a-1", thread: "t-1", mode: "demo" } } })
     render(<HomeView onOpen={() => {}} />)
     return sent
   }
@@ -39,7 +38,8 @@ describe("first visit", () => {
     for (const e of examples) expect(e.textContent!.length).toBeLessThanOrEqual(60)
     expect(box.compareDocumentPosition(examples[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.setup().click(examples[0])
-    await waitFor(() => expect(to(sent, "POST", "/api/chat")).toHaveLength(1)) // filled and sent, one click
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1)) // filled and sent, one click: a direct answer
+    expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: examples[0].textContent, effort: "standard" })
   })
   it("has no setup cards, model names, key status or agent lists until they are asked for", async () => {
     home(CATALOG_ON)
@@ -104,11 +104,13 @@ describe("where you were", () => {
 })
 
 describe("help and next steps", () => {
-  it("How this works is reachable from the status line on every view, and is four plain steps", async () => {
-    const onHelp = vi.fn()
-    render(<StatusLine shell={{ engine: "online", paid: "off" }} onOpenSettings={() => {}} onHelp={onHelp} />)
+  it("How this works is reachable from Search and from Settings, and is four plain steps", async () => {
+    const asked = vi.fn(); window.addEventListener("app.help", asked)
+    routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_OFF }, "GET /api/status": { status: 200, body: {} } })
+    render(<HomeView onOpen={() => {}} />)
     await userEvent.setup().click(screen.getByRole("button", { name: "How this works" }))
-    expect(onHelp).toHaveBeenCalled()
+    expect(asked).toHaveBeenCalledTimes(1)
+    window.removeEventListener("app.help", asked)
     render(<HowItWorks open onClose={() => {}} />)
     const steps = within(screen.getByRole("list", { name: "The four steps" })).getAllByRole("listitem")
     expect(steps.map((s) => s.querySelector("b")!.textContent)).toEqual(["You ask", "A team discusses", "Every statement is checked", "You get an answer"])

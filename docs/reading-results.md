@@ -1,7 +1,7 @@
 # Reading results
 
 Words such as swarm, claim, ledger and verdict are defined in the
-[README](../README.md#words-used-in-these-documents).
+[README](developers.md#words-used-in-these-documents).
 
 ## Files of a run
 

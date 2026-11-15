@@ -128,15 +128,16 @@ export function RealDialog({ open, onClose }: { open: boolean; onClose: (done?: 
  * The one compact indicator on every view: "Demo mode" or "Real mode". Pressing it opens the switch itself.
  * The full control also lives in Settings.
  */
-export function ModeIndicator({ paid, locked }: { paid: PaidState; locked?: boolean }) {
+export function ModeIndicator({ paid, locked, short }: { paid: PaidState; locked?: boolean; short?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [open, setOpen] = useState(false)
   useEffect(() => { const d = ref.current; if (!d) return; if (open && !d.open) d.showModal(); if (!open && d.open) d.close() }, [open])
   const label = paid === "on" ? "Real mode" : paid === "off" ? "Demo mode" : "Mode not known"
+  const chip = paid === "on" ? "Real" : paid === "off" ? "Demo" : "?"
   return (
     <>
       <button type="button" className="mode-pill" data-state={paid} aria-haspopup="dialog" onClick={() => setOpen(true)}
-        title={paid === "unknown" ? "The engine did not say. It may not be running." : `${MODE_WORDS[paid]} Press to change.`}>{label}</button>
+        aria-label={label} title={paid === "unknown" ? "Demo or Real is not known: the engine did not say. It may not be running." : `${label}. ${MODE_WORDS[paid]} Press to change.`}>{short ? chip : label}</button>
       <dialog ref={ref} className="how paid-switch" aria-labelledby="mode-title" onClose={() => setOpen(false)} onClick={(e) => { if (e.target === ref.current) setOpen(false) }}>
         <h2 id="mode-title">Demo or Real</h2>
         <p className="muted small">Demo: AI answers and web search are unavailable. You can search saved research and try practice runs for free. Real: answers come from real AI models and web search, which cost money.</p>

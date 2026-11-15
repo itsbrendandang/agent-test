@@ -1,15 +1,15 @@
-// The shell: one status line on top, a rail of views on the left, and the view. Which view shows is in the URL hash.
+// The shell: a rail of views on the left (with one small Demo / Real chip at its foot), and the view. No bar on top. Which view shows is in the URL hash.
 import { lazy, Suspense, useEffect, useState } from "react"
 import { FlaskConical, GitCompareArrows, Home, ListChecks, Settings, Share2, Users } from "lucide-react"
 import { Mark } from "./components/Buddy"
 import { Loading } from "./components/Crew"
 import { SideCrew } from "./components/SideCrew"
 import { Splash } from "./components/Splash"
-import { StatusLine } from "./components/StatusLine"
+import { ModeIndicator } from "./components/PaidSwitch"
 import { TokenPrompt } from "./components/TokenPrompt"
 import { ViewBoundary } from "./components/ViewBoundary"
 import { getCatalog } from "./home/api"
-import { useShell } from "./lib/shell"
+import { HELP, useShell } from "./lib/shell"
 import { HowItWorks } from "./components/HowItWorks"
 import { setOpen } from "./lib/open"
 import { initialView, LABEL, rememberView, runOfHash, viewOfHash, VIEWS, type View } from "./nav"
@@ -32,6 +32,7 @@ export default function App() {
   const [linked, setLinked] = useState(0) // goes up when the address names another run, so the view opens it
   const [help, setHelp] = useState(false)
   useEffect(() => rememberView(view), [view])
+  useEffect(() => { const show = () => setHelp(true); window.addEventListener(HELP, show); return () => window.removeEventListener(HELP, show) }, [])
   // The hash is the address of a view, so the browser's Back and Forward buttons move between views.
   useEffect(() => {
     const sync = () => { const v = viewOfHash(window.location.hash); if (hand(window.location.hash)) setLinked((n) => n + 1); if (v) setView(v) }
@@ -48,7 +49,6 @@ export default function App() {
     <div className="app">
       <Splash ready={shell.engine !== "unknown" && catalogAnswered} offline={shell.engine === "offline"} />
       <TokenPrompt />
-      <StatusLine shell={shell} onOpenSettings={() => go("Settings")} onHelp={() => setHelp(true)} />
       <HowItWorks open={help} onClose={() => setHelp(false)} />
       <nav className="rail" aria-label="Views">
         <span className="rail-mark" aria-hidden="true"><Mark size={30} /></span>
@@ -61,6 +61,7 @@ export default function App() {
             </button>
           )
         })}
+        <span className="rail-mode"><ModeIndicator paid={shell.paid} locked={shell.locked} short /></span>
         <SideCrew />
       </nav>
       <main className="page-host">
