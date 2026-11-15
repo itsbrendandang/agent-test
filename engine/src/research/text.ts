@@ -261,6 +261,16 @@ const HEALTH = /\b(patients?|treat(?:ment|ed|ing)?|therap(?:y|ies|eutic)|drugs?|
 /** A word rule for "is this about health": used with the planner's own flag, so the line is added even when the planner failed. */
 export const looksMedical = (question: string): boolean => HEALTH.test(question)
 
+const PROTOCOL_ASK = /\b(protocols?|sops?|standard operating procedures?|step[- ]by[- ]step|bench ?top method)\b/i
+const HOW_TO = /\b(how (?:do|can|should|would|could) (?:i|we|you|one)|how to|what is the best way to|best practices? for)\b/i
+const LAB_WORK = /\b(assays?|extract\w*|isolat\w*|stain\w*|cultur\w*|transfect\w*|transduc\w*|clon\w*|purif\w*|blot\w*|(?:q|rt-?q?)?pcr|sequenc\w*|librar(?:y|ies)|label\w*|knock-?(?:out|down|in)|crispr|antibod\w*|buffers?|lysates?|lyse|lysis|centrifug\w*|pipet\w*|elisa|flow cytometry|facs|microscop\w*|immuno\w*|electrophoresis|gels?|plasmids?|cells?|tissues?|samples?|organoids?|mice|mouse|rats?|lab(?:oratory)?|bench|incubat\w*|fixation|digest\w*|ligat\w*|amplif\w*|titrat\w*|dilut\w*|harvest\w*|dissect\w*|cryopreserv\w*|thaw\w*|steriliz\w*|autoclav\w*)\b/i
+/**
+ * True when a question asks for a lab protocol or an SOP, or how to do a lab method ("How do I isolate mouse
+ * hepatocytes?"). The answer then searches the published lab protocols (search/protocols.ts) even when the planner
+ * wrote no protocol query. A guess from words, kept narrow: a "how do I" question needs a lab word too.
+ */
+export const looksProtocol = (question: string): boolean => PROTOCOL_ASK.test(question) || (HOW_TO.test(question) && LAB_WORK.test(question))
+
 /** The answer with the medical line as its last line, once. */
 export function withAdviceLine(markdown: string): string {
   if (/not medical advice/i.test(markdown)) return markdown

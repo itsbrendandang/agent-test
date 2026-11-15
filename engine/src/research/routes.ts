@@ -30,6 +30,7 @@ import type { BoardConfig } from "../config.ts"
 import { exaSearch, type SearchResult } from "../search/exa.ts"
 import { gate, HttpError, linesFrom, readJson } from "../http.ts"
 import { scholarlyLive } from "../search/scholarly.ts"
+import { protocolsLive } from "../search/protocols.ts"
 import { checkTierPrices, gateProvider } from "../models.ts"
 import { PaidCallsOff, paidCallsOff, refusePaid } from "../paid/paid.ts"
 import { missingKeys } from "../providers.ts"
@@ -58,9 +59,10 @@ export interface ResearchDeps {
   mock: () => boolean
   /** Tests: the models of a real answer (fakes). Default: the gated Anthropic and OpenAI providers of models.ts. */
   models?: () => Models
-  /** Tests: stand-ins for the searches. Defaults: exa.ts, scholarly.ts (literature), and sources/ when it is there. */
+  /** Tests: stand-ins for the searches. Defaults: exa.ts, scholarly.ts (literature), protocols.ts (lab protocols), and sources/ when it is there. */
   exa?: (query: string, objective: string) => Promise<SearchResult>
   literature?: (query: string) => Promise<SearchResult>
+  protocols?: (query: string) => Promise<SearchResult>
   database?: (source: Database, query: string) => Promise<SearchResult>
   now?: () => number
   /** The method specialists that fit a question. Default: the matcher of specialists.ts over glhf/specialists. */
@@ -209,6 +211,7 @@ export function createResearch(deps: ResearchDeps) {
               ...shared, brain, firstPass: () => new FirstPass(models, config, false), writerModel: brain.names.writer,
               exa: deps.exa ?? ((query, objective) => exaSearch(query, objective, false, env, config.meeting.exa_highlight_chars)),
               literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref, bioRxiv/medRxiv: free, no key needed
+              protocols: deps.protocols ?? ((query) => protocolsLive(query)), // protocol journals (Europe PMC, OpenAlex) and protocols.io (Crossref): free, no key needed
               database: deps.database ?? (limits.levels[record.effort].databaseLookups ? await databaseLookup() : undefined),
               paidOff: () => paidCallsOff(env),
             }

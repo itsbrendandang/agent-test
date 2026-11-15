@@ -208,6 +208,16 @@ preprints), OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv. A s
 paper found twice is listed once. No key is needed. See
 [docs/research-answer.md](docs/research-answer.md#the-flow).
 
+Research answers can also find **lab protocols and SOPs**. When a question asks for a protocol,
+an SOP or how to do a lab method ("How do I isolate hepatocytes from mouse liver?"), the answer
+also searches published protocols. Three free sources are asked at once: Europe PMC and OpenAlex,
+both limited to protocol journals (Bio-protocol, STAR Protocols, Nature Protocols, JoVE, Current
+Protocols, Cold Spring Harbor Protocols, MethodsX, Methods in Molecular Biology, and Protocol
+Exchange in OpenAlex only), and protocols.io through Crossref. No key is needed. The
+protocols.io API itself needs a token, so it is not used. A protocol is marked "protocol" in the
+sources and cited like a paper. Only its abstract is read, not its steps. See
+`engine/src/search/protocols.ts`.
+
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
 service. Light is the default. Dark and Match system are in Settings → Appearance.
@@ -421,7 +431,7 @@ flowchart TB
     sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
     store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
     paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
-    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv<br/>Crossref · bioRxiv/medRxiv:<br/>papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
+    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv<br/>Crossref · bioRxiv/medRxiv:<br/>papers and preprints<br/>protocol journals · protocols.io (Crossref):<br/>lab protocols<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
 
     you --> app
     app -- "questions, starts, cancels" --> gate
