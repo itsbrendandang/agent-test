@@ -66,6 +66,104 @@ The app is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). A 
 is interrupted, for example by a crash or a restart, continues where it stopped and does not
 repeat finished work. We tested this by stopping a practice run in the middle.
 
+## How everything fits together
+
+**The whole system.** You use the app in a browser. The app only talks to the engine on your own
+machine. The engine holds the keys, enforces the spending limits, and is the only part that reaches
+outside services.
+
+```mermaid
+flowchart TB
+    you(["You, in a browser"])
+
+    subgraph mac["Your machine"]
+        app["The app (dashboard)<br/>127.0.0.1:5317<br/>Search, Saved research, Compare,<br/>Board, Agents, Graph, Settings"]
+        subgraph engine["The engine, 127.0.0.1:8787"]
+            gate{"Demo or Real?<br/>spending limits,<br/>session token"}
+            chat["Chat and planner<br/>answers from saved research<br/>or drafts a plan"]
+            board["Board review<br/>lead scientist + 9 members"]
+            tracker["Run tracker<br/>starts and follows swarm runs"]
+            check["Statement checker<br/>quote must be in the source"]
+        end
+        store[("Saved research<br/>run folders: events, record of<br/>every check, memo, outputs")]
+        sandbox["Docker sandbox, no network<br/>the swarm (9 roles) or one single agent<br/>then the benchmark's own grader"]
+    end
+
+    subgraph outside["Outside services, Real mode only"]
+        anthropic["Anthropic<br/>lead, members, first check"]
+        openai["OpenAI<br/>critic and second check"]
+        exa["Exa<br/>web search, paid"]
+        pmc["Europe PMC<br/>PubMed and preprints, free"]
+    end
+
+    you --> app
+    app -- "questions, plans, start, cancel" --> gate
+    gate --> chat
+    gate --> board
+    gate --> tracker
+    chat -- "plan you confirm" --> board
+    chat -- "plan you confirm" --> tracker
+    board --> check
+    tracker --> sandbox
+    board --> store
+    check --> store
+    sandbox --> store
+    store -- "live events" --> app
+    board -.-> anthropic
+    board -.-> openai
+    check -.-> anthropic
+    check -.-> openai
+    board -. "scout only" .-> exa
+    board -. "scout only" .-> pmc
+```
+
+In Demo mode nothing on the dotted lines is called: replies are fixed example text and sources are
+example sources.
+
+**One board review, step by step.**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant App
+    participant Engine
+    participant Lead as Lead scientist
+    participant Scout
+    participant Members as Other 8 members
+    participant Checker as Checker (other vendor)
+    participant Search as Europe PMC / Exa
+
+    You->>App: Ask a research question
+    App->>Engine: The question
+    Engine-->>App: A plan: who takes part, limits, estimated cost
+    You->>App: Confirm (in Real mode this is the paid step)
+    App->>Engine: Start the review
+    loop Each round, up to the limits
+        Engine->>Lead: Brief and what the last round found
+        Lead->>Scout: Question for the round
+        Scout->>Search: Search the literature and the web
+        Search-->>Scout: Papers and pages, screened for relevance
+        Scout-->>Lead: Reply with sources
+        Lead->>Members: Same question, plus the scout's sources
+        Members-->>Lead: Replies, written without seeing each other in round 1
+        Engine->>Checker: Every statement, with the source it cites
+        Checker-->>Engine: Holds up / Proven wrong / Not enough evidence, with the quote
+        Engine-->>App: Replies and marks, live
+    end
+    Lead->>Engine: Memo: recommendation, open questions, next steps
+    Engine-->>App: Finished review
+    You->>App: Open any statement to see who said it and how it was checked
+```
+
+A statement is marked "holds up" only when the checker quotes a passage and code finds that passage,
+with the same numbers, in the cited source. The order of steps, the limits and the marks are set by
+code; no model decides them. Every step is saved as it happens, so a review that is interrupted
+continues where it stopped.
+
+**One swarm run** uses the same engine but does its work inside the sandbox: see
+[The nine roles](#the-nine-roles).
+
 ## Try it in your browser
 
 This needs a terminal and a few minutes. You need [Node.js](https://nodejs.org) 24 or newer. For the
