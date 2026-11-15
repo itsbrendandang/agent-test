@@ -1,26 +1,49 @@
-.event-log { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--foreground); overflow: hidden; }
+.event-log { position: relative; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--foreground); overflow: hidden; }
 .event-log-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 20px; }
 .event-log-tools label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; }
 .event-log-tools select, .event-log-tools input { min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); font: inherit; max-width: 100%; }
 .event-log-search { flex: 1; min-width: 200px; }
 .event-log-downloads { display: flex; gap: 8px; }
 .event-log-status { padding: 12px 20px; border-block: 1px solid var(--border); color: var(--muted-foreground); background: var(--muted); font-size: 12px; }
-.event-log-rows { list-style: none; margin: 0; padding: 0; }
-.event-log-row { display: grid; grid-template-columns: 135px 150px minmax(0, 1fr) 90px; gap: 18px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
-.event-log-row:last-child { border-bottom: 0; }
-.event-log-time, .event-log-agent span, .event-log-cost small { color: var(--muted-foreground); font-size: 12px; }
-.event-log-time { font-variant-numeric: tabular-nums; }
-.event-log-agent { display: flex; flex-direction: column; gap: 5px; overflow-wrap: anywhere; }
-.event-log-agent strong { font-size: 13px; }
-.event-log-action { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
-.event-log-action p { margin: 0; white-space: pre-wrap; }
-.event-log-action ul { margin: 10px 0 0; padding-left: 18px; }
-.event-log-action a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-.event-log-cost { text-align: right; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .event-log-empty { padding: 24px 20px; color: var(--muted-foreground); }
-.event-log :is(button, select, input, a):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.event-log :is(button, select, input, a, summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .event-log-heading { margin: 8px 0 20px; }
 .event-log-heading h2 { margin: 8px 0; font-size: 22px; }
 .event-log-heading p { color: var(--muted-foreground); font-size: 13px; }
-@media (max-width: 850px) { .event-log-row { grid-template-columns: 100px minmax(0, 1fr) 75px; gap: 10px; } .event-log-time { grid-column: 1 / -1; } }
-@media (max-width: 520px) { .event-log-row { grid-template-columns: minmax(0, 1fr) 75px; } .event-log-agent { grid-column: 1; } .event-log-action { grid-column: 1 / -1; grid-row: 3; } .event-log-cost { grid-column: 2; grid-row: 2; } }
+
+/* The group chat: one bubble per agent turn, the agent's picture and name on the first of a run, quiet notes between. */
+.chat-scroll { max-height: min(72vh, 900px); overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+.chat-thread { list-style: none; margin: 0; padding: 16px 20px 24px; display: flex; flex-direction: column; }
+.chat-msg { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 10px; margin-top: 3px; }
+.chat-msg[data-first] { margin-top: 14px; }
+.chat-face { width: 32px; align-self: start; }
+.chat-msg[data-first] .chat-face { padding-top: 18px; }
+.chat-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; max-width: min(640px, 100%); }
+.chat-who { display: flex; align-items: baseline; gap: 8px; margin: 0 0 3px 4px; font-size: 12px; overflow-wrap: anywhere; }
+.chat-who strong { font-weight: 600; }
+.chat-who span { color: var(--muted-foreground); font-size: 11px; }
+.chat-bubble { min-width: 0; max-width: 100%; padding: 8px 12px; border-radius: 4px 16px 16px 4px; background: var(--card); border: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; box-shadow: var(--shadow); }
+.chat-msg[data-first] .chat-bubble { border-top-left-radius: 16px; }
+.chat-msg[data-last] .chat-bubble { border-bottom-left-radius: 16px; }
+.chat-msg[data-first][data-last] .chat-bubble { border-radius: 16px 16px 16px 4px; }
+.chat-bubble p { margin: 0; white-space: pre-wrap; }
+.chat-thinking { margin-top: 6px; font-size: 12.5px; color: var(--muted-foreground); }
+.chat-thinking summary { cursor: pointer; width: fit-content; font-size: 12px; font-weight: 500; list-style: none; }
+.chat-thinking summary::-webkit-details-marker { display: none; }
+.chat-thinking summary::before { content: "▸ "; }
+.chat-thinking[open] summary::before { content: "▾ "; }
+.chat-thinking p { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
+.chat-sources { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; }
+.chat-sources a { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--muted); color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+.chat-meta { display: flex; gap: 8px; margin: 2px 0 0 4px; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.chat-time, .chat-cost { color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chat-cost small { font-size: inherit; }
+.chat-note { position: relative; margin: 10px 0 0 42px; padding-left: 14px; color: var(--muted-foreground); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.chat-note::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: var(--edge-strong); }
+.chat-note-line > * + * { margin-left: 6px; }
+.chat-note strong { color: var(--foreground); font-weight: 500; }
+.chat-note-text { white-space: pre-wrap; }
+.chat-note[data-kind="error"] { color: var(--danger); }
+.chat-note[data-kind="error"]::before { background: var(--danger); }
+.chat-jump { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); box-shadow: var(--shadow-pop); }
+@media (max-width: 520px) { .chat-thread { padding-inline: 12px; } .chat-note { margin-left: 0; } }

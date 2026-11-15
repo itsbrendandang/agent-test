@@ -47,3 +47,58 @@ it("handles loading, empty, unsupported streams, errors and appended events", ()
   fireEvent.click(screen.getByRole("button", { name: "Download JSON" }))
   expect(screen.getByRole("alert")).toHaveTextContent("could not be downloaded")
 })
+
+const chat: EventRow[] = [
+  { id: "c1", at: 1000, agent: "Planner", agentId: "planner", kind: "claim", text: "I think the outputs need every sample.", sources: [] },
+  { id: "c2", at: 2000, agent: "Planner", agentId: "planner", kind: "test", text: "Registering a shape check first.\nA pilot on a subsample is cheap and shows whether the columns line up before the full run.", sources: [] },
+  { id: "c3", at: 3000, agent: "Engine", agentId: "engine", kind: "claim", text: "Moved claim C1 from triaged to piloting.", sources: [], note: true },
+  { id: "c4", at: 4000, agent: "Scout", agentId: "scout", kind: "search", text: "Searched practice example sources: kept 1, dropped 0.", sources: [{ title: "Trial", url: "https://example.org/t" }], note: true },
+  { id: "c5", at: 5000, agent: "Critic", agentId: "critic", kind: "review", text: "A control is missing.", sources: [] },
+]
+
+it("shows agent turns as grouped chat bubbles with faces, thinking behind a toggle and quiet notes", () => {
+  render(<EventLog rows={chat} run={run} connection="ended" />)
+  const items = within(screen.getByRole("list", { name: "Run events" })).getAllByRole("listitem").filter((li) => li.classList.contains("event-log-row"))
+  expect(items.map((li) => li.className.includes("chat-note") ? "note" : "msg")).toEqual(["msg", "msg", "note", "note", "msg"])
+  // One picture and one name per run of messages from the same agent.
+  expect(items[0].querySelector("svg[data-agent='planner']")).not.toBeNull()
+  expect(items[1].querySelector("svg")).toBeNull()
+  expect(items[0]).toHaveAttribute("data-first")
+  expect(items[1]).toHaveAttribute("data-last")
+  expect(within(items[1]).getByText("Planner:")).toHaveClass("sr-only")
+  expect(items[4].querySelector("svg[data-agent='critic']")).not.toBeNull()
+  // The short line shows; the reasoning is behind "Show thinking".
+  expect(within(items[1]).getByText("Registering a shape check first.")).toBeVisible()
+  const thinking = within(items[1]).getByText("Show thinking").closest("details")!
+  expect(thinking.open).toBe(false)
+  fireEvent.click(within(items[1]).getByText("Show thinking"))
+  expect(thinking.open).toBe(true)
+  expect(within(items[0]).queryByText("Show thinking")).toBeNull()
+  // Notes have no picture, keep their agent and their links.
+  expect(items[3].querySelector("svg")).toBeNull()
+  expect(within(items[3]).getByText("Scout")).toBeInTheDocument()
+  expect(within(items[3]).getByRole("link", { name: "Trial" })).toHaveAttribute("href", "https://example.org/t")
+  expect(items[0].querySelector("time")).toHaveAttribute("dateTime", new Date(1000).toISOString())
+})
+
+it("follows the newest message while live, and offers a jump back after the reader scrolls up", () => {
+  const { rerender, container } = render(<EventLog rows={chat.slice(0, 2)} run={run} connection="live" />)
+  const scroller = container.querySelector(".chat-scroll") as HTMLDivElement
+  let height = 1000
+  Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height })
+  Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 300 })
+  rerender(<EventLog rows={chat.slice(0, 3)} run={run} connection="live" />)
+  expect(scroller.scrollTop).toBe(1000)
+  scroller.scrollTop = 100
+  fireEvent.scroll(scroller)
+  height = 1200
+  rerender(<EventLog rows={chat.slice(0, 4)} run={run} connection="live" />)
+  expect(scroller.scrollTop).toBe(100)
+  fireEvent.click(screen.getByRole("button", { name: "New messages ↓" }))
+  expect(scroller.scrollTop).toBe(1200)
+  expect(screen.queryByRole("button", { name: "New messages ↓" })).toBeNull()
+  // A finished run is read from the start: nothing moves it.
+  scroller.scrollTop = 0
+  rerender(<EventLog rows={chat} run={run} connection="ended" />)
+  expect(scroller.scrollTop).toBe(0)
+})

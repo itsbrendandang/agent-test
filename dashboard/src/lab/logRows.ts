@@ -23,11 +23,20 @@ export interface EventRow {
   usd?: number
   costScope?: "step" | "total"
   sources: LogSource[]
+  /** A tool call, a search or a system step: the chat shows it as a small note, not as an agent's message. */
+  note?: boolean
 }
 export interface LogFilter { agent: string; kind: string; query: string }
 const objects = (value: unknown): LabEvent[] => Array.isArray(value) ? value.filter((v): v is LabEvent => !!v && typeof v === "object" && !Array.isArray(v)) : []
 const texts = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
 const join = (...values: unknown[]) => values.filter((v) => typeof v === "string" && v).join(" ")
+/** Event types that are tool calls, searches or bookkeeping rather than an agent speaking. */
+const NOTE_TYPES = new Set([
+  "run.started", "run.resumed", "run.finished", "run.failed", "research.started", "research.resumed", "research.queued", "research.finished", "research.failed", "research.cancelled",
+  "run.roster", "specialists", "evidence.triaged", "constraint", "step.started", "step.progress", "sources", "sources.cited", "artifact.created",
+  "phase.started", "phase.finished", "claim.transition", "claim.illegal_transition", "test.executed", "test.recorded", "budget.allocated", "budget.spent", "flags", "triage.uncovered",
+])
+const NOTE_KINDS = new Set(["search", "fetch", "sources"])
 const STEP_AGENT: Record<string, string> = { prepare: "planner", hypothesize: "planner", search: "searcher", fetch: "searcher", evaluate: "relevance", write: "writer", check: "checker", review: "critic", revise: "writer", save: "engine" }
 export function sourceLink(url: unknown, title?: unknown): LogSource[] {
   if (typeof url !== "string") return []
@@ -130,7 +139,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const total = /^(run|research)\.(finished|failed|cancelled)$/.test(type)
     const usd = num(e.usd) ?? num(e.spentUsd)
     links = [...new Map(links.map((s) => [s.url, s])).values()]
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links }]
+    const note = agentId === "engine" || NOTE_TYPES.has(type) || NOTE_KINDS.has(kind)
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}) }]
   })
 }
 
