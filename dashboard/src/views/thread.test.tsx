@@ -75,7 +75,7 @@ describe("the board's discussion", () => {
     expect(critic).toHaveAttribute("data-mark", "contradicted")
     expect(within(critic).getByRole("link", { name: "https://example.org/paper" })).toHaveAttribute("href", "https://example.org/paper")
     expect(stretch).toHaveAttribute("data-mark", "insufficient")
-    expect(stretch.querySelector("a")).toBeNull() // a javascript: source is never a link
+    expect([...stretch.querySelectorAll("a")].map((a) => a.getAttribute("href")).filter((h) => !h?.startsWith("#Graph/"))).toEqual([]) // a javascript: source is never a link; only the graph link is
   })
   it("marks the moment a check proves a statement wrong, in the log and in the headline", async () => {
     await open()

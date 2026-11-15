@@ -200,8 +200,8 @@ describe("Team review and Compare", () => {
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getAllByRole("link", { name: "In the graph" })[0]).toHaveAttribute("href", graphLink("board", "run-1", sourceNodeId(SRC)))
     expect(sources.getByRole("link", { name: "Show in the graph: The margin is thin" })).toHaveAttribute("href", graphLink("board", "run-1", claimNodeId("scout", "The margin is thin")))
-    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1: Supported/ }))
-    expect(screen.getByRole("link", { name: "Show this statement and its checks in the graph" })).toHaveAttribute("href", graphLink("board", "run-1", claimNodeId("scout", "The margin is thin")))
+    // The check is a quiet note in the discussion (the Agent Log's chat); it links to the statement's node.
+    expect(within(screen.getByRole("list", { name: "Run events" })).getByRole("link", { name: "Show this statement and its checks in the graph" })).toHaveAttribute("href", graphLink("board", "run-1", claimNodeId("scout", "The margin is thin")))
   })
 
   it("a benchmark run links to its Agent Log and graph", async () => {

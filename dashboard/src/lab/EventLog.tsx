@@ -10,7 +10,7 @@ import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { agentLink } from "@/lib/links"
+import { agentLink, graphLink, hasGraph } from "@/lib/links"
 import { SearchCredit } from "@/components/Shared"
 import type { SearchProvider } from "@/board/api"
 import { MARK_GLYPH } from "@/lib/words"
@@ -56,7 +56,7 @@ function NoteIcon({ row }: { row: EventRow }) {
 type OnAgent = (row: EventRow) => void
 const onlyLabel = (row: EventRow) => `Show only ${row.agent}'s messages`
 
-function Note({ row, onAgent }: { row: EventRow; onAgent: OnAgent }) {
+function Note({ row, onAgent, graph }: { row: EventRow; onAgent: OnAgent; graph?: string }) {
   return (
     <li className="event-log-row chat-note" data-kind={row.kind} data-mark={row.mark}>
       <NoteIcon row={row} />
@@ -66,6 +66,7 @@ function Note({ row, onAgent }: { row: EventRow; onAgent: OnAgent }) {
           {row.agentId === "engine" && <span className="sr-only">{row.agent}: </span>}
           <span className="chat-note-text">{row.text}</span>
           {row.provider && <SearchCredit provider={row.provider as SearchProvider} />}
+          {graph && <a className="small source-graph" href={graph}>Show this statement and its checks in the graph</a>}
           <When at={row.at} />
           <Cost row={row} />
         </div>
@@ -223,7 +224,7 @@ export function EventLog({ rows, run, connection, agent, onAgent }: {
             {items.map((item) => (
               <Fragment key={item.row.id}>
                 {item.round && <li className="chat-round"><h3>Round {item.round.n}{item.round.final ? ": final positions" : ""}</h3></li>}
-                {item.row.note ? <Note row={item.row} onAgent={focusOn} /> : <Message item={item} onAgent={focusOn} />}
+                {item.row.note ? <Note row={item.row} onAgent={focusOn} graph={item.row.node && hasGraph(run.kind) ? graphLink(run.kind, run.id, item.row.node) : undefined} /> : <Message item={item} onAgent={focusOn} />}
               </Fragment>
             ))}
           </ol>

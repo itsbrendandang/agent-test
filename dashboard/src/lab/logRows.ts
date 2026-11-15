@@ -5,6 +5,7 @@ import { agentIdentity, readableName } from "./identity"
 import { answerOrder, boardOrder, num, str, type LabEvent } from "./adapter"
 import type { Provenance, RunKind } from "./model"
 import { claimsOrder, claimsTimeline } from "./claims"
+import { claimNodeId } from "@/graph/model"
 
 export function swarmLogEvents(events: readonly LabEvent[], notes: readonly LabEvent[] = [], seenAt: readonly (number | undefined)[] = [], runId?: string): LabEvent[] {
   const ordered = claimsOrder(events, runId).events
@@ -39,6 +40,8 @@ export interface EventRow {
   wrong?: number
   /** Where a search looked, as the run recorded it: the chat credits it (Exa, Europe PMC, a database, or example sources). */
   provider?: string
+  /** A checked statement's node in the run's graph (team review only): the note links to it. */
+  node?: string
 }
 export interface LogFilter { agent: string; kind: string; query: string }
 const objects = (value: unknown): LabEvent[] => Array.isArray(value) ? value.filter((v): v is LabEvent => !!v && typeof v === "object" && !Array.isArray(v)) : []
@@ -197,7 +200,7 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const job = run === "board" && !note ? (specialists.has(agentId) ? SPECIALIST_JOB : BOARD_JOB[agentId] ?? title?.toLowerCase()) : undefined
     const contradicted = type === "member.replied" ? wrong.get(`${agentId}|${num(e.round)}`) : undefined
     const round = run === "board" && num(e.round) !== undefined && ["round.started", "member.replied", "claim.checked"].includes(type) ? { n: num(e.round)!, ...(e.final === true ? { final: true } : {}) } : undefined
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict) } : {}), ...(type === "evidence.triaged" && searchedWith(e) ? { provider: searchedWith(e) } : {}) }]
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}), ...(round ? { round } : {}), ...(job ? { job } : {}), ...(contradicted ? { wrong: contradicted } : {}), ...(type === "claim.checked" ? { mark: markOf(e.verdict), ...(str(e.member) && str(e.claim) ? { node: claimNodeId(str(e.member)!, str(e.claim)!) } : {}) } : {}), ...(type === "evidence.triaged" && searchedWith(e) ? { provider: searchedWith(e) } : {}) }]
   })
 }
 
