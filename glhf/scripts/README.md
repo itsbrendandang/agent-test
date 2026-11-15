@@ -14,18 +14,27 @@ All downloaded data goes to `glhf/data/` and is gitignored (never committed).
 
 ## 1. Evidence corpus — `fetch_literature.py`
 
-**What it does:** the agents check claims against the biomedical literature using
-`literature_search`, which queries **Europe PMC (PubMed + preprints)**. This script
-hits the **same source** and saves the abstracts, so you have a cached evidence
-base to inspect, cite, or demo offline.
+**What it does:** gathers evidence for a claim from several **trusted scholarly
+databases** researchers use, merges and de-duplicates the results, and saves the
+abstracts. A cached evidence base you can inspect, cite, or demo offline.
+
+Sources (all free, no API key):
+
+| Source | Covers |
+|---|---|
+| Europe PMC | PubMed / NIH (`ncbi.nlm.nih.gov`) + preprints — the source the app uses |
+| OpenAlex | open scholarly catalog, ~all disciplines |
+| Crossref | official DOI registry (every publisher) |
+| arXiv | preprints (physics / CS / quant bio) |
 
 ```bash
 python3 glhf/scripts/fetch_literature.py "KRAS G12C covalent inhibitor resistance"
-python3 glhf/scripts/fetch_literature.py --file claims.txt    # one claim per line
+python3 glhf/scripts/fetch_literature.py --file claims.txt          # one claim per line
+python3 glhf/scripts/fetch_literature.py "crispr off-target" --sources europepmc openalex
 ```
 
-Output: one Markdown file per query in `glhf/data/literature/` with the top
-abstracts (title, journal, year, PubMed link, abstract text).
+Output: one Markdown file per query in `glhf/data/literature/` with the merged top
+results (title, authors, venue, year, DOI/link, which source, abstract).
 
 > Tip: use 3–6 PubMed-style keywords, not full sentences.
 > Note: the app already does this live during a run — this is a cache/offline backup.
