@@ -159,7 +159,7 @@
 .ov-run-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 @media (max-width: 860px) { .ov-run { grid-template-columns: minmax(0, 1fr); } .ov-run-actions { justify-content: flex-start; } }
 
-/* The numbers: two rows of tiles on the same four-column grid, the scope switch between them. */
+/* The numbers: the engine's spend and limits, then the scope switch over the tiles it counts. */
 .ov-metrics { display: flex; flex-direction: column; gap: var(--space-3); }
 .ov-home .ov-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ov-metric { gap: 4px; }
@@ -175,6 +175,10 @@
 .ov-checks i[data-tone="bad"] { background: var(--danger); }
 .ov-scope { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-2); }
 .ov-scope h3 { font-size: 14px; font-weight: 650; }
+@media (min-width: 861px) {
+  .ov-home .ov-tiles[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ov-home .ov-tiles[data-cols="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
 @media (max-width: 860px) { .ov-home .ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .ov-home .ov-tiles { grid-template-columns: minmax(0, 1fr); } }
 

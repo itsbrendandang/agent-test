@@ -167,6 +167,14 @@ describe("the home page: metrics from recorded data only", () => {
     // Averages over the three finished research answers, from their own records.
     expect(tile("Average time per answer").textContent).toContain("1 minute") // (60 + 120 + 30) / 3 = 70 s
     expect(tile("Average cost per answer").textContent).toContain("$3.67")
+    // The spend tiles are not counted by the Research/Practice switch, so they sit above it and do not change with it.
+    const metrics = tile("Spent today").closest(".ov-metrics")!
+    const scopeTitle = within(metrics as HTMLElement).getByText("Which runs are counted")
+    for (const label of ["Spent today", "Last 7 days", "Limit per team review"]) expect(scopeTitle.compareDocumentPosition(tile(label)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    for (const label of ["Runs", "Average time per answer", "Sources", "Checks"]) expect(scopeTitle.compareDocumentPosition(tile(label)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await userEvent.click(screen.getByRole("button", { name: "Practice runs" }))
+    expect(tile("Last 7 days").textContent).toContain("$3.00")
+    expect(tile("Last 7 days").textContent).toContain("3 research answers and reviews")
   })
 
   it("counts sources and checks from the records, and shows practice runs apart when asked", async () => {

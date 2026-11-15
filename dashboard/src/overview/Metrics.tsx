@@ -27,26 +27,15 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
   const which = scope === "research" ? "research" : "practice"
   return (
     <div className="ov-metrics">
-      <div className="ov-scope">
-        <h3 id="ov-scope-title">Which runs are counted</h3>
-        <ButtonGroup aria-labelledby="ov-scope-title">
-          <Button size="sm" variant={scope === "research" ? "secondary" : "outline"} aria-pressed={scope === "research"} onClick={() => onScope("research")}>Research runs</Button>
-          <Button size="sm" variant={scope === "practice" ? "secondary" : "outline"} aria-pressed={scope === "practice"} onClick={() => onScope("practice")}>Practice runs</Button>
-        </ButtonGroup>
-      </div>
-      <div className="ov-tiles">
-        <Tile label="Runs" value={many(counts.done + counts.running + counts.failed + counts.stopped, "run")}>
-          <small className="ov-split"><span><b>{counts.done}</b> done</span><span><b>{counts.running}</b> running</span><span data-tone={counts.failed ? "bad" : undefined}><b>{counts.failed}</b> failed</span>{counts.stopped > 0 && <span><b>{counts.stopped}</b> stopped</span>}</small>
-          <small>{scope === "research" ? "Research runs only: practice runs are counted apart." : "Practice runs only: scripted models, $0."}</small>
-        </Tile>
+      <div className="ov-tiles" data-cols="3">
         <Tile label="Spent today" value={paid ? usdText(paid.spentToday) : "Not known"} empty={!paid || paid.spentToday === undefined}>
           {paid ? <>
-            <small>{paid.daily !== undefined ? `of a ${usdText(paid.daily)} daily limit.` : "No daily limit was reported."}{paid.real === false ? " Demo mode: nothing can be spent." : ""}</small>
+            <small>{paid.daily !== undefined ? `of a ${usdText(paid.daily)} daily limit, for all runs.` : "No daily limit was reported."}{paid.real === false ? " Demo mode: nothing can be spent." : ""}</small>
             <div className="ov-track" role="img" aria-label={`${Math.round(share(paid.spentToday, paid.daily))}% of the daily limit`}><i data-made="research" style={{ width: `${share(paid.spentToday, paid.daily)}%` }} /></div>
           </> : <small>The engine did not report its spend.</small>}
         </Tile>
         <Tile label="Last 7 days" value={week ? usdText(week.usd) : "Nothing recorded"} empty={!week}>
-          <small>{week ? `Recorded by ${many(week.runs, "answer or review", "answers and reviews")} started in the last 7 days.` : "No answer or team review in the last 7 days recorded a cost."} Benchmark runs do not record dollars.</small>
+          <small>{week ? `Recorded by ${many(week.runs, "research answer or review", "research answers and reviews")} started in the last 7 days.` : "No research answer or team review in the last 7 days recorded a cost."} Benchmark runs do not record dollars.</small>
         </Tile>
         <Tile label="Limit per team review" value={paid ? usdText(paid.perRun) : "Not known"} empty={!paid || paid.perRun === undefined}>
           <small>A team review stops when it reaches it. Each answer stops at its own level's cap.</small>
@@ -57,7 +46,18 @@ export function Metrics({ works, paid, scope, onScope }: { works: Work[]; paid: 
         </Tile>
       </div>
 
-      <div className="ov-tiles">
+      <div className="ov-scope">
+        <h3 id="ov-scope-title">Which runs are counted</h3>
+        <ButtonGroup aria-labelledby="ov-scope-title">
+          <Button size="sm" variant={scope === "research" ? "secondary" : "outline"} aria-pressed={scope === "research"} onClick={() => onScope("research")}>Research runs</Button>
+          <Button size="sm" variant={scope === "practice" ? "secondary" : "outline"} aria-pressed={scope === "practice"} onClick={() => onScope("practice")}>Practice runs</Button>
+        </ButtonGroup>
+      </div>
+      <div className="ov-tiles" data-cols="5">
+        <Tile label="Runs" value={many(counts.done + counts.running + counts.failed + counts.stopped, "run")}>
+          <small className="ov-split"><span><b>{counts.done}</b> done</span><span><b>{counts.running}</b> running</span><span data-tone={counts.failed ? "bad" : undefined}><b>{counts.failed}</b> failed</span>{counts.stopped > 0 && <span><b>{counts.stopped}</b> stopped</span>}</small>
+          <small>{scope === "research" ? "Research runs only: practice runs are counted apart." : "Practice runs only: scripted models, $0."}</small>
+        </Tile>
         <Tile label="Average time per answer" value={answer.seconds === undefined ? "No data" : plainDuration(answer.seconds * 1000)} empty={answer.seconds === undefined}>
           <small>{answer.timed ? `Over ${many(answer.timed, `finished ${which} answer`)}.` : `No finished ${which} answer recorded its time yet.`}</small>
         </Tile>
