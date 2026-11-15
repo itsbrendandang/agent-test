@@ -16,7 +16,6 @@ import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type E
 import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MAX_MESSAGE, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { EffortPicker } from "@/home/EffortPicker"
 import { PlanCard } from "@/home/PlanCard"
-import { useStickToBottomContext } from "use-stick-to-bottom"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
 import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
 import { ResearchAnswer } from "@/research/Answer"
@@ -259,8 +258,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           )}
 
           {!empty && (
-            <Conversation className="search-log" aria-live="polite" aria-label="Messages">
-              <StartAtQuestion answers={turns.filter((t) => t.role === "assistant").length} />
+            <Conversation className="search-log" aria-live="polite" aria-label="Messages" targetScrollTop={atLatestQuestion}>
               <ConversationContent className="search-thread">
                 {turns.map((t) => t.role === "user" ? <UserMessage key={t.id}>{t.content}</UserMessage> : "research" in t ? (
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
@@ -367,22 +365,16 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 }
 
 /**
- * When an answer arrives, the reader starts at its beginning: the question it answers goes to the top of the
- * visible area, with the label and the first lines of the answer under it. (While waiting, the list follows the
- * newest line as usual, and the "latest" button stays for long threads.)
+ * Where the conversation settles. It follows new lines only until the latest question reaches the top of the visible
+ * area: from then on the reader is at the beginning of the answer and stays there while the rest is written below,
+ * and opening a section (the activity, the sources) moves nothing. A reader who scrolls away is left alone.
  */
-function StartAtQuestion({ answers }: { answers: number }) {
-  const { stopScroll } = useStickToBottomContext()
-  const seen = useRef(answers)
-  useEffect(() => {
-    if (answers <= seen.current) { seen.current = answers; return }
-    seen.current = answers
-    stopScroll() // or the list would pull itself back to the bottom as the answer lays out
-    const go = () => { const asked = document.querySelectorAll(".search-thread .thread-user"); asked[asked.length - 1]?.scrollIntoView?.({ block: "start" }) }
-    go(); const later = window.requestAnimationFrame(go); const settle = window.setTimeout(go, 120)
-    return () => { window.cancelAnimationFrame(later); window.clearTimeout(settle) }
-  }, [answers, stopScroll])
-  return null
+const atLatestQuestion = (bottom: number, { scrollElement, contentElement }: { scrollElement: HTMLElement; contentElement: HTMLElement }): number => {
+  const asked = contentElement.querySelectorAll<HTMLElement>(".thread-user")
+  const last = asked[asked.length - 1]
+  if (!last) return bottom
+  const top = last.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop
+  return Math.max(0, Math.min(bottom, top - 12))
 }
 
 interface Listed { startedAt?: number; scripted?: boolean; solver?: string; task?: string }

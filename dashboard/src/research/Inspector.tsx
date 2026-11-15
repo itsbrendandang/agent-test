@@ -5,16 +5,18 @@
 //  Activity: the run's status, what it is doing, what it has spent against its limit, the searches, any failure.
 //  Lab:      the team at work, drawn from the same events.
 // A tab exists only when it has content. Nothing here is a placeholder.
-import { useMemo, useState } from "react"
-import { Lab, answerLab, type LabEvent } from "@/lab"
+import { lazy, Suspense, useState } from "react"
 import { safeUrl } from "@/lib/words"
 import { Activity } from "./Activity"
 import { artifactUrl } from "./api"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markOf } from "./marks"
-import { progressLine, seconds, sourceCounts, type AnswerState, type ResearchEvent } from "./model"
+import { noteOutcome, progressLine, seconds, sourceCounts, type AnswerState, type ResearchEvent } from "./model"
 import { tabsOf, type InspectorTab } from "./inspectorState"
 import { ProviderCredit } from "./ProviderCredit"
 import { PROVIDERS } from "./providers"
+
+// The Lab draws the whole scene: loaded only when its tab is opened.
+const LabTab = lazy(() => import("./LabTab"))
 
 const TAB_NAME: Record<InspectorTab, string> = { evidence: "Evidence", results: "Results", activity: "Activity", lab: "Lab" }
 const money = (usd: number) => (usd === 0 ? "$0" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
@@ -39,7 +41,7 @@ export function Inspector({ id, state, events, tab, onTab }: { id: string; state
         {current === "evidence" && <Evidence state={state} />}
         {current === "results" && <Results id={id} state={state} />}
         {current === "activity" && <Status state={state} />}
-        {current === "lab" && <LabTab id={id} events={events} />}
+        {current === "lab" && <Suspense fallback={<p className="muted small">Loading the Lab.</p>}><LabTab id={id} events={events} /></Suspense>}
       </div>
     </div>
   )
@@ -62,7 +64,7 @@ function Evidence({ state: s }: { state: AnswerState }) {
                 <span className="source-n" aria-hidden="true">{src.n}</span>
                 <span className="source-what">
                   <span className="inspector-title">{url ? <a href={url} target="_blank" rel="noopener noreferrer">{src.title || url}</a> : src.title || src.url}</span>
-                  <span className="muted small">{[identifierOf(src.url), src.note].filter(Boolean).join(" · ")}{(identifierOf(src.url) || src.note) && " · "}<ProviderCredit provider={src.provider} /></span>
+                  <span className="muted small">{[identifierOf(src.url), src.published, src.note].filter(Boolean).join(" · ")}{(identifierOf(src.url) || src.note || src.published) && " · "}<ProviderCredit provider={src.provider} /></span>
                   {(/preprint/i.test(src.note ?? "") || /\[preprint\]\s*$/i.test(src.title)) && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   {s.cited && <span className="source-use small" data-cited={!!cited}>{cited ? "Cited in the answer" : "Selected, but not cited"}</span>}
                   {why && <span className="small">{why.why}{why.limitation && <span className="muted"> Limit: {why.limitation}</span>}</span>}
@@ -105,7 +107,7 @@ function Evidence({ state: s }: { state: AnswerState }) {
           <ul className="inspector-notes">
             {s.notes.map((n) => (
               <li key={n.index}>
-                <span className="pill" data-kind={n.resolved ? "success" : n.resolved === false ? "warning" : "neutral"}>{n.resolved ? "dealt with" : n.resolved === false ? "not dealt with" : "raised"}</span>
+                <span className="pill" data-kind={noteOutcome(n).kind}>{noteOutcome(n).word}</span>
                 <span className="muted small"> {n.severity}</span>
                 <span className="inspector-note">{n.text}</span>
                 {n.how && <span className="muted small">What was done: {n.how}</span>}
@@ -169,9 +171,4 @@ function Status({ state: s }: { state: AnswerState }) {
       <Activity steps={s.steps} working={working} totalSeconds={s.finished?.seconds ?? s.seconds} defaultOpen />
     </section>
   )
-}
-
-function LabTab({ id, events }: { id: string; events: ResearchEvent[] }) {
-  const model = useMemo(() => answerLab(events as unknown as LabEvent[], id), [events, id])
-  return <Lab model={model} compact />
 }

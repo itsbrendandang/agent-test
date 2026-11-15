@@ -60,6 +60,9 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
   const prep = preparation(s)
   const failedSteps = s.steps.filter((x) => x.status === "failed" || (x.status === "empty" && x.kind === "search"))
   const marked = useMemo(() => withMarks(s.markdown, s.complete ? s.statements : [], s.sources, key), [s.markdown, s.complete, s.statements, s.sources, key])
+  // How many were found and selected: the engine's own counts when it sent them, else counted from its lists.
+  const listed = s.selection ? s.selection.selected.length + s.selection.notSelected.length : 0
+  const picked = s.selection?.counts ?? { selected: s.selection?.selected.length ?? 0, unique: listed, results: Math.max(listed, sourceCounts(s).found ?? 0) }
   const byIndex = new Map(s.statements.map((st) => [st.index, st]))
   const goTo = (n: number) => { setLit(n); document.getElementById(`${uid}-source-${n}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }) }
   const mark = (st: Statement) => {
@@ -190,9 +193,9 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
       {s.selection && s.sources.length > 0 && (
         <section className="answer-selection" aria-label="How the sources were selected">
           <p>
-            <b>Selected {s.selection.selected.length} of {s.selection.selected.length + s.selection.notSelected.length} sources automatically.</b>{" "}
-            {/* The searches' own counts can be higher: two searches can find the same source, and it is listed once. */}
-            {(sourceCounts(s).found ?? 0) > s.selection.selected.length + s.selection.notSelected.length && <>The searches returned {sourceCounts(s).found} results; a source found twice is counted once. </>}
+            <b>Selected {picked.selected} of {picked.unique} sources automatically.</b>{" "}
+            {/* The searches' own count can be higher: two searches can find the same source, and it is listed once. */}
+            {picked.results > picked.unique && <>The searches returned {picked.results} results; a source found twice is counted once. </>}
             {s.selection.criteria}
           </p>
           <details>
@@ -231,7 +234,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
                     <span className="source-what">
                       <span className="source-title">{url ? <a href={url} target="_blank" rel="noopener noreferrer">{src.title || url}</a> : src.title || src.url}</span>
                       <span className="muted small">
-                        {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", identifierOf(src.url), ...other].filter(Boolean).join(" · ")}
+                        {[url ? new URL(url).hostname.replace(/^www\./, "") : "not a web address", identifierOf(src.url), src.published, ...other].filter(Boolean).join(" · ")}
                         {" · "}<ProviderCredit provider={src.provider} />
                       </span>
                       {preprint && <span className="source-preprint">Preprint: not peer reviewed</span>}

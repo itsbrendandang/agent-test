@@ -34,36 +34,64 @@ npm run lint     # oxlint
 
 ## Views
 
-Seven views, one file each in `src/views/`. Each has a URL hash, and an address can name a run
-(`#Board/<id>`, `#Compare/<id>`).
+One file each in `src/views/`. The name in the address (the URL hash) is the view's key and never changes; what
+a person reads is the label (`src/nav.ts`). An address can name a run (`#Board/<id>`, `#Compare/<id>`), and older
+addresses still work (`#Experiments`, `#Swarm`, `#Worlds`, and the on-screen words `#Research`, `#Saved`, `#Review`).
 
-| View | File | What it shows |
-|---|---|---|
-| Home | `HomeView.tsx` | The chat box. Ask about saved research, or ask a research question and get a plan you can start. |
-| Runs | `ExperimentsView.tsx` | Every run, with keyword search. |
-| Compare | `SwarmView.tsx` | The swarm and the single agent on the same task, side by side. Start a run here (see below). |
-| Board | `BoardView.tsx` | One board review: the question, what each member said, how each statement was checked, the sources. |
-| Agents | `AgentsView.tsx` | The roles and what each one did. |
-| Graph | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what held up, with a replay. |
-| Settings | `SettingsView.tsx` | Engine state, Demo or Real mode, session token. |
+| Label (navigation) | Key (address) | File | What it shows |
+|---|---|---|---|
+| Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work, read the answer with its sources. |
+| Saved research | `Runs` | `ExperimentsView.tsx` | Everything that was researched, newest first, with keyword search. Runs of the same brief are one row with their history. |
+| Compare | `Compare` | `SwarmView.tsx` | One agent alone and a team of nine on the same task, side by side. Start a run here (see below). |
+| Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |
+| Agents | `Agents` | `AgentsView.tsx` | Who does the work: roles, team members, specialists, methods. |
+| Graph | `Graph` | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what each check found, with a replay. |
+| Lab | `Lab` | `LabView.tsx`, `src/lab/` | The team at work in a run, as an animated scene. |
+| Settings | `Settings` | `SettingsView.tsx` | Demo or Real, the session token, help, and a "Technical" disclosure with tools, keys (set or not) and file names. |
 
-Home is being simplified into a search-first screen and will be labelled "Search"; Runs will be
-labelled "Saved research". File names and routes stay.
+Research, Saved research and Compare are the primary places. Team review, Agents, Graph and Lab sit under "More".
+Settings has one entry, at the foot of the navigation.
 
-## Demo and Real
+## The shell
 
-The status line shows the engine's mode on every view. **Demo** is the default: practice runs with
-fixed example answers, free. **Real** uses real AI models and search and costs money. Switching to
-Real opens a dialog with the spending limits and a tick box, and needs the engine's session token;
-switching back is one click. The state is read from the engine (`GET /api/paid`) and is never stored
-in the browser. Code: `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`.
+`src/App.tsx`: the navigation (`src/components/AppSidebar.tsx`, on the shadcn Sidebar: a compact sidebar that folds
+to icons on a wide window, a drawer below 768 px), one header row, and the view inside `<main>`. The header takes
+its own row and the view scrolls inside the content area, so nothing lies over content. The header holds the menu
+button, the place name, the "Next run" selector, and two slots a view can fill
+(`<HeaderSlot area="title" | "actions">`, `src/components/HeaderSlot.tsx`). When the engine cannot be reached, the
+page says so once, with "Try again".
+
+## Next run (Demo or Real) and provenance
+
+Two different things, never mixed:
+
+- **How the next run is made**: the "Next run: Demo | Real" selector in the header (also in Settings). **Demo** is
+  the default: practice runs with fixed example answers, free. **Real** uses real AI models and searches and costs
+  money. Choosing Real opens a dialog with the spending limits and a tick box, and needs the engine's session token;
+  choosing Demo is one click. The state is read from the engine (`GET /api/glhf/status`, `GET /api/paid`) and is
+  never stored in the browser. Code: `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`, `src/lib/shell.ts`.
+- **How an existing result was made**: the `Provenance` badge (`src/components/Provenance.tsx`): "Practice" or
+  "Live research" (or "Local model"), an icon and the word. It is read from the record's own data
+  (`provenanceOf` in `src/lib/provenance.ts`) and never from the selector: a practice result seen while Real is
+  chosen still says Practice.
 
 ## Words on screen
 
-The app uses plain words, not the code's words: "statement" (claim), "Holds up / Proven wrong / Not
-enough evidence" (verified / contradicted / unsupported), "practice run" (scripted or mock). The full
-list is in [DESIGN.md](DESIGN.md#words). A mark appears only when a recorded check produced it, and
-"Search powered by Exa" appears only on real Exa results.
+The app's words are in one module, `src/lib/words.ts`:
+
+- The four marks of a checked statement, each with its glyph: ✓ Supported, ✕ Contradicted, ? Insufficient
+  evidence, ○ Not checked (`markOf`, `MARK_WORD`, `MARK_GLYPH`; the chip is `MarkChip` in
+  `src/components/Shared.tsx`). A mark appears only where a check was recorded.
+- Counts never say that every statement was checked: "99 of 204 statements checked" (`checkedOf`), and a team
+  review gives the reasons for the rest from the check records' own notes (`uncheckedReasons` in `src/lib/verdict.ts`).
+- Money: "Run limit: $1" (the most a run may spend), "Estimated: about $0.40" (never a promise), "Spent: $0.31"
+  (recorded).
+- "Search powered by Exa" appears only on real Exa results; a database source is called a record.
+
+Saved runs, answers and sources use one row everywhere: `RecordRow` and `RecordList` in
+`src/components/RecordRow.tsx` (title on two lines, type, date and time, provenance, status or result, one Open;
+a few rows, then "View all N"). Grouping (`groupRecords` in `src/lib/records.ts`) is exact: the same brief made the
+same way. A similar name never groups two records.
 
 ## New run form
 
@@ -132,21 +160,27 @@ their saved names and looks.
 
 ```
 src/
-├── App.tsx, Dashboard.tsx, nav.ts   # shell, status line, navigation
-├── views/                           # the seven views and their tests
-├── home/                            # chat client, plan card, effort picker, catalogue panel
-├── board/                           # client for the board routes, styles
+├── App.tsx, nav.ts                  # the shell and the list of places
+├── views/                           # one file per view, and their tests
+├── research/, home/                 # the Research conversation: event adapters, answer, composer, inspector, plan card
+├── board/                           # client for the team-review routes, styles
 ├── swarm/                           # client for /api/glhf/*, New run form, cancel dialog
 ├── graph/                           # graph model, narration, canvas (lazy-loaded)
-├── components/                      # Thread, PaidSwitch, StatusLine, HowItWorks, characters
+├── lab/                             # the Lab scene, its adapters, and the agents' pictures (AgentAvatar, identity)
+├── components/                      # AppSidebar, HeaderSlot, PaidSwitch, Provenance, RecordRow, Shared, Thread, characters
 │   ├── ai-elements/                 # Vercel AI Elements (generated)
-│   └── ui/                          # shadcn/ui (generated)
-├── lib/                             # engine address, glossary, paid switch client
+│   └── ui/                          # shadcn/ui (generated): sidebar, sheet, tooltip, dialog, …
+├── hooks/                           # use-mobile (below 768 px)
+├── lib/                             # engine address, words and marks, provenance, records, paid switch client, formats
 └── test/                            # test helpers and fixtures
 src-tauri/                           # desktop shell (paused)
 ```
 
+Design tokens (colours, spacing, radii, fonts: Geist for text, Geist Mono for durations, ids and counts) are the
+CSS variables at the top of `src/index.css`; views read them and do not set colours of their own.
+
 ## Not verified
 
-A real-model run on screen, a run in progress, screen readers, Firefox and Safari. Tests run in
-jsdom; the browser checks so far were in Chromium.
+A run in progress with a real model on screen (the one real team review was looked at after it finished), switching
+to Real against a live engine (checked with a stand-in engine in tests only), screen readers, Firefox and Safari.
+Tests run in jsdom; the browser checks were in headless Chromium at 375, 528, 768 and 1280 px wide.

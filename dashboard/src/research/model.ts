@@ -7,12 +7,14 @@ import type { Verdict } from "@/board/api"
 import { PROVIDERS } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
-export interface Source { n: number; url: string; title: string; provider: Provider; note?: string }
+export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string }
 export interface Statement {
   stage: "draft" | "final"; index: number; text: string; sources: number[]; verdict: Verdict
   quote?: string; quoteFound: boolean; quoteSource?: number; checker: string; note?: string; carried?: boolean
 }
-export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string }
+export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string
+  /** Who says so: the critic re-reading the revision ("reviewer"), the engine's code ("code"), or only the writer's own report ("writer"). */
+  by?: "reviewer" | "code" | "writer" }
 export interface Searched { provider: Provider; query: string; ran?: boolean; found?: number; kept?: number; reason?: string }
 /** One step of the work, as the engine reports it: started, maybe progress, then finished with how it ended. */
 export interface Step {
@@ -24,7 +26,7 @@ export interface Step {
 }
 export interface Recommendation { label: string; text: string; why: string; basis: number[]; does?: string }
 export interface Artifact { id: string; name: string; type: string; bytes: number; at?: number }
-export interface Selection { criteria: string; selected: { n: number; why: string; limitation?: string }[]; notSelected: { title: string; url: string; provider: Provider; reason: string }[] }
+export interface Selection { criteria: string; /** The engine's own counts: results the searches returned, different sources among them, and how many were selected. */ counts?: { results: number; unique: number; selected: number }; selected: { n: number; why: string; limitation?: string }[]; notSelected: { title: string; url: string; provider: Provider; reason: string }[] }
 export type ResearchEvent = { type: string; at?: number; seq?: number } & Record<string, unknown>
 
 export interface AnswerState {
@@ -62,6 +64,8 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
   const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], missing: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
   let deltas = "", written: string | undefined, revised: string | undefined
   const draft: Statement[] = [], final: Statement[] = []
+  const judged = new Set<number>() // notes the critic has judged after the revision
+  const by = (v: unknown): Note["by"] => (v === "reviewer" || v === "code" || v === "writer" ? v : undefined)
   // In order of seq, each seq once: a replay after a reconnect, or events that arrive out of order, change nothing.
   const once = new Map<number, ResearchEvent>(); const loose: ResearchEvent[] = []
   for (const e of events) { if (typeof e.seq === "number") { if (!once.has(e.seq)) once.set(e.seq, e) } else loose.push(e) }
@@ -90,6 +94,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
       case "selection":
         s.selection = {
           criteria: str(e.criteria) ?? "",
+          counts: ((c) => (c && num(c.results) !== undefined && num(c.unique) !== undefined && num(c.selected) !== undefined ? { results: num(c.results)!, unique: num(c.unique)!, selected: num(c.selected)! } : undefined))(e.counts as Record<string, unknown> | undefined),
           selected: Array.isArray(e.selected) ? (e.selected as Record<string, unknown>[]).flatMap((x) => (num(x?.n) !== undefined ? [{ n: num(x.n)!, why: str(x.why) ?? "", limitation: str(x.limitation) }] : [])) : [],
           notSelected: Array.isArray(e.notSelected) ? (e.notSelected as Record<string, unknown>[]).flatMap((x) => (str(x?.title) !== undefined || str(x?.url) ? [{ title: plainTitle(str(x.title) ?? ""), url: str(x.url) ?? "", provider: str(x.provider) ?? "", reason: str(x.reason) ?? "" }] : [])) : [],
         }
@@ -115,13 +120,17 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "sources":
-        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note) }] : []))
+        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20) }] : []))
         break
       case "answer.delta": deltas += str(e.text) ?? ""; break
       case "answer.written": written = str(e.markdown); break
       case "answer.revised":
         revised = str(e.markdown)
-        if (Array.isArray(e.notes)) for (const n of e.notes as Record<string, unknown>[]) { const hit = s.notes.find((x) => x.index === n?.index); if (hit) { hit.resolved = n.resolved === true; hit.how = str(n.how) } }
+        if (Array.isArray(e.notes)) for (const n of e.notes as Record<string, unknown>[]) { const hit = s.notes.find((x) => x.index === n?.index); if (hit && !judged.has(hit.index)) { hit.resolved = n.resolved === true; hit.how = str(n.how); hit.by = by(n.by) } }
+        break
+      // The critic read the revision and judged each of its own notes: this is the final word on a note.
+      case "review.resolved":
+        if (Array.isArray(e.notes)) for (const n of e.notes as Record<string, unknown>[]) { const hit = s.notes.find((x) => x.index === n?.index); if (hit) { hit.resolved = n.resolved === true; hit.how = str(n.how); hit.by = by(n.by); judged.add(hit.index) } }
         break
       case "review.started": if (str(e.reviewer)) s.reviewing.push(str(e.reviewer)!); break
       case "statement.checked": {
@@ -247,6 +256,13 @@ export const preparation = (s: AnswerState): { running: boolean; ms?: number; fa
   return p ? { running: p.status === "running", ms: p.ms, failed: p.status === "failed" } : undefined
 }
 /** Found, selected and cited are three different things. Counts only what the engine reported. */
+/** How a critic's note ended, in words. Only a check (the critic re-reading, or the engine's code) makes it "dealt with"; the writer saying so is only a report. */
+export const noteOutcome = (n: Note): { word: string; kind: "success" | "warning" | "neutral" } =>
+  n.resolved === undefined ? { word: "raised", kind: "neutral" }
+    : !n.resolved ? { word: "not dealt with", kind: "warning" }
+      : n.by === "writer" ? { word: "reported addressed by the writer, not re-checked", kind: "neutral" }
+        : { word: n.by === "reviewer" ? "dealt with, confirmed by the critic" : "dealt with", kind: "success" }
+
 /** A title as text: a database title can carry markup ("<i>KRAS</i>"), which is never rendered and reads badly as text. */
 export function plainTitle(title: string): string { return title.replace(/<\/?(?:i|b|em|strong|sub|sup|u)>/gi, "").replace(/\s+/g, " ").trim() }
 

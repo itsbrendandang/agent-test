@@ -277,7 +277,6 @@ export function SwarmView() {
             </li>
           ))}
         </ol>
-        {!run && list.length === 0 && <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>}
         {run && live && (
           <div className="swarm-live">
             <div className="swarm-progress" aria-hidden="true"><span style={{ width: `${run.phase === "queued" ? 0 : progress * 100}%` }} /></div>

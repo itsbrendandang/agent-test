@@ -80,9 +80,9 @@ function RunLab({ run }: { run: RunRef }) {
   const on = replaying && ready
   useEffect(() => {
     if (!on || !playing) return
-    let last = performance.now()
+    let last = Date.now()
     const timer = window.setInterval(() => {
-      const now = performance.now(), dt = now - last
+      const now = Date.now(), dt = Math.max(0, Math.min(500, now - last)) // a sleeping tab does not jump ahead
       last = now
       if (document.hidden) return
       setPosition((was) => Math.min(length, was + dt * speed))

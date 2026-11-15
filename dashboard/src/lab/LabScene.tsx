@@ -143,6 +143,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
           {reduced ? "Reduced motion enabled" : !canAnimate ? "Motion not available" : paused ? "Resume motion" : "Pause motion"}
         </button>
       </div>
+      {!compact && <p className="lab-scroll-hint">Scroll the lab sideways to see every room.</p>}
       <div className="lab-viewport" tabIndex={compact ? undefined : 0} role="group" aria-label="The six rooms of the lab. Scroll sideways on a small screen.">
         <div className="lab" data-still={still || undefined} data-paused={paused || undefined}>
           <LabMap />
@@ -182,7 +183,6 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       </div>
       {!compact && (
         <p className="lab-legend">
-          <span className="lab-scroll-hint">Scroll the lab sideways to see every room.</span>
           <span>… working</span><span>⇄ fetching</span><span>→ handed off</span><span>✓ done</span><span>✕ failed</span><span>■ cancelled</span><span className="lab-legend-off">faded: not in this run</span>
         </p>
       )}

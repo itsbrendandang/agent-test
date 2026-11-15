@@ -13,7 +13,7 @@ import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
 import { identifierOf, markOf } from "./marks"
 import { ProviderCredit } from "./ProviderCredit"
-import { copyText, foldAnswer, fromRecord, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
+import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
@@ -599,7 +599,7 @@ describe("stopping and queueing from the composer (checkpoint C)", () => {
     await waitFor(() => expect(streams.some((s) => s.url.endsWith("/a-1/events"))).toBe(true))
     await feed(running, /a-1\/events$/)
     expect(t.box()).not.toBeDisabled()
-    expect(screen.getAllByRole("button", { name: "Stop" }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole("button", { name: "Stop" })).toHaveLength(1) // one Stop, in the composer
     await t.user.type(t.box(), "A follow-up")
     expect(screen.getByRole("button", { name: "Send" })).toHaveTextContent("Send (queued)")
     await t.user.keyboard("{Enter}")
@@ -703,5 +703,73 @@ describe("a real answer, as recorded", () => {
     expect(next.getAllByRole("button", { name: /^Source \d$/ }).map((b) => b.textContent)).toEqual(["1", "1", "1", "5", "6"])
     expect(document.body).toHaveTextContent("Spent: $0.07 of a run limit of $0.15. Completed in 31s.")
     expect(answer).toBeTruthy()
+  })
+})
+
+describe("restoring and reconnecting (checkpoint E)", () => {
+  const THREAD = { items: [{ id: "a-1", thread: "t-9", question: "First question", status: "done" }, { id: "a-2", thread: "t-9", question: "A follow-up", status: "done" }] }
+  const engine = (extra: Parameters<typeof routes>[0] = {}) => routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/research/a-2": { status: 200, body: { id: "a-2", thread: "t-9", question: "A follow-up" } },
+    "GET /api/research": (r) => (r.query.includes("thread=t-9") ? { status: 200, body: THREAD } : { status: 404, body: {} }), "POST /api/research": { status: 202, body: { id: "a-3", thread: "t-9", mode: "demo" } }, ...extra })
+  it("a saved answer opens with its whole conversation, from the engine, and a follow-up continues that conversation", async () => {
+    const sent = engine()
+    sessionStorage.setItem("open.answer", JSON.stringify({ id: "a-2", question: "A follow-up" }))
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(2))
+    expect(screen.getAllByText("First question").length).toBeGreaterThan(0)
+    expect(streams.map((x) => x.url.replace(/.*research\//, ""))).toEqual(expect.arrayContaining(["a-1/events", "a-2/events"])) // each answer is read from its own record
+    await userEvent.setup().type(screen.getByRole("textbox", { name: "Ask a research question" }), "And then?{Enter}")
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/research")[0].body).toMatchObject({ question: "And then?", thread: "t-9" })
+  })
+  it("after a reload the conversation is still there and still the same thread", async () => {
+    const sent = engine()
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "First question" }, { id: 2, role: "assistant", content: "", research: { id: "a-1", question: "First question", thread: "t-9" } }]))
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(2)) // the follow-up the engine holds is shown too
+    await userEvent.setup().type(screen.getByRole("textbox", { name: "Ask a research question" }), "More{Enter}")
+    await waitFor(() => expect(to(sent, "POST", "/api/research")[0]?.body).toMatchObject({ thread: "t-9" }))
+  })
+  it("leaves the page as it is when the engine cannot list the thread, or when the page also holds other kinds of reply", async () => {
+    engine({ "GET /api/research": { status: 500, body: {} } })
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "First question" }, { id: 2, role: "assistant", content: "", research: { id: "a-1", question: "First question", thread: "t-9" } }]))
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(streams.length).toBe(1))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1)
+  })
+  it("when the connection drops it says so, and events replayed after it comes back are not shown twice", async () => {
+    await show(lines(S_REAL).slice(0, 12))
+    act(() => streams[0].onerror?.())
+    expect(await screen.findByRole("alert")).toHaveTextContent("The connection to the engine was lost while this answer was being made.")
+    await feed(lines(S_REAL)) // the stream opens again and replays from the start
+    expect(screen.queryByRole("alert")).toBeNull()
+    const s = foldAnswer(lines(S_REAL))
+    expect(within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")).toHaveLength(s.sources.length)
+    expect(screen.getAllByRole("button", { name: "Copy answer" })).toHaveLength(1)
+  })
+})
+
+describe("what the engine added after the first real answer", () => {
+  const base = lines(S_REAL)
+  const at = (seq: number, type: string, rest: object): ResearchEvent => ({ seq, at: 1, run: "a-1", type, ...rest } as ResearchEvent)
+  it("a source shows the year the search gave for it, and none when it gave none", async () => {
+    const events = base.map((e) => (e.type === "sources" ? { ...e, items: (e as unknown as { items: object[] }).items.map((x, i) => (i === 0 ? { ...x, published: "2025" } : x)) } as ResearchEvent : e))
+    await show(events)
+    const rows = within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")
+    expect(rows[0]).toHaveTextContent(/· 2025 ·/); expect(rows[1]).not.toHaveTextContent(/· 20\d\d ·/)
+  })
+  it("uses the engine's own counts of results, different sources and selected", () => {
+    const s = foldAnswer(base.map((e) => (e.type === "selection" ? { ...e, counts: { results: 24, unique: 22, selected: 6 } } as ResearchEvent : e)))
+    expect(s.selection?.counts).toEqual({ results: 24, unique: 22, selected: 6 })
+  })
+  it("the final word on a critic's note is the critic's own re-reading; the writer's report alone is not 'dealt with'", () => {
+    const notes = [at(900, "review.note", { index: 90, reviewer: "critic", severity: "major", text: "One" }), at(901, "review.note", { index: 91, reviewer: "critic", severity: "minor", text: "Two" }), at(902, "review.note", { index: 92, reviewer: "critic", severity: "minor", text: "Three" })]
+    const revised = at(903, "answer.revised", { markdown: "Revised.", notes: [{ index: 90, resolved: true, how: "rewritten", by: "writer" }, { index: 91, resolved: true, how: "removed", by: "writer" }, { index: 92, resolved: true, how: "cut by code", by: "code" }] })
+    const judged = at(904, "review.resolved", { notes: [{ index: 90, resolved: false, how: "still overstated", by: "reviewer" }] })
+    const of = (events: ResearchEvent[]) => Object.fromEntries(foldAnswer(events).notes.filter((n) => n.index >= 90).map((n) => [n.index, noteOutcome(n).word]))
+    expect(of([...notes, revised])).toEqual({ 90: "reported addressed by the writer, not re-checked", 91: "reported addressed by the writer, not re-checked", 92: "dealt with" })
+    const final = { 90: "not dealt with", 91: "reported addressed by the writer, not re-checked", 92: "dealt with" }
+    expect(of([...notes, revised, judged])).toEqual(final)
+    expect(of([judged, revised, ...notes])).toEqual(final) // the same whatever order they arrive in
   })
 })

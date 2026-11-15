@@ -20,12 +20,12 @@ import {
 /** An event as it arrives: an object with a type. Every other field is checked before it is used. */
 export type LabEvent = Record<string, unknown>
 
-const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined)
-const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined)
+export const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined)
+export const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined)
 
 // ── Building a model ─────────────────────────────────────────────────────────────────────────────
 
-class Build {
+export class Build {
   readonly model: LabModel
   /** Teammates that did something in this run. */
   readonly touched = new Set<CharacterId>()

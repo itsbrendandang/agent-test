@@ -289,3 +289,6 @@
 .search-new { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .search-new .search-new-icon { display: none; }
 @media (max-width: 640px) { .search-new { width: 36px; height: 36px; padding: 0; justify-content: center; border-color: transparent; background: none; } .search-new span { display: none; } .search-new .search-new-icon { display: block; } }
+/* small text buttons inside the conversation: at least 24 px tall to press */
+.page.search .answer-actions .link-btn, .page.search .inspector .link-btn { min-height: 24px; display: inline-flex; align-items: center; }
+.page.search summary { min-height: 24px; }

@@ -75,7 +75,8 @@ export type LabState = "idle" | "working" | "fetching" | "handing-off" | "done" 
  */
 export interface Trip {
   id: string
-  kind: "fetch" | "handoff"
+  /** "carry": a claim is picked up in the room of its old state (`from`) and put down in the room of its new one. */
+  kind: "fetch" | "handoff" | "carry"
   room: RoomId
   /** What is being fetched or handed over, in plain words: "8 papers from PubMed and preprints". */
   label: string
@@ -91,6 +92,9 @@ export interface Trip {
   to?: CharacterId
   /** A search: where it looked ("exa", "europepmc", "fixture", a database), as the engine recorded it. */
   provider?: string
+  /** A carry: the room the claim is picked up in, and the claim's id. */
+  from?: RoomId
+  claim?: string
 }
 
 export interface Activity {
@@ -123,6 +127,44 @@ export interface Visitor { id: string; name: string; title: string; why?: string
 
 export interface LogLine { id: string; at: number; text: string; who?: string; tone?: "bad" | "good" | "warn" }
 
+/** The states a claim moves through in the claims engine. Only the engine's code moves a claim; the lab shows the state it is given. */
+export type ClaimState = "triaged" | "piloting" | "in_workup" | "under_review" | "sent_back" | "supported" | "rejected" | "not_established"
+export const CLAIM_WORD: Record<ClaimState, string> = {
+  triaged: "Triaged", piloting: "Piloting", in_workup: "In workup", under_review: "Under review", sent_back: "Sent back",
+  supported: "Supported", rejected: "Rejected", not_established: "Not established",
+}
+/** A mark for the three states a claim ends in, so they are never told apart by colour alone. */
+export const CLAIM_GLYPH: Record<ClaimState, string> = { triaged: "", piloting: "", in_workup: "", under_review: "", sent_back: "↩", supported: "✓", rejected: "✕", not_established: "?" }
+/** The room a claim sits in: where the work of its state is done; a closed claim is shelved. */
+export const CLAIM_ROOM: Record<ClaimState, RoomId> = {
+  triaged: "planning", piloting: "bench", in_workup: "bench", sent_back: "bench", under_review: "review",
+  supported: "report", rejected: "quality", not_established: "quality",
+}
+export const claimOpen = (state: ClaimState) => state !== "supported" && state !== "rejected" && state !== "not_established"
+
+/** One claim of a claims-engine run, as the board snapshot and the events after it say. */
+export interface ClaimCard {
+  id: string
+  text: string
+  acuity?: string
+  state: ClaimState
+  room: RoomId
+  /** Why it is in this state: the `reason` of its last move, in the engine's words. */
+  reason?: string
+  movedAt?: number
+  /**
+   * What is known about work on it now. The engine reports a call only when it ends, so an open claim is "being
+   * worked on or waiting" between two events; no agent is named unless an event names it.
+   */
+  activity: string
+  budget: { tokensSpent: number; tokensAlloc?: number; secondsSpent: number; secondsAlloc?: number }
+  /** Calls per mode ("pilot", "workup", "audit 1", ...): 2 means it was tried again. */
+  attempts: Record<string, number>
+  errors: string[]
+  /** The last call on it that ended. */
+  lastCall?: { role: string; mode: string; outcome: string; at: number }
+}
+
 export type RunKind = "board" | "answer" | "swarm"
 export const KIND_WORD: Record<RunKind, string> = { board: "Team review", answer: "Research answer", swarm: "Swarm run" }
 /** How a run was made, from its own record: the shell's one vocabulary (lib/provenance.ts). */
@@ -144,6 +186,12 @@ export interface LabModel {
   at?: number
   /** True when the times are estimates (a swarm's notes record time only when a step ends). */
   roughTimes?: boolean
+  /** A claims-engine run: its claims, in the order they were proposed. */
+  claims?: ClaimCard[]
+  /** Lines the view must show for this run: the model, that it is a scripted run, which switches were off. */
+  labels?: string[]
+  /** True when an event is missing between the snapshot and the events held: the reader must read the snapshot again. */
+  needsSync?: boolean
   /** The searches the run has reported so far, counted by where they looked. Only what an event said. */
   searches?: Record<string, number>
   characters: Record<CharacterId, Activity>
