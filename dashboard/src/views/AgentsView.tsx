@@ -66,6 +66,7 @@ export function AgentsView() {
   const [retry, setRetry] = useState(0)
   /** The member whose details are open in the side panel: one at a time, by its stable key. */
   const [opened, setOpened] = useState<string>()
+  const [lastOpened, setLastOpened] = useState<string>()
   const opener = useRef<HTMLButtonElement>(undefined)
   useEffect(() => {
     let stale = false
@@ -146,7 +147,7 @@ export function AgentsView() {
                       <p className="member-foot">{m.foot}</p>
                       {m.details && (
                         <Button type="button" variant="outline" size="sm" className="member-details" aria-label={`Details of ${m.name}`} aria-haspopup="dialog" aria-expanded={opened === m.key}
-                          onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key) }}>Details</Button>
+                          onClick={(e) => { opener.current = e.currentTarget; setOpened(m.key); setLastOpened(m.key) }}>Details</Button>
                       )}
                     </div>
                   </li>
@@ -155,7 +156,7 @@ export function AgentsView() {
             </section>
           )
         })}
-        <MemberPanel member={members.find((m) => m.key === opened)} onClose={() => setOpened(undefined)} returnFocus={() => opener.current?.focus()} />
+        <MemberPanel open={opened !== undefined} member={members.find((m) => m.key === lastOpened)} onClose={() => setOpened(undefined)} returnFocus={() => opener.current?.focus()} />
         {roles && (group === "all" || group === "nine") && !filter.trim() && (
           <details className="team-prompt team-shared card-surface">
             <summary>Rules every role of the team of nine follows</summary>
@@ -178,9 +179,9 @@ export function AgentsView() {
   )
 }
 /** One member's details, in a side panel over the page. */
-function MemberPanel({ member, onClose, returnFocus }: { member?: Member; onClose: () => void; returnFocus: () => void }) {
+function MemberPanel({ open, member, onClose, returnFocus }: { open: boolean; member?: Member; onClose: () => void; returnFocus: () => void }) {
   return (
-    <Sheet open={!!member} onOpenChange={(open) => { if (!open) onClose() }}>
+    <Sheet open={open} onOpenChange={(open) => { if (!open) onClose() }}>
       <SheetContent side="right" className="member-panel" onCloseAutoFocus={(e) => { e.preventDefault(); returnFocus() }}>
         {member && (
           <>
