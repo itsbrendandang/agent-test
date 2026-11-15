@@ -859,6 +859,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     // A failure caused by the setup (a refused model id or key), or a lead that wrote no memo, is recorded on the run, so it
     // is listed as failed and not continued by itself at the next start; a person fixes the cause and resumes it.
     if (error instanceof FatalModelError || error instanceof MemoMissing) { state.failed = error.message; save() }
+    mirrorRun(state, false)
     log.emit(`failed:${Date.now()}`, { type: "run.failed", error: error instanceof FatalModelError || error instanceof MemoMissing ? error.message : String(error) })
     throw error
   } finally {
@@ -935,7 +936,7 @@ async function answerText(api: ToolExecutionApi, entryId: EntryId): Promise<stri
 /** In one step (writeWhole): a cut run.json would hide the run from the list, stop its resume and drop its spend from the daily cap. */
 function saveState(config: BoardConfig, state: RunState) {
   writeWhole(`${runDir(config, state.runId)}/run.json`, JSON.stringify(state, null, 2))
-  mirrorRun(state) // the database copy, when one is set up (db/supabase.ts); never waits, never throws
+  mirrorRun(state, lockHolder(runDir(config, state.runId)) !== undefined) // the database copy, when one is set up (db/supabase.ts); never waits, never throws
 }
 
 export function loadState(config: BoardConfig, runId: string): RunState {

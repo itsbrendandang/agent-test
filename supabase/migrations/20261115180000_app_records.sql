@@ -28,25 +28,12 @@ create index if not exists research_answers_thread_idx on public.research_answer
 create index if not exists research_answers_started_idx on public.research_answers (started_at desc);
 create index if not exists research_answers_status_idx on public.research_answers (status);
 
--- One row per thread (a conversation of answers): the first question as its title, the latest answer's status.
-create or replace view public.research_threads with (security_invoker = on) as
-select
-  thread,
-  (array_agg(left(regexp_replace(question, '\s+', ' ', 'g'), 120) order by started_at, id))[1] as title,
-  (array_agg(status order by started_at desc, id desc))[1] as status,
-  count(*)::int as answers,
-  sum(usd) as usd,
-  min(started_at) as started_at,
-  max(coalesce(finished_at, work_started_at, started_at)) as updated_at
-from public.research_answers
-group by thread;
-
 -- One row per board run (board/runs/<run>/run.json, and memo.md once the lead writes it).
 create table if not exists public.board_runs (
   run_id          text primary key,
   brief_file      text,
   brief_id        text,
-  status          text check (status in ('running', 'finished', 'failed')),
+  status          text check (status in ('running', 'paused', 'finished', 'failed')),
   mock            boolean,
   started_at      timestamptz,
   roster          jsonb not null default '[]'::jsonb, -- member names
@@ -82,4 +69,4 @@ create index if not exists exa_ledger_at_idx on public.exa_ledger (at);
 alter table public.research_answers enable row level security;
 alter table public.board_runs enable row level security;
 alter table public.exa_ledger enable row level security;
-revoke all on public.research_answers, public.board_runs, public.exa_ledger, public.research_threads from anon, authenticated;
+revoke all on public.research_answers, public.board_runs, public.exa_ledger from anon, authenticated;

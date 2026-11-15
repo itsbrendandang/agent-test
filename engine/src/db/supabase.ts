@@ -3,7 +3,7 @@
 //
 // The local files stay the source of truth. When on, every save of a record is also sent to the database
 // ("write-through"), in the background:
-//   research_answers   one row per research answer (board/runs/.research/<id>/record.json); threads are a view on it
+//   research_answers   one row per research answer (board/runs/.research/<id>/record.json)
 //   board_runs         one row per board run (board/runs/<run>/run.json, and the memo once it is written)
 //   exa_ledger         one row per line of the Exa spend record (board/runs/.exa-ledger.jsonl)
 // The schema is supabase/migrations/. A database write never throws into the caller, never makes it wait, and is
@@ -30,22 +30,21 @@ export interface DbClient { upsert(table: Table, rows: Row[]): Promise<void> }
 export const DEFAULT_TIMEOUT_MS = 5000
 
 /** The database settings, or undefined when either variable is missing (then the database is off). */
-export function supabaseSettings(env: NodeJS.ProcessEnv = process.env): { url: string; key: string; timeoutMs: number } | undefined {
+export function supabaseSettings(env: NodeJS.ProcessEnv = process.env): { url: string; key: string } | undefined {
   const url = env.SUPABASE_URL?.trim(), key = env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   if (!url || !key) return undefined
-  const timeout = Number(env.SUPABASE_TIMEOUT_MS)
-  return { url: url.replace(/\/+$/, ""), key, timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_TIMEOUT_MS }
+  return { url: url.replace(/\/+$/, ""), key }
 }
 
 /** A client for Supabase's REST API: one POST per upsert, merged on the table's key columns. */
-export function restClient(settings: { url: string; key: string; timeoutMs: number }, fetchImpl: typeof fetch = fetch): DbClient {
+export function restClient(settings: { url: string; key: string }, fetchImpl: typeof fetch = fetch, timeoutMs = DEFAULT_TIMEOUT_MS): DbClient {
   return {
     async upsert(table, rows) {
       const res = await fetchImpl(`${settings.url}/rest/v1/${table}?on_conflict=${CONFLICT[table]}`, {
         method: "POST",
         headers: { apikey: settings.key, authorization: `Bearer ${settings.key}`, "content-type": "application/json", prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify(rows),
-        signal: AbortSignal.timeout(settings.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200)}`)
     },
@@ -66,7 +65,6 @@ export function dbClient(env: NodeJS.ProcessEnv = process.env): DbClient | null 
   if (client !== undefined) return client
   const settings = env.NODE_TEST_CONTEXT ? undefined : supabaseSettings(env)
   client = settings ? restClient(settings) : null
-  if (settings) timeoutMs = settings.timeoutMs
   return client
 }
 
@@ -131,11 +129,15 @@ export function answerRow(record: ResearchRecord, now = Date.now()): Row {
   }
 }
 
-/** A board run as a row. `memo` (text and decision) is added once the memo is written; without it those columns are left as they are. */
-export function runRow(state: RunState, memo?: { memo: string | null; decision: string | null }, now = Date.now()): Row {
+/**
+ * A board run as a row. `running`: a process holds the run's lock. The status follows the engine's run list: a run
+ * that is not finished and not being worked on is "failed" when it recorded a failure, otherwise "paused".
+ * `memo` (text and decision) is added once the memo is written; without it those columns are left as they are.
+ */
+export function runRow(state: RunState, running: boolean, memo?: { memo: string | null; decision: string | null }, now = Date.now()): Row {
   return {
     run_id: state.runId, brief_file: state.briefFile, brief_id: basename(state.briefFile).replace(/\.md$/, ""),
-    status: state.finished ? "finished" : state.failed ? "failed" : "running", mock: state.mock === true,
+    status: state.finished ? "finished" : running ? "running" : state.failed ? "failed" : "paused", mock: state.mock === true,
     started_at: time(state.startedAt), roster: Object.keys(state.members ?? {}), rounds: state.rounds ?? 0,
     usd: num(state.usd) ?? 0, checker_usd: num(state.checkerUsd) ?? 0, first_pass_usd: num(state.firstPassUsd) ?? 0, cost_estimated: state.costEstimated === true,
     ledger: state.ledger ?? [], state, updated_at: time(now),
@@ -149,7 +151,7 @@ export const exaRow = (entry: ExaEntry): Row => ({ run_id: entry.runId, call_id:
 // ── The calls the stores make ────────────────────────────────────────────────────────────────────
 
 export const mirrorAnswer = (record: ResearchRecord): void => mirror("research_answers", record.id, () => answerRow(structuredClone(record)))
-export const mirrorRun = (state: RunState): void => mirror("board_runs", state.runId, () => runRow(structuredClone(state)))
+export const mirrorRun = (state: RunState, running: boolean): void => mirror("board_runs", state.runId, () => runRow(structuredClone(state), running))
 /** The memo of a run, read from the file just written, with the decision the lead gave. A slot of its own, so a later save of the state does not replace it. */
 export const mirrorMemo = (state: RunState, file: string, decision: string): void =>
   mirror("board_runs", `${state.runId}:memo`, () => ({ run_id: state.runId, memo: readFileSync(file, "utf8"), decision, updated_at: time(Date.now()) }))

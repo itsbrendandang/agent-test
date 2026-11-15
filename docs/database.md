@@ -8,7 +8,6 @@ The engine keeps its records as files under `board/runs/`. It can also keep a co
 | Table | One row per | Read from |
 |---|---|---|
 | `research_answers` | research answer: question, thread, status, times, cost, answer text, sources (with their images), and the whole record | `board/runs/.research/<id>/record.json` |
-| `research_threads` (a view) | thread (one conversation of answers): title, status of the latest answer, number of answers, cost | `research_answers` |
 | `board_runs` | team review: brief, members, status, rounds, cost, checked claims, memo and decision, and the whole `run.json` | `board/runs/<run>/run.json`, `memo.md` |
 | `exa_ledger` | line of the Exa spend record | `board/runs/.exa-ledger.jsonl` |
 
@@ -27,6 +26,9 @@ tracker's database (`glhf/runs/tracker.sqlite`).
 - A write that fails, or takes longer than the time limit (5 seconds), is given up. The engine
   logs one line, `[supabase] ... not saved to the database: <reason>`. The answer or review goes
   on as normal.
+- The status of a review follows the engine's run list: `running` only while a process works
+  on it, then `finished`, `failed`, or `paused` (stopped, can be resumed). The backfill also
+  marks an answer that the engine left `running` or `queued` long past its time as `failed`.
 - When the engine saves one record many times while a write is on its way, only the newest
   version is sent next.
 - Code: `engine/src/db/supabase.ts`. It calls Supabase's REST API with `fetch`; there is no extra
@@ -55,7 +57,5 @@ tracker's database (`glhf/runs/tracker.sqlite`).
    It reads the runs folder (`paths.runs` in `board/config.yaml`, or `DRUG_BOARD_RUNS_DIR`) and
    sends every answer, review and Exa line. It is safe to run again: each row replaces the row
    with the same key.
-
-Optional: `SUPABASE_TIMEOUT_MS` changes the time limit of one write (default `5000`).
 
 To turn it off, remove the two variables and restart the engine. Nothing else changes.

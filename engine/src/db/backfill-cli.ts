@@ -11,7 +11,7 @@ if (!settings) {
   process.exit(1)
 }
 try {
-  await backfill(loadConfig(), restClient({ ...settings, timeoutMs: Math.max(settings.timeoutMs, 30_000) }), (line) => console.log(line))
+  await backfill(loadConfig(), restClient(settings, fetch, 30_000), (line) => console.log(line))
   console.log("Done.")
 } catch (error) {
   console.error(`Backfill stopped: ${error instanceof Error ? error.message : String(error)}`)

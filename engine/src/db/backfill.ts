@@ -7,11 +7,12 @@ import { type BoardConfig, path } from "../config.ts"
 import { EventLog } from "../events.ts"
 import { type ExaEntry, exaLedgerFile } from "../paid/exaledger.ts"
 import { listRecords } from "../research/store.ts"
+import { holder } from "../runlock.ts"
 import { answerRow, CONFLICT, type DbClient, exaRow, type Row, runRow, type Table } from "./supabase.ts"
 
 export const BATCH = 50
 
-/** The board runs on disk (each folder with a run.json), as rows, with the memo and decision when one was written. */
+/** The board runs on disk (each folder with a run.json), as rows ("running" only while a process holds the run's lock), with the memo and decision when one was written. */
 export function runRows(config: BoardConfig): Row[] {
   const root = path(config, "runs")
   if (!existsSync(root)) return []
@@ -22,7 +23,7 @@ export function runRows(config: BoardConfig): Row[] {
     if (!state || typeof state.runId !== "string") return []
     const memo = existsSync(join(dir, "memo.md")) ? readFileSync(join(dir, "memo.md"), "utf8") : null
     const written = EventLog.read(join(dir, "events.jsonl")).filter((e) => e.type === "memo.written").at(-1) as { decision?: string } | undefined
-    return [runRow(state, { memo, decision: written?.decision ?? null })]
+    return [runRow(state, holder(join(dir, "run.lock")) !== undefined, { memo, decision: written?.decision ?? null })]
   })
 }
 

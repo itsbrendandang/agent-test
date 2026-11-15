@@ -23,7 +23,7 @@ const { backfill } = await import("../src/db/backfill.ts")
 const { engine } = await import("./fixtures/research/harness.ts")
 const { reserveSearch, settleSearch } = await import("../src/paid/exaledger.ts")
 const { loadConfig } = await import("../src/config.ts")
-const { runBoard, startRun } = await import("../src/board/board.ts")
+const { acquireRunLock, runBoard, runDir, startRun } = await import("../src/board/board.ts")
 import type { DbClient, Row, Table } from "../src/db/supabase.ts"
 
 /** A database in memory: upserts merge on the table's key columns, as PostgREST's merge-duplicates does. */
@@ -50,7 +50,7 @@ test("off unless both variables are set; under node --test the environment alone
   assert.equal(db.supabaseSettings({}), undefined)
   assert.equal(db.supabaseSettings({ SUPABASE_URL: "https://x.supabase.co" }), undefined)
   assert.equal(db.supabaseSettings({ SUPABASE_SERVICE_ROLE_KEY: "k" }), undefined)
-  assert.deepEqual(db.supabaseSettings({ SUPABASE_URL: "https://x.supabase.co/", SUPABASE_SERVICE_ROLE_KEY: "k" }), { url: "https://x.supabase.co", key: "k", timeoutMs: db.DEFAULT_TIMEOUT_MS })
+  assert.deepEqual(db.supabaseSettings({ SUPABASE_URL: "https://x.supabase.co/", SUPABASE_SERVICE_ROLE_KEY: "k" }), { url: "https://x.supabase.co", key: "k" })
   db.setDbClient(undefined)
   assert.equal(db.dbClient({ SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k", NODE_TEST_CONTEXT: "child" }), null)
 })
@@ -72,13 +72,13 @@ test("unset keys: an answer and an Exa line make no database call and reach no n
 test("the REST client: one POST to the table, merged on its key, the key only in the headers", async () => {
   const seen: { url: string; init: RequestInit }[] = []
   const fake = (async (url: string, init: RequestInit) => { seen.push({ url, init }); return new Response(null, { status: 201 }) }) as unknown as typeof fetch
-  const client = db.restClient({ url: "https://x.supabase.co", key: "service-key", timeoutMs: 1000 }, fake)
+  const client = db.restClient({ url: "https://x.supabase.co", key: "service-key" }, fake)
   await client.upsert("exa_ledger", [{ run_id: "r" }])
   assert.equal(seen[0].url, "https://x.supabase.co/rest/v1/exa_ledger?on_conflict=run_id,call_id,kind,at")
   const headers = seen[0].init.headers as Record<string, string>
   assert.deepEqual([seen[0].init.method, headers.apikey, headers.authorization, headers.prefer], ["POST", "service-key", "Bearer service-key", "resolution=merge-duplicates,return=minimal"])
   assert.equal(seen[0].init.body, JSON.stringify([{ run_id: "r" }]))
-  const refused = db.restClient({ url: "https://x.supabase.co", key: "service-key", timeoutMs: 1000 }, (async () => new Response("permission denied", { status: 401 })) as unknown as typeof fetch)
+  const refused = db.restClient({ url: "https://x.supabase.co", key: "service-key" }, (async () => new Response("permission denied", { status: 401 })) as unknown as typeof fetch)
   await assert.rejects(refused.upsert("board_runs", []), /HTTP 401 permission denied/)
 })
 
@@ -166,6 +166,20 @@ test("a scripted board run: one row with roster, status, spend and the memo with
   assert.deepEqual(outbound, [])
 })
 
+test("a board run that stops before its end is mirrored as paused, not left running", async () => {
+  const fake = fakeDb()
+  db.setDbClient(fake.client)
+  const base = tempConfig()
+  const config = { ...base, board: base.board.slice(0, 3), meeting: { ...base.meeting, max_minutes: 5, lead_turns: 1 } }
+  const id = await startRun(join(import.meta.dirname, "../../board/briefs/kras-g12c-hit-to-lead.md"), { config, mock: true })
+  await assert.rejects(runBoard(id, undefined, { config, mock: true }))
+  await db.flushDb()
+  const statuses = fake.calls.filter((c) => c.table === "board_runs" && c.rows[0].run_id === id && "status" in c.rows[0]).map((c) => c.rows[0].status)
+  assert.ok(statuses.includes("running"), "running while the lead works")
+  assert.equal(fake.tables.board_runs.get(id)?.status, "paused")
+  assert.deepEqual(outbound, [])
+})
+
 test("backfill: every local answer, run and Exa line, in batches, and running it twice changes nothing", async () => {
   db.setDbClient(null) // made with the database off
   const e = await engine({ demo: true })
@@ -180,8 +194,11 @@ test("backfill: every local answer, run and Exa line, in batches, and running it
   const lines: string[] = []
   assert.deepEqual(await backfill(config, fake.client, (l) => lines.push(l)), { research_answers: 1, board_runs: 1, exa_ledger: 1 })
   assert.equal(fake.tables.research_answers.get(id)?.status, "done")
-  assert.deepEqual([fake.tables.board_runs.get(runId)?.status, fake.tables.board_runs.get(runId)?.memo], ["running", null])
+  assert.deepEqual([fake.tables.board_runs.get(runId)?.status, fake.tables.board_runs.get(runId)?.memo], ["paused", null], "a run nobody works on is not running")
   assert.deepEqual(lines, ["research_answers: 1 row", "board_runs: 1 row", "exa_ledger: 1 row"])
+  const release = acquireRunLock(runDir(config, runId))
+  try { await backfill(config, fake.client) } finally { release() }
+  assert.equal(fake.tables.board_runs.get(runId)?.status, "running", "running while a process holds the run's lock")
   const before = JSON.stringify([...fake.tables.exa_ledger.values()])
   await backfill(config, fake.client)
   assert.equal(JSON.stringify([...fake.tables.exa_ledger.values()]), before)
