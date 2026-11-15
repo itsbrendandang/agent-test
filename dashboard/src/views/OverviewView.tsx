@@ -47,6 +47,14 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
   const [refused, setRefused] = useState<string>()
   const events = useSeenEvents(asked?.id)
   const lab = useMemo(() => (asked ? answerLab(events as unknown as LabEvent[], asked.id) : emptyLab()), [asked, events])
+  const ended = lab.status === "done" || lab.status === "failed" || lab.status === "cancelled"
+  // An answer that ended is counted at once: the line of counts is read again.
+  useEffect(() => { if (ended) retry() }, [ended, asked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const said = !asked ? "The team is at its desks. Send a question above and the agents it needs start working."
+    : lab.status === "done" ? "The team finished your question. The answer is below."
+    : lab.status === "failed" ? "The answer could not be finished. What the team did is in the activity list."
+    : lab.status === "cancelled" ? "The answer was stopped."
+    : "The team is working on your question. Nothing here moves unless the engine reports it."
   const ask = async (question: string, effort: "quick" | "standard") => {
     setRefused(undefined)
     try {
@@ -69,7 +77,7 @@ export function OverviewView({ onOpen }: { onOpen: (view: View) => void }) {
       <div className="ov-lab">
         <div className="ov-row-label">
           <span id="ov-lab-title">Agent Lab</span>
-          <small role="status">{asked ? "The team is working on your question. Nothing here moves unless the engine reports it." : "The team is at its desks. Send a question above and the agents it needs start working."}</small>
+          <small role="status">{said}</small>
         </div>
         <Lab model={lab} />
       </div>

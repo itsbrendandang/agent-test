@@ -91,6 +91,12 @@ describe("the Agent Lab under the question box", () => {
       { seq: 3, at: 3, type: "step.started", step: "specialist:toxicologist", kind: "write", label: "Toxicologist: reading 3 sources with its method notes", agent: "specialist:toxicologist" },
     ])
     await waitFor(() => expect(lab().textContent).toContain("Toxicologist"))
+    // When the answer ends, the line says so and the counts are read again.
+    const reads = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => String(url).endsWith("/api/research?all=1")).length
+    const before = reads()
+    await feed([{ seq: 4, at: 4, type: "research.finished", usd: 0, seconds: 1, counts: { sources: 3, statements: 2, verified: 2 }, searches: {}, review: { checker: "scripted", critic: "scripted", revised: false, notes: { raised: 0, resolved: 0 } } }])
+    await waitFor(() => expect(lab().querySelector(".ov-row-label [role=status]")?.textContent).toContain("The team finished your question."))
+    await waitFor(() => expect(reads()).toBeGreaterThan(before))
   })
 
   it("an engine without direct answers: the question is handed to Research, as before", async () => {
