@@ -7,7 +7,7 @@ import { provenanceOf } from "@/lib/provenance"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { answerLab, answerOrder, boardLab, boardOrder, swarmLab, type LabEvent } from "@/lab/adapter"
 import { EventLog } from "@/lab/EventLog"
-import { eventRows } from "@/lab/logRows"
+import { eventRows, swarmLogEvents } from "@/lab/logRows"
 import { KIND_WORD, type LabModel, type RunKind } from "@/lab/model"
 import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
 import { claimsLab } from "@/lab/claims"
@@ -51,7 +51,7 @@ function RunLog({ run, picker }: { run: RunRef; picker: ReactNode }) {
     return run.kind === "swarm" ? swarmLab(swarm.run, swarm.notes, { seenAt: swarm.seenAt }) : run.kind === "board" ? boardLab(ordered, run.id) : answerLab(ordered, run.id)
   }, [run.kind, run.id, ordered, swarm, claims])
   const notes = claims.board ? claims.notes?.events : swarm.notes?.events
-  const rows = useMemo(() => eventRows(run.kind === "swarm" ? [...claims.events, ...(Array.isArray(notes) ? notes as LabEvent[] : [])] : ordered, run.kind), [run.kind, ordered, notes, claims.events])
+  const rows = useMemo(() => eventRows(run.kind === "swarm" ? swarmLogEvents(claims.events, Array.isArray(notes) ? notes as LabEvent[] : [], claims.seenAt, claims.board && typeof claims.board.run_id === "string" ? claims.board.run_id : undefined) : ordered, run.kind), [run.kind, ordered, notes, claims.events, claims.seenAt, claims.board])
   const connection: Connection = run.kind === "swarm" ? swarm.connection : stream.connection
   const provenance = full.provenance ?? run.provenance
   return (

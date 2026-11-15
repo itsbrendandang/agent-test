@@ -66,6 +66,24 @@ describe("full event log", () => {
     const rows = eventRows([{ kind: "claim.added", seq: 1, ts: 10.5, by: "planner", claim_id: "C1", text: "Recorded claim" }], "swarm")
     expect(rows[0]).toMatchObject({ at: 10500, agentId: "planner", text: "Recorded statement C1: Recorded claim" })
   })
+  it("keeps claim transition reasons, call outcomes and failed calls", () => {
+    const rows = eventRows([
+      { kind: "claim.transition", claim_id: "C1", from: "under_review", to: "sent_back", reason: "A control is missing" },
+      { kind: "agent.call", claim_id: "C1", role: "experimenter", mode: "revise", outcome: "ok", attempt: 2, model: "mock", note: "Added the control" },
+      { kind: "claim.error", claim_id: "C2", error: "The pilot timed out" },
+      { kind: "claim.illegal_transition", claim_id: "C3", from: "triaged", to: "supported", reason: "Review is required" },
+      { kind: "agent.call", claim_id: "C2", role: "critic", mode: "review", outcome: "error" },
+    ], "swarm")
+    expect(rows[0]).toMatchObject({ agentId: "engine", text: "Moved claim C1 from under_review to sent_back. A control is missing" })
+    expect(rows[1]).toMatchObject({ agentId: "experimenter", text: "Ended revise call on claim C1. Role: experimenter. Outcome: ok. Attempt: 2. Model: mock. Added the control" })
+    expect(rows[2]).toMatchObject({ kind: "error", text: "A call on claim C2 did not finish. The pilot timed out" })
+    expect(rows[3].text).toContain("Refused an illegal move of claim C3 from triaged to supported. Review is required")
+    expect(rows[4]).toMatchObject({ agentId: "critic", text: "Ended review call on claim C2. Role: critic. Outcome: error." })
+    expect(eventRows([], "swarm")).toEqual([])
+    const sparse = eventRows([{ kind: "agent.call", attempt: NaN, outcome: null }, { kind: "claim.transition", from: null }], "swarm")
+    expect(sparse[0].text).toBe("Ended (mode not recorded) call on claim (id not recorded).")
+    expect(sparse[1].text).toBe("Moved claim (id not recorded) from (state not recorded) to (state not recorded).")
+  })
   it("preserves swarm issues, test registration, execution and recorded verdict details", () => {
     const rows = eventRows([
       { kind: "issue.raised", issue: "I1", severity: "blocking", problem: "Missing samples", by: "critic" },

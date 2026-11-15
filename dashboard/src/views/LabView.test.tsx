@@ -6,6 +6,7 @@ import type { LabEvent } from "@/lab/adapter"
 import { forgetScripted } from "@/lib/scripted"
 import { routes } from "@/test/engine"
 import { LabView } from "./LabView"
+import { CLAIMS_BOARD, CLAIMS_EVENTS, CLAIMS_NOTES } from "@/lab/fixtures/claims"
 
 /** A stand-in for the browser's EventSource: the test decides what arrives and when the stream breaks. */
 class FakeSource {
@@ -44,6 +45,23 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); window.location.hash = "" })
 
 describe("Agent Log view", () => {
+  it("interleaves claims-engine ledger notes rather than appending proposal after assembly", async () => {
+    const run = { id: "claims-run", task: "demo", model: "mock", solver: "glhf", phase: "done", startedAt: T0 }
+    engine({ swarm: [run] }, {
+      "GET /api/glhf/runs/claims-run": ok({ run, ledger: { events: [] } }),
+      "GET /api/glhf/runs/claims-run/board": ok({ ...CLAIMS_BOARD, ledgerEvents: CLAIMS_NOTES }),
+      "GET /api/glhf/runs/claims-run/claims-events": ok(CLAIMS_EVENTS),
+    })
+    render(<LabView />)
+    await tick(0)
+    const rows = [...document.querySelectorAll(".event-log-row")].map((e) => e.textContent ?? "")
+    const propose = rows.findIndex((s) => s.includes("Started the propose phase"))
+    const claim = rows.findIndex((s) => s.includes("Recorded statement C1"))
+    const report = rows.findIndex((s) => s.includes("Started the report phase"))
+    expect(propose).toBeGreaterThanOrEqual(0)
+    expect(propose).toBeLessThan(claim)
+    expect(report).toBeGreaterThan(claim)
+  })
   it("shows the live run and appends events without a room scene", async () => {
     engine({ board: [LIVE_REVIEW], answers: [DONE_ANSWER] })
     render(<LabView />)
