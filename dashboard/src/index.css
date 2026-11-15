@@ -538,6 +538,35 @@ td { border-bottom: 1px solid var(--line); }
 .prov-detail { font-weight: 500; font-family: var(--font-mono); font-size: 11px; }
 .prov[data-compact] { padding: 1px 6px; font-size: 11px; }
 
+/* ---- the one row for a saved run, an answer or a source (components/RecordRow.tsx) ---- */
+.records { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--edge); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
+.record { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); min-width: 0; }
+.record + .record { border-top: 1px solid var(--line); }
+.record-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.record-title { display: flex; gap: var(--space-2); font-size: 15px; font-weight: 600; line-height: 1.35; }
+.record-titletext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.record-n { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 10px; background: var(--hover); font: 600 11px var(--font-mono); }
+.record-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); font-size: 12px; color: var(--text-muted); }
+.record-type { font-weight: 600; color: var(--text); }
+.record-result { font-size: 13px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-open { flex: none; align-self: center; text-decoration: none; }
+.record-history { font-size: 12px; }
+.record-history summary { cursor: pointer; color: var(--text-muted); width: fit-content; border-radius: 4px; padding: 2px 0; }
+.record-history summary:hover { color: var(--text); }
+.record-list[data-nested] { margin-top: var(--space-2); }
+.record-list[data-nested] .records { background: transparent; }
+.record[data-nested] { padding: var(--space-2) var(--space-3); }
+.record[data-nested] .record-title { font-size: 13px; font-weight: 500; }
+.record-all { align-self: flex-start; margin-top: var(--space-2); padding: 6px 0; color: var(--text); }
+.record-order { font-size: 12px; color: var(--text-muted); margin-bottom: var(--space-2); }
+.record-list { display: flex; flex-direction: column; }
+.record mark { background: var(--brand); color: inherit; border-radius: 3px; padding: 0 1px; }
+.record-match { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.record-match i { font-style: normal; font-weight: 600; }
+.record summary:focus-visible, .record-all:focus-visible, .record-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-size: .95em; font-variant-numeric: tabular-nums; }
+@media (max-width: 767px) { .record { padding: var(--space-3); } .record-open { min-height: 44px; min-width: 56px; display: inline-flex; align-items: center; justify-content: center; } .record-all { min-height: 44px; } }
+
 /* ---- one button system: .btn, with .btn-primary and .btn-danger; .link-btn for a text link. ---- */
 .btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fffdf6; }
 .exp-kinds .btn { border-radius: 999px; }

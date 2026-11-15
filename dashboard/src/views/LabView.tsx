@@ -21,7 +21,7 @@ import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarm
 import { useLabEvents, useSwarmRun, type Connection } from "@/lab/useLabModel"
 import "@/lab/lab.css"
 
-/** The three run lists, read again every few seconds. A list the engine does not have (an older engine) counts as empty. */
+/** The three run lists, read again every two seconds. A list the engine does not have (an older engine) counts as empty. */
 function useLabRuns() {
   const [runs, setRuns] = useState<RunRef[]>()
   const [problem, setProblem] = useState<Problem>()
@@ -36,7 +36,8 @@ function useLabRuns() {
       else {
         const list = mergeRuns(board.status === "fulfilled" ? boardRuns(board.value) : [], answers.status === "fulfilled" ? answerRuns(answers.value) : [], swarm.status === "fulfilled" ? swarmRuns(swarm.value) : [])
         setRuns(list); setProblem(undefined)
-        timer = setTimeout(tick, list.some((r) => r.live) ? 3000 : 10_000)
+        // Often while the page is looked at (a practice run is over in seconds), seldom while it is hidden.
+        timer = setTimeout(tick, document.hidden ? 15_000 : 2000)
         return
       }
       timer = setTimeout(tick, 10_000)

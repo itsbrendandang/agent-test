@@ -77,7 +77,7 @@ describe("Runs list", () => {
     }))
     render(<ExperimentsView onOpen={() => {}} />)
   }
-  const card = async (id: string) => (await screen.findByText(id)).closest("button")!
+  const card = async (id: string) => (await screen.findByText(id)).closest("li")!
 
   it.each([[false, "paid calls off"], [true, "paid calls on"]])("labels each run from the run itself (%s: %s)", async (paidCalls) => {
     list(paidCalls)

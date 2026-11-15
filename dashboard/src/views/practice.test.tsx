@@ -54,7 +54,7 @@ describe("a practice run says so, in the same words, wherever it is shown", () =
     vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (/\/api\/runs\/b-mock\/events$/.test(String(url))
       ? Promise.resolve(new Response(sse({ type: "run.started", runId: "b-mock", brief: "kras", title: "KRAS", mock: true }), { status: 200 })) : plain(url, init))))
     render(<ExperimentsView onOpen={() => {}} />)
-    for (const id of ["s-mock", "b-mock"]) await waitFor(async () => practice((await screen.findByText(id)).closest("button")!))
+    for (const id of ["s-mock", "b-mock"]) await waitFor(async () => practice((await screen.findByText(id)).closest("li")!))
   })
   it("Board: the review on screen", async () => {
     routes({

@@ -305,8 +305,8 @@ describe("Saved research", () => {
     const onOpen = vi.fn()
     const list = render(<ExperimentsView onOpen={onOpen} />)
     const real = (await screen.findByText("Does semaglutide lower heart risk?")).closest("button")!
-    expect(real).toHaveTextContent("AI answer"); expect(real).not.toHaveTextContent("Demo response")
-    expect(screen.getByText("Is hERG a risk for KRAS G12C inhibitors?").closest("button")).toHaveTextContent("Demo response")
+    expect(real).toHaveTextContent("Live research"); expect(real).not.toHaveTextContent("Practice")
+    expect(screen.getByText("Is hERG a risk for KRAS G12C inhibitors?").closest("button")).toHaveTextContent("Practice")
     await userEvent.setup().click(real)
     expect(onOpen).toHaveBeenCalledWith("Home")
     list.unmount()

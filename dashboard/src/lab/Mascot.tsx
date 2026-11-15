@@ -5,9 +5,12 @@ import type { ReactNode } from "react"
 import type { Shape } from "./model"
 
 const INK = "#1d1c19"
+/** Anh's eight shapes, and one plain shape for an agent this app has no character for. */
+export type FaceShape = Shape | "generic"
 
-function body(shape: Shape, color: string): ReactNode {
+function body(shape: FaceShape, color: string): ReactNode {
   switch (shape) {
+    case "generic": return <rect x="8" y="11" width="34" height="37" rx="17" fill={color} />
     case "bunny": return <><ellipse cx="17" cy="13" rx="5" ry="12" fill={color} /><ellipse cx="31" cy="12" rx="5" ry="12" fill={color} /><ellipse cx="24" cy="32" rx="17" ry="15" fill={color} /></>
     case "tree": return <><rect x="19" y="32" width="10" height="14" rx="4" fill="#c8a582" /><path d="M9 35C-1 29 5 17 13 17C10 4 29 2 33 13C46 9 51 28 40 32C35 44 18 43 9 35" fill={color} /></>
     case "mushroom": return <><rect x="14" y="23" width="21" height="23" rx="10" fill="#f5e3cc" /><path d="M3 25C3 0 45 0 45 25Q25 32 3 25" fill={color} /><circle cx="15" cy="17" r="4" fill="#fff1ec" /><circle cx="29" cy="11" r="4" fill="#fff1ec" /><circle cx="36" cy="22" r="3" fill="#fff1ec" /></>
@@ -21,16 +24,25 @@ function body(shape: Shape, color: string): ReactNode {
   }
 }
 
-/** One character. `feetRef` lets the scene shift the feet while it walks, as in Anh's page. */
-export function Mascot({ shape, color, feetRef }: { shape: Shape; color: string; feetRef?: (el: SVGGElement | null) => void }) {
+/** A character's body and face without its feet and shadow: what the scene and the small avatar both draw. */
+export function MascotHead({ shape, color }: { shape: FaceShape; color: string }) {
   return (
-    <svg viewBox="0 0 50 56" aria-hidden="true" focusable="false">
-      <ellipse cx="25" cy="51" rx="15" ry="3" fill="#0000000f" />
-      <g ref={feetRef} className="lab-feet" fill={color}><ellipse cx="17" cy="48" rx="5" ry="3" /><ellipse cx="32" cy="48" rx="5" ry="3" /></g>
+    <>
       {body(shape, color)}
       <g fill={INK}><circle cx="18" cy="30" r="2.4" /><circle cx="31" cy="30" r="2.4" /></g>
       <g fill="#f19bb3" opacity=".75"><ellipse cx="12.5" cy="35" rx="3" ry="1.8" /><ellipse cx="36.5" cy="35" rx="3" ry="1.8" /></g>
       {shape !== "owl" && <path d="M22 35.5Q24.5 38.5 27 35.5" fill="none" stroke={INK} strokeWidth="1.4" strokeLinecap="round" />}
+    </>
+  )
+}
+
+/** One character. `feetRef` lets the scene shift the feet while it walks, as in Anh's page. */
+export function Mascot({ shape, color, feetRef }: { shape: FaceShape; color: string; feetRef?: (el: SVGGElement | null) => void }) {
+  return (
+    <svg viewBox="0 0 50 56" aria-hidden="true" focusable="false">
+      <ellipse cx="25" cy="51" rx="15" ry="3" fill="#0000000f" />
+      <g ref={feetRef} className="lab-feet" fill={color}><ellipse cx="17" cy="48" rx="5" ry="3" /><ellipse cx="32" cy="48" rx="5" ry="3" /></g>
+      <MascotHead shape={shape} color={color} />
     </svg>
   )
 }

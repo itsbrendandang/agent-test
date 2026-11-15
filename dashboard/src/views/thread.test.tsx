@@ -147,6 +147,51 @@ describe("the message line", () => {
   })
 })
 
+describe("every agent's message shows that agent's own label and face", () => {
+  const ROSTER_NAMES: [string, string][] = [["lead-scientist", "Lead Scientist"], ["scout", "Scout"], ["proposer", "Proposer"], ["pilot", "Pilot"], ["experimenter", "Experimenter"],
+    ["methods-auditor", "Methods Auditor"], ["critic", "Critic"], ["reviser", "Reviser"], ["finisher", "Finisher"], ["reporter", "Reporter"]]
+  it.each(ROSTER_NAMES)("%s: label '%s', its own face on the left, as decoration", (agent, label) => {
+    const { container } = render(<TeamMessage name={label} agent={agent} text="In short: fine." />)
+    const message = screen.getByRole("article", { name: label })
+    expect(message).toHaveAttribute("data-agent", agent)
+    const face = container.querySelector(".thread-face .agent-face")!
+    expect(face).toHaveAttribute("data-face", agent) // this agent's face, not another's and not the neutral one
+    expect(face).toHaveAttribute("aria-hidden", "true") // the label is the text
+    expect(face).toHaveStyle({ width: "32px", height: "32px" }) // a fixed box: nothing moves when it is drawn
+    expect(message.firstElementChild).toHaveClass("thread-face") // on the left, before the label
+    expect(within(message).getByText(label)).toBeInTheDocument()
+  })
+  it("the same agent has the same face whether it is named by its engine name or by its label", () => {
+    const { container } = render(<><TeamMessage name="Methods Auditor (Quality Checker)" text="a" /><TeamMessage name="Critic, round 2" text="b" /><TeamMessage name="Critic" agent="critic" text="c" /></>)
+    expect([...container.querySelectorAll(".agent-face")].map((f) => f.getAttribute("data-face"))).toEqual(["methods-auditor", "critic", "critic"])
+  })
+  it("an agent that is not known gets the neutral face and keeps its own name", () => {
+    const { container } = render(<TeamMessage name="Bulk RNA-seq Analyst" agent="bulk-rnaseq-analyst" text="x" />)
+    expect(container.querySelector(".agent-face")).toHaveAttribute("data-face", "neutral")
+    expect(screen.getByRole("article", { name: "Bulk RNA-seq Analyst" })).toHaveTextContent("Bulk RNA-seq Analyst")
+  })
+})
+
+describe("many statements in one reply", () => {
+  const checks = [...Array.from({ length: 4 }, (_, i) => ({ key: `v${i}`, verdict: "verified" as const, claim: `Supported statement ${i}`, why: "quoted" })),
+    ...Array.from({ length: 5 }, (_, i) => ({ key: `u${i}`, verdict: "unchecked" as const, claim: `Calculation ${i}`, why: "computed claim not re-executed" })),
+    { key: "x", verdict: "unsupported" as const, claim: "A stretch", why: "the source does not state this" }]
+  it("groups the chips by mark with counts, says how many were really checked, and opens a group to its statements and their reasons", async () => {
+    const user = userEvent.setup()
+    render(<TeamMessage name="Experimenter" text="Many numbers." checks={checks} />)
+    const group = within(screen.getByRole("group", { name: "What the checks found about Experimenter's statements" }))
+    expect(group.getAllByRole("button")).toHaveLength(3) // one per mark, not ten chips
+    expect(group.getByRole("button", { name: /^4 Supported\./ })).toHaveTextContent("✓ 4 supported")
+    expect(group.getByRole("button", { name: /^5 Not checked\./ })).toHaveTextContent("○ 5 not checked")
+    expect(screen.getByText(/5 of 10 statements checked\./)).toBeInTheDocument() // the five not checked are not counted as checked
+    await user.click(group.getByRole("button", { name: /^5 Not checked\./ }))
+    const list = within(screen.getByRole("list", { name: "Not checked statements" }))
+    expect(list.getAllByRole("listitem")).toHaveLength(5)
+    await user.click(list.getByRole("button", { name: "Calculation 2" }))
+    expect(screen.getByText("The statement").closest("dl")).toHaveTextContent("Whycomputed claim not re-executed")
+  })
+})
+
 describe("pieces", () => {
   it("only an http(s) source becomes a link, opened safely", async () => {
     expect(safeUrl("javascript:alert(1)")).toBeUndefined()
