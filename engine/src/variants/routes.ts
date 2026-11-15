@@ -1,6 +1,5 @@
 // Known variants of a protein and their predicted structures, over HTTP (known.ts, compare.ts, fold.ts).
 //
-//   GET /api/variants?accession=<UniProt>                     the variants UniProt reports with cited papers (at most 6)
 //   GET /api/variants/compare?accession=<UniProt>&variants=G12D,G13D
 //       folds the reference and each named variant with ESMFold and gives the model's confidence (pLDDT) at the
 //       changed position in each, and its change. Only variants UniProt reports for that entry are accepted: nothing
@@ -14,7 +13,7 @@ import { liveHttp, type Http, ServiceError } from "../sources/shared.ts"
 import { ACCESSION } from "../sources/uniprot.ts"
 import { compareVariants, COMPARE_TIMEOUT_MS } from "./compare.ts"
 import { createEsmFold, ESMFOLD_LABEL, type Fold } from "./fold.ts"
-import { CHANGE, keptOf, MAX_VARIANTS, readEntry } from "./known.ts"
+import { CHANGE, MAX_VARIANTS, readEntry } from "./known.ts"
 
 /** Comparisons running at once in this process; more are refused (429) rather than queued. */
 export const MAX_COMPARES = 2
@@ -43,26 +42,24 @@ export function createVariants(config: BoardConfig, options: VariantsOptions = {
 
   async function handle(req: IncomingMessage, res: ServerResponse, parts: string[], url: URL): Promise<void> {
     if (req.method !== "GET") return json(res, 405, { error: "GET only" })
-    const compare = parts.length === 3 && parts[2] === "compare"
-    if (parts.length !== 2 && !compare) return json(res, 404, { error: "not found" })
+    if (parts.length !== 3 || parts[2] !== "compare") return json(res, 404, { error: "not found" })
     const accession = (url.searchParams.get("accession") ?? "").trim().toUpperCase()
     if (!ACCESSION.test(accession)) return json(res, 400, { error: "accession must be a UniProt accession, such as P01116" })
-    const asked = compare ? [...new Set((url.searchParams.get("variants") ?? "").split(",").map((v) => v.trim().toUpperCase()).filter(Boolean))] : []
-    if (compare && (!asked.length || asked.length > MAX_VARIANTS || !asked.every((v) => CHANGE.test(v)))) return json(res, 400, { error: `variants must be 1 to ${MAX_VARIANTS} substitutions written like G12D, separated by commas` })
-    if (compare && comparing >= MAX_COMPARES) return json(res, 429, { error: `${MAX_COMPARES} comparisons are being predicted now. Try again in a moment.` })
-    if (compare) comparing++
+    const asked = [...new Set((url.searchParams.get("variants") ?? "").split(",").map((v) => v.trim().toUpperCase()).filter(Boolean))]
+    if (!asked.length || asked.length > MAX_VARIANTS || !asked.every((v) => CHANGE.test(v))) return json(res, 400, { error: `variants must be 1 to ${MAX_VARIANTS} substitutions written like G12D, separated by commas` })
+    if (comparing >= MAX_COMPARES) return json(res, 429, { error: `${MAX_COMPARES} comparisons are being predicted now. Try again in a moment.` })
+    comparing++
     try {
       let entry
       try { entry = await readEntry({ accession }, http) } catch (error) {
         return json(res, 502, { error: error instanceof ServiceError ? error.message : "UniProt could not be read" })
       }
       if (!entry) return json(res, 404, { error: `UniProt has no entry ${accession}` })
-      if (!compare) return json(res, 200, keptOf(entry))
       const known = new Map(entry.all.map((v) => [v.id, v]))
       const unknown = asked.filter((v) => !known.has(v))
       if (unknown.length) return json(res, 400, { error: `UniProt reports no substitution ${unknown.join(", ")} with a cited paper for ${accession}. Only reported variants are compared; nothing new is predicted.` })
       json(res, 200, await compareVariants(entry, asked.map((v) => known.get(v)!), fold, { timeoutMs: options.timeoutMs ?? COMPARE_TIMEOUT_MS, modelLabel: ESMFOLD_LABEL }))
-    } finally { if (compare) comparing-- }
+    } finally { comparing-- }
   }
 
   return { handle }

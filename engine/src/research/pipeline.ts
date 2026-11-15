@@ -958,8 +958,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
   const settle = async () => { if (background.size) await Promise.race([Promise.allSettled([...background]), new Promise((resolve) => setTimeout(resolve, 20_000).unref())]) }
 
   /**
-   * KNOWN VARIANTS. Once the sources are numbered, the protein the answer is about (variantTarget: a UniProt source, an
-   * accession in the question, or a gene symbol in a question about variants) is looked up beside the writing. It is
+   * KNOWN VARIANTS. Once the sources are numbered, the protein the answer is about (variantTarget: an accession in the
+   * question, a gene symbol in a question about variants, or else a UniProt source) is looked up beside the writing. It is
    * free, stored under a stable key like every outside step (a replay does not ask again), bound by the answer's time
    * limit, and it never fails the answer: a lookup that fails or runs out of time only closes its own step.
    */

@@ -76,22 +76,26 @@ export interface Entry extends KnownVariants { sequence: string; all: KnownVaria
 export type Target = { accession: string } | { gene: string }
 
 /**
- * The protein an answer is about, for the variant lookup, or undefined when it is about none. In order: the first
- * UniProt source of the answer; an accession written in the question; a gene symbol in a question that speaks of
- * variants or mutations (or names a substitution such as G12D).
+ * The protein an answer is about, for the variant lookup, or undefined when it is about none. In order: an accession
+ * written in the question; a gene symbol in a question that speaks of variants or mutations (or names a substitution
+ * such as G12D), through the answer's UniProt source for that gene when there is one; else the first UniProt source of
+ * the answer.
  */
-export function variantTarget(question: string, sources: { url: string; provider: string }[]): Target | undefined {
-  for (const s of sources) {
-    if (s.provider !== "uniprot") continue
-    const m = /^https:\/\/www\.uniprot\.org\/uniprotkb\/([A-Z0-9]{6,10})\//.exec(s.url)
-    if (m && ACCESSION.test(m[1])) return { accession: m[1] }
-  }
+export function variantTarget(question: string, sources: { url: string; provider: string; title?: string }[]): Target | undefined {
+  const uniprot = sources.flatMap((s) => {
+    const m = s.provider === "uniprot" ? /^https:\/\/www\.uniprot\.org\/uniprotkb\/([A-Z0-9]{6,10})\//.exec(s.url) : null
+    return m && ACCESSION.test(m[1]) ? [{ accession: m[1], title: s.title ?? "" }] : []
+  })
   const tokens = question.split(/[^A-Za-z0-9-]+/).filter(Boolean)
   const accession = tokens.find((t) => ACCESSION.test(t))
   if (accession) return { accession }
-  if (!VARIANT_WORDS.test(question) && !question.match(CHANGES_IN_TEXT)) return undefined
-  const gene = tokens.find((t) => GENE.test(t) && /[A-Z]{2}/.test(t) && !NOT_GENES.has(t) && !CHANGE.test(t))
-  return gene ? { gene } : undefined
+  const aboutVariants = VARIANT_WORDS.test(question) || Boolean(question.match(CHANGES_IN_TEXT))
+  const gene = aboutVariants ? tokens.find((t) => GENE.test(t) && /[A-Z]{2}/.test(t) && !NOT_GENES.has(t) && !CHANGE.test(t)) : undefined
+  if (gene) {
+    const source = uniprot.find((s) => s.title.includes(`(${gene})`))
+    return source ? { accession: source.accession } : { gene }
+  }
+  return uniprot[0] ? { accession: uniprot[0].accession } : undefined
 }
 
 /** The substitutions a text names (G12D), in order, each once. */

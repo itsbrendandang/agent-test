@@ -18,7 +18,7 @@
 //   GET  /api/search?q=          keyword search over all runs and saved research answers
 //   GET  /api/trending           "Try asking": biology questions from Google's trending searches (search/trending.ts; free, kept an hour)
 //   /api/research/*              a direct, sourced answer to one question (see research/routes.ts)
-//   GET /api/variants[/compare]  a protein's known variants (UniProt) and their predicted confidence beside the reference (ESMFold), free and keyless (variants/routes.ts)
+//   GET /api/variants/compare  a protein's known variants (UniProt) and their predicted confidence beside the reference (ESMFold), free and keyless (variants/routes.ts)
 //   POST /api/ask {question}     a small model answers from the run records (see ask.ts). Needs the dashboard's
 //                                Origin or the token; the model is asked only for a token holder
 //   /api/glhf/*                  GLHF benchmark runs (see glhf/routes.ts)
@@ -73,7 +73,7 @@ export interface AppOptions {
   ask?: import("./search/ask.ts").AskOptions
   /** Options for GET /api/trending (tests: a fake fetch). */
   trending?: import("./search/trending.ts").TrendingOptions
-  /** Options for GET /api/variants (tests: a fake UniProt and a fake fold). */
+  /** Options for GET /api/variants/compare (tests: a fake UniProt and a fake fold). */
   variants?: VariantsOptions
 }
 

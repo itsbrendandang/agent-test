@@ -54,7 +54,7 @@ function fakeFold(fail: string[] = []): { fold: Fold; folded: string[] } {
   return { fold, folded }
 }
 
-test("which protein an answer is about: a UniProt source first, then an accession in the question, then a gene symbol only in a question about variants", () => {
+test("which protein an answer is about: an accession in the question, then a gene symbol in a question about variants, then a UniProt source", () => {
   assert.deepEqual(variantTarget("What does it do?", [{ provider: "exa", url: "https://x.org/a" }, { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/P04637/entry#function" }]), { accession: "P04637" })
   assert.deepEqual(variantTarget("Structure of P01116 variants", []), { accession: "P01116" })
   assert.deepEqual(variantTarget("Which KRAS mutations are found in lung cancer?", []), { gene: "KRAS" })
@@ -62,6 +62,11 @@ test("which protein an answer is about: a UniProt source first, then an accessio
   assert.equal(variantTarget("What does KRAS do in the cell?", []), undefined, "a gene without a word about variants: not looked up")
   assert.equal(variantTarget("Does semaglutide lower the risk of heart attack?", []), undefined)
   assert.equal(variantTarget("Which DNA mutations does the FDA list?", []), undefined, "common upper-case words are not genes")
+  const mdm2 = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/Q00987/entry#function", title: "E3 ubiquitin-protein ligase Mdm2 (MDM2): function (UniProt Q00987)" }
+  const tp53 = { provider: "uniprot", url: "https://www.uniprot.org/uniprotkb/P04637/variant-viewer", title: "Cellular tumor antigen p53 (TP53): natural variants (UniProt P04637)" }
+  assert.deepEqual(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2]), { gene: "TP53" }, "the gene the question names wins over another protein's source")
+  assert.deepEqual(variantTarget("Do TP53 mutations change MDM2 binding?", [mdm2, tp53]), { accession: "P04637" }, "a source is used when it is the named gene's")
+  assert.deepEqual(variantTarget("Which variants of P04637 bind MDM2?", [mdm2]), { accession: "P04637" }, "an accession in the question wins over the sources")
   assert.deepEqual(changesIn("Compare G12D, G13D and G12D with p53"), ["G12D", "G13D"])
 })
 
@@ -152,7 +157,7 @@ test("the ESMFold adapter: only api.esmatlas.com, pLDDT on 0-100, kept on disk u
   assert.equal(sent.length, 2, "a sequence it cannot fold is never sent")
 })
 
-test("GET /api/variants and /api/variants/compare: reported variants only (nothing new is predicted), plain errors, GET only", async () => {
+test("GET /api/variants/compare: reported variants only (nothing new is predicted), plain errors, GET only", async () => {
   const u = fakeUniprot()
   const f = fakeFold()
   const variants = createVariants(loadConfig(), { http: u.http, fold: f.fold })
@@ -160,10 +165,6 @@ test("GET /api/variants and /api/variants/compare: reported variants only (nothi
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready))
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
   try {
-    const list = await fetch(`${base}/api/variants?accession=P01116`)
-    const body = (await list.json()) as { items: { id: string }[]; accession: string }
-    assert.equal(list.status, 200)
-    assert.equal(body.items.length, MAX_VARIANTS)
     const cmp = await fetch(`${base}/api/variants/compare?accession=P01116&variants=G12D,G12V`)
     const c = (await cmp.json()) as { rows: { id: string; change: number }[]; label: string }
     assert.equal(cmp.status, 200)
@@ -173,9 +174,10 @@ test("GET /api/variants and /api/variants/compare: reported variants only (nothi
     assert.equal(made.status, 400, "a substitution UniProt does not report is refused")
     assert.match(((await made.json()) as { error: string }).error, /nothing new is predicted/)
     assert.equal(f.folded.length, 3, "and nothing was folded for it")
-    assert.equal((await fetch(`${base}/api/variants?accession=nope`)).status, 400)
+    assert.equal((await fetch(`${base}/api/variants/compare?accession=nope&variants=G12D`)).status, 400)
     assert.equal((await fetch(`${base}/api/variants/compare?accession=P01116&variants=G12D;DROP`)).status, 400)
-    assert.equal((await fetch(`${base}/api/variants?accession=Q99999`)).status, 404)
-    assert.equal((await fetch(`${base}/api/variants?accession=P01116`, { method: "POST" })).status, 405)
+    assert.equal((await fetch(`${base}/api/variants?accession=P01116`)).status, 404, "only the comparison is served")
+    assert.equal((await fetch(`${base}/api/variants/compare?accession=Q99999&variants=G12D`)).status, 404)
+    assert.equal((await fetch(`${base}/api/variants/compare?accession=P01116&variants=G12D`, { method: "POST" })).status, 405)
   } finally { await new Promise((done) => server.close(done)) }
 })

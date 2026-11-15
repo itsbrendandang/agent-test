@@ -64,9 +64,10 @@ this field, shows no strip. Europe PMC and the databases give no pictures.
 ### Known variants
 
 When an answer is about a protein, code looks up the variants of it that are already reported. Nothing new is made or
-proposed. The protein is the first UniProt source of the answer, or an accession in the question, or a gene symbol in a
-question about variants or mutations (or one that names a change such as G12D) (`variantTarget` in
-`engine/src/variants/known.ts`).
+proposed. The protein is, in this order: an accession in the question; a gene symbol in a question about variants or
+mutations (or one that names a change such as G12D), through the answer's UniProt source for that gene when it has
+one; else the first UniProt source of the answer (`variantTarget` in `engine/src/variants/known.ts`). So "Do TP53
+mutations change MDM2 binding?" looks up TP53, even when an MDM2 source comes first.
 
 - **What is looked up.** The UniProt entry: its natural variants and mutagenesis features, each with the papers UniProt
   cites (PubMed). Code keeps single-residue changes that cite at least one paper and match the entry's sequence. At most
@@ -369,7 +370,6 @@ costs nothing. Everything in it says that it is a demo. It is not research.
 | `GET /api/research/threads` | One line per thread, newest first. |
 | `GET /api/research/:id/artifacts` and `.../artifacts/:name` | The registered result files; one of them as a download. |
 | `GET /api/search?q=` | Saved answers are found here as `kind: "answer"`, next to the runs. |
-| `GET /api/variants?accession=<UniProt>` | The known variants of an entry (at most 6), as an answer keeps them. Free, no key. |
 | `GET /api/variants/compare?accession=<UniProt>&variants=G12D,G13D` | The predicted confidence of the reference and of each variant (ESMFold). Only variants UniProt reports for that entry are accepted (400 otherwise). 429 when 2 comparisons are running. |
 
 Every event has `seq` (1, 2, 3, ... in one answer), `at`, `run` and `type`. The types, in the order they

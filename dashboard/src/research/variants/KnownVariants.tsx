@@ -3,15 +3,14 @@
 // changed position. Nothing here is new: every row is a reported variant. Predictions are made only when this tab is
 // opened (GET /api/variants/compare); the engine keeps them, so a second look is quick.
 //
-// "View" shows the variant's predicted confidence beside the reference's along the protein. When the Structure tab
-// (branch fm/research-esm-structure) is in, `onView` opens the variant's 3D prediction there instead.
+// "View" shows the variant's predicted confidence beside the reference's along the protein.
 import { type ReactNode, useEffect, useState } from "react"
 import { tracked } from "@/lib/engine"
-import { compareUrl, comparisonOf, NOT_MEASURED, signed, type Comparison, type ConfidenceRow, type KnownVariant, type KnownVariants as Known, type Profile } from "./model"
+import { compareUrl, comparisonOf, NOT_MEASURED, signed, type Comparison, type ConfidenceRow, type KnownVariants as Known, type Profile } from "./model"
 
 type Load = { state: "loading" } | { state: "done"; comparison: Comparison } | { state: "failed"; error: string }
 
-export function KnownVariants({ variants, onView }: { variants: Known; onView?: (variant: KnownVariant) => void }) {
+export function KnownVariants({ variants }: { variants: Known }) {
   const [load, setLoad] = useState<Load>({ state: "loading" })
   const [attempt, setAttempt] = useState(0)
   const [open, setOpen] = useState<string>()
@@ -56,7 +55,7 @@ export function KnownVariants({ variants, onView }: { variants: Known; onView?: 
                 <td className="small">{v.reported}</td>
                 <td className="small">{v.citations.map((c) => <a key={c.url} href={c.url} target="_blank" rel="noopener noreferrer">{c.label}</a>).reduce<ReactNode[]>((all, a, i) => (i ? [...all, ", ", a] : [a]), [])}{" · "}<a href={v.record} target="_blank" rel="noopener noreferrer">UniProt</a></td>
                 <td className="small mono" data-testid={`change-${v.id}`}>{row?.change !== undefined ? <>{signed(row.change)}<span className="muted"> ({row.reference?.toFixed(1)} → {row.variant?.toFixed(1)})</span></> : row?.error ? <span className="muted">{row.error}</span> : load.state === "loading" ? <span className="muted">predicting…</span> : <span className="muted">not predicted</span>}</td>
-                <td><button type="button" className="link-btn" aria-pressed={open === v.id} disabled={!viewable} onClick={() => { if (onView) onView(v); else setOpen(open === v.id ? undefined : v.id) }}>{open === v.id ? "Hide" : "View"}</button></td>
+                <td><button type="button" className="link-btn" aria-pressed={open === v.id} disabled={!viewable} onClick={() => setOpen(open === v.id ? undefined : v.id)}>{open === v.id ? "Hide" : "View"}</button></td>
               </tr>
             )
           })}

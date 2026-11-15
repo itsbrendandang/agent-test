@@ -239,7 +239,7 @@ describe("the engine's investigators, as streamed", () => {
     within(screen.getByRole("table")).getAllByRole("row").slice(1).forEach((row, i) => expect(row).toHaveTextContent(new RegExp(`Investigator ${i + 1}\\d+ search`)))
     expect(hypothesisWork(s, "h1")).toContain("section drafted")
     for (const st of s.steps.filter((x) => x.hypothesis)) expect(st.agent).toBe(`investigator-${st.hypothesis!.slice(1)}`) // a hypothesis's steps are its own investigator's
-    expect(new Set(s.steps.map((x) => agentName(x.agent)))).toEqual(new Set(["Planner", "Investigator 1", "Investigator 2", "Investigator 3", "Writer", "Checker", "Critic", undefined]))
+    expect(new Set(s.steps.map((x) => agentName(x.agent)))).toEqual(new Set(["Planner", "Investigator 1", "Investigator 2", "Investigator 3", "Searcher", "Writer", "Checker", "Critic", undefined]))
     expect(s.hypotheses.every((h) => h.result?.testedBy?.kind === "sources")).toBe(true)
   })
   it("says Drafting its section while an investigator's own draft step runs", () => {
