@@ -286,6 +286,7 @@ called for the 8 pilot questions (`claude-sonnet-5-5`) and for one chat question
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
 | `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
 | `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
+| `engine/src/db/supabase.ts`, `backfill.ts` | The optional copy of the records in Supabase, written in the background, and `npm run db:backfill` ([database.md](database.md)). |
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
 | `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |

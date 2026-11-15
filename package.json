@@ -17,6 +17,7 @@
     "dashboard": "npm --prefix dashboard run dev",
     "check": "node scripts/check.mjs",
     "preflight": "npm --prefix engine run preflight",
+    "db:backfill": "node engine/src/db/backfill-cli.ts",
     "typecheck": "(cd engine && npx tsc --noEmit) && (cd dashboard && npx tsc -b)",
     "test:engine": "npm --prefix engine test",
     "test": "(cd glhf/bixbench && uv run pytest -q tests) && npm run typecheck && npm run test:engine",

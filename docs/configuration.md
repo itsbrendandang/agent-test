@@ -78,6 +78,8 @@ Set these in `.env` or in your shell. All are optional.
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
 | `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | not set | Both set: the engine also writes its records to a Supabase database, in the background. See [database.md](database.md). Never commit the key. | `engine/src/db/supabase.ts` |
+| `SUPABASE_TIMEOUT_MS` | `5000` | Time limit of one database write. | `engine/src/db/supabase.ts` |
 
 ### Run tracker
 
