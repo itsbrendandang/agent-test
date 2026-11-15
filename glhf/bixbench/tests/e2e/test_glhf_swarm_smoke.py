@@ -330,6 +330,8 @@ def test_run_settings_are_recorded_for_disclosure(tmp_path: Path) -> None:
         "token_semantics": None,
         "max_messages_per_role": None,
         "review_rounds": 3,
+        "engine": "phases",  # the default; the claims engine also records its ablations
+        "ablations": None,
         "exa": False,
         "memory": True,
         "memory_source": None,  # the memory folder was empty when the run started

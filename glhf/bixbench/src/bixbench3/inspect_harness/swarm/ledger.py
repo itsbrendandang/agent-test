@@ -240,6 +240,7 @@ class Issue:
     status: Literal["open", "fixed", "wontfix"] = "open"
     resolution: str = ""
     rechecked: bool = False  # a critic round completed after the fix
+    claim_ids: list[str] = field(default_factory=list)  # the claims it is about (claims engine)
 
 
 @dataclass
@@ -467,7 +468,13 @@ class Ledger:
 
     # Issues -------------------------------------------------------------------------------
     def raise_issue(
-        self, severity: Severity, artifact_ids: list[str], problem: str, evidence: str, by: str
+        self,
+        severity: Severity,
+        artifact_ids: list[str],
+        problem: str,
+        evidence: str,
+        by: str,
+        claim_ids: list[str] | None = None,
     ) -> Issue:
         issue = Issue(
             f"I{len(self.issues) + 1}",
@@ -476,6 +483,7 @@ class Ledger:
             problem.strip(),
             evidence.strip(),
             by,
+            claim_ids=list(claim_ids or []),
         )
         self.issues[issue.id] = issue
         self.log("issue.raised", issue=issue.id, severity=severity, problem=issue.problem, by=by)

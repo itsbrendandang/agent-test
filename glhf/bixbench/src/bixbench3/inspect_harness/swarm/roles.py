@@ -317,3 +317,51 @@ def degraded(mode: str, skipped: list[str], reason: str) -> str:
         "them twice: do the smallest part of that work your own task needs, and say in "
         "/workspace/work/glhf/deviations.md which phases were skipped for budget."
     )
+
+
+# -- Claims engine (engine.py): one claim per call -------------------------------------------------
+TRIAGE = """
+
+THIS RUN TRIAGES CLAIMS. Instead of one plan for everything, name 3 to 8 claims with
+`propose_claim`, each with an acuity (high, medium, low). The run's budget is shared out by acuity,
+and each claim is then piloted, worked up and reviewed on its own, in its own folder. A claim that
+fails its pilot is dropped cheaply, so put the claims you trust most first and mark them high.
+Every claim must name the required artifacts it depends on, and every required artifact must be
+named by at least one claim: an artifact no claim covers may never be produced, and scores zero."""
+
+_CLAIM_MODES = {
+    "pilot": "PILOT this claim: run its analysis on a small subsample that still has every group, "
+    "and shape each artifact it depends on under {pilot}/ with the same relative path it would "
+    "have under /outputs. Code then shape-checks those files; if they fail, the claim is dropped.",
+    "workup": "WORK UP this claim on the full data: write each artifact it depends on under "
+    "{outputs}/ with the same relative path it would have under /outputs.",
+    "revise": "REVISE this claim: fix only the open issues listed below, in {outputs}/, and resolve "
+    "each one with `resolve_issue`. Rerun what the fix affects.",
+    "audit": "AUDIT this claim's methods against the brief's Method Guidance: its scripts under "
+    "{folder}/ and its files under {outputs}/. Raise an issue for each step that is wrong or missing.",
+    "critique": "CRITIQUE this claim. You see its code and its files, never the experimenter's "
+    "notes. Rerun what you can and register at least one falsification test for it.",
+}
+
+
+def claim_task(mode: str, claim_id: str, text: str, folder: str, issues: str, tests: str) -> str:
+    """The task of one call on one claim. `mode` is pilot, workup, revise, audit N or critique N."""
+    base = mode.split()[0]
+    paths = {"folder": folder, "outputs": f"{folder}/outputs", "pilot": f"{folder}/pilot/outputs"}
+    lines = [
+        f"GLHF claim: {claim_id} mode: {base}",
+        f"Claim {claim_id}: {text}",
+        _CLAIM_MODES[base].format(**paths),
+        f"Work only in {folder}/ (scripts in {folder}/scripts/). Never write to /outputs: code "
+        "copies the best claim's files there at the end. This overrides any other path above.",
+    ]
+    if base in ("pilot", "workup", "revise"):
+        lines.append(
+            "End with `claim_done`: ok when the files are written, failed when they "
+            "cannot be made (say why). Then submit."
+        )
+    if issues:
+        lines.append(f"Open issues on this claim:\n{issues}")
+    if tests:
+        lines.append(f"Registered tests:\n{tests}")
+    return "\n\n".join(lines)

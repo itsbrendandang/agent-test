@@ -23,9 +23,11 @@ e.g. -T critic_model=openai/gpt-5.5 to put the critic on a second vendor (Claude
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from inspect_ai.agent import Agent, AgentState, react, run
@@ -54,9 +56,15 @@ from inspect_ai.util import (
 from ..models import RuntimeCase
 from ..tools import request_web_access
 from . import baseline, past_memory, relevance, roles
+from .board import Board
+from .claim_budget import Pool
+from .claims_solver import ClaimHooks, assemble_outputs, scout_code
+from .engine import Limits, run_claims
+from .flags import DEFAULT_MAX_PARALLEL, DEFAULT_REVIEW_ROUNDS, SwarmFlags
 from .ledger import RELEVANCE_THRESHOLD, UNREVIEWED, Ledger
 from .memory import add_pending, filter_lessons, load_memory
 from .tools import (
+    HOST_LEDGER_ENV,
     MIN_TEST_SECONDS,
     TEST_SECONDS,
     WORK,
@@ -77,6 +85,7 @@ from .tools import (
     run_registered_test,
     save_ledger,
     search_docs,
+    triage_claim,
 )
 
 # Fractions of the run's time budget. Whatever a phase does not use rolls forward.
@@ -739,10 +748,32 @@ def glhf_swarm(
     max_messages_per_role: int | None = None,
     exa: bool = False,
     memory_dir: str | None = None,
+    engine: str = "phases",
+    no_critic: bool = False,
+    no_auditor: bool = False,
+    no_pilot: bool = False,
+    no_retriage: bool = False,
+    max_parallel: int = DEFAULT_MAX_PARALLEL,
 ) -> Solver:
     """Budgets: `budget_seconds` (time), `max_tokens` (all roles together) and
     `max_messages_per_role` (each phase; a model call with one tool call is two messages).
-    `exa` gives roles a documentation search. `memory_dir` keeps lessons between runs."""
+    `exa` gives roles a documentation search. `memory_dir` keeps lessons between runs.
+
+    `engine="phases"` (default) runs the nine phases in order. `engine="claims"` runs the claims
+    engine (engine.py): the Scout as code, triage into 3 to 8 claims with an acuity, then pilot,
+    workup and review per claim, up to `max_parallel` at once, the Finisher as code, the report.
+    Its review rounds are capped at DEFAULT_REVIEW_ROUNDS. The `no_*` switches are ablations of
+    the claims engine; they do not change the run's budget."""
+    if engine not in ("phases", "claims"):
+        raise ValueError(f"unknown engine {engine!r}; use 'phases' or 'claims'")
+    flags = SwarmFlags.from_options(
+        no_critic=no_critic,
+        no_auditor=no_auditor,
+        no_pilot=no_pilot,
+        no_retriage=no_retriage,
+        max_parallel=max_parallel,
+        review_rounds=min(review_rounds, DEFAULT_REVIEW_ROUNDS),
+    )
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         del generate
@@ -816,6 +847,8 @@ def glhf_swarm(
                 "token_share": TOKEN_SHARE["relevance"],
             },
             test_results="run by the harness from the registered script",
+            engine=engine,
+            flags=flags.event() if engine == "claims" else None,
         )
         ledger.log("budget.plan", **plan.event(), allocation=allocation(plan))
         if plan.degraded:
@@ -1267,114 +1300,219 @@ def glhf_swarm(
         def review_left() -> float:
             return clock.left() - hold_seconds
 
-        try:
-            await phase("scout", scout, "Inventory the inputs and the environment.")
-            await phase("propose", planner, "Plan the reproduction.")
-            await phase(
-                "pilot",
-                pilot,
-                "Run the whole pipeline on a small subsample and shape every required artifact.",
+        board: Board | None = None
+
+        async def write_findings() -> None:
+            """FINDINGS.md in the outputs; with the claims engine, also its claims and rejections."""
+            findings = ledger.findings_markdown()
+            if board is not None:
+                findings += "\n" + board.markdown()
+                await sandbox().write_file("/outputs/glhf/board.json", board.to_json())
+                await sandbox().write_file(
+                    "/outputs/glhf/rejections.json", json.dumps(board.rejections(), indent=2)
+                )
+            await sandbox().write_file("/outputs/glhf/FINDINGS.md", findings)
+
+        async def after_critique(n: int) -> None:
+            await judge_relevance(n)
+            await run_registered_tests(n)
+            ledger.mark_rechecked()
+            await save_ledger(ledger)
+
+        async def claims_flow() -> None:
+            nonlocal board
+            host = os.environ.get(HOST_LEDGER_ENV)
+            board = Board(
+                f"{case.task_id}-{int(time.time())}", out_dir=Path(host) if host else None
             )
-            first_pass = "Produce every required artifact on the full data."
-            if "pilot" in plan.phases:
-                pilot_contract = contract_text(await check_contract(outputs, root=PILOT_OUT))
-                ledger.log("pilot.checked", contract=pilot_contract)
-                first_pass += (
-                    f"\n\nShape check of the pilot's subsampled artifacts under {PILOT_OUT}:\n"
-                    f"{pilot_contract}"
+            inventory = await scout_code()
+            ledger.log(
+                "scout.code",
+                files=inventory.get("file_count"),
+                problems=len(inventory.get("problems", [])),
+                error=inventory.get("error"),
+            )
+            acuities: dict[str, str] = {}
+            triager = agent(
+                "planner",
+                roles.PLANNER + roles.TRIAGE,
+                planner_model,
+                [triage_claim(ledger, "planner", acuities)],
+            )
+            await phase(
+                "propose",
+                triager,
+                f"Triage the claims. The data report was written by code: {WORK}/data_report.md.",
+            )
+            for claim in ledger.claims.values():
+                board.add(
+                    claim.id,
+                    claim.text,
+                    claim.artifact_ids,
+                    acuities.get(claim.id, "medium"),
+                    claim.proposed_by,
                 )
-            await phase("experiment", experimenter, first_pass)
-            critiques_completed = 0
-            if review_rounds and "critique" not in plan.phases:
-                ledger.log("review.not_planned", mode=plan.mode, reason=plan.reason)
-            for n in range(1, review_rounds + 1 if "critique" in plan.phases else 1):
-                if review_left() < min_review_seconds(clock.budget):
-                    ledger.log("review.skipped", round=n, reason="time")
-                    break
-                contract = contract_text(await check_contract(outputs))
+            covered = {a for c in board.claims.values() for a in c.artifact_ids}
+            uncovered = [o.artifact_id for o in outputs if o.artifact_id not in covered]
+            if uncovered:
+                board.event("triage.uncovered", artifacts=uncovered)
+                ledger.log("triage.uncovered", artifacts=uncovered)
+            if not board.claims:
+                board.event("engine.no_claims")
+                ledger.log("claims.none", reason="triage registered no claim")
+                return
+            reserved = sum(plan.reserves.get(k, 0) for k in ("report", "finish", "overshoot"))
+            pool_tokens = max(0, book.max_tokens - tokens_used() - reserved) if book else 0
+            hooks = ClaimHooks(
+                ledger=ledger,
+                board=board,
+                flags=flags,
+                outputs=outputs,
+                brief=brief,
+                seconds_left=review_left,
+                tokens_used=tokens_used,
+                max_tokens=book.max_tokens if book else None,
+                make_agent=agent,
+                models={"experimenter": experimenter_model, "critic": critic_model},
+                default_model=default_name,
+                after=after_critique,
+                messages=state.messages,
+                max_messages=max_messages_per_role,
+            )
+            limits = Limits(
+                reserved_tokens=reserved,
+                min_claim_tokens=plan.token_floors.get("experiment", 0) if book else 0,
+                reserved_seconds=float(MIN_PHASE_SECONDS),
+            )
+            summary = await run_claims(
+                board, ledger, hooks, flags, Pool(pool_tokens, max(0.0, review_left())), limits
+            )
+            ledger.log(
+                "claims.finished",
+                states=summary.states,
+                stopped=summary.stopped,
+                rounds=summary.rounds,
+            )
+            if book:
+                book.used = tokens_used()  # the claims were paid outside the phase grants
+            placed = await assemble_outputs(board, outputs)
+            ledger.log("finish.assembled", artifacts=placed)
+            missing = needs_rescue(await check_contract(outputs))
+            if missing:
+                ledger.log("finish.missing", failing=contract_text(missing)[:500])
+            await save_ledger(ledger)
+
+        try:
+            if engine == "claims":
+                await claims_flow()
+            else:
+                await phase("scout", scout, "Inventory the inputs and the environment.")
+                await phase("propose", planner, "Plan the reproduction.")
                 await phase(
-                    f"audit {n}",
-                    auditor,
-                    f"Audit round {n}. Check the scripts against the Method Guidance.\n\n"
-                    f"Current ledger:\n{ledger.summary()}",
+                    "pilot",
+                    pilot,
+                    "Run the whole pipeline on a small subsample and shape every required artifact.",
                 )
-                critique = await phase(
-                    f"critique {n}",
-                    critic,
-                    f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
-                    f"Current ledger:\n{ledger.summary()}",
-                )
-                if critique.ran:
-                    # What the critic registered is now fixed (script and hash). First the
-                    # relevance judge, which sees no result; then the harness runs the tests.
-                    await judge_relevance(n)
-                    await run_registered_tests(n)
-                step = review_step(critique, len(ledger.open_issues()))
-                if critique.completed:
-                    critiques_completed += 1
-                    # Fixes made before this round have now been through a full critic pass.
-                    ledger.mark_rechecked()
-                else:
-                    ledger.log(
-                        "review.incomplete",
-                        round=n,
-                        reason=f"critic stopped by the {critique.limit} limit"
-                        if critique.ran
-                        else "critic did not run (no budget left)",
+                first_pass = "Produce every required artifact on the full data."
+                if "pilot" in plan.phases:
+                    pilot_contract = contract_text(await check_contract(outputs, root=PILOT_OUT))
+                    ledger.log("pilot.checked", contract=pilot_contract)
+                    first_pass += (
+                        f"\n\nShape check of the pilot's subsampled artifacts under {PILOT_OUT}:\n"
+                        f"{pilot_contract}"
                     )
-                if step == "stop":
-                    break
-                if step == "converged":
-                    ledger.log("review.converged", round=n)
-                    break
-                if step == "again":
-                    continue  # nothing to revise; the next round gives the critic another pass
-                await phase(
-                    f"revise {n}",
-                    reviser,
-                    f"Revision round {n}. Fix the open issues.\n\n{ledger.summary()}",
-                    last_round=n == review_rounds,
-                )
-            unchecked = [
-                i.id for i in ledger.issues.values() if i.status == "fixed" and not i.rechecked
-            ]
-            if unchecked:
-                ledger.log("review.fixes_not_rechecked", issues=unchecked)
-            if review_rounds > 0 and "critique" in plan.phases and critiques_completed == 0:
-                # Review was planned and no critic finished a pass: the artifacts are the first
-                # pass, unchecked. Said in the ledger, in FINDINGS.md and in run.json.
-                ledger.log(
-                    UNREVIEWED,
-                    rounds_planned=review_rounds,
-                    note="no critic completed a pass; the artifacts are the first pass, unchecked",
-                )
-            # Last line of defence for completeness: only for artifacts that would score zero
-            # because they are missing or unreadable. Warnings never trigger it.
-            last_check = await check_contract(outputs)
-            if check_failed(last_check):
-                # Nothing is known about the artifacts, so the finisher is not started on a guess.
-                ledger.log("contract.check_failed", detail=contract_text(last_check)[:500])
-            failing = needs_rescue(last_check)
-            finish_time = int(clock.left() - plan.time_reserves["report"])
-            # A run too short for the full reserve (under 20 minutes) still gets a rescue attempt.
-            needed = min(MIN_FINISH_SECONDS, int(clock.budget * finish_hold(clock.budget)))
-            if failing and finish_time >= max(needed, MIN_PHASE_SECONDS):
-                await phase(
-                    "finish",
-                    finisher,
-                    "These required artifacts are missing or cannot be read:\n"
-                    f"{contract_text(failing)}\n\nFull check, for context:\n"
-                    f"{contract_text(await check_contract(outputs))}",
-                    finish_time,
-                )
-            elif failing:
-                ledger.log(
-                    "finish.skipped",
-                    reason="time",
-                    failing=len(failing),
-                    seconds=finish_time,
-                    needed=max(needed, MIN_PHASE_SECONDS),
-                )
+                await phase("experiment", experimenter, first_pass)
+                critiques_completed = 0
+                if review_rounds and "critique" not in plan.phases:
+                    ledger.log("review.not_planned", mode=plan.mode, reason=plan.reason)
+                for n in range(1, review_rounds + 1 if "critique" in plan.phases else 1):
+                    if review_left() < min_review_seconds(clock.budget):
+                        ledger.log("review.skipped", round=n, reason="time")
+                        break
+                    contract = contract_text(await check_contract(outputs))
+                    await phase(
+                        f"audit {n}",
+                        auditor,
+                        f"Audit round {n}. Check the scripts against the Method Guidance.\n\n"
+                        f"Current ledger:\n{ledger.summary()}",
+                    )
+                    critique = await phase(
+                        f"critique {n}",
+                        critic,
+                        f"Review round {n}. Deterministic contract check right now:\n{contract}\n\n"
+                        f"Current ledger:\n{ledger.summary()}",
+                    )
+                    if critique.ran:
+                        # What the critic registered is now fixed (script and hash). First the
+                        # relevance judge, which sees no result; then the harness runs the tests.
+                        await judge_relevance(n)
+                        await run_registered_tests(n)
+                    step = review_step(critique, len(ledger.open_issues()))
+                    if critique.completed:
+                        critiques_completed += 1
+                        # Fixes made before this round have now been through a full critic pass.
+                        ledger.mark_rechecked()
+                    else:
+                        ledger.log(
+                            "review.incomplete",
+                            round=n,
+                            reason=f"critic stopped by the {critique.limit} limit"
+                            if critique.ran
+                            else "critic did not run (no budget left)",
+                        )
+                    if step == "stop":
+                        break
+                    if step == "converged":
+                        ledger.log("review.converged", round=n)
+                        break
+                    if step == "again":
+                        continue  # nothing to revise; the next round gives the critic another pass
+                    await phase(
+                        f"revise {n}",
+                        reviser,
+                        f"Revision round {n}. Fix the open issues.\n\n{ledger.summary()}",
+                        last_round=n == review_rounds,
+                    )
+                unchecked = [
+                    i.id for i in ledger.issues.values() if i.status == "fixed" and not i.rechecked
+                ]
+                if unchecked:
+                    ledger.log("review.fixes_not_rechecked", issues=unchecked)
+                if review_rounds > 0 and "critique" in plan.phases and critiques_completed == 0:
+                    # Review was planned and no critic finished a pass: the artifacts are the first
+                    # pass, unchecked. Said in the ledger, in FINDINGS.md and in run.json.
+                    ledger.log(
+                        UNREVIEWED,
+                        rounds_planned=review_rounds,
+                        note="no critic completed a pass; the artifacts are the first pass, unchecked",
+                    )
+                # Last line of defence for completeness: only for artifacts that would score zero
+                # because they are missing or unreadable. Warnings never trigger it.
+                last_check = await check_contract(outputs)
+                if check_failed(last_check):
+                    # Nothing is known about the artifacts, so the finisher is not started on a guess.
+                    ledger.log("contract.check_failed", detail=contract_text(last_check)[:500])
+                failing = needs_rescue(last_check)
+                finish_time = int(clock.left() - plan.time_reserves["report"])
+                # A run too short for the full reserve (under 20 minutes) still gets a rescue attempt.
+                needed = min(MIN_FINISH_SECONDS, int(clock.budget * finish_hold(clock.budget)))
+                if failing and finish_time >= max(needed, MIN_PHASE_SECONDS):
+                    await phase(
+                        "finish",
+                        finisher,
+                        "These required artifacts are missing or cannot be read:\n"
+                        f"{contract_text(failing)}\n\nFull check, for context:\n"
+                        f"{contract_text(await check_contract(outputs))}",
+                        finish_time,
+                    )
+                elif failing:
+                    ledger.log(
+                        "finish.skipped",
+                        reason="time",
+                        failing=len(failing),
+                        seconds=finish_time,
+                        needed=max(needed, MIN_PHASE_SECONDS),
+                    )
         finally:
             # Reporting always runs, even after a failure or a limit, so the run ends documented.
             # First stop every job a role left running, so nothing writes to /outputs after review.
@@ -1386,7 +1524,7 @@ def glhf_swarm(
                 ledger.log("background.kill_failed", error=str(error)[:200])
             orphans = False
             await save_ledger(ledger)
-            await sandbox().write_file("/outputs/glhf/FINDINGS.md", ledger.findings_markdown())
+            await write_findings()
             await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
             await sandbox().exec(
                 [
@@ -1456,7 +1594,7 @@ def glhf_swarm(
                 within_max_tokens=(tokens_used() <= max_tokens) if max_tokens else None,
             )
             await save_ledger(ledger)
-            await sandbox().write_file("/outputs/glhf/FINDINGS.md", ledger.findings_markdown())
+            await write_findings()
             await sandbox().exec(["cp", f"{WORK}/ledger.json", "/outputs/glhf/ledger.json"])
             await sandbox().exec(
                 ["sh", "-c", f"cp -r {HANDOFF_DIR} /outputs/glhf/ 2>/dev/null; true"]

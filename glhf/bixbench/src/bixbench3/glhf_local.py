@@ -26,6 +26,7 @@ import contextlib
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import time
@@ -246,6 +247,153 @@ def role_script(
     }
 
 
+CLAIMS_DIR = "/workspace/work/glhf/claims"
+
+
+def _in_claim(claim_id: str, sandbox_path: str, pilot: bool = False) -> str:
+    """Where a claim writes a required artifact: its folder, same relative path as under /outputs."""
+    base = f"{CLAIMS_DIR}/{claim_id}/" + ("pilot/outputs" if pilot else "outputs")
+    return base + sandbox_path.removeprefix("/outputs")
+
+
+def _write_made(path: str, text: str) -> ModelOutput:
+    return _call(
+        "python",
+        code=f"import os\nos.makedirs(os.path.dirname({path!r}), exist_ok=True)\n"
+        f"open({path!r}, 'w').write({text!r})\nprint('wrote', {path!r})",
+    )
+
+
+def claims_role_script(truths: dict[str, str]) -> dict[str, list[ModelOutput]]:
+    """The claims engine's fixed script for `--model mock`, keyed by role and claim ("pilot:C1"):
+    each call plays the lines of its own role on its own claim, whatever order claims run in.
+
+    Story: triage names C1 (high) and C2 (low). C2's pilot writes nothing, so code drops it dead on
+    arrival. C1's pilot passes; its workup leaves the first artifact with a header and no rows; the
+    critic raises a blocking issue, so code sends C1 back; the reviser fixes the artifact and
+    resolves the issue; in round 2 the critic registers a test, the relevance judge passes it, the
+    harness runs it and the ledger supports C1. Code copies C1's files to /outputs and the reporter
+    writes METHODS.md. No role types a p-value or a verdict.
+    """
+    first_path, first_text = next(iter(truths.items()))
+    artifact = Path(first_path).stem
+    header = first_text.splitlines()[0] + "\n"
+    claim = {
+        "text": "Every required output is derived from all listed samples.",
+        "artifact_ids": [artifact],
+        "null_hypothesis": "At least one listed sample is missing from the outputs.",
+    }
+    weak = {
+        "text": "A subset of samples is enough to reproduce the outputs.",
+        "artifact_ids": [artifact],
+        "null_hypothesis": "The outputs change when samples are left out.",
+    }
+    return {
+        "planner": [
+            _call("propose_claim", **claim, acuity="high"),
+            _call("propose_claim", **weak, acuity="low"),
+            _done("triaged"),
+        ],
+        "pilot:C1": [
+            *(
+                _write_made(_in_claim("C1", path, pilot=True), text)
+                for path, text in truths.items()
+            ),
+            _call("claim_done", status="ok", note="pilot outputs shaped on a subsample"),
+            _done("piloted"),
+        ],
+        # C2's pilot writes no file: the shape check fails and the claim is dead on arrival.
+        "pilot:C2": [_call("claim_done", status="ok", note="nothing written"), _done("piloted")],
+        "experimenter:C1": [
+            _write_made(_in_claim("C1", first_path), header),
+            *(_write_made(_in_claim("C1", path), text) for path, text in list(truths.items())[1:]),
+            _call("claim_done", status="ok", note="first pass written"),
+            _done("worked up"),
+        ],
+        "auditor:C1": [_done("no undisclosed deviations"), _done("no undisclosed deviations")],
+        "critic:C1": [
+            # round 1: the first artifact has a header and no rows
+            _call(
+                "raise_issue",
+                severity="blocking",
+                artifact_ids=[artifact],
+                problem=f"{Path(first_path).name} has a header and no rows.",
+                evidence=f"wc -l {_in_claim('C1', first_path)} -> 1",
+            ),
+            _done("1 issue raised"),
+            # round 2
+            _test_script(
+                "label_permutation.py",
+                "# Scripted run: stands in for 10000 label permutations. No analysis is done.\n"
+                "print('GLHF_RESULT p_value=0.0004 contradicts=false')\n",
+            ),
+            _call(
+                "register_falsification_test",
+                claim_id="C1",
+                test_name="label permutation",
+                method="Permute sample labels 10000 times; a p-value near 1 contradicts the claim.",
+                script_path=f"{TESTS}/label_permutation.py",
+                test_null="The outputs do not depend on which samples are used.",
+            ),
+            _done("no issues"),
+        ],
+        "reviser:C1": [
+            _write_made(_in_claim("C1", first_path), first_text),
+            _call(
+                "resolve_issue",
+                issue_id="I1",
+                status="fixed",
+                resolution="Reran the counting script; rows present.",
+            ),
+            _call("claim_done", status="ok", note="rows restored"),
+            _done("fixed"),
+        ],
+        "relevance": [ModelOutput.from_content(MOCK, "T1 score=1 reason=Scripted judgement.")],
+        "reporter": [
+            _write("/outputs/METHODS.md", "# Methods\n\nScripted mock run (claims engine).\n"),
+            _done("reported"),
+        ],
+    }
+
+
+_CLAIM_LINE = re.compile(r"GLHF claim: (C\d+) mode: (\w+)")
+
+
+def claim_of(messages: list[ChatMessage]) -> str | None:
+    """The claim a call works on, from the first line of its task (roles.claim_task)."""
+    for message in messages:
+        if message.role == "user":
+            found = _CLAIM_LINE.search(message.text)
+            if found:
+                return found.group(1)
+    return None
+
+
+def by_claim_role(
+    script: dict[str, list[ModelOutput]],
+) -> Callable[[list[ChatMessage], list[ToolInfo], ToolChoice, GenerateConfig], ModelOutput]:
+    """Like by_role, but a call on a claim plays the lines under "<role>:<claim>" when there are any."""
+    plain = by_role(script)
+    keyed = {name: list(lines) for name, lines in script.items() if ":" in name}
+
+    def answer(
+        messages: list[ChatMessage],
+        tools: list[ToolInfo],
+        tool_choice: ToolChoice,
+        config: GenerateConfig,
+    ) -> ModelOutput:
+        claim = claim_of(messages)
+        role = role_of(messages)
+        key = f"{role}:{claim}"
+        if claim and tools and key in keyed:
+            if keyed[key]:
+                return keyed[key].pop(0)
+            return _done(f"scripted run: nothing left for {key}")
+        return plain(messages, tools, tool_choice, config)
+
+    return answer
+
+
 def mock_script(
     solver: str,
     truths: dict[str, str],
@@ -455,6 +603,12 @@ def run_local(
     memory_dir: Path | None = None,
     seed: int | None = None,
     mock_outputs: list[ModelOutput] | None = None,
+    engine: str = "phases",
+    no_critic: bool = False,
+    no_auditor: bool = False,
+    no_pilot: bool = False,
+    no_retriage: bool = False,
+    max_parallel: int = 2,
 ) -> dict[str, Any]:
     """`mock_outputs` replaces the fixed script of `--model mock` (tests only)."""
     # NO_PAID_CALLS (paid.py): before anything is created or started.
@@ -499,7 +653,9 @@ def run_local(
         }
         truths = {o.sandbox_path: truth_by_id[o.artifact_id] for o in case.expected_outputs}
         scripted: Any = mock_outputs
-        if scripted is None and solver == "glhf":
+        if scripted is None and solver == "glhf" and engine == "claims":
+            scripted = by_claim_role(claims_role_script(truths))
+        elif scripted is None and solver == "glhf":
             scripted = by_role(role_script(truths, review_rounds, exa, memory_dir is not None))
         resolved: Model = get_model(
             MOCK, custom_outputs=scripted if scripted is not None else mock_script(solver, truths)
@@ -518,6 +674,16 @@ def run_local(
         "token_semantics": TOKEN_SEMANTICS[solver] if max_tokens else None,
         "max_messages_per_role": max_messages_per_role if swarm else None,
         "review_rounds": review_rounds if swarm else None,
+        "engine": engine if swarm else None,
+        "ablations": {
+            "no_critic": no_critic,
+            "no_auditor": no_auditor,
+            "no_pilot": no_pilot,
+            "no_retriage": no_retriage,
+            "max_parallel": max_parallel,
+        }
+        if swarm and engine == "claims"
+        else None,
         "exa": bool(exa and swarm),
         "memory": bool(memory_dir and swarm),
         "memory_source": None,  # filled in after the run: "file", "past.dev" or None
@@ -554,6 +720,12 @@ def run_local(
             "max_messages_per_role": max_messages_per_role,
             "exa": exa,
             "memory_dir": str(memory_dir.resolve()) if memory_dir else None,
+            "engine": engine,
+            "no_critic": no_critic,
+            "no_auditor": no_auditor,
+            "no_pilot": no_pilot,
+            "no_retriage": no_retriage,
+            "max_parallel": max_parallel,
         }
     # A scripted run never reaches a search engine, key or no key.
     with offline_search() if model == "mock" else contextlib.nullcontext():
@@ -683,6 +855,22 @@ def main() -> int:
     )
     parser.add_argument("--memory-dir", type=Path, help="swarm: keep lessons between runs here")
     parser.add_argument("--seed", type=int, help="sent to providers that support a seed")
+    parser.add_argument(
+        "--engine",
+        choices=("phases", "claims"),
+        default="phases",
+        help="swarm: nine phases in order (default), or the claims engine",
+    )
+    for name, what in (
+        ("critic", "the critic"),
+        ("auditor", "the methods auditor"),
+        ("pilot", "the pilot"),
+        ("retriage", "moving unspent budget between claims"),
+    ):
+        parser.add_argument(f"--no-{name}", action="store_true", help=f"claims engine: no {what}")
+    parser.add_argument(
+        "--max-parallel", type=int, default=2, help="claims engine: claims worked on at once"
+    )
     arguments = parser.parse_args()
     role_models: dict[str, str] = {}
     for item in arguments.role_model:
@@ -707,6 +895,12 @@ def main() -> int:
         exa=arguments.exa,
         memory_dir=arguments.memory_dir,
         seed=arguments.seed,
+        engine=arguments.engine,
+        no_critic=arguments.no_critic,
+        no_auditor=arguments.no_auditor,
+        no_pilot=arguments.no_pilot,
+        no_retriage=arguments.no_retriage,
+        max_parallel=arguments.max_parallel,
     )
     print(json.dumps(summary, indent=2))
     return 0 if summary["status"] == "done" else 1

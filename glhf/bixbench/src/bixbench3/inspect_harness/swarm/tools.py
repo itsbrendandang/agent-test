@@ -850,3 +850,82 @@ def search_docs(
     assert execute.__doc__
     execute.__doc__ = execute.__doc__.replace("OBJECTIVE_PLACEHOLDER", _OBJECTIVE)
     return execute
+
+
+# -- Claims engine (engine.py) ---------------------------------------------------------------------
+MAX_CLAIMS = 8  # triage names 3 to 8 claims
+
+
+@tool(name="propose_claim")
+def triage_claim(ledger: Ledger, role: str, acuities: dict[str, str]) -> Tool:
+    async def execute(
+        text: str,
+        artifact_ids: list[str],
+        null_hypothesis: str,
+        acuity: Literal["high", "medium", "low"],
+    ) -> str:
+        """Register a falsifiable claim and its priority. The run's budget is shared out by
+        priority: high gets three times what low gets. Name 3 to 8 claims, the most promising
+        first; a weak claim is dropped cheaply at the pilot.
+
+        Args:
+            text: The claim, one sentence, specific and testable.
+            artifact_ids: Required artifacts the claim depends on.
+            null_hypothesis: What would be true if the claim were false.
+            acuity: high, medium or low: how much of the budget the claim deserves.
+        """
+        if len(ledger.claims) >= MAX_CLAIMS:
+            raise ToolError(f"{MAX_CLAIMS} claims are registered, the most a run may have")
+        if acuity not in ("high", "medium", "low"):
+            raise ToolError("acuity must be high, medium or low")
+        claim = ledger.add_claim(text, artifact_ids, null_hypothesis, role)
+        acuities[claim.id] = acuity
+        await save_ledger(ledger)
+        return f"Registered {claim.id} ({acuity})."
+
+    return execute
+
+
+@tool
+def claim_done(done: dict[str, tuple[str, str]], key: str) -> Tool:
+    async def execute(status: Literal["ok", "failed"], note: str) -> str:
+        """End your work on this claim. Call it once, last. "ok": the files the task asked for are
+        written in the claim's folder. "failed": they could not be made; say why in the note.
+        Code checks the files either way; what you write here does not decide anything.
+
+        Args:
+            status: ok or failed.
+            note: One or two sentences: what you did, or why it failed.
+        """
+        if status not in ("ok", "failed"):
+            raise ToolError("status must be ok or failed")
+        done[key] = (status, note.strip()[:500])
+        return "Recorded. Now submit."
+
+    return execute
+
+
+@tool(name="raise_issue")
+def raise_claim_issue(ledger: Ledger, role: str, claim_id: str) -> Tool:
+    async def execute(
+        severity: Literal["blocking", "major", "minor"],
+        artifact_ids: list[str],
+        problem: str,
+        evidence: str,
+    ) -> str:
+        """Raise a problem with this claim's analysis that must be fixed before it can be supported.
+        blocking = artifact is missing, malformed, or computed from the wrong samples/contrast;
+        major = method deviates from the guidance or a QC check fails; minor = documentation gaps.
+        An open blocking or major issue sends the claim back for revision.
+
+        Args:
+            severity: blocking, major or minor.
+            artifact_ids: Affected required artifacts.
+            problem: What is wrong, one or two sentences.
+            evidence: The command you ran and the output that shows it.
+        """
+        issue = ledger.raise_issue(severity, artifact_ids, problem, evidence, role, [claim_id])
+        await save_ledger(ledger)
+        return f"Raised {issue.id} on {claim_id}."
+
+    return execute

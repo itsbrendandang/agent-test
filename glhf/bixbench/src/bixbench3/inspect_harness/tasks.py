@@ -41,12 +41,21 @@ def bixbench3_cases(
     exa: bool = False,
     memory_dir: str | None = None,
     seed: int | None = None,
+    engine: str = "phases",
+    no_critic: bool = False,
+    no_auditor: bool = False,
+    no_pilot: bool = False,
+    no_retriage: bool = False,
+    max_parallel: int = 2,
 ) -> Task:
     """solver="single" is the upstream baseline, unchanged. solver="glhf" is the GLHF swarm.
 
     With `max_tokens`, both solvers follow one rule: 90% for the work, and the rest (at least 10%)
     is kept so the run still writes METHODS.md. For the baseline that is the same agent run by
-    `single_with_report_reserve`; without `max_tokens` it is upstream's solver, untouched."""
+    `single_with_report_reserve`; without `max_tokens` it is upstream's solver, untouched.
+
+    For the swarm, `engine` picks the phase engine (default) or the claims engine; `no_*` and
+    `max_parallel` apply to the claims engine only (swarm/flags.py)."""
     if solver not in ("single", "glhf"):
         raise ValueError(f"unknown solver {solver!r}; use 'single' or 'glhf'")
     limit = time_limit_seconds or TIME_LIMIT_SECONDS  # shorter only for local runs
@@ -74,6 +83,12 @@ def bixbench3_cases(
             max_messages_per_role=max_messages_per_role,
             exa=exa,
             memory_dir=memory_dir,
+            engine=engine,
+            no_critic=no_critic,
+            no_auditor=no_auditor,
+            no_pilot=no_pilot,
+            no_retriage=no_retriage,
+            max_parallel=max_parallel,
         ),
         scorer=output_collection(),
         sandbox=("docker", compose_path),
@@ -97,6 +112,16 @@ def bixbench3_cases(
             "token_semantics": TOKEN_SEMANTICS[solver] if max_tokens else None,
             "time_limit_seconds": limit,
             "review_rounds": review_rounds if solver == "glhf" else None,
+            "engine": engine if solver == "glhf" else None,
+            "ablations": {
+                "no_critic": no_critic,
+                "no_auditor": no_auditor,
+                "no_pilot": no_pilot,
+                "no_retriage": no_retriage,
+                "max_parallel": max_parallel,
+            }
+            if solver == "glhf" and engine == "claims"
+            else None,
             # What the swarm's roles have that the single agent does not. Disclose with scores.
             "swarm_only_tools": (
                 ["check_outputs", "read_ledger", "ledger tools"]

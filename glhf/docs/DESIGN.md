@@ -151,6 +151,63 @@ changes anything.
 
 See [docs/running.md](../../docs/running.md#budgets).
 
+## 2b. The claims engine (`--engine claims`)
+
+**Status: tested with the scripted model only. No real model has run it. The default is still the
+phase engine.**
+
+The claims engine treats each claim like a patient. Triage names 3 to 8 claims, each with an
+acuity. Each claim is then piloted, worked up and reviewed on its own, in its own folder
+(`/workspace/work/glhf/claims/<id>/`), up to `--max-parallel` claims at once (default 2).
+
+| Step | Done by |
+|---|---|
+| Scout | Code: lists `/data`, checks that each file opens, lists the installed tools (`scout_code`, `swarm/claims_solver.py`). |
+| Triage | The planner model: `propose_claim` with an acuity (high, medium, low). |
+| Pilot | The experimenter model, mode `pilot`. Code then shape-checks its files. A failure is **dead on arrival**: the claim is rejected at the pilot. |
+| Workup | The experimenter model, mode `workup`, on the full data. Code checks that the files exist. |
+| Methods Auditor, Critic | Their models, on their own. The critic sees code and files, not the experimenter's notes. |
+| Tests | The relevance judge, then the harness runs the registered scripts (as in the phase engine). |
+| Reviser | The experimenter model, mode `revise`, on a claim that was sent back. At most 2 review rounds. |
+| Finisher | Code: copies each required file to `/outputs` from the best claim that wrote it (supported, then not established, then rejected). A file no claim wrote stays missing. Nothing is made up. |
+| Reporter | The reporter model writes `METHODS.md`. |
+
+**The Board** (`swarm/board.py`) holds one record per claim and a state machine:
+`triaged -> piloting -> in_workup -> under_review -> supported | rejected | not_established`, and
+`under_review -> sent_back -> in_workup`. Code makes every change. An illegal change is refused and
+logged. The outcome of a review comes from the ledger's verdict and the open issues on the claim
+(`review_outcome`). A model never decides it. A role that crashes, times out or ends without
+`claim_done` gets one retry. After that the claim is `not_established`, never `rejected`: a crash
+says nothing about the claim.
+
+**Budget** (`swarm/claim_budget.py`). The run keeps one budget, the same as the single agent. The
+claims share what is left after the report, finish and overshoot reserves and the triage call:
+15% is held back, and the rest is split by acuity (3, 2, 1). Inside a claim: pilot 15%, workup 50%,
+review and revise 35%. After each review round, what closed claims did not spend goes to the open
+ones (re-triage). New work stops when one more step would reach the reserves.
+
+**Ablations** (`swarm/flags.py`): `--no-critic`, `--no-auditor`, `--no-pilot`, `--no-retriage`. They
+do not change the run's budget. With `--no-critic`, only the registered tests can support a claim.
+
+**Files**, next to `ledger.json` in the run folder and in `outputs/glhf/`: `board.json` (after every
+change), `events.jsonl` (every change, agent call and budget step), `rejections.json` (claim, stage,
+reason, evidence). FINDINGS.md gets the claims table and the rejection log.
+
+Run it locally (scripted, free):
+
+```bash
+cd glhf/bixbench
+uv run python -m bixbench3.glhf_local --case ../demo_case --out /tmp/claims-run --engine claims --model mock
+```
+
+The engine's launcher (`npm run glhf -- run`) does not pass `--engine` yet.
+
+Known limits:
+- Two claims on the same artifact each compute it. The Finisher keeps the best one.
+- Resume after a crash is not possible: the upstream setup clears `/workspace/work` and `/outputs`.
+  The Board is saved after every change, for the record.
+- Claims dropped at the pilot still count in the Bonferroni family (the ledger rules are unchanged).
+
 ## 3. From claim to verdict
 
 No model decides a verdict. The Critic first registers its tests, then runs them and reports
