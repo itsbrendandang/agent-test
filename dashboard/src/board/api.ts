@@ -8,6 +8,8 @@ export type Verdict = "verified" | "unsupported" | "contradicted" | "unchecked"
 
 export interface RosterMember {
   name: string; title: string; role: "lead" | "member"; model: string; modelId: string; tools: string[]; deliverable?: string
+  /** One agent playing several roles: mode id -> role title. The active mode is on each member.replied event. */
+  modes?: Record<string, string>
 }
 export interface RunSummary { id: string; brief: string; rounds: number; startedAt: number; status: "done" | "running" | "paused"; claims: number }
 /** `paidCalls` false: the engine's NO_PAID_CALLS switch is on, so the board runs with scripted models only. */
@@ -17,7 +19,7 @@ export interface Status { mock: boolean; paidCalls?: boolean; keys: Record<strin
 export type BoardEvent = { key: string; at: number } & (
   | { type: "run.started"; runId: string; brief: string; title: string; mock: boolean }
   | { type: "round.started"; round: number; message: string; final: boolean }
-  | { type: "member.replied"; round: number; member: string; text: string }
+  | { type: "member.replied"; round: number; member: string; mode?: string; text: string }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: { url: string; title: string; studyType?: string }[] }
   | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: string; p?: number; note?: string }
   | { type: "constraint"; reason: string; detail: string }

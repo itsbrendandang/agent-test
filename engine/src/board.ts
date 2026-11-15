@@ -24,7 +24,7 @@
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
-import { bool, obj, str } from "@earendil-works/pi-schema"
+import { bool, map, obj, opt, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { type AgentDef, instructionsFor, loadAgent, loadRoster } from "./agents.ts"
@@ -146,6 +146,37 @@ export function checkDailyBudget(config: BoardConfig, now = new Date(), mock = M
   if (mock) return
   const today = spentToday(config, now)
   if (today >= config.meeting.daily_usd) throw new BudgetReached(`Daily budget reached: $${today.toFixed(2)} of $${config.meeting.daily_usd} counted for today's runs (running ones count at their full cap). Raise meeting.daily_usd in board/config.yaml or wait until tomorrow.`)
+}
+
+/**
+ * Check the lead's `modes` for one round ({ member: mode id }) against the modes each agent file declares.
+ * Returns "" when they are fine, else the refusal text. Code decides the mode; the model's reply is never parsed for it.
+ */
+export function checkModes(roster: Pick<AgentDef, "name" | "modes">[], modes: Record<string, string> | undefined): string {
+  const problems: string[] = []
+  for (const [member, mode] of Object.entries(modes ?? {})) {
+    const agent = roster.find((a) => a.name === member)
+    if (!agent) problems.push(`${member} is not on the board`)
+    else if (!agent.modes) problems.push(`${member} has no modes`)
+    else if (!(mode in agent.modes)) problems.push(`${member} has no mode "${mode}" (it has: ${Object.keys(agent.modes).join(", ")})`)
+  }
+  return problems.length ? `Round not run, and not counted: ${problems.join("; ")}. Call converse again with valid modes.` : ""
+}
+
+/** The "## " sections a memo must have. The dashboard reads decision, rationale, unresolved tensions and next actions. */
+export const MEMO_SECTIONS = ["Decision", "Rationale", "Rejected Claims", "Unresolved Tensions", "Next Actions"] as const
+
+/**
+ * The Finisher, as code: the required memo sections that are missing or empty. It splits on "## " the same way
+ * as sections() in dashboard/src/views/BoardView.tsx. It only reports; it never fills a section in.
+ */
+export function missingMemoSections(md: string): string[] {
+  const found = new Map<string, string>()
+  for (const part of md.split(/^## /m).slice(1)) {
+    const [head, ...body] = part.split("\n")
+    found.set(head.trim().toLowerCase(), body.join("\n").trim())
+  }
+  return MEMO_SECTIONS.filter((s) => !found.get(s.toLowerCase()))
 }
 
 /**
@@ -397,10 +428,16 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
 
   const converseTool = defineTool({
     name: "converse",
-    description: "Address the whole board. Every member replies in parallel; you get their replies with checker verdicts on each claim.",
-    parameters: obj({ message: str(), final: bool({ description: "true to ask for final positions" }) }),
+    description: "Address the whole board. Every member replies in parallel; you get their replies with checker verdicts on each claim. Use modes to name the role a member with modes plays this round.",
+    parameters: obj({
+      message: str(), final: bool({ description: "true to ask for final positions" }),
+      modes: opt(map(str(), { description: 'Member name to mode id for this round, e.g. {"experimenter": "pilot"}. Only members whose file declares modes.' })),
+    }),
     replay: "safe",
     execute: async (args, api) => {
+      // Bad modes are refused before the round is counted. The check reads only the arguments, so a replay decides the same way.
+      const modeError = checkModes(roster, args.modes)
+      if (modeError) return { output: [{ type: "text", text: modeError }] }
       // The round number and the decision to run it are memoised first (see gateRound).
       const { round, refusal } = await gateRound(state, config, args.final, <T extends string | number>(name: string, candidate: T) => api.memo<T>(name, candidate, ctx), spend,
         (r, limit) => log.emit(`constraint:${r}`, { type: "constraint", reason: limit.reason, detail: limit.detail }))
@@ -411,8 +448,10 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
       log.emit(`round:${round}`, { type: "round.started", round, message: args.message, final: args.final })
 
       const digest = round === 1 ? "" : peerDigest(state)
-      const input = [
+      const modeOf = (agent: AgentDef) => args.modes?.[agent.name]
+      const inputFor = (agent: AgentDef) => [
         `Round ${round}. Lead Scientist to the board:`,
+        modeOf(agent) && `Mode: ${agent.modes?.[modeOf(agent)!]} (${modeOf(agent)}). Work in this role this round.`,
         args.message,
         round === 1 ? "Work independently: you have not seen the other members' views, on purpose." : digest,
         args.final ? "Give your final position in two sentences." : "Reply with your deliverable.",
@@ -421,7 +460,7 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
       const replies = await Promise.all(roster.map(async (agent) => {
         const conversation = await api.conversation(state.members[agent.name] as ConversationId, ctx)
         if (!conversation) throw new Error(`No conversation for ${agent.name}`)
-        const submission = await conversation.submit({ type: "input", content: input, requestId: `${runId}:r${round}:${agent.name}` }, ctx)
+        const submission = await conversation.submit({ type: "input", content: inputFor(agent), requestId: `${runId}:r${round}:${agent.name}` }, ctx)
         const settled = await submission.wait(ctx)
         const reply = settled.status === "done" && settled.answer !== undefined ? await answerText(api, settled.answer) : `(no answer: ${"reason" in settled ? settled.reason : "unknown"})`
         return { agent, reply }
@@ -429,9 +468,9 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
 
       state.lastRound = []
       for (const { agent, reply } of replies) {
-        log.emit(`reply:${round}:${agent.name}`, { type: "member.replied", round, member: agent.name, text: stripClaims(reply), usd: 0 })
+        log.emit(`reply:${round}:${agent.name}`, { type: "member.replied", round, member: agent.name, ...(modeOf(agent) ? { mode: modeOf(agent) } : {}), text: stripClaims(reply), usd: 0 })
         const verdicts = await checkClaims(claimDeps, round, agent.name, parseClaims(reply))
-        state.lastRound.push({ member: agent.title, reply: stripClaims(reply), verdicts })
+        state.lastRound.push({ member: modeOf(agent) ? `${agent.title}, as ${agent.modes?.[modeOf(agent)!]}` : agent.title, reply: stripClaims(reply), verdicts })
       }
       const after = overLimit(config, state.rounds, state.startedAt, await spend())
       save()
@@ -443,10 +482,12 @@ async function runLocked(config: BoardConfig, runId: string, onLog?: (log: Event
 
   const memoTool = defineTool({
     name: "write_memo",
-    description: "Write the final memo. Call once, after final positions.",
+    description: `Write the final memo, after final positions. It is refused unless it has these "## " sections, each not empty: ${MEMO_SECTIONS.join(", ")}.`,
     parameters: obj({ decision: str({ description: "Go, No-Go, or Go with conditions" }), memo: str({ description: "The full memo in Markdown" }) }),
     replay: "safe",
     execute: async (args) => {
+      const missing = missingMemoSections(args.memo)
+      if (missing.length) return { output: [{ type: "text", text: `Memo not saved. Missing or empty "## " sections: ${missing.join(", ")}. Write them from the board's record, then call write_memo again.` }] }
       const dir = runDir(config, runId)
       writeFileSync(`${dir}/memo.md`, args.memo)
       writeFileSync(`${dir}/verification_ledger.json`, JSON.stringify(state.ledger, null, 2))

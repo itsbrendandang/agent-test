@@ -70,7 +70,7 @@ const stems = (text: string) => new Set(text.toLowerCase().split(/[^a-z0-9]+/).f
 
 /**
  * Members whose profile shares words with the question, best first. A word that most members share says nothing
- * and is not counted. With fewer than two matches the Scout and the Critic fill in, and say why.
+ * and is not counted. With fewer than two matches the Proposer and the Critic fill in, and say why.
  */
 export function rankAgents(question: string, members: Member[]): PlanAgent[] {
   const asked = [...new Set(question.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !STOP.has(w)))]
@@ -78,7 +78,7 @@ export function rankAgents(question: string, members: Member[]): PlanAgent[] {
   const hits = members.map((m, i) => ({ m, i, words: asked.filter((w) => vocab[i].has(w.slice(0, 5)) && vocab.filter((v) => v.has(w.slice(0, 5))).length <= members.length / 2) }))
   const ranked: PlanAgent[] = hits.filter((h) => h.words.length).sort((a, b) => b.words.length - a.words.length || a.i - b.i)
     .map((h) => ({ name: h.m.name, title: h.m.title, why: `Its profile shares words with the question: ${h.words.slice(0, 5).join(", ")}.` }))
-  for (const [name, why] of [["scout", "Added by default: checks the data before any research begins."], ["critic", "Added by default: tries to disprove the claims the board makes."]] as const) {
+  for (const [name, why] of [["proposer", "Added by default: turns the question into ranked claims to test."], ["critic", "Added by default: tries to disprove the claims the board makes."]] as const) {
     const m = members.find((x) => x.name === name)
     if (ranked.length < 2 && m && !ranked.some((r) => r.name === name)) ranked.push({ name, title: m.title, why })
   }

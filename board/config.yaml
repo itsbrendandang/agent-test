@@ -61,12 +61,8 @@ checkers:
   timeout_seconds: 180                # per escalation check; a check that times out records the claim as unsupported
 
 board:                       # order = speaking order in the transcript; remove a line to bench a member
-  - scout                    # members still reply in parallel each round; the order is the intended pipeline
-  - proposer
-  - pilot
-  - experimenter
+  - proposer                 # members still reply in parallel each round; the lead names each one's task
+  - experimenter             # one agent, three modes (Pilot, full run, Reviser) named by the lead
   - methods-auditor
   - critic
-  - reviser
-  - finisher
   - reporter

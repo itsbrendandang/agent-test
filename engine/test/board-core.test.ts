@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { BudgetReached, checkClaims, type ClaimDeps, gateRound, type Memo, rollDay, runBoard, spentToday, summarize, todaySpend, usdOf } from "../src/board.ts"
+import { BudgetReached, checkClaims, type ClaimDeps, gateRound, MEMO_SECTIONS, type Memo, missingMemoSections, rollDay, runBoard, spentToday, summarize, todaySpend, usdOf } from "../src/board.ts"
 import { claudeCodeCheck } from "../src/checkers.ts"
 import type { Claim } from "../src/claims.ts"
 import { type BoardConfig, loadConfig, ROOT } from "../src/config.ts"
@@ -249,4 +249,16 @@ test("checker: the default command confines Claude Code, and the default tools c
   assert.match(config.checkers.claude_code_cmd, /--restricted\b/)
   assert.match(config.checkers.claude_code_cmd, /--strict-mcp-config\b/)
   assert.doesNotMatch(config.checkers.claude_code_tools ?? "", /Bash|WebFetch|WebSearch/)
+})
+
+test("the Finisher check: a memo needs every required section, at level 2 and not empty", async () => {
+  const full = MEMO_SECTIONS.map((h) => `## ${h}\nText for ${h}.`).join("\n\n")
+  assert.deepEqual(missingMemoSections(`# Memo\n\n${full}\n\n## Board Positions\n- one line`), [], "a full memo passes, extra sections are fine")
+  assert.deepEqual(missingMemoSections(full.replace("## Rejected Claims", "## Other")), ["Rejected Claims"], "a missing section is named")
+  assert.deepEqual(missingMemoSections(full.replace("## Next Actions", "### Next Actions")), ["Next Actions"], "a level-3 heading does not count")
+  assert.deepEqual(missingMemoSections(full.replace("Text for Rationale.", "")), ["Rationale"], "an empty section does not count")
+  assert.deepEqual(missingMemoSections(full.replace("## Decision", "## decision")), [], "headings match without case")
+  assert.deepEqual(missingMemoSections(""), [...MEMO_SECTIONS])
+  const { MOCK_MEMO } = await import("../src/mock.ts")
+  assert.deepEqual(missingMemoSections(MOCK_MEMO), [], "the scripted memo passes")
 })

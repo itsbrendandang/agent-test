@@ -30,24 +30,21 @@ export function mockLeadTurn(ctx: TranscriptContext): Step {
     return { text: "Writing the memo.", tool: { name: "write_memo", args: { decision: "Go with conditions", memo: MOCK_MEMO } } }
   }
   if (wrapUp || rounds === 2) return { text: "Time to close.", tool: { name: "converse", args: { message: "We are at our limit. Final positions: one statement each, Go or No-Go, and the one condition you would attach.", final: true } } }
-  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Methods Auditor and Critic: the hERG margin and solubility of CMP-0517 both miss the criteria. Reviser: fix what they flagged. Finisher: list the outputs that are still missing. Reporter: draft the supported findings and the rejected claims.", final: false } } }
+  if (rounds === 1) return { text: "Pushing on the disagreement.", tool: { name: "converse", args: { message: "Round 2. Experimenter (revise): fix what the checkers flagged. Methods Auditor and Critic: review the claims on your own. Reporter: draft the supported findings and the rejection log. Proposer: no task.", final: false, modes: { experimenter: "revise" } } } }
   return {
     text: "Framing: Go only if one candidate has a credible path to the criteria and a differentiation story against the approved drugs.",
-    tool: { name: "converse", args: { message: "Round 1. Scout: inspect the data. Proposer: plan the analysis and name the claims to test. Pilot and Experimenter: say what you would run. Everyone else: give your first check. Work independently.", final: false } },
+    tool: { name: "converse", args: { message: "Round 1. Proposer: triage the claims, with priority and budget share. Experimenter (pilot): test each claim on a subsample. Methods Auditor, Critic, Reporter: no task this round.", final: false, modes: { experimenter: "pilot" } } },
   }
 }
 
+const NO_TASK = "No task.\n\nCLAIMS"
 const MEMBER_REPLIES: Record<string, (round: number) => string> = {
-  scout: () => `The brief has one assay table for two candidates. No raw data files came with it, so no file could be checked for damage.\n\nCLAIMS\n- [brief] The brief gives six assays for each of CMP-0423 and CMP-0517 (source: brief)`,
-  proposer: () => `Plan: compare each candidate with the decision criteria, one claim per criterion.\n\nCLAIMS\n- [brief] CMP-0517 pERK IC50 is 95 nM in H358 (source: brief)\n- [brief] CMP-0423 pERK IC50 is 180 nM in H358 (source: brief)`,
-  pilot: () => `Prepared a script that reads the assay table and computes descriptors from the SMILES. Not run: this board has no code tool yet.\n\nCLAIMS\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)`,
-  experimenter: (r) => r === 1 ? `CMP-0423 passes solubility and clearance; CMP-0517 fails solubility.\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)\n- [brief] CMP-0423 kinetic solubility is 12 uM (source: brief)\n- [brief] CMP-0423 shows no resistance liability (source: brief)` :
-    `No new results this round: the reruns the Reviser asked for need a code tool.\n\nCLAIMS`,
-  "methods-auditor": () => `The plan compares each candidate with every criterion. The hERG margin step is present; resistance testing is missing.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
-  critic: (r) => `Supported: CMP-0517 fails the hERG margin. Rejected: the claim that CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)` ,
-  reviser: () => `Dropped the Experimenter's claim that CMP-0423 has no resistance liability: the brief has no resistance data. Nothing else changed.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
-  finisher: () => `Required outputs: the comparison table is present. The resistance-mutant results are missing and cannot be made from this data.\n\nCLAIMS`,
-  reporter: () => `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
+  proposer: (r) => r === 1 ? `Triage: (1) CMP-0517 fails the hERG margin, high, 40%. (2) CMP-0423 passes solubility and clearance, high, 40%. (3) Either candidate covers resistance mutants, low, 20%.\n\nCLAIMS\n- [brief] CMP-0517 pERK IC50 is 95 nM in H358 (source: brief)\n- [brief] CMP-0423 pERK IC50 is 180 nM in H358 (source: brief)` : NO_TASK,
+  experimenter: (r) => r === 1 ? `Pilot: a script for the assay table and the SMILES descriptors, not run (no code tool yet). From the brief, CMP-0423 passes solubility and CMP-0517 fails it.\n\nCLAIMS\n- [brief] CMP-0517 kinetic solubility is 4 uM (source: brief)\n- [computed] CMP-0423 TPSA is about 49 and cLogP about 2.4 (source: RDKit on CMP-0423 SMILES)\n- [brief] CMP-0423 shows no resistance liability (source: brief)` :
+    `Revise: dropped my claim that CMP-0423 has no resistance liability; the checker contradicted it and the brief has no resistance data. Claim 3 stays open.\n\nCLAIMS\n- [brief] CMP-0423 kinetic solubility is 12 uM (source: brief)`,
+  "methods-auditor": (r) => r === 1 ? NO_TASK : `Each claim is compared with its criterion. The hERG margin step is present; resistance testing is missing from the plan.\n\nCLAIMS\n- [brief] CMP-0517 hERG IC50 is 6 uM (source: brief)`,
+  critic: (r) => r === 1 ? NO_TASK : `Supported: CMP-0517 fails the hERG margin. Rejected: CMP-0423 has no resistance liability; the brief has no resistance data. Not yet established: any advantage over the approved drugs.\n\nCLAIMS\n- [brief] CMP-0423 hERG IC50 is 18 uM (source: brief)`,
+  reporter: (r) => r === 1 ? NO_TASK : `Draft: one supported finding (CMP-0517 fails the hERG margin), one rejected claim (no resistance liability for CMP-0423), and no resistance data.\n\nCLAIMS\n- [brief] Neither candidate has resistance-mutant data (source: brief)`,
 }
 
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
@@ -57,13 +54,13 @@ export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Ste
     return { text: "Searching.", tool: { name: "exa_search", args: { query: `KRAS G12C ${agent.title} evidence`, objective: "Find primary data that separates the two candidates; prefer research papers over news and pull potency, selectivity and safety figures.", key_question: "Is either candidate differentiated?" } } }
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
-    const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : agent.name === "finisher" ? "Outputs complete except the resistance-mutant results." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
+    const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."
     return { text: `${position}\n\nCLAIMS` }
   }
   return { text: (MEMBER_REPLIES[agent.name] ?? (() => "No comment.\n\nCLAIMS"))(round) }
 }
 
-const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)
+export const MOCK_MEMO = `# Memo: KRAS G12C hit-to-lead (mock run)
 
 ## Decision
 **Go with conditions: advance CMP-0423; park CMP-0517.**
@@ -73,18 +70,17 @@ CMP-0423 meets solubility, clearance and hERG criteria and misses only potency (
 Methods Auditor and Critic rate as the more fixable liability. CMP-0517's hERG IC50 of 6 uM fails the safety margin.
 
 ## Board Positions
-- Scout: one assay table, no raw data files to check.
-- Proposer: one claim per decision criterion.
-- Pilot: descriptor script prepared, not run.
-- Experimenter: CMP-0423 passes solubility and clearance; CMP-0517 fails solubility.
+- Proposer: three claims; resistance coverage ranked low.
+- Experimenter: pilot script prepared, not run; dropped one claim on revise.
 - Methods Auditor: resistance testing is missing from the plan.
 - Critic: No-Go until an advantage over the approved drugs is shown. (dissent)
-- Reviser: dropped one claim that did not match the brief.
-- Finisher: resistance-mutant results are missing.
 - Reporter: one supported finding, one rejected claim.
 
 ## Evidence Ledger Summary
 See verification_ledger.json. One claim did not match the brief and was dropped.
+
+## Rejected Claims
+- CMP-0423 shows no resistance liability. Contradicted by the checker: the brief has no resistance data.
 
 ## Unresolved Tensions
 Differentiation against approved drugs is a hypothesis, not data.

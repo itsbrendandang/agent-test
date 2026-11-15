@@ -13,7 +13,7 @@ export type BoardEvent =
   | { type: "run.resumed"; runId: string }
   | { type: "lead.framed"; text: string }
   | { type: "round.started"; round: number; message: string; final: boolean }
-  | { type: "member.replied"; round: number; member: string; text: string; usd: number }
+  | { type: "member.replied"; round: number; member: string; mode?: string; text: string; usd: number }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[] }
   | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string }
   | { type: "constraint"; reason: "time" | "budget" | "rounds"; detail: string }

@@ -11,8 +11,8 @@ This repository holds two projects that share one backend and one web UI:
    The nine roles are nine phases with their own instructions. They use four model groups, and
    by default all four use the same model.
    Only the solver is ours. The sandbox, time limit, grader and judge are the benchmark's own code.
-2. **Drug candidate board** (the older project). A lead scientist agent and nine research agents (our own
-   nine-role swarm, prompts only so far) that write a memo. See [docs/drug-board.md](docs/drug-board.md).
+2. **Drug candidate board** (the older project). A lead scientist agent and five research agents (our own
+   swarm: nine roles, some as agent modes and some as code; prompts only so far) that write a memo. See [docs/drug-board.md](docs/drug-board.md).
 
 ## Paid calls are off on a new clone
 

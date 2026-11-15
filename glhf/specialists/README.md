@@ -5,7 +5,7 @@ Nine profiles for the full workflow, each taken from one portfolio of the drug-c
 it is a checked proof point. **Status: these files are instructions only. No code loads them yet, and no
 run, scripted or real, has used them.**
 
-The board portfolios named in `based_on` were replaced by the nine swarm roles on 2026-11-14. The old
+The board portfolios named in `based_on` were replaced by the swarm roles on 2026-11-14. The old
 files are in git history (for example `git show d8f249d:board/agents/skeptic.md`).
 
 | Profile | From board portfolio | Place in the workflow | Called when |

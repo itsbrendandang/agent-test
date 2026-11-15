@@ -79,7 +79,7 @@ const addRun = (w: World, id: string, state: object, memo = "") => {
   writeFileSync(join(w.runs, id, "run.json"), JSON.stringify({ runId: id, briefFile: "/x/sotorasib-review.md", startedAt: Date.now(), members: {}, rounds: 1, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, usd: 0, mock: true, finished: true, ...state }))
   if (memo) writeFileSync(join(w.runs, id, "memo.md"), memo)
 }
-const RESEARCH = "Are the sample groups complete, were the methods and parameters correct, and can the claims be reproduced?"
+const RESEARCH = "Rank the claims by priority, check the parameters against the study instructions, and try to disprove the conclusions."
 
 test("catalog: the contract's shape, effort levels within the caps, and never a key", async () => {
   const w = await world()
@@ -92,7 +92,7 @@ test("catalog: the contract's shape, effort levels within the caps, and never a 
   assert.deepEqual(body.search, { exa: { keyPresent: true } })
   assert.ok(!JSON.stringify(body).includes(SECRET) && !JSON.stringify(body).includes("fake-key-for-tests"), "no key in the catalog")
   const board = body.agents.filter((a: any) => a.source === "board"), specialists = body.agents.filter((a: any) => a.source === "specialist")
-  assert.equal(board.length, 10); assert.equal(specialists.length, 9)
+  assert.equal(board.length, 6); assert.equal(specialists.length, 9)
   assert.deepEqual(board[0], { name: "lead-scientist", title: "Lead Scientist", source: "board", role: "lead", tools: ["converse", "write_memo"] })
   assert.ok(board.slice(1).every((a: any) => a.role === "member" && typeof a.deliverable === "string" && Array.isArray(a.tools)))
   assert.ok(specialists.every((a: any) => typeof a.trigger === "string" && a.trigger && typeof a.role === "string"))
@@ -146,7 +146,7 @@ test("paid calls off: the plan is the same every time, passes the brief check, a
   assert.deepEqual(a.models, { lead: "scripted", members: "scripted", checker: "scripted" })
   assert.equal(a.agents[0].name, "lead-scientist")
   const names = a.agents.map((x: any) => x.name)
-  assert.ok(names.includes("methods-auditor") && names.includes("scout"), `chosen by the question's words: ${names}`)
+  assert.ok(names.includes("methods-auditor") && names.includes("proposer"), `chosen by the question's words: ${names}`)
   assert.ok(a.agents.every((x: any) => x.title && x.why))
   assert.deepEqual(a.skills, [], "no member searches, so the search skill is not linked")
   assert.ok(a.warnings.some((x: string) => /Scripted mode/.test(x)) && a.warnings.some((x: string) => /not stated/.test(x)) && a.warnings.some((x: string) => /Not applied yet/.test(x)))
@@ -160,7 +160,7 @@ test("paid calls off: the plan is the same every time, passes the brief check, a
   assert.deepEqual(Object.keys(loadBrief(file, w.config.brief.required_sections).sections), w.config.brief.required_sections)
   // The word match itself: a word most profiles share is not a reason to pick anyone.
   const { members } = boardMembers(w.config)
-  assert.deepEqual(rankAgents("zzz qqq", members).map((r) => r.name), ["scout", "critic"])
+  assert.deepEqual(rankAgents("zzz qqq", members).map((r) => r.name), ["proposer", "critic"])
 })
 
 test("effort: limits, agents, models and the estimate follow the level; an unknown level is refused with its field", async () => {

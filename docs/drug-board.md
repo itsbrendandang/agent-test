@@ -11,7 +11,7 @@ The Board view shows a plain summary (progress, recommendation, how many claims 
 > **Status.** The board runs from brief to memo on scripted models (no keys). With `OPENROUTER_API_KEY` and `NO_PAID_CALLS=0` in `.env` it uses real models. This repository holds no record of a finished run with real models, so treat the live path as not verified. The board is the older project in this repository; the main project is the GLHF swarm ([README](../README.md)).
 
 ```
-brief.md ──▶ Lead Scientist ──converse──▶ 9 board members (parallel, each its own durable conversation)
+brief.md ──▶ Lead Scientist ──converse──▶ 5 board members (parallel, each its own durable conversation)
                  ▲                            │ no member searches today (tools: [])
                  │                            ▼
                  └── replies + verdicts ◀── claim checks: Jev first ─(uncertain)─▶ OpenAI / Claude Code
@@ -60,30 +60,40 @@ Claude Code (the checker for computed claims) uses your existing `claude` login.
 
 ## The board (`board/agents/*.md`)
 
-The board now holds the nine roles of our own swarm. It will compete with the BixBench swarm, which is
-the baseline. **Status: prompts only, scripted runs only.** Two limits:
+The board runs our own swarm. It will compete with the BixBench swarm, which is the baseline, at equal
+compute. **Status: prompts only, scripted runs only.** The nine roles of the plan are covered by **five
+model agents and three code checks**. Fewer agents means fewer model calls: every member is called every
+round, and each call resends its whole conversation.
 
-- Every member gets every round **at the same time**. The engine does not run the roles in order yet, and
-  it has no review loop of its own. The lead asks for the order and for at most three review rounds in
-  its messages.
-- Members have **no tools**: no code, no file access, no search. Pilot, Experimenter, Reviser and Finisher
-  describe work they cannot run, and they mark it "not run". No member has open web search, because
-  benchmark agents get none (see `AGENTS.md`).
-
-| Member | Task | Deliverable | Model tier |
+| Role | Done by | Task | Model tier |
 |---|---|---|---|
-| Lead Scientist | Frames the question, gives each role its task by name, writes the memo | Memo | lead (Opus) |
-| Scout | Inspects the data: files, damage, sample groups, software | Data report | cheap |
-| Proposer | Writes the analysis plan and 3 to 8 claims to test | Research plan | strong |
-| Pilot | Tests the analysis on part of the data | Tested scripts | cheap |
-| Experimenter | Runs the analysis on the full data | Results, tables, output files | strong |
-| Methods Auditor | Checks the methods against the study instructions | Methods report | strong |
-| Critic | Tries to disprove the claims | Supported / rejected / not yet established | rival (second vendor) |
-| Reviser | Fixes what the Auditor and the Critic flagged | Corrected analyses and a change log | strong |
-| Finisher | Checks that each required output exists and opens; never makes up results | Final list of output files | cheap |
-| Reporter | Writes the methods, findings, rejected claims and limits | Report and rejection ledger | strong |
+| Lead Scientist | agent `lead-scientist` | Frames the question, gives each member its task and mode, writes the memo | lead (Opus) |
+| Scout | code | The brief check before anything runs (`loadBrief`, `brief.required_sections`). There is no dataset to inspect yet. | none |
+| Proposer (triage) | agent `proposer` | 3 to 8 claims, each with a priority and a share of the budget | strong |
+| Pilot | agent `experimenter`, mode `pilot` | Subsample test; claims that fail early are dropped | strong |
+| Experimenter | agent `experimenter`, mode `full` | The analysis per claim, highest priority first | strong |
+| Methods Auditor | agent `methods-auditor` | Were the methods right? | strong |
+| Critic | agent `critic` | Is the conclusion true? Works on its own, not from the Auditor's report | rival (second vendor) |
+| Reviser | agent `experimenter`, mode `revise` | Fixes only what was flagged; at most 2 review rounds | strong |
+| Finisher | code | `write_memo` is refused until the memo has every section in `MEMO_SECTIONS` (`engine/src/board.ts`). It never fills a section in. | none |
+| Reporter | agent `reporter` | Supported findings and the rejection log | strong |
+| Board (shared record) | code | One budget per run, the claim ledger in `run.json` and `verification_ledger.json`, verdicts from the checkers | none |
 
-The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
+**Modes: one agent, several roles.** An agent file can declare `modes:` (for example
+`modes: {pilot: "Pilot", full: "Experimenter", revise: "Reviser"}` in `experimenter.md`). The lead names
+a mode per round in `converse` (`modes: {"experimenter": "pilot"}`). Code checks it (`checkModes`): an
+unknown member or mode is refused, and the round is not counted. The member's input starts with
+"Mode: ...". Each `member.replied` event carries `mode`, and `GET /api/roster` lists each member's
+`modes`, so the dashboard can show one figure per role. The agent keeps one conversation, so the Reviser
+remembers what the Pilot did. Limit: one mode per member per round.
+
+Other limits:
+
+- Every member gets every round **at the same time**. The engine does not run the roles in order. The
+  lead follows a round plan in its prompt, and a member with no task replies "No task."
+- Members have **no tools**: no code, no file access, no search. Results that were not run are marked
+  "not run". No member has open web search, because benchmark agents get none (see `AGENTS.md`).
+- The checkers decide each claim's verdict. The Critic's labels are its view, not the verdict.
 
 To add or bench a member, add or remove a line under `board:` in `board/config.yaml` and add an agent file. Tiers map to OpenRouter model IDs in `models:`, so changing a model is a one-line edit.
 
@@ -134,8 +144,9 @@ dashboard/             the web UI (Tauri + React); the board is dashboard/src/vi
 - [ ] Add keys; run the example brief live; tune Jev questions on real Exa results.
 - [ ] Watch mode: scheduled Exa searches reopen a run when new evidence changes a verdict. The `watch:` keys exist in the config, but no code uses them yet.
 - [x] Members' checked claims are written to their `expertise/` files after each run (see Memory).
-- [ ] Run the nine roles in order (Scout, Proposer, Pilot, Experimenter, then review, Finisher, Reporter) instead of all at once.
-- [ ] A code tool for Pilot, Experimenter, Reviser and Finisher, in a sandbox, with `refusePaid()` and replay keys. Today no member can run code, and the Claude Code checker does not run code by default.
+- [ ] Run the phases in order in code instead of all at once, and call only the members with a task.
+- [ ] One Experimenter conversation per claim, run in parallel, with each claim's budget share enforced in code.
+- [ ] A data workspace, so the Scout and the Finisher can check real files in code. A code tool for the Experimenter (all three modes), in a sandbox, with `refusePaid()` and replay keys. Today no member can run code, and the Claude Code checker does not run code by default.
 - [ ] Brief sections for research tasks. `brief.required_sections` in `board/config.yaml` still asks for drug sections (Candidates, Target and Indication).
 - [ ] Evals in the acyclic style: plant a wrong claim, fork the session at the same entry, and measure how often the board adopts it.
 - [ ] Hosting: Modal for long runs and scheduled watch mode. Planned only; no code uses Modal.

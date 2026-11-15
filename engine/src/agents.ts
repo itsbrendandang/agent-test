@@ -1,4 +1,4 @@
-// Agent files: YAML frontmatter (name, title, model tier, tools, deliverable) + a Markdown system prompt.
+// Agent files: YAML frontmatter (name, title, model tier, tools, deliverable, modes) + a Markdown system prompt.
 // The harness builds each agent's instructions from its file, the shared context, its expertise file,
 // and the brief, so every member starts on the same page.
 import { existsSync, readdirSync, readFileSync } from "node:fs"
@@ -14,7 +14,19 @@ export interface AgentDef {
   model: Tier
   tools: string[]
   deliverable?: string
+  /** Roles this one agent can play, as mode id -> role title (e.g. pilot -> "Pilot"). The lead names one per round. */
+  modes?: Record<string, string>
   prompt: string
+}
+
+/** Mode ids are short words; a title is plain text. Anything else in `modes:` is an error in the agent file. */
+function readModes(name: string, value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Agent ${name}: modes must be a map of mode id to role title`)
+  const modes = Object.entries(value as Record<string, unknown>)
+  if (!modes.length || modes.some(([id, title]) => !/^[a-z][a-z0-9-]{0,30}$/.test(id) || typeof title !== "string" || !title.trim()))
+    throw new Error(`Agent ${name}: each mode needs a short lowercase id and a role title`)
+  return Object.fromEntries(modes.map(([id, title]) => [id, String(title).trim()]))
 }
 
 export function loadAgent(config: BoardConfig, name: string): AgentDef {
@@ -29,6 +41,7 @@ export function loadAgent(config: BoardConfig, name: string): AgentDef {
     model: (front.model ?? "cheap") as Tier,
     tools: front.tools ?? [],
     deliverable: front.deliverable,
+    ...(front.modes === undefined ? {} : { modes: readModes(name, front.modes) }),
     prompt: match[2].trim(),
   }
 }
