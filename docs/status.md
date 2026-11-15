@@ -88,7 +88,7 @@ Known limits:
 
 | Tool | Status |
 |---|---|
-| Exa search | Tested live. Used by the swarm's `search_docs` tool (`swarm/tools.py`). Also wired into the drug board (`engine/src/exa.ts`), but no board member has the tool since the nine-role roster. Details for the swarm's tool are in the next table. |
+| Exa search | Tested live. Used by the swarm's `search_docs` tool (`swarm/tools.py`). Also wired into the board review (`engine/src/exa.ts`): the scout has the tool, with a limit of 20 searches a run and $40 in total. No real board review has used it. The scout also has a free literature search (`engine/src/literature.ts`, Europe PMC), tested with a fake network and one live query by hand. Details for the swarm's tool are in the next table. |
 
 Live test of the swarm's documentation search (the guard in `swarm/tools.py`, with the 9-site
 list):

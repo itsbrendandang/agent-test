@@ -46,8 +46,9 @@ A longer list for developers is [further down](#words-used-in-these-documents).
   On both, it scored the same as one model alone and cost more.
 - We have **not** run a full benchmark. So we cannot say that a team of agents is better than one
   model. That is the question this project was built to test.
-- The board review has never been run with real AI models, and today its agents cannot look
-  anything up. This is the next thing to fix.
+- The board review has never been run with real AI models. It is ready to: one member (the scout)
+  can now search the web and the scientific literature, and a free pre-check confirms the keys and
+  model names before any money is spent.
 
 Exact details are in [Status](#status).
 
@@ -57,9 +58,76 @@ The app is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). A 
 is interrupted, for example by a crash or a restart, continues where it stopped and does not
 repeat finished work. We tested this by stopping a practice run in the middle.
 
-## Download the app (Mac)
+## Try it in your browser
 
-No terminal and nothing to install. For Macs with Apple Silicon (M1 or newer), macOS 11 or later.
+This needs a terminal and a few minutes. You need [Node.js](https://nodejs.org) 24 or newer. For the
+swarm you also need [uv](https://docs.astral.sh/uv/) and Docker (running).
+
+```bash
+git clone https://github.com/itsbrendandang/agent-test.git && cd agent-test
+npm run setup    # once, after cloning
+npm start        # starts the engine and the app, and opens http://127.0.0.1:5317 in your browser
+```
+
+Press Ctrl+C to stop. A new clone is in **Demo mode**: practice runs with fixed example answers, no
+keys, no cost. They show how the app works. They are not research.
+
+### Do I need API keys?
+
+| You want to | Keys needed |
+|---|---|
+| Look around, do practice runs, search saved research | None. |
+| Run a real board review | Your own `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `EXA_API_KEY`. |
+| Run the swarm with a real model | The key of the model's vendor, for example `ANTHROPIC_API_KEY`. |
+
+Keys are never in the repository, so **each teammate uses their own**:
+
+```bash
+cp .env.example .env    # then open .env and paste your keys after the = signs
+npm run preflight       # free: checks the keys and model names with the vendors, prints the limits
+```
+
+Then start the app and switch from **Demo** to **Real** in the status line at the top. The switch
+shows the spending limits, asks you to tick "I understand this costs money", and asks for the engine's
+session token (the engine prints where it is when it starts). Real stays on until the engine
+restarts or you switch back. `.env` is ignored by git; do not commit it or paste keys in chat.
+
+Other ways to start:
+
+```bash
+npm run doctor   # list what this machine has and what is missing
+npm run demo     # run the swarm on the demo case with the scripted model (about 15 seconds)
+
+docker compose up --build   # everything in containers; wait for "glhf tracker ready",
+                            # then open http://localhost:5317
+```
+
+- `npm start` was tested only with the engine and the app already running. A start from nothing
+  is not tested yet.
+- The Docker path was tested on a new clone on macOS. Linux and Windows are not tested; Windows
+  needs WSL2. Steps: [CONTRIBUTING.md](CONTRIBUTING.md#quick-start-with-docker-only).
+- Run the engine in Docker or on your machine, not both at the same time.
+
+## What is in the app
+
+| View | What it shows |
+|---|---|
+| Home | A chat box. Ask about past runs, or ask a research question and get a plan you can start. |
+| Runs | Every run, with search. |
+| Compare | The swarm and the single agent on the same task, side by side. Start a run here. |
+| Board | One board review: what each member said, and how each statement was checked. |
+| Agents | The roles and what each one did. |
+| Graph | One run as a 3D graph of who said what and what held up. |
+| Settings | Engine state, Demo or Real mode, session token. |
+
+The app is being simplified now into a search-first screen (Home becomes "Search", Runs becomes
+"Saved research"). The table describes the views; names and details on screen may differ.
+
+## The Mac app (paused)
+
+**The desktop app is paused. Use the browser version above.** The download below is an older build: it
+does practice runs only and does not have the Demo/Real switch, the literature search or the newer
+screens. For Macs with Apple Silicon (M1 or newer), macOS 11 or later.
 
 1. Download [`AI-Scientist-Bot-macOS-Apple-Silicon.dmg`](downloads/AI-Scientist-Bot-macOS-Apple-Silicon.dmg)
    (54 MB): open that link and click the download button. The same file is on the
@@ -94,51 +162,8 @@ To check the download: its SHA-256 is
 (`shasum -a 256 AI-Scientist-Bot-macOS-Apple-Silicon.dmg`).
 
 Not tested: an Intel Mac, a second Mac, and the first-open steps on a freshly downloaded copy. Windows
-and Linux have no app; use [Try it from the source](#try-it-from-the-source). How it is built:
+and Linux have no app; use [Try it in your browser](#try-it-in-your-browser). How it is built:
 [docs/proposals/desktop-app.md](docs/proposals/desktop-app.md).
-
-## Try it from the source
-
-This needs a terminal and a few minutes. You need [Node.js](https://nodejs.org) 24 or newer. For the
-swarm you also need [uv](https://docs.astral.sh/uv/) and Docker (running).
-
-```bash
-npm run setup    # once, after cloning
-npm start        # starts the engine and the app, and opens it in your browser
-```
-
-Press Ctrl+C to stop. A new clone does **practice runs** only: fixed example answers, no keys,
-no cost. They show how the app works. They are not research.
-
-Other ways to start:
-
-```bash
-npm run doctor   # list what this machine has and what is missing
-npm run demo     # run the swarm on the demo case with the scripted model (about 15 seconds)
-
-docker compose up --build   # everything in containers; wait for "glhf tracker ready",
-                            # then open http://localhost:5317
-```
-
-- `npm start` was tested only with the engine and the app already running. A start from nothing
-  is not tested yet.
-- The Docker path was tested on a new clone on macOS. Linux and Windows are not tested; Windows
-  needs WSL2. Steps: [CONTRIBUTING.md](CONTRIBUTING.md#quick-start-with-docker-only).
-- Run the engine in Docker or on your machine, not both at the same time.
-
-## What is in the app
-
-| View | What it shows |
-|---|---|
-| Home | A chat box. Ask about past runs, or ask a research question and get a plan you can start. |
-| Runs | Every run, with search. |
-| Compare | The swarm and the single agent on the same task, side by side. Start a run here. |
-| Board | One board review: what each member said, and how each statement was checked. |
-| Agents | The roles and what each one did. |
-| Graph | One run as a 3D graph of who said what and what held up. |
-| Settings | Engine state, paid calls, session token. |
-
-The dashboard is being reworked now. The table describes the views; details on screen may differ.
 
 ---
 
@@ -151,8 +176,10 @@ The rest of this page is for developers and teammates.
    grader and judge are the benchmark's own code.
 2. **Board review.** A lead scientist agent and nine members discuss a written brief in rounds
    and the lead writes a memo. The members have the same nine role names as the swarm, but here
-   they are prompts only: they have no tools and run no code. Each statement a member makes is
-   checked by a model from a different vendor, which must quote the source. See
+   they are prompts only and run no code. One member, the scout, can search: the literature
+   (PubMed and preprints through Europe PMC, free) and the web (Exa, paid). It replies first, so
+   the others see its sources. Each statement a member makes is checked by a model from a
+   different vendor, which must quote the source. See
    [docs/drug-board.md](docs/drug-board.md).
 
 Both are tracked by one engine (`engine/`, port 8787) and shown in one app (`dashboard/`, port 5317).
@@ -160,16 +187,22 @@ Both are tracked by one engine (`engine/`, port 8787) and shown in one app (`das
 ## Paid calls are off on a new clone
 
 A new clone can only do scripted runs (`--model mock`). They cost nothing. Everything that
-costs money is refused by the engine until a person writes this line in `.env` and starts the
-engine again:
+costs money is refused by the engine until a person turns it on, in one of two ways:
+
+- **In the app:** the Demo/Real switch in the status line (`GET`/`POST /api/paid`). It needs the
+  session token and a confirmation, checks that the keys are present, writes an audit line for
+  every change, and goes back to the `.env` value when the engine restarts.
+- **In `.env`:** write the line below and start the engine again.
 
 ```
 NO_PAID_CALLS=0
 ```
 
+`PAID_SWITCH_LOCKED=1` disables the in-app switch, so only `.env` decides. Tests and CI set it.
+
 | | |
 |---|---|
-| Who may set it | Only the person who pays for the API keys. A coding agent never sets it. |
+| Who may set it | Only the person who pays for the API keys. A coding agent never sets it, never uses the switch and never runs `npm run preflight`. |
 | Where it is read | First the process environment (an exported value wins), then `.env`. |
 | When is the switch on | Always, unless the value is exactly `0`. No value, `1`, `true` or a typing mistake all mean: no paid calls. |
 | Refused while on | Runs with a real model, cloud runs, Exa search, the board's real models and its claim checkers. The Home chat answers with a word search or fixed text, with no model. |
@@ -178,8 +211,11 @@ NO_PAID_CALLS=0
 | **Not covered** | `inspect eval` on `inspect_harness/tasks.py`, and scripts that call `run_capsule`, `InspectJudge`, `GCPRunner` or `exa_docs` directly. Credentials other than seven named provider keys (Google, AWS, Azure, a saved Hugging Face login). A cloud run that is already on its virtual machine. |
 
 With paid calls on, a board run with a missing key stops at the start and names the key. It does not
-fall back to a practice run. A switch in the app to turn paid calls on is being built; today `.env` is
-the only way.
+fall back to a practice run. A vendor that rejects a key or a model name ends the run at once, and the
+run is shown as failed. For a first real run, lower the cap: `npm run board -- run <brief> --max-usd 0.5`.
+
+Two known gaps of the in-app switch: any program running as you can read the session token file, and a
+cloud run that is already started keeps billing after a switch back to Demo.
 
 Details: [docs/running.md](docs/running.md#paid-calls-no_paid_calls).
 
@@ -192,8 +228,8 @@ Read this first. It says what was really done.
 | Swarm and single agent on the demo case, scripted model | Works. Covered by automated tests and `npm run demo`. |
 | Swarm and single agent on the demo case, real model | Done once each. Both scored 1.0. The swarm used about 15 times the tokens of the single agent. |
 | Board review, scripted | Works. A practice run with the default members shows statements that hold up, one proven wrong, and some with too little evidence. |
-| Board review, real models | **Never run.** The board calls Anthropic and OpenAI directly. The model names, the cost and the quote check are not proven with a real run. |
-| Evidence for the board | **Missing.** No board member has a search tool, so a real run has no sources. Every literature statement would be recorded as "not enough evidence". Only statements about the brief itself can be confirmed. |
+| Board review, real models | **Never run.** The board calls Anthropic and OpenAI directly. `npm run preflight` found the configured model names on both accounts (a free check). The cost per review and the quote check are not proven with a real run. |
+| Evidence for the board | Built, tested with practice runs and fake network only. The scout has two search tools: `literature_search` (Europe PMC, free; one live query was tried by hand) and `exa_search` (paid, at most 20 a run and $40 in total). Results are screened and shown to the other members. **No real review has used them.** |
 | A real BixBench3 task | **Not done.** There is no benchmark score to report. |
 | Cloud run on Google Cloud | **Not done.** Google Cloud is not set up. |
 | Public BixBench dataset (`futurehouse/BixBench` v1.5, 205 questions, 59 data capsules) | Adapter built and tested with the scripted model. A small pilot with a real model ran (3 capsules, 8 questions) with the older swarm. The swarm was changed after it; the changes are tested with the scripted model only. **The full run is not done.** See [BixBench v1 adapter](#bixbench-v1-adapter). |
@@ -342,7 +378,7 @@ Known limits:
 
 | Sponsor | Used for | Status |
 |---|---|---|
-| [Exa](https://exa.ai) | Search. Documentation search for the swarm (`--exa`). Literature search for the board is built, with spend limits, but no board member has the search tool today. | The swarm's search was tested with live searches. |
+| [Exa](https://exa.ai) | Search. Documentation search for the swarm (`--exa`), and web search for the board's scout, with spend limits. The app shows "Search powered by Exa" on real Exa results only. | The swarm's search was tested with live searches. The board's has not been used in a real review. |
 | [past.dev](https://past.dev) | Long-term memory for the swarm (`--memory` with `PAST_API_KEY`). Only lessons that a person approved are sent. | Sending and recalling lessons is tested against the live API. It has not been used inside a full swarm run. |
 | [Modal](https://modal.com) | Cloud computing. | Planned only. No code in this repository uses Modal. |
 
@@ -361,16 +397,16 @@ Known limits:
 | `glhf/runs/` | Run folders. Not in git. |
 | `engine/src/glhf/` | Run tracker, CLI, doctor, scoreboard, API routes. |
 | `engine/src/bixv1/` | Read-only results API for the BixBench v1 adapter. |
-| `engine/src/paid.ts` | The paid-calls switch (`NO_PAID_CALLS`). |
+| `engine/src/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch (`NO_PAID_CALLS`), the in-app Demo/Real switch, and the free pre-check (`npm run preflight`). |
 | `engine/src/chat/` | The Home chat: catalogue, plans, routes. |
-| `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
+| `engine/src/` (other files) | Board review (`board.ts`), providers (`providers.ts`), claim checking (`triage.ts`, `checkers.ts`), Exa search and its spend record (`exa.ts`, `exaledger.ts`), the free literature search (`literature.ts`), search (`search.ts`), Ask (`ask.ts`), HTTP checks (`http.ts`), request handler (`app.ts`), server start (`server.ts`). |
 | `dashboard/src/views/` | One file per view: `HomeView.tsx`, `ExperimentsView.tsx` (Runs), `SwarmView.tsx` (Compare), `BoardView.tsx`, `AgentsView.tsx`, `WorldsView.tsx` (Graph), `SettingsView.tsx`. |
-| `dashboard/src-tauri/` | The desktop app (Tauri). |
+| `dashboard/src-tauri/` | The desktop app (Tauri). Paused. |
 | `dashboard/src/swarm/NewRun.tsx` | The form that starts a run from the dashboard. |
 | `board/` | Board review configuration, members, briefs. The folder and the API keep the name "board". |
 | `glhf/specialists/` | Domain specialist profiles and skill agents. Instructions only. Nothing runs them. |
 | `bixbench/` | A teammate's separate single-agent baseline for BixBench v1. Not used for our comparison. |
-| `datasets/` | A catalogue of public dataset pointers. A proposal; no code reads it. |
+| `datasets/` | A catalogue of 1,262 public biology and chemistry datasets with their licences. Pointers only, no data. No code reads it yet. See [datasets/README.md](datasets/README.md). |
 | `scripts/start.mjs` | What `npm start` runs. |
 | `Dockerfile`, `docker-compose.yml`, `docker/` | The container setup. |
 | `docs/` | Reference documents (list below). |
@@ -403,15 +439,16 @@ cd glhf/bixbench_v1 && uv run pytest -q tests    # BixBench v1 adapter
 npm --prefix dashboard test                      # dashboard
 ```
 
-**`main` is not green today.** Several changes are in progress at once.
+**`main` is not fully green today**: five engine tests fail and one engine test file does not finish.
 
 | Part | Last known state |
 |---|---|
 | Engine type check | Clean. |
-| Engine tests | 249 pass, 5 fail, and `app.test.ts` does not finish, so `npm test` hangs. The failures are known and being fixed. |
-| Dashboard | Mid-rework. The last pushed dashboard passed its tests; the working copy does not build yet. |
-| Harness (`glhf/bixbench/tests`) | Not re-run in full after the latest changes. |
-| BixBench v1 adapter | Not re-run in full after the latest changes. |
+| Engine tests | 283 pass, 5 fail, and `app.test.ts` does not finish, so `npm test` hangs. The failures are in the run tracker and the request handler and are being fixed. The board, chat, paid-switch and literature tests all pass. |
+| Dashboard | Type check clean, 415 tests pass. |
+| Harness (`glhf/bixbench/tests`) | 2,368 pass. |
+| BixBench v1 adapter | 200 pass. |
+| Datasets catalogue | 231 pass (`cd datasets && uv run --no-project --with pytest pytest`). |
 
 Some harness tests start a Docker sandbox. They are skipped when Docker is not running.
 Details and older counts: [docs/status.md](docs/status.md).
@@ -421,7 +458,11 @@ Details and older counts: [docs/status.md](docs/status.md).
 Our own code is under the MIT licence (`LICENSE`). Two folders are not: `glhf/bixbench/` is a modified copy
 of BixBench3 (Edison Scientific, CC BY-SA 4.0; our changes are listed in `glhf/bixbench/CHANGES.md` and carry
 the same licence), and `glhf/bixbench_v1/` depends on it and is offered under CC BY-SA 4.0 as well.
-Third-party files copied into the repository keep their own terms. Open items before the repository is made
+Third-party files copied into the repository keep their own terms. From Biomni (snap-stanford/Biomni, Apache-2.0)
+we took two things and no code: the idea for the scout's free literature search (a PubMed query that is tried
+again with fewer words when it finds nothing; `engine/src/literature.ts` is our own code), and the 100 skill
+descriptions indexed under `glhf/specialists/skills/`, which are instructions only and are not run. Its tools,
+its agent and its data lake are not used. Open items before the repository is made
 public are in `docs/proposals/licenses.md`.
 
 ## Limits
@@ -440,7 +481,8 @@ public are in `docs/proposals/licenses.md`.
   see a test that a model ran in private before it registered the test.
 - The BixBench v1 pilot (8 questions) is too small to compare the solvers.
 - The benchmark's network gate is not tested by us.
-- A board review cannot gather evidence today, because no member can search. See [Status](#status).
+- A board review has never gathered evidence in a real run. The scout's searches return abstracts and
+  short excerpts, not full papers, so a true statement can still end as "not enough evidence".
 - On the board, "verified" means a model from another vendor found a real passage in the source with the
   same numbers. It does not prove the passage supports the statement.
 - The swarm's ledger is inspired by the Popper paper (Huang et al., 2025) but is not that method: we

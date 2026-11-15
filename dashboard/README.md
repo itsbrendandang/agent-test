@@ -1,56 +1,69 @@
 # AI Scientist Bot dashboard
 
-The web UI for the GLHF swarm and the drug candidate board. It talks to the engine on
-`http://localhost:8787` (change with `VITE_ENGINE_URL`). Start the engine first: `npm run engine`
-in the repository root.
+The web app for AI Scientist Bot. It runs in a browser and talks to the engine on port 8787
+(change with `VITE_ENGINE_URL`). The engine does the work and holds the API keys; the browser never
+sees a key.
 
-The dashboard started as "Sim Lab", a UI skeleton for simulations. The Simulations, Analytics
-and Worlds views and the characters come from that skeleton. No simulation is registered.
+**Start it from the repository root with `npm start`**, which starts the engine and this app and
+opens `http://127.0.0.1:5317`. To start only this app: `npm run dev` here, with the engine already
+running (`npm run engine` in the root).
 
-The screenshot below shows the old Simulations view, not the Swarm view.
-
-![Simulations view](docs/screenshot.png)
+Where the design lives and which file to change for what: [DESIGN.md](DESIGN.md). Read it before
+changing the UI. This page is the short map.
 
 ## Stack
+
 | Layer | Library |
 |---|---|
-| Desktop shell | [Tauri 2](https://tauri.app) (Rust) in `src-tauri/` |
 | UI | React + Vite + TypeScript |
-| Controls | [ui-sdk](https://ui-sdk.dev) (`@ui-sdk/react`): tabs, sliders, switches, toolbar |
-| Copilot chat | Vercel [AI Elements](https://github.com/vercel/ai-elements) in `src/components/ai-elements/` |
-| Charts | [Recharts](https://recharts.org) via shadcn/ui `chart` |
-| Styling | Tailwind CSS 4 + shadcn/ui tokens |
+| Chat and discussion | Vercel [AI Elements](https://github.com/vercel/ai-elements) in `src/components/ai-elements/` |
+| Controls | shadcn/ui and Radix in `src/components/ui/` |
+| Graph | three.js with `3d-force-graph`, loaded only when the Graph view opens |
+| Styling | Tailwind CSS 4, tokens in `src/index.css` |
+| Desktop shell | Tauri 2 in `src-tauri/`. **Paused**; the browser is the supported way to use the app. |
 
-## Run
+## Commands
+
 ```bash
 npm install
-npm run desktop         # desktop window (needs Rust: brew install rustup && rustup default stable)
-npm run dev             # browser only, http://localhost:5317
-npm run desktop:build   # packaged app
+npm run dev      # http://127.0.0.1:5317 (the port is fixed; the engine only accepts this origin)
+npm test         # vitest, in jsdom, with the network blocked
+npm run build    # type check and production build
+npm run lint     # oxlint
 ```
 
 ## Views
-The icons on the left switch views. Each view also has a URL hash, for example `#Experiments`.
-The first view is Swarm.
 
-- **Swarm** (`src/views/SwarmView.tsx`): swarm and single-agent runs from the run tracker: phase,
-  roles, claims, verdicts, issues, score, scoreboard. It also has a search box that opens the
-  Experiments view, and the **New run** button (see "New run form" below).
-- **Board** (`src/views/BoardView.tsx`): the drug candidate board. See `../docs/drug-board.md`.
-- **Experiments** (`src/views/ExperimentsView.tsx`): word search and the Ask box over all runs
-  (engine routes `/api/search` and `/api/ask`).
-- **Overview**: landing page with live CPU and GPU bars (desktop app only), session counts, and run
-  history: totals, success rate, a GitHub-style activity graph, and results per AI model. Runs are
-  recorded with `recordRun()` in `src/runs/store.ts`; nothing calls it yet, so it starts empty.
-- **Simulations**: simulation cards, the canvas, an inspector (Copilot / Controls / Metrics / About),
-  a run timeline and a run-status card.
-- **Agents** (`src/views/AgentsView.tsx`): the nine roles of the swarm with their budget share and
-  instructions (engine route `/api/glhf/roles`), and the character editor: a name, a role, a look
-  and a `SKILL.md` for each character. Skills are saved but no agent reads them.
-- **Analytics**: charts for every metric the simulation reports, plus events by type.
-- **Settings**: connect and test API keys for OpenAI, Anthropic, xAI and Google Gemini. Keys are stored in
-  the macOS keychain by the Rust side and never returned to the window. Desktop app only.
-- **Worlds**: an empty placeholder.
+Seven views, one file each in `src/views/`. Each has a URL hash, and an address can name a run
+(`#Board/<id>`, `#Compare/<id>`).
+
+| View | File | What it shows |
+|---|---|---|
+| Home | `HomeView.tsx` | The chat box. Ask about saved research, or ask a research question and get a plan you can start. |
+| Runs | `ExperimentsView.tsx` | Every run, with keyword search. |
+| Compare | `SwarmView.tsx` | The swarm and the single agent on the same task, side by side. Start a run here (see below). |
+| Board | `BoardView.tsx` | One board review: the question, what each member said, how each statement was checked, the sources. |
+| Agents | `AgentsView.tsx` | The roles and what each one did. |
+| Graph | `WorldsView.tsx`, `src/graph/` | One run as a graph of who said what and what held up, with a replay. |
+| Settings | `SettingsView.tsx` | Engine state, Demo or Real mode, session token. |
+
+Home is being simplified into a search-first screen and will be labelled "Search"; Runs will be
+labelled "Saved research". File names and routes stay.
+
+## Demo and Real
+
+The status line shows the engine's mode on every view. **Demo** is the default: practice runs with
+fixed example answers, free. **Real** uses real AI models and search and costs money. Switching to
+Real opens a dialog with the spending limits and a tick box, and needs the engine's session token;
+switching back is one click. The state is read from the engine (`GET /api/paid`) and is never stored
+in the browser. Code: `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`.
+
+## Words on screen
+
+The app uses plain words, not the code's words: "statement" (claim), "Holds up / Proven wrong / Not
+enough evidence" (verified / contradicted / unsupported), "practice run" (scripted or mock). The full
+list is in [DESIGN.md](DESIGN.md#words). A mark appears only when a recorded check produced it, and
+"Search powered by Exa" appears only on real Exa results.
 
 ## New run form
 
@@ -110,54 +123,30 @@ run page have none. The engine side is tested in
 `engine/test/glhf-runs.test.ts`.
 
 ## Characters
-- `src/components/Buddy.tsx`: SVG characters (bunny, flame, egg, mountain, sprout) with four moods.
-- `src/crew/`: the character store (saved in localStorage) and the sprites. The desktop overlay
-  window was removed.
-- The characters are decoration. In the Swarm view they show which role is working.
 
-Easter eggs (in the side rail):
-- Poke a character and it talks back. Poke it five times fast and it looks startled.
-- Leave the app alone for 45 seconds and they fall asleep.
-- Click the logo five times and the crew strolls across the window.
-
-
-## Add a simulation
-1. Copy `src/sim/sims/template.ts`.
-2. Implement `init`, `step`, `draw`, and optionally `metrics` and `drainEvents`. Declared `params`
-   become controls automatically; keys in `resetOn` restart the run when changed.
-3. Import it in `src/sim/registry.ts` and add it to the `simulations` array.
-
-## Copilot
-`src/agent/copilot.ts` is a local placeholder (no model, no API key). It answers status questions and
-runs `pause`, `play`, `reset` and `set <parameter> to <value>`. Swap it for the AI SDK's `useChat`
-and expose the same actions as tools to use a real model.
-
-## Not wired yet
-- Starting a cloud run or a run on a BixBench3 task from the Swarm view.
-- The BixBench v1 results (`GET /api/bixv1/...` in the engine). No view reads them.
-- Claims and issues of cloud runs (they are in the results bucket).
-- Simulations: none is registered.
-- Tests that drive a browser against a real engine. There are 105 unit tests (vitest, `npm test`
-  in this folder), with the network blocked.
+`src/components/Buddy.tsx` draws the characters (Momo, Ember, Fuji and friends) and `Splash.tsx` the
+loading screen. They are decoration: small, and kept away from the main controls. `src/crew/` holds
+their saved names and looks.
 
 ## Structure
+
 ```
 src/
-├── App.tsx                   # shell: rail, views, simulations layout
-├── index.css                 # layout + theme tokens
-├── agent/copilot.ts          # placeholder copilot logic
-├── components/               # SimCard, Timeline, ParamPanel, MetricsChart, CopilotPanel
-│   ├── ai-elements/          # Vercel AI Elements (generated)
-│   └── ui/                   # shadcn/ui (generated)
-├── crew/                     # character store, sprites, skill starters
-├── views/                    # Swarm, Board, Experiments, Agents, Overview, Analytics, Settings, Placeholder
-├── swarm/                    # client for /api/glhf/*, New run form, cancel dialog, role list, styles
-├── board/                    # client for the drug board routes, styles
-└── sim/
-    ├── types.ts              # Simulation contract
-    ├── registry.ts           # simulations shown in the app
-    ├── useSimulation.ts      # run loop, metrics history, events
-    ├── empty.ts              # fallback shown while the registry is empty
-    └── sims/template.ts      # starting point for your own (not registered)
-src-tauri/                    # Rust desktop shell
+├── App.tsx, Dashboard.tsx, nav.ts   # shell, status line, navigation
+├── views/                           # the seven views and their tests
+├── home/                            # chat client, plan card, effort picker, catalogue panel
+├── board/                           # client for the board routes, styles
+├── swarm/                           # client for /api/glhf/*, New run form, cancel dialog
+├── graph/                           # graph model, narration, canvas (lazy-loaded)
+├── components/                      # Thread, PaidSwitch, StatusLine, HowItWorks, characters
+│   ├── ai-elements/                 # Vercel AI Elements (generated)
+│   └── ui/                          # shadcn/ui (generated)
+├── lib/                             # engine address, glossary, paid switch client
+└── test/                            # test helpers and fixtures
+src-tauri/                           # desktop shell (paused)
 ```
+
+## Not verified
+
+A real-model run on screen, a run in progress, screen readers, Firefox and Safari. Tests run in
+jsdom; the browser checks so far were in Chromium.
