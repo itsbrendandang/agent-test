@@ -16,7 +16,7 @@ import { Hero } from "@/overview/Hero"
 import { totalsOf } from "@/overview/model"
 import { ResearchAnswer } from "@/research/Answer"
 import { ResearchRefused, startResearch, useSeenEvents } from "@/research/api"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 /** The three run lists. A list the engine does not have (an older engine) counts as empty. */
 function useRuns() {

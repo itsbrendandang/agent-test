@@ -3,7 +3,7 @@
 // put on the page as text (React text nodes): no Markdown, no HTML, no links or images made from model output.
 import type { SearchProvider } from "@/board/api"
 import { type ReactNode, useId, useState } from "react"
-import "@/research/research.css"
+import "@/design/research.css"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { SearchCredit, Verdict as VerdictChip } from "@/components/Shared"
 import type { Verdict } from "@/board/api"

@@ -1,0 +1,7 @@
+import "@fontsource-variable/geist"
+import "@fontsource-variable/geist-mono"
+import "@fontsource-variable/fredoka"
+import "@fontsource-variable/fraunces"
+import "@fontsource/instrument-serif/400.css"
+import "@fontsource-variable/bricolage-grotesque"
+import "@fontsource-variable/nunito"

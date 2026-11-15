@@ -2,18 +2,8 @@ import logoUrl from "@/assets/logo.png"
 
 // Simple flat characters that stand in for agents. Pure SVG, no assets.
 import { speciesFor, type Mood, type Species } from "./species"
+import { FACE, INK } from "../design/buddy"
 export type { Mood, Species }
-
-const INK = "#1b1a17"
-
-
-const FACE: Record<Species, { x: number; y: number; spread: number }> = {
-  bunny: { x: 50, y: 66, spread: 11 },
-  flame: { x: 50, y: 66, spread: 10 },
-  egg: { x: 50, y: 54, spread: 9 },
-  mountain: { x: 50, y: 72, spread: 10 },
-  sprout: { x: 50, y: 46, spread: 11 },
-}
 
 // Flat, outline-free shapes: one soft colour each, plus one small detail.
 function Body({ species }: { species: Species }) {

@@ -14,6 +14,8 @@
 //  - A name this file does not know gets the plain neutral face and its own name: never another agent's face.
 // This file has no React and no CSS, and does not import the lab's scene.
 import { CHARACTERS, type CharacterId, type Shape } from "./model"
+import { NEUTRAL_COLOUR, SHAPES, SPECIALIST_COLOURS } from "../design/identity"
+export { NEUTRAL_COLOUR } from "../design/identity"
 
 /** The five Buddy species, and one plain shape for an agent this app has no character for. */
 export type FaceShape = Shape | "generic"
@@ -76,10 +78,6 @@ export const agentKey = (nameOrLabel: string): string => {
   const slug = String(nameOrLabel ?? "").trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   return BY_TITLE[slug] ?? slug
 }
-const SHAPES: Shape[] = ["mountain", "bunny", "flame", "sprout", "egg"]
-/** Colours none of the twelve characters has: slate, sand, plum, moss, clay, steel. Five species in six colours: 30 faces. */
-const SPECIALIST_COLOURS = ["#93a4bd", "#d6c08a", "#b889c9", "#8aa37b", "#cf9478", "#7fa8c9"]
-export const NEUTRAL_COLOUR = "#cfcabd"
 
 /** "methods-auditor" -> "Methods auditor". The name itself, readable; nothing is added. */
 export const readableName = (name: string): string => { const t = name.replace(/[-_]+/g, " ").trim(); return t ? t[0].toUpperCase() + t.slice(1) : name }

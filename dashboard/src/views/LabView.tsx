@@ -12,7 +12,7 @@ import { KIND_WORD, type LabModel, type RunKind } from "@/lab/model"
 import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarmRuns, type RunRef } from "@/lab/runs"
 import { claimsLab } from "@/lab/claims"
 import { useClaimsRun, useLabEvents, useSwarmRun, type Connection } from "@/lab/useLabModel"
-import "@/lab/lab.css"
+import "@/design/lab.css"
 
 /** The three run lists, read again every two seconds. A list the engine does not have (an older engine) counts as empty. */
 function useLabRuns() {

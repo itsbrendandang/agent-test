@@ -16,7 +16,7 @@ import { headline, narration, replaySeconds } from "./story"
 import { GLYPH, LINK_KINDS, MAX_NODES, NODE_KINDS, QUIET_LINKS, VERDICT_CLASSES, type GraphModel, type LinkKind, type NodeKind, type Outcome } from "./types"
 import { applyView, byAttention, capGraph, countVerdicts, layoutView, neighbourMap, reveal, searchNodes } from "./view"
 import { GROUP_WORD, KIND_WHAT, kindLabel, LINK_VERB } from "./words"
-import "./graph.css"
+import "../design/graph.css"
 
 const GraphCanvas = lazy(() => import("./GraphCanvas").then((m) => ({ default: m.GraphCanvas })))
 /** A run whose first picture (team members and statements) has fewer nodes than this opens as a list: a handful of dots says less than a short list does. */

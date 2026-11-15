@@ -6,7 +6,7 @@
 // Everything comes from the engine (GET /api/glhf/status, /api/glhf/runs, /api/bixv1/scoreboard). No number is typed in here.
 import { useEffect, useState } from "react"
 import { readEngine } from "@/lib/engine"
-import "@/overview/overview.css"
+import "@/design/overview.css"
 
 import { modelFacts, plainConclusion, pricedByToken, record3Of, rowsOf, shortModel, type Record3, type Row, type Side } from "@/overview/benchmarkNumbers"
 
