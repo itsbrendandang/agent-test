@@ -113,6 +113,8 @@ research:
     sources_kept: 6          # numbered sources the writer gets
     max_output_tokens: 2000  # the writer's output for the draft, and again for the revision (reasoning tokens count in it)
     words: 220               # the length the writer is asked for
+    specialists: 1           # method specialists (glhf/specialists) one answer may add when their notes match the question (0 = none)
+    specialist_tier: cheap   # the model tier a specialist runs on: cheap or strong (see `models` above)
   standard:
     max_usd: 0.60            # expected cost about $0.12
     queries: 3
@@ -122,3 +124,5 @@ research:
     sources_kept: 12
     max_output_tokens: 3000
     words: 380
+    specialists: 2
+    specialist_tier: strong

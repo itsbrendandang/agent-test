@@ -49,6 +49,16 @@ NEXT STEPS`
 
 export const DEMO_STANCES = JSON.stringify({ stances: [{ i: 0, stance: "supports" }, { i: 1, stance: "neither" }, { i: 2, stance: "contradicts" }] })
 
+/** What a demo specialist "drafts": one sentence the example source on hERG states. */
+export const DEMO_SPECIALIST = `### Method view: demo
+Adding polarity reduced hERG binding in most matched pairs [2].`
+/** The specialists' sections of the draft a demo reviser is given, kept as they are (the fixed revised text has none). */
+const methodViews = (user: string): string => {
+  const draft = /<draft>\n([\s\S]*?)\n<\/draft>/.exec(user)?.[1] ?? ""
+  const at = draft.search(/^### Method view:/m)
+  return at < 0 ? "" : draft.slice(at).replaceAll("&lt;", "<").trim()
+}
+
 const fixed = (text: string) => async () => ({ text, usd: 0, truncated: false })
 const tests = (system: string, user: string) => system.includes("# This answer tests hypotheses") || user.includes("<hypotheses>")
 
@@ -60,10 +70,12 @@ export const demoBrain: Brain = {
   worstCase: () => 0,
   plan: fixed(JSON.stringify({ key_question: "KRAS G12C inhibitors: response, hERG and resistance (demo)", medical: false, researchable: true, web: [{ query: "demo", objective: "demo" }], literature: ["demo example"] })),
   write: async (system, user, _signal, onDelta) => { const text = tests(system, user) ? DEMO_COMPARISON : DEMO_DRAFT; onDelta(text); return { text, usd: 0, truncated: false } },
+  specialistModel: "scripted",
+  specialist: fixed(DEMO_SPECIALIST),
   section: async (system) => ({ text: DEMO_SECTIONS[/Yours is (H\d)\./.exec(system)?.[1] ?? "H1"] ?? "", usd: 0, truncated: false }),
   critique: async (system, user) => ({ text: tests(system, user) ? JSON.stringify({ notes: [] }) : DEMO_NOTES, usd: 0, truncated: false }),
   hypothesize: fixed(DEMO_HYPOTHESES),
   stance: fixed(DEMO_STANCES),
-  revise: fixed(DEMO_REVISED),
+  revise: async (_system, user) => { const views = methodViews(user); return { text: views ? DEMO_REVISED.replace("\n\nSwitch to Real", `\n\n${views}\n\nSwitch to Real`) : DEMO_REVISED, usd: 0, truncated: false } },
   rejudge: fixed(JSON.stringify({ notes: [{ note: 1, status: "resolved", why: "Demo text: the sentence is no longer in the answer." }] })),
 }

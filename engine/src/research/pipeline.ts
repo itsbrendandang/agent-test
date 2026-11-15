@@ -42,12 +42,13 @@ import { exaAssumed, exaLedgerFile, reserveSearch, settleSearch } from "../paid/
 import { PaidCallsOff } from "../paid/paid.ts"
 import { describeModelFailure, FatalModelError, firstPassModel, isFatalModelError, type ModelId, parseModelId } from "../providers.ts"
 import { type FirstPass, type FirstPassRuling, parseJson, quietReasoning } from "../board/triage.ts"
-import { investigatorSystem, investigatorUser, leadSystem, leadUser } from "./prompts.ts"
+import { investigatorSystem, investigatorUser, leadSystem, leadUser, specialistSystem, specialistUser } from "./prompts.ts"
+import { answerNotes, type Match } from "../specialists.ts"
 import { criticSystem, criticUser, hypothesesSystem, hypothesesUser, MAX_NOTES, plannerSystem, plannerUser, providerName, rejudgeSystem, rejudgeUser, reviserSystem, reviserUser, STANCE, stanceUser, type ThreadTurn, writerSystem, writerUser } from "./prompts.ts"
 import { saveRecord, writeArtifacts, type ResearchLog } from "./store.ts"
 import { clip, withoutInlineTags, withoutRepeats } from "./text.ts"
 import { ADVICE_LINE, citedSentences, cleanAnswer, directAnswer, keywordsOf, looksMedical, MAX_NOTE_CHARS, MAX_QUERY_CHARS, MAX_SOURCE_CHARS, MAX_STATEMENTS, MAX_TITLE_CHARS, oneLine, plainBlock, safeUrl, sameText, scrub, type Sentence, sentencesOf, statementKey, withAdviceLine } from "./text.ts"
-import type { Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
+import type { AnswerSpecialist, Counts, Hypothesis, Level, Provider, Recommendation, ResearchEvent, ResearchLimits, ResearchRecord, ReviewNote, SearchLine, Selection, Severity, Stance, Statement, StepEnd, StepRecord, StepStart, StepStatus, Stopped, StoredSource } from "./types.ts"
 
 export const DATABASES = ["chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem"] as const
 export type Database = (typeof DATABASES)[number]
@@ -77,7 +78,9 @@ export interface Brain {
   checkerIndependent: boolean
   criticIndependent: boolean
   /** Worst-case dollars of one call of each step, given the size of its input in characters. */
-  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
+  /** The model a method specialist runs on: the level's tier (cheap at quick, strong at standard). */
+  specialistModel: string
+  worstCase(step: "plan" | "hypothesize" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge" | "stance" | "screen" | "check", inputChars: number): number
   plan(system: string, user: string, signal: AbortSignal): Promise<Reply>
   write(system: string, user: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<Reply>
   critique(system: string, user: string, signal: AbortSignal): Promise<Reply>
@@ -88,6 +91,8 @@ export interface Brain {
   hypothesize(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** One investigator drafts the section of its hypothesis (the writer's model; its output is capped lower than a whole answer's). */
   section(system: string, user: string, signal: AbortSignal): Promise<Reply>
+  /** One method specialist drafts its section (the model of the level's specialist tier; output capped like an investigator's). */
+  specialist(system: string, user: string, signal: AbortSignal): Promise<Reply>
   /** Which way each checked statement points for its hypothesis (the checker's model: another vendor than the writer). */
   stance(system: string, user: string, signal: AbortSignal): Promise<Reply>
 }
@@ -122,6 +127,8 @@ export interface PipelineDeps {
   literature: (query: string) => Promise<SearchResult>
   /** One database lookup (sources/), when that module is there. */
   database?: (source: Database, query: string) => Promise<SearchResult>
+  /** The method specialists whose notes fit a question, best first (specialists.ts: matchSpecialists). Absent: no answer gets one. */
+  specialists?: (question: string) => Match[]
   /** A demo answer's example sources. Set only in demo mode: then no other search runs. */
   fixtures?: (query: string) => Promise<SearchResult>
   /** Read live before every paid step: true once paid calls were switched off. Always false in a demo answer. */
@@ -170,6 +177,8 @@ export const CHARS_PER_TOKEN = 3
 /** Output tokens of one investigator's section: a part of what a whole answer may use, so several sections cost no more than the limits allow. */
 export const sectionTokens = (level: Pick<Level, "maxOutputTokens">): number => Math.max(800, Math.floor(level.maxOutputTokens * 0.6))
 /** The investigator of a hypothesis: h1 -> investigator-1. */
+/** The agent name of a method specialist in an answer's steps and events. */
+export const specialistAgent = (name: string): string => `specialist:${name}`
 export const investigatorOf = (hypothesis: string): string => `investigator-${hypothesis.replace(/^h/, "")}`
 
 /** The critic's model: the rival tier when it is on another vendor than the writer, else the board's escalation choice. */
@@ -192,6 +201,9 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
   const writer = parseModelId(config.models.strong, "board/config.yaml models.strong")
   const checker = firstPassModel(config, writer.qualified)
   const critic = criticModel(config, writer)
+  // A specialist's sentences are checked by the writer's checker, which is on another vendor than the writer. So the
+  // cheap tier is used only when it is the writer's vendor; otherwise the specialist runs on the writer's model.
+  const specialist = level.specialistTier === "cheap" && planner.vendor === writer.vendor ? planner : writer
   const get = (id: ModelId) => {
     const model = models.getModel(id.vendor, id.id)
     if (!model) throw new Error(`Model ${id.qualified} is not in the model catalog`)
@@ -228,11 +240,13 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     names: { planner: planner.qualified, writer: writer.qualified, checker: checker.model.qualified, critic: critic.model.qualified },
     checkerIndependent: checker.independent,
     criticIndependent: critic.independent,
+    specialistModel: specialist.qualified,
     worstCase(step, inputChars) {
       switch (step) {
         case "plan": return price(planner, inputChars, PLAN_TOKENS)
         case "write": case "revise": return price(writer, inputChars, level.maxOutputTokens)
         case "section": return price(writer, inputChars, sectionTokens(level))
+        case "specialist": return price(specialist, inputChars, sectionTokens(level))
         case "critic": return price(critic.model, inputChars, CRITIC_TOKENS)
         case "rejudge": return price(critic.model, inputChars, REJUDGE_TOKENS)
         case "hypothesize": return price(planner, inputChars, HYPOTHESES_TOKENS)
@@ -247,6 +261,7 @@ export function realBrain(models: Models, config: BoardConfig, level: Level, ref
     revise: (system, user, signal) => ask(writer, "the writer (revision)", system, user, level.maxOutputTokens, "low", signal),
     rejudge: (system, user, signal) => ask(critic.model, "the critic (second look)", system, user, REJUDGE_TOKENS, "low", signal),
     section: (system, user, signal) => ask(writer, "an investigator", system, user, sectionTokens(level), "low", signal),
+    specialist: (system, user, signal) => ask(specialist, "a method specialist", system, user, sectionTokens(level), "low", signal),
     hypothesize: (system, user, signal) => ask(planner, "the planner (hypotheses)", system, user, HYPOTHESES_TOKENS, "quiet", signal),
     stance: (system, user, signal) => ask(checker.model, "the stance check", system, user, STANCE_TOKENS, "quiet", signal),
   }
@@ -891,6 +906,17 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       save()
     }
 
+    // ── method specialists: chosen by code from the question, before anything is searched ─────────
+    // The matcher compares the question's words with the method notes (specialists.ts). No model chooses. The chosen
+    // ones are named now, so a person sees who joined; each works once the searches have given it sources.
+    const invited = (level.specialists > 0 && deps.specialists ? deps.specialists(record.question) : []).slice(0, level.specialists)
+    const notesOf = new Map(invited.map((m) => [m.specialist.name, answerNotes(m.specialist, m.methods)]))
+    const team: AnswerSpecialist[] = invited.map((m) => ({
+      name: m.specialist.name, title: m.specialist.title, agent: specialistAgent(m.specialist.name),
+      why: `Its method notes match the question's words: ${m.words.slice(0, 6).join(", ")}.`, methods: m.methods.map((x) => ({ name: x.name, title: x.title })),
+    }))
+    if (team.length) { record.specialists = team; emit("specialists", { type: "specialists", items: team }); save() } else delete record.specialists
+
     // ── hypotheses (Standard level): what to test, written before anything is searched ─────────────
     // Each hypothesis needs one web search and one literature query of the level, so the level's own limits say how
     // many can be tested. No limit is raised for them; what does not fit is set aside and said.
@@ -1133,6 +1159,44 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
         if (failures.length) throw failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
         sectionsText = drafted.map((r) => (r as PromiseFulfilledResult<string>).value).join("\n\n")
       }
+      // ── method specialists: each drafts one short section from the sources the searches found ─────
+      // A specialist is an extra, so it never takes money the answer itself needs: it is asked only when its worst case
+      // fits beside the worst case of the draft, the critic and the revision. One that is not asked is said so, and the answer goes
+      // on. Its section becomes part of the draft, so the statement checker and the critic review it like the rest.
+      let specialistText = ""
+      if (team.length) {
+        const share = Math.max(60, Math.floor(level.words / 3))
+        const wSystem = writerSystem(level.words), wUser = writerUser({ question: record.question, thread, searches: record.searches, sources })
+        // The critic also reads the draft, and the reviser the draft and its review: both are counted at their longest
+        // (the writer's whole output plus every specialist's section), so the estimate errs on the side of not asking.
+        const base = wSystem.length + wUser.length, longest = (level.maxOutputTokens + team.length * sectionTokens(level)) * CHARS_PER_TOKEN
+        const needed = brain.worstCase("write", base) + brain.worstCase("critic", base + longest) + brain.worstCase("revise", base + 2 * longest)
+        const drafted = await Promise.allSettled(team.map(async (who): Promise<string> => {
+          const step = `specialist:${who.name}`, heading = `### Method view: ${who.title}`
+          const sSystem = specialistSystem(share, who.title), sUser = specialistUser({ question: record.question, why: who.why, notes: notesOf.get(who.name) ?? "", searches: record.searches, sources })
+          const bought = storedBefore.has(keyOf(step, { sSystem, sUser }))
+          // A step that ended before with nothing stored was not asked then; a replay takes the same path.
+          const passedOver = !bought && log.has(`step.finished:${step}`)
+          begin({ step, kind: "write", label: `${who.title}: reading ${plural(sources.length, "source")} with its method notes`, agent: who.agent, input: { model: brain.specialistModel, sources: sources.length, maxOutputTokens: sectionTokens(level), words: share } })
+          const worst = brain.worstCase("specialist", sSystem.length + sUser.length)
+          const whyNot = bought ? undefined : passedOver ? "cap" : guard(worst + needed) ?? allow(worst, step, { sSystem, sUser })
+          if (whyNot) { end(step, "empty", { summary: `Not asked: ${STOP_WORDS[whyNot]}.`, consequence: "The answer has no section from this specialist." }); return "" }
+          let text: string
+          try { text = splitBlocks((await model(step, { sSystem, sUser }, () => brain.specialist(sSystem, sUser, signal))).text).markdown } catch (error) {
+            if (!(error instanceof StepFailed)) { const stop = asStop(error); if (stop) endFor(step, stop.reason); else if (!(error instanceof Interrupted)) end(step, "failed", { error: "The specialist's key or model name was refused by its vendor." }); throw stop ?? error }
+            notes.push(`The ${who.title} did not answer (${error.message}), so the answer has no section from it.`)
+            end(step, "failed", { error: `The specialist did not answer (${error.message}).`, consequence: "The answer has no section from this specialist." })
+            return ""
+          }
+          const body = cleanAnswer(text, sources.length, urls).markdown.split("\n").filter((l) => !/^\s*#{1,6}\s/.test(l) && !/not medical advice/i.test(l)).join("\n").trim()
+          const cited = citedSentences(`${heading}\n${body}`).length
+          end(step, cited ? "completed" : "empty", { summary: cited ? `${plural(cited, "cited sentence")}.` : "It wrote no sentence with a source, so nothing from it is shown." })
+          return cited ? `${heading}\n${body}` : ""
+        }))
+        const failures = drafted.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason as unknown)
+        if (failures.length) throw failures.find((f) => f instanceof Interrupted) ?? failures.find((f) => !(f instanceof Stop)) ?? failures[0]
+        specialistText = drafted.map((r) => (r as PromiseFulfilledResult<string>).value).filter(Boolean).join("\n\n")
+      }
       const system = testing.length ? leadSystem(level.words) : writerSystem(level.words), user = testing.length ? leadUser({ question: record.question, thread, hypotheses: testing, searches: record.searches, sections: sectionsText }) : writerUser({ question: record.question, thread, searches: record.searches, sources })
       begin({ step: "write", kind: "write", agent: "writer", label: testing.length ? "Comparing the hypotheses" : `Writing the answer from ${plural(sources.length, "source")}`, input: { model: brain.names.writer, sources: sources.length, maxOutputTokens: level.maxOutputTokens, words: level.words } })
       const whyNot = allow(brain.worstCase("write", system.length + user.length), "write", { system, user })
@@ -1158,7 +1222,8 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const finishText = (raw: string, truncated: boolean) => {
         let text = truncated ? raw.slice(0, Math.max(raw.lastIndexOf(". ") + 1, raw.lastIndexOf(".\n") + 1) || raw.length) : raw
         const tidy = withoutRepeats(cleanAnswer(text, sources.length, urls).markdown)
-        text = tidy.markdown
+        // A specialist's heading with nothing left under it (its only sentence was a repeat, or the revision removed it) is not shown.
+        text = tidy.markdown.split("\n").filter((line, i, all) => !/^### Method view: /.test(line) || !/^(#|$)/.test(all.slice(i + 1).find((l) => l.trim()) ?? "")).join("\n").replace(/\n{3,}/g, "\n\n").trim()
         if (tidy.removed.length) notes.push(`${plural(tidy.removed.length, "sentence")} that the writer wrote twice ${tidy.removed.length === 1 ? "is" : "are"} shown once.`)
         for (const phrase of tidy.repeated.slice(0, 2)) notes.push(`The text repeats a phrase: "${oneLine(phrase, 120)}".`)
         if (truncated) text += "\n\n(The text was cut here: the writer reached its length limit.)"
@@ -1167,7 +1232,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const first = splitBlocks(reply.text)
       // In an answer that tests hypotheses the writer's part is the first paragraph; the investigators' sections follow it.
       const opening = testing.length ? first.markdown.split(/\n(?=\s*#{1,6}\s)/)[0].split("\n").filter((l) => !/not medical advice/i.test(l)).join("\n").trim() || "The sections below give what the sources found report for and against each hypothesis." : first.markdown
-      const draft = finishText(testing.length ? `${opening}\n\n${sectionsText}` : opening, reply.truncated && !first.nextSteps.length)
+      const draft = finishText([testing.length ? `${opening}\n\n${sectionsText}` : opening, specialistText].filter(Boolean).join("\n\n"), reply.truncated && !first.nextSteps.length)
       if (!draft.replace(ADVICE_LINE, "").trim()) { end("write", "failed", { error: "The writer returned no text.", consequence: "No answer was written." }); throw new Error("the writer returned no text") }
       proposed = first.nextSteps
       const cited = citedSentences(draft)

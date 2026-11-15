@@ -429,6 +429,31 @@ export function specialistPrompt(s: Specialist, methods: Method[], why: string):
   return (prompt + tail).slice(0, PROMPT_CAP)
 }
 
+/** Characters of the notes one specialist gets for a research answer. */
+export const ANSWER_NOTES_CAP = 4_000
+
+/**
+ * A specialist's notes for a research answer (research/pipeline.ts): its role in one line, the notes of `methods` it
+ * owns (at most MAX_METHODS, each cut to METHOD_CHARS) and the limits of those methods. Text only, cleaned when it was
+ * read, at most ANSWER_NOTES_CAP characters. The board's frame is not used: an answer's specialist has its own prompt.
+ */
+export function answerNotes(s: Specialist, methods: Method[]): string {
+  const chosen = methods.filter((m) => s.methods.some((x) => x.number === m.number && x.name === m.name)).slice(0, MAX_METHODS)
+  let text = `Role: ${s.does}`
+  for (const m of chosen) {
+    const next = `${text}\n\n${methodBlock(m)}`
+    if (next.length > ANSWER_NOTES_CAP) break
+    text = next
+  }
+  const used = new Set(chosen.map((m) => m.number))
+  for (const l of s.limits.filter((x) => !x.methods.length || x.methods.some((n) => used.has(n)))) {
+    const next = `${text}\n- ${l.cannot ? "Not possible, or not to be done: " : "Limit: "}${l.text}`
+    if (next.length > ANSWER_NOTES_CAP) break
+    text = next
+  }
+  return text.slice(0, ANSWER_NOTES_CAP)
+}
+
 // ── Putting specialists on a run ─────────────────────────────────────────────────────────────────────────────────
 /** What a plan writes into overrides.json for each specialist. */
 export interface Invitation { name: string; why: string; methods: string[] }

@@ -466,3 +466,31 @@ describe("a swarm run (swarmLab)", () => {
     expect(swarmLab({ ...SWARM_RUN, phase: "running" }, { events: "broken" }).status).toBe("running")
   })
 })
+
+describe("method specialists of a research answer", () => {
+  const who = { name: "toxicologist", title: "Toxicologist", agent: "specialist:toxicologist", why: "Its method notes match the question's words: herg, risk.", methods: [] }
+  const events: LabEvent[] = [
+    { seq: 1, at: 1, type: "research.started", id: "a-1", question: "Is hERG a risk?", mode: "real" },
+    { seq: 2, at: 2, type: "specialists", items: [who] },
+    { seq: 3, at: 3, type: "step.started", step: "specialist:toxicologist", kind: "write", label: "Toxicologist: reading 3 sources with its method notes", agent: "specialist:toxicologist" },
+    { seq: 4, at: 4, type: "step.finished", step: "specialist:toxicologist", status: "completed", ms: 5, summary: "1 cited sentence." },
+  ]
+  it("joins as a visitor, idle until its step starts, working while it runs, done when it ends; the reporter is not moved for it", () => {
+    const joined = answerLab(upTo(events, 2))
+    expect(joined.visitors.map((v) => [v.id, v.title, v.state])).toEqual([["specialist:toxicologist", "Toxicologist", "idle"]])
+    expect(joined.visitors[0].why).toContain("herg")
+    const working = answerLab(upTo(events, 3))
+    expect(working.visitors[0].state).toBe("working")
+    expect(working.characters.reporter.state).toBe("idle")
+    const done = answerLab(events)
+    expect(done.visitors[0].state).toBe("done")
+    expect(text(done)).toContain("Toxicologist joined this answer as a method specialist.")
+  })
+  it("a specialist that was not asked goes back to idle and says why", () => {
+    const m = answerLab([...events.slice(0, 3), { seq: 4, at: 4, type: "step.finished", step: "specialist:toxicologist", status: "empty", ms: 0, summary: "Not asked: the answer's spending limit was reached." }])
+    expect([m.visitors[0].state, m.visitors[0].doing]).toEqual(["idle", "Not asked: the answer's spending limit was reached."])
+  })
+  it("an answer with no specialists event has no visitors", () => {
+    expect(answerLab(events.filter((e) => e.type !== "specialists" && e.agent === undefined)).visitors).toEqual([])
+  })
+})
