@@ -12,11 +12,13 @@ import { AgentAvatar } from "./AgentAvatar"
 import { chatItems, splitMessage, type ChatItem } from "./chat"
 import { readableName } from "./identity"
 import { filterRows, logDownload, type EventRow, type LogFilter } from "./logRows"
-import { DEFAULT_VIEW, LogTools, type FilterGroup, type FilterOption, type LogView } from "./LogTools"
+import { LogTools, type FilterGroup, type FilterOption, type LogView } from "./LogTools"
 import type { Provenance, RunKind } from "./model"
 import type { Connection } from "./useLabModel"
 import "../design/eventLog.css"
 
+/** The log starts with everything shown. */
+const DEFAULT_VIEW: LogView = { notes: true, meta: true }
 /** Pixels from the bottom that still count as "reading the newest message". */
 const NEAR_BOTTOM = 80
 

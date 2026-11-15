@@ -18,7 +18,6 @@ export interface LogView {
   /** Show each message's time and cost. */
   meta: boolean
 }
-export const DEFAULT_VIEW: LogView = { notes: true, meta: true }
 
 export interface FilterOption { value: string; label: string; count: number }
 export interface FilterGroup { label?: string; options: FilterOption[] }

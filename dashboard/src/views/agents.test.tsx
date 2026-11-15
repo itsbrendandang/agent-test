@@ -1,6 +1,6 @@
-// Agents: member cards in one grid with a search box and a group filter, each card built only from what the role
+// Agents: member cards grouped by team, with a search box and a group filter, each card built only from what the role
 // list and the engine's catalog say; and one card that shows a run step by step from the run's own clock readings.
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 import { clockLength, phaseTimeline } from "@/lib/timeline"
@@ -29,12 +29,16 @@ const show = async (runs: object[] = [], events: object[] = EVENTS) => {
   await screen.findAllByText("Model group: planner")
   return { ...view, sent }
 }
-const cards = () => within(screen.getByRole("list", { name: "Agents" })).getAllByRole("listitem")
-const names = () => cards().map((c) => c.querySelector("h3")!.textContent)
+const lists = () => [...document.querySelectorAll<HTMLElement>("ul.members")]
+const cards = () => lists().flatMap((l) => [...l.querySelectorAll<HTMLElement>(":scope > li")])
+const names = () => cards().map((c) => c.querySelector("h4")!.textContent)
+const card = (name: string) => cards().find((c) => c.querySelector("h4")!.textContent === name)!
 
 describe("member cards", () => {
-  it("is one grid of every agent: the team of nine, the review agents and the specialists, each with one picture and its group", async () => {
+  it("groups every agent: the team of nine in step order, the review agents lead first, the specialists; each with one picture and its group", async () => {
     await show()
+    expect(lists().map((l) => l.getAttribute("aria-label"))).toEqual(["Team of nine", "Team review", "Specialists"])
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Team of nine 9", "Team review 2", "Specialists 1"])
     expect(names()).toEqual(["Scout", "Proposer", "Pilot", "Experimenter", "Auditor", "Critic", "Reviser", "Finisher", "Reporter", "Lead Scientist", "Critic (Scientific Reviewer)", "Toxicologist"])
     for (const card of cards()) expect(card.querySelectorAll("svg[data-agent]")).toHaveLength(1)
     expect(cards().map((c) => c.querySelector(".member-top .pill")!.textContent)).toEqual([...Array(9).fill("Team of nine"), "Team review", "Team review", "Specialist"])
@@ -43,23 +47,40 @@ describe("member cards", () => {
   })
   it("every card has the same two fields, filled only from what the lists say", async () => {
     await show()
-    const fields = (name: string) => { const card = cards().find((c) => c.querySelector("h3")!.textContent === name)!; return { fields: [...card.querySelectorAll(".member-fields > div")].map((d) => `${d.querySelector("dt")!.textContent}: ${d.querySelector("dd")!.textContent}`), foot: card.querySelector(".member-foot")!.textContent, job: card.querySelector(".member-job")!.textContent } }
+    const fields = (name: string) => { const c = card(name); return { fields: [...c.querySelectorAll(".member-fields > div")].map((d) => `${d.querySelector("dt")!.textContent}: ${d.querySelector("dd")!.textContent}`), foot: c.querySelector(".member-foot")!.textContent, job: c.querySelector(".member-job")!.textContent } }
     expect(fields("Pilot")).toEqual({ fields: ["Works on: Benchmark tasks", "Takes part: Step 3 of 9"], foot: "Model group: planner", job: "Tries the whole analysis on a small sample first." })
     expect(fields("Lead Scientist")).toEqual({ fields: ["Works on: Team reviews", "Takes part: Leads the review"], foot: "Tools: leads the discussion, writes the decision", job: "Runs the discussion; does not do the research or decide what is true." })
     expect(fields("Critic (Scientific Reviewer)")).toEqual({ fields: ["Works on: Team reviews", "Takes part: Review member"], foot: "Tools: none", job: "Tries to prove the others wrong." })
     expect(fields("Toxicologist")).toEqual({ fields: ["Works on: Team reviews", "Takes part: When the question fits"], foot: "Tools: code", job: "the question is about a safety margin" })
     for (const card of cards()) expect([...card.querySelectorAll(".member-fields dt")].map((d) => d.textContent)).toEqual(["Works on", "Takes part"])
   })
-  it("Details is one disclosure per card, named for its agent; nothing on a card is about a run", async () => {
+  it("Details opens one member at a time in a side panel, named for its agent; nothing on a card is about a run", async () => {
     await show([RUN])
+    const user = userEvent.setup()
     const scout = cards()[0]
-    const summary = within(scout).getByText("Details")
-    expect(summary.tagName).toBe("SUMMARY"); expect(summary).toHaveAccessibleName("Details of Scout")
-    await userEvent.setup().click(summary)
-    expect(scout).toHaveTextContent("up to 3% of the time"); expect(scout).toHaveTextContent("Instructions of scout.")
-    const tox = cards().find((c) => c.querySelector("h3")!.textContent === "Toxicologist")!
-    expect(tox).toHaveTextContent("Used whenthe question is about a safety margin")
-    expect(screen.getByRole("list", { name: "Agents" })).not.toHaveTextContent(/latest run|did not run|Ran in|No run yet|working now|2026\d{6}|swarm|task run|board/i)
+    const button = within(scout).getByRole("button", { name: "Details of Scout" })
+    expect(button).toHaveAttribute("aria-expanded", "false")
+    await user.click(button)
+    const panel = screen.getByRole("dialog", { name: "Scout" })
+    expect(panel).toHaveTextContent("up to 3% of the time"); expect(panel).toHaveTextContent("Instructions of scout.")
+    expect(scout).toHaveAttribute("data-selected")
+    await user.keyboard("{Escape}")
+    expect(screen.queryByRole("dialog")).toBeNull()
+    await user.click(within(card("Toxicologist")).getByRole("button", { name: "Details of Toxicologist" }))
+    expect(screen.getByRole("dialog", { name: "Toxicologist" })).toHaveTextContent("Used whenthe question is about a safety margin")
+    for (const list of lists()) expect(list).not.toHaveTextContent(/latest run|did not run|Ran in|No run yet|working now|2026\d{6}|swarm|task run|board/i)
+  })
+  it("opening one member's details leaves every other card closed and the same size", async () => {
+    await show()
+    fireEvent.click(within(card("Proposer")).getByRole("button", { name: "Details of Proposer" }))
+    expect(screen.getAllByRole("dialog")).toHaveLength(1)
+    expect(screen.getByRole("dialog", { name: "Proposer" })).toHaveTextContent("Instructions of propose.")
+    const open = cards().filter((c) => c.hasAttribute("data-selected")).map((c) => c.querySelector("h4")!.textContent)
+    expect(open).toEqual(["Proposer"])
+    const expanded = cards().flatMap((c) => [...c.querySelectorAll("[aria-expanded='true']")])
+    expect(expanded).toHaveLength(1)
+    // The cards hold no details text: nothing in a card grows when one is opened.
+    for (const c of cards()) expect(c).not.toHaveTextContent(/Instructions of/)
   })
   it("the search box and the group filter narrow the one grid, and say when nothing matches", async () => {
     await show()
@@ -68,12 +89,13 @@ describe("member cards", () => {
     await user.type(box, "critic")
     expect(names()).toEqual(["Critic", "Critic (Scientific Reviewer)"]) // the role of the team of nine and the review agent both match
     await user.click(within(screen.getByRole("group", { name: "Group" })).getByRole("button", { name: "Team review" }))
+    expect(lists().map((l) => l.getAttribute("aria-label"))).toEqual(["Team review"])
     expect(names()).toEqual(["Critic (Scientific Reviewer)"])
     expect(screen.getByRole("status")).toHaveTextContent("1 of 12 agents shown")
     await user.clear(box)
-    await user.click(screen.getByRole("button", { name: "Specialists" }))
+    await user.click(within(screen.getByRole("group", { name: "Group" })).getByRole("button", { name: "Specialists" }))
     expect(names()).toEqual(["Toxicologist"])
-    await user.click(screen.getByRole("button", { name: "All" }))
+    await user.click(within(screen.getByRole("group", { name: "Group" })).getByRole("button", { name: "All" }))
     await user.type(box, "zzzz")
     expect(screen.queryByRole("listitem")).toBeNull()
     expect(screen.getByText(/No agent matches “zzzz”/)).toBeInTheDocument()
