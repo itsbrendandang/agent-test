@@ -9,6 +9,8 @@ export type Verdict = "verified" | "unsupported" | "contradicted" | "unchecked"
 
 export interface RosterMember {
   name: string; title: string; role: "lead" | "member"; model: string; modelId: string; tools: string[]; deliverable?: string
+  /** The paragraph under "# Purpose" in the agent's file (newer engines). */
+  purpose?: string
   /** One agent playing several roles: mode id -> role title. The active mode is on each member.replied event. */
   modes?: Record<string, string>
 }
@@ -21,6 +23,8 @@ export const DATABASES: readonly SearchProvider[] = ["chembl", "clinicaltrials",
 export interface Status { mock: boolean; paidCalls?: boolean; keys: Record<string, boolean>; meeting: { max_minutes: number; max_usd: number; max_rounds: number; max_searches?: number; max_literature_searches?: number } }
 
 // Mirrors engine/src/events.ts
+/** One agent's own model use in a run: tokens as the model reported them, and their cost ($0 in a practice run). */
+export interface MemberUsage { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; usd: number }
 /** A source a search kept. `relevance` and `studyType` are what the engine recorded; the title and URL are untrusted. */
 export interface EvidenceItem { url: string; title: string; studyType?: string; relevance?: number; provider?: SearchProvider; /** The query that found it (newer runs). */ query?: string }
 export type BoardEvent = { key: string; at: number } & (
@@ -28,13 +32,13 @@ export type BoardEvent = { key: string; at: number } & (
   | { type: "round.started"; round: number; message: string; final: boolean }
   /** Who took part in this run, in speaking order. Runs recorded before this event existed have none. */
   | { type: "run.roster"; members: { name: string; title: string; role: "lead" | "member"; source?: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }[] }
-  | { type: "member.replied"; round: number; member: string; text: string; /** What this reply cost. */ usd?: number; /** The sentence after "In short:", when the member wrote one. */ summary?: string }
+  | { type: "member.replied"; round: number; member: string; text: string; /** What this reply cost. */ usd?: number; /** The sentence after "In short:", when the member wrote one. */ summary?: string; /** The member's own model use so far (newer runs). */ usage?: MemberUsage }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; provider?: SearchProvider; items: EvidenceItem[] }
   | never
   | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: string; p?: number; note?: string; checkedBy?: string; source?: string; /** Whether the passage the checker quoted was found in the source text. */ quoteFound?: boolean }
   | { type: "constraint"; reason: string; detail: string }
   | { type: "memo.written"; path: string; decision: string }
-  | { type: "run.finished"; usd: number; minutes: number }
+  | { type: "run.finished"; usd: number; minutes: number; /** Each agent's own model use over the run, the lead included (newer runs). */ members?: Record<string, MemberUsage> }
   | { type: "run.failed"; error: string }
   | { type: "run.resumed" | "lead.framed"; [k: string]: unknown }
 )

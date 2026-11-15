@@ -16,12 +16,12 @@ export type BoardEvent =
   | { type: "run.roster"; members: RosterEntry[] /** who takes part in this run: the lead first, then the members in speaking order (key "roster") */ }
   | { type: "lead.framed"; text: string }
   | { type: "round.started"; round: number; message: string; final: boolean }
-  | { type: "member.replied"; round: number; member: string; mode?: string; text: string; usd: number; summary?: string /** the "In short:" line the reply opened with, when it did */ }
+  | { type: "member.replied"; round: number; member: string; mode?: string; text: string; usd: number; summary?: string /** the "In short:" line the reply opened with, when it did */; usage?: MemberUsage /** the member's own model use so far in this run, read when the reply was recorded; absent in runs recorded before this field */ }
   | { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[]; provider?: SearchProvider }
   | { type: "claim.checked"; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }
   | { type: "constraint"; reason: "time" | "budget" | "rounds"; detail: string }
   | { type: "memo.written"; path: string; decision: string }
-  | { type: "run.finished"; usd: number; minutes: number }
+  | { type: "run.finished"; usd: number; minutes: number; members?: Record<string, MemberUsage> /** each agent's own model use over the run, the lead included; absent in runs recorded before this field */ }
   | { type: "run.failed"; error: string }
 
 /**
@@ -42,6 +42,13 @@ export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", 
  * the search returned it (Exa gives one for some pages, at no extra cost); absent when there is none.
  */
 export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider; query?: string; image?: string }
+
+/**
+ * One agent's model use in a run, from its own conversation's usage record (pi-durable `pi.usage`): tokens as the model
+ * reported them and the dollars they cost. A practice run's scripted model is free, so `usd` is 0 there. The checkers and
+ * searches are not in it: they are counted in the run's total only.
+ */
+export interface MemberUsage { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; usd: number }
 
 /** One member of a run. `source`: "board" (a file in board/agents) or "specialist" (a method specialist a plan added for this run: `why` it was chosen and the `methods` whose notes it reads). */
 export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; room?: SpecialistRoom; why?: string; methods?: { name: string; title: string }[] }

@@ -64,3 +64,6 @@
   .event-log-search, .event-log-select { flex: 1 1 100%; max-width: none; width: 100%; }
   .chat-toggle { min-height: 44px; }
 }
+.chat-who-btn { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.chat-who-btn:hover { color: inherit; }
+.chat-who-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }

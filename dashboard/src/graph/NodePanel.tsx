@@ -8,9 +8,11 @@ import { VerdictPill } from "./VerdictPill"
 import { KIND_TECH, KIND_WHAT, kindLabel } from "./words"
 
 /** Details of the selected node. All run text is rendered as text. */
-export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onClose }: {
+export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onClose, onDetails }: {
   node: GraphNode; nodes: readonly GraphNode[]; links: readonly GraphLink[]; model: GraphModel
   onSelect: (id: string) => void; onOpenRun: () => void; onClose: () => void
+  /** Opens everything the run recorded about this node (details/DetailSheet.tsx), when it has such a panel. */
+  onDetails?: () => void
 }) {
   const conns = useMemo(() => connectionsOf(node.id, nodes, links), [node.id, nodes, links])
   const href = node.url ? safeUrl(node.url) : undefined
@@ -27,6 +29,7 @@ export function NodePanel({ node, nodes, links, model, onSelect, onOpenRun, onCl
       </header>
       <h2>{node.verdict && (node.kind === "claim" || node.kind === "test") && <VerdictPill verdict={node.verdict} />}{" "}{node.label}</h2>
       {node.text && node.text !== node.label && <p className="graph-text">{node.text}</p>}
+      {onDetails && <button type="button" className="btn" onClick={onDetails} aria-haspopup="dialog">All details in this run</button>}
       {href && <p className="small"><a href={href} target="_blank" rel="noreferrer noopener">Open the source</a> <span className="muted">({href})</span></p>}
       {node.facts.length > 0 && (
         <dl className="graph-facts">

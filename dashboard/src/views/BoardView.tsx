@@ -12,6 +12,8 @@ import { Provenance } from "@/components/Provenance"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
+import { DetailSheet, type DetailTarget } from "@/details/DetailSheet"
+import type { LabEvent } from "@/lab/adapter"
 import { AgentAvatar } from "@/lab/AgentAvatar"
 import { agentIdentity } from "@/lab/identity"
 import { provenanceOf } from "@/lib/provenance"
@@ -70,6 +72,8 @@ export function BoardView() {
   // Someone who asked to see a review wants the discussion: it is open on arrival. Otherwise the last choice is kept.
   const [details, setDetails] = useState(() => opened !== undefined || localStorage.getItem("board.details") === "1")
   const events = useRunEvents(runId)
+  /** The agent or source whose details are open (details/DetailSheet.tsx). */
+  const [detail, setDetail] = useState<DetailTarget>()
 
   useEffect(() => localStorage.setItem("board.details", details ? "1" : "0"), [details])
   const refresh = () => get<RunSummary[]>("/api/runs").then((r) => { setRuns(r); setRunId((id) => id ?? r[0]?.id) })
@@ -286,8 +290,8 @@ export function BoardView() {
             // From the run's own events: a member who never replied did not take part, also when the roster lists them.
             const spokeAtAll = events.some((e) => e.type === "member.replied" && e.member === m.name)
             const step = !live ? (spokeAtAll ? "done" : "todo") : current?.replies.some((r) => r.member === m.name) ? "done" : "now"
-            // Each member opens its own messages of this review in the Agent Log.
-            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><a className="board-member-link" href={logLink({ kind: "board", id: runId }, m.name)} aria-label={`${agentIdentity(m.name, { title: m.title }).short}: messages in the Agent Log`}><AgentAvatar name={m.name} size={24} /><span className="board-who"><span>{agentIdentity(m.name, { title: m.title }).short}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></span></a></li>
+            // Each member opens its own messages of this review in the Agent Log; Details opens what it did.
+            return <li key={m.name} data-step={step} title={BOARD_JOB[m.name] ?? nameAndJob(m.title).job}><a className="board-member-link" href={logLink({ kind: "board", id: runId }, m.name)} aria-label={`${agentIdentity(m.name, { title: m.title }).short}: messages in the Agent Log`}><AgentAvatar name={m.name} size={24} /><span className="board-who"><span>{agentIdentity(m.name, { title: m.title }).short}</span><span className="swarm-step">{step === "done" ? (live ? "✓ replied" : "✓ took part") : step === "now" ? "● working" : finished ? "○ did not take part" : "○ not started"}</span></span></a><button type="button" className="link-btn small board-step-details" onClick={() => setDetail({ kind: "agent", id: m.name })} aria-label={`Details of ${agentIdentity(m.name, { title: m.title }).label}`}>Details</button></li>
           })}
         </ol>
       )}
@@ -329,6 +333,7 @@ export function BoardView() {
                 <li key={src.url}>
                   <span className="source-title">{url ? <a href={url} target="_blank" rel="noreferrer noopener">{src.title || url}</a> : src.title || src.url}</span>
                   <a className="source-graph small" href={graphLink("board", runId, sourceNodeId(src.url))}>In the graph</a>
+                  <button type="button" className="link-btn small source-details" onClick={() => setDetail({ kind: "entity", ref: { kind: "source", url: src.url } })} aria-label={`Details of the source ${src.title || src.url}`}>Details</button>
                   {/\[preprint\]\s*$/i.test(src.title ?? "") && <span className="source-preprint">Preprint: not peer reviewed</span>}
                   <span className="muted small">
                     {[url ? (new URL(url).hostname === "api.fda.gov" ? "openFDA query" : new URL(url).hostname.replace(/^www\./, "")) : "not a web address", src.studyType && `kind of study: ${src.studyType}`].filter(Boolean).join(" · ")}
@@ -395,6 +400,7 @@ export function BoardView() {
 
         </div>
       )}
+      {runId && <DetailSheet target={detail} onClose={() => setDetail(undefined)} run={{ kind: "board", id: runId, live, practice: startedAs }} events={events as unknown as LabEvent[]} roster={roster} />}
     </div>
   )
 }

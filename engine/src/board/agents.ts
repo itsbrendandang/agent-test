@@ -17,6 +17,8 @@ export interface AgentDef {
   model: Tier
   tools: string[]
   deliverable?: string
+  /** The text under the agent file's "# Purpose" heading: what the agent is for, in its own file's words. Absent when the file has no such heading. */
+  purpose?: string
   /** Roles this one agent can play, as mode id -> role title (e.g. pilot -> "Pilot"). The lead names one per round. */
   modes?: Record<string, string>
   /** Set only for a method specialist added to one run (specialists.ts): why it was chosen and the methods whose notes it reads. Never read from a board agent file. */
@@ -34,6 +36,10 @@ function readModes(name: string, value: unknown): Record<string, string> | undef
   return Object.fromEntries(modes.map(([id, title]) => [id, String(title).trim()]))
 }
 
+/** The paragraph under "# Purpose" in an agent file, up to the next heading, on one line. */
+export const purposeOf = (body: string): string | undefined =>
+  /^#\s+Purpose\s*\n([\s\S]*?)(?=^#|(?![\s\S]))/m.exec(body)?.[1].replace(/\s+/g, " ").trim() || undefined
+
 export function loadAgent(config: BoardConfig, name: string): AgentDef {
   const raw = readFileSync(path(config, "agents", `${name}.md`), "utf8")
   const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(raw)
@@ -46,6 +52,7 @@ export function loadAgent(config: BoardConfig, name: string): AgentDef {
     model: (front.model ?? "cheap") as Tier,
     tools: front.tools ?? [],
     deliverable: front.deliverable,
+    ...(purposeOf(match[2]) ? { purpose: purposeOf(match[2]) } : {}),
     ...(front.modes === undefined ? {} : { modes: readModes(name, front.modes) }),
     prompt: match[2].trim(),
   }

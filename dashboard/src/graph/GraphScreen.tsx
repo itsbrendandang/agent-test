@@ -12,6 +12,9 @@ import { GraphList } from "./GraphList"
 import { FullKey, Key } from "./Legend"
 import { buildBoardGraph, buildSwarmGraph, statsOf } from "./model"
 import { NodePanel } from "./NodePanel"
+import { DetailSheet, type DetailTarget } from "@/details/DetailSheet"
+import type { LabEvent } from "@/lab/adapter"
+import { detailOf } from "./detailOf"
 import { Scrubber } from "./Scrubber"
 import { headline, narration, replaySeconds } from "./story"
 import { GLYPH, LINK_KINDS, MAX_NODES, NODE_KINDS, QUIET_LINKS, VERDICT_CLASSES, type GraphModel, type LinkKind, type NodeKind, type Outcome } from "./types"
@@ -76,6 +79,8 @@ export function GraphScreen() {
   const [playing, setPlaying] = useState(false)
   const [emphasis, setEmphasis] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
+  /** The node whose full details are open in the side sheet (details/DetailSheet.tsx). */
+  const [nodeDetail, setNodeDetail] = useState<DetailTarget>()
   // The person's own choice (kept for next time) wins. Until they choose, a small run opens as a list.
   const [chosenMode, setChosenMode] = useState<"graph" | "list" | null>(storedMode)
   const chooseMode = (m: "graph" | "list") => { setChosenMode(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* private mode: not kept */ } }
@@ -289,7 +294,8 @@ export function GraphScreen() {
               </div>
             </div>
             {selectedNode
-              ? <NodePanel node={selectedNode} nodes={shown.nodes} links={shown.connections} model={full} onSelect={select} onOpenRun={openRun} onClose={() => select(null)} />
+              ? <NodePanel node={selectedNode} nodes={shown.nodes} links={shown.connections} model={full} onSelect={select} onOpenRun={openRun} onClose={() => select(null)}
+                  onDetails={full.kind === "board" && detailOf(selectedNode) ? () => setNodeDetail(detailOf(selectedNode)) : undefined} />
               : <aside className="graph-panel" aria-label="About this graph">
                   <h2>About this picture</h2>
                   <p className="muted small">Select a node to see its details and to light up what it is connected to.</p>
@@ -301,6 +307,7 @@ export function GraphScreen() {
           </div>
           <Scrubber model={full} step={step} onStep={setStep} playing={playing} onPlaying={setPlaying} />
           {fullKey && <FullKey kinds={kindsPresent} runKind={full.kind} />}
+          {full.kind === "board" && board.data && <DetailSheet target={nodeDetail} onClose={() => setNodeDetail(undefined)} run={{ kind: "board", id: full.runId, live: full.status === "running", practice: full.scripted }} events={board.data.events as unknown as LabEvent[]} roster={board.data.roster} />}
         </>
       )}
     </div>
