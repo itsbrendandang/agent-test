@@ -9,7 +9,7 @@
   python3 deploy/modal_host/tests/cloud_check.py <address> show [<id>]    runs, or one run's event counts
   python3 deploy/modal_host/tests/cloud_check.py <address> digest <id>    a hash of the run's event log and memo
 
-The access code is read from deploy/modal_host/.local/codes/<ASB_CHECK_USER or tester>.txt and never printed.
+The access code is read from deploy/modal_host/.local/codes/<ASB_CHECK_USER or owner>.txt and never printed.
 Standard library only.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ class Client:
         self.jar = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar), NoRedirect)
         if signed_in:
-            code = (LOCAL / "codes" / f"{os.environ.get('ASB_CHECK_USER', 'tester')}.txt").read_text().strip()
+            code = (LOCAL / "codes" / f"{os.environ.get('ASB_CHECK_USER', 'owner')}.txt").read_text().strip()
             status, _, _ = self.call("/login", form={"code": code}, timeout=180)
             if status != 303:
                 sys.exit(f"sign-in failed with status {status}")

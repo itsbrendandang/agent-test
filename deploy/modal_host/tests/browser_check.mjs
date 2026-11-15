@@ -2,7 +2,7 @@
 // stream from the page. Headless Chrome through puppeteer-core, which is NOT a dependency of this repo:
 //   mkdir -p /tmp/pptr && cd /tmp/pptr && npm i puppeteer-core
 //   NODE_PATH=/tmp/pptr/node_modules node deploy/modal_host/tests/browser_check.mjs <address> [screenshot folder]
-// The access code is read from deploy/modal_host/.local/codes/<ASB_CHECK_USER or tester>.txt and never printed.
+// The access code is read from deploy/modal_host/.local/codes/<ASB_CHECK_USER or owner>.txt and never printed.
 import { mkdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
@@ -15,7 +15,7 @@ const base = (process.argv[2] ?? "").replace(/\/$/, "")
 const shots = process.argv[3] ?? "/tmp/modal-host/shots"
 if (!base) { console.error("give the address"); process.exit(2) }
 mkdirSync(shots, { recursive: true })
-const code = readFileSync(join(here, "..", ".local", "codes", `${process.env.ASB_CHECK_USER ?? "tester"}.txt`), "utf8").trim()
+const code = readFileSync(join(here, "..", ".local", "codes", `${process.env.ASB_CHECK_USER ?? "owner"}.txt`), "utf8").trim()
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))
 const results = []
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`) }

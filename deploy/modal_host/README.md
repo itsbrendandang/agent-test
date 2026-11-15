@@ -204,6 +204,6 @@ NODE_PATH=/tmp/pptr/node_modules node tests/browser_check.mjs <address>   # a re
 ```
 
 The cloud checks sign in with the code of the person named in `ASB_CHECK_USER` (default
-`tester`). They start practice reviews only.
+`owner`). They start practice reviews only.
 
 Do not name a file or a folder `modal`. It would hide the Python package of that name.
