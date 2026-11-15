@@ -158,7 +158,7 @@ sources show in a strip under the text; each links to its source page. "Open in 
 A question that asks for a lab protocol or an SOP also searches published protocols (see [How a research answer is made](#how-a-research-answer-is-made)).
 
 Try asking works as on Overview: a click fills the box. The button at the top right opens the **inspector**, with
-four tabs:
+up to four tabs (a tab shows only when it has content):
 
 - **Evidence**: the sources (found, selected, cited) and each checked statement with its quoted passage. A citation
   number in the answer opens this tab with that source lit; "Show in the answer" goes back.
