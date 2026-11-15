@@ -8,6 +8,7 @@ import "./env.ts"
 import { bindHost, createApp } from "./app.ts"
 import { startTracker } from "./glhf/routes.ts"
 import { paidCallsLine } from "./paid/paid.ts"
+import { previewLine } from "./research/preview.ts"
 import { boardKeysLine, boardModeLine } from "./providers.ts"
 import { LOCAL, loadConfig, MOCK } from "./config.ts"
 
@@ -20,6 +21,7 @@ createServer((req, res) => void app.handler(req, res).catch((error) => { console
   console.log(`AI Scientist Bot engine on http://${HOST}:${PORT}`)
   console.log(boardModeLine(loadConfig(), app.mock, LOCAL))
   console.log(paidCallsLine())
+  console.log(previewLine(app.mock)) // whether the Research screen answers in Real mode (RESEARCH_PREVIEW)
   if (!MOCK) console.warn(boardKeysLine(loadConfig())) // paid calls are on: say now if a real board run would be refused for a missing key
   app.resumePaused()
   void startTracker().catch((e) => console.error("glhf tracker failed to start:", e)) // continues unfinished GLHF runs

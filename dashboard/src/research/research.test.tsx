@@ -443,6 +443,8 @@ describe("the adapter, contract v2", () => {
     expect(await screen.findByRole("region", { name: PLAN.briefTitle })).toBeInTheDocument()
     expect(screen.queryByRole("alert")).toBeNull(); expect(screen.queryByRole("dialog")).toBeNull()
     expect(to(sent, "POST", "/api/chat")).toHaveLength(1)
+    // ...but it says why, so the plan is not mistaken for an answer
+    expect(screen.getByText(/Direct answers are switched off on this engine\. In Real mode they need the engine started with RESEARCH_PREVIEW=1\./)).toHaveAttribute("role", "status")
   })
 })
 

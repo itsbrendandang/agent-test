@@ -43,7 +43,10 @@ npm run dashboard
 ```
 
 Open http://localhost:5317. Press Ctrl+C in both terminals to stop. Restart after `git pull`.
-You can also use `npm start` to start both parts and open the browser.
+You can also use `npm start` to start both parts and open the browser. It prints the engine's mode, the paid switch,
+which keys are set (yes or no) and whether direct answers are on. When an engine was already running on port 8787, it
+uses that engine and says so, with a warning when that engine runs other code than this folder or cannot say which
+code it runs.
 
 A new copy starts in **Demo mode**. Demo mode is free and needs no account. Its answers are fixed
 examples that show how the app works. They are not research.

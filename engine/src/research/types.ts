@@ -5,6 +5,7 @@
 import type { BoardConfig } from "../config.ts"
 import type { SpecialistRoom } from "../specialists.ts"
 import type { Verdict } from "../events.ts"
+import type { Manifest } from "../manifest.ts"
 
 export type Effort = "quick" | "standard"
 export const EFFORTS: Effort[] = ["quick", "standard"]
@@ -299,6 +300,8 @@ export interface ResearchRecord {
   /** The cited sentences of the final text, each with the verdict code gave it. */
   statements: Statement[]
   review: { checker: string; critic: string; revised: boolean; notes: ReviewNote[] }
+  /** What produced the answer: the commit, prompt and config hashes, library versions (manifest.ts). Absent in older records. */
+  manifest?: Manifest
   recommendations: Recommendation[]
   /**
    * "What is missing": plain sentences built by code from what did not run, what found nothing and what did not pass

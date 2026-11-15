@@ -76,6 +76,7 @@ Set these in `.env` or in your shell. All are optional.
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/search/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
+| `RESEARCH_PREVIEW` | not set, which means **off** | `1` turns on direct answers on the Research screen in Real mode (`POST /api/research`). Off: in Real mode the request answers 503 `{preview: false}`, and the Research screen makes a team-review plan instead and says that direct answers are off. Demo answers need no switch. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say whether it is on. | `engine/src/research/preview.ts` |
 | `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
 

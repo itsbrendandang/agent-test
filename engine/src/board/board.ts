@@ -45,6 +45,7 @@ import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "../models.ts"
 import { holder, take } from "../runlock.ts"
 import { writeWhole } from "../fsx.ts"
+import { type Manifest, runManifest } from "../manifest.ts"
 
 const ctx = BACKGROUND_CONTEXT
 
@@ -74,6 +75,10 @@ export interface RunState {
   day?: string // the local day (YYYY-MM-DD) the run last worked on, and what it had spent before that day,
   dayBase?: number // so the daily cap counts only today's part of a run that started on an earlier day
   costEstimated?: boolean // true once a model reported tokens with no cost and the fallback price was used
+  /** Tokens and cost per harness model ("provider/id"; the lead and the members): input, output, cache reads and writes. The checkers are in firstPassUsd and checkerUsd as dollars only. Written with each spend. */
+  usage?: Record<string, unknown>
+  /** What produced the run: commit, prompt and config hashes, library versions (manifest.ts). Absent in older runs. */
+  manifest?: Manifest
   mock?: boolean
   finalRound?: number // the round that asked for final positions; no round may follow it
   finished?: boolean
@@ -526,7 +531,7 @@ export async function startRun(briefFile: string, options: { config?: BoardConfi
   if (!mock) assertBoardKeys(config, options.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // MissingTierKey: a real run never starts, and is never made scripted, for want of a key
   checkDailyBudget(config, new Date(), mock)
   const runId = newRunDir(config, `${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}-${brief.id}`)
-  const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, firstPassUsd: 0, usd: 0, mock }
+  const state: RunState = { runId, briefFile, startedAt: Date.now(), members: {}, rounds: 0, lastRound: [], evidence: {}, ledger: [], escalations: 0, checkerUsd: 0, firstPassUsd: 0, usd: 0, mock, manifest: runManifest(config) }
   saveState(config, state)
   if (options.maxUsd !== undefined && options.maxUsd < config.meeting.max_usd) writeWhole(`${runDir(config, runId)}/overrides.json`, JSON.stringify({ meeting: { max_usd: options.maxUsd } }))
   new EventLog(`${runDir(config, runId)}/events.jsonl`).emit("run", { type: "run.started", runId, brief: brief.id, title: brief.title, mock })
@@ -816,6 +821,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     const usage = await harness.usage(ctx)
     const models = usdOf(usage.models, config.meeting.fallback_usd_per_mtok ?? 15, mock)
     if (models.estimated) state.costEstimated = true
+    state.usage = usage.models // the token detail behind the dollars, so a finished run can be measured without its session.sqlite
     rollDay(state) // before the total changes: a run that works past midnight starts a new day's count
     state.firstPassUsd = firstPassBefore + firstPass.usd
     state.usd = totalUsd(state, models.usd)
