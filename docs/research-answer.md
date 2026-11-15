@@ -116,6 +116,34 @@ from one abstract is enough for Supported or Contradicted; the note of every mar
 statements from 2 sources for it; none against it"), so a thin mark can be seen to be thin. A mark says what
 these sources report. It does not say the hypothesis is true.
 
+## Method specialists
+
+An answer can add **method specialists**: members of the method library (`glhf/specialists`) whose notes fit the
+question. This is how a question starts the agents that match it.
+
+1. **Code chooses, not a model.** After the prepare step the engine compares the words of the question with the
+   method notes (`matchSpecialists` in `engine/src/specialists.ts`). The best matches join: at most 1 at the Quick
+   level and 2 at the Standard level (`specialists` in `board/config.yaml`). A question that fits none gets none.
+   The `specialists` event names who joined and why.
+2. **Each one reads the search results.** When the searches (Exa, the literature search, the databases) have given
+   the numbered sources, each specialist gets the question, its method notes and those sources, and drafts one
+   short section: `### Method view: <its title>`. It has no tools: it cannot search or run code. It may only say
+   what the sources state.
+3. **The model follows the effort.** A specialist runs on the `cheap` tier at Quick and on the `strong` tier at
+   Standard (`specialist_tier`). Both tiers are set under `models` in `board/config.yaml`, so they can be Claude
+   or OpenAI models.
+4. **Its section is reviewed.** The section becomes part of the draft. The statement checker checks each of its
+   cited sentences against the source, and the critic reads it, like the rest of the answer.
+5. **It never takes money the answer needs.** A specialist is asked only when its worst-case cost fits under the
+   answer's limit together with the worst case of the draft, the critic and the revision. If it does not fit, its
+   step ends as "Not asked" and the answer goes on without it. Its reply is stored like every paid step, so a
+   restart does not pay for it twice.
+
+In a Demo answer the specialist's text is a fixed example sentence, and nothing is spent.
+
+In the events: `specialists` (name, title, agent, why, methods), and steps named `specialist:<name>` with
+`agent: "specialist:<name>"`.
+
 In the events: `hypotheses` (id, text, supportIf, contradictIf, origin; `cut` for what was set aside), a
 `hypothesis` tag on each search and screening step, `hypotheses` on each source, `hypothesis` and `side` on each
 statement, and one `hypothesis.checked` per hypothesis (the mark, the source numbers for and against, the

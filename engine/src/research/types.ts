@@ -29,6 +29,10 @@ export interface Level {
   words: number
   /** Hypotheses one answer may test, at most (0 = the level tests none). Each needs one web search and one literature query, so fewer are tested when those run out. */
   hypotheses: number
+  /** Method specialists one answer may add, at most (0 = none). Each drafts one short section from the sources, which is checked and reviewed like the rest. */
+  specialists: number
+  /** The model tier a specialist runs on (board/config.yaml `models`): "cheap" at the quick level, "strong" at the standard level, unless the config says otherwise. */
+  specialistTier: "cheap" | "strong"
 }
 
 export interface ResearchLimits {
@@ -50,8 +54,8 @@ export const DEFAULTS: ResearchLimits = {
   maxInProgress: 3,
   perOriginPerMinute: 6,
   levels: {
-    quick: { maxUsd: 0.15, queries: 2, exaSearches: 1, databaseLookups: 0, sourcesKept: 6, maxOutputTokens: 2_000, words: 220, hypotheses: 0 },
-    standard: { maxUsd: 0.6, queries: 3, exaSearches: 3, databaseLookups: 2, sourcesKept: 12, maxOutputTokens: 3_000, words: 380, hypotheses: 3 },
+    quick: { maxUsd: 0.15, queries: 2, exaSearches: 1, databaseLookups: 0, sourcesKept: 6, maxOutputTokens: 2_000, words: 220, hypotheses: 0, specialists: 1, specialistTier: "cheap" },
+    standard: { maxUsd: 0.6, queries: 3, exaSearches: 3, databaseLookups: 2, sourcesKept: 12, maxOutputTokens: 3_000, words: 380, hypotheses: 3, specialists: 2, specialistTier: "strong" },
   },
 }
 
@@ -60,7 +64,7 @@ export interface ResearchYaml {
   time_limit_seconds?: number; max_question_chars?: number; max_in_progress?: number; per_origin_per_minute?: number
   quick?: LevelYaml; standard?: LevelYaml
 }
-export interface LevelYaml { max_usd?: number; queries?: number; exa_searches?: number; database_lookups?: number; sources_kept?: number; max_output_tokens?: number; words?: number; hypotheses?: number }
+export interface LevelYaml { max_usd?: number; queries?: number; exa_searches?: number; database_lookups?: number; sources_kept?: number; max_output_tokens?: number; words?: number; hypotheses?: number; specialists?: number; specialist_tier?: string }
 
 const num = (value: unknown, fallback: number, min: number, max: number, whole = true): number =>
   typeof value === "number" && Number.isFinite(value) && value >= min && value <= max && (!whole || Number.isInteger(value)) ? value : fallback
@@ -83,6 +87,8 @@ export function limitsOf(config: Pick<BoardConfig, "research">): ResearchLimits 
       maxOutputTokens: num(l.max_output_tokens, d.maxOutputTokens, 300, 8_000),
       words: num(l.words, d.words, 60, 1_000),
       hypotheses: effort === "quick" ? 0 : num(l.hypotheses, d.hypotheses, 0, 4),
+      specialists: num(l.specialists, d.specialists, 0, 3),
+      specialistTier: l.specialist_tier === "cheap" || l.specialist_tier === "strong" ? l.specialist_tier : d.specialistTier,
     }
   }
   return {
@@ -123,13 +129,16 @@ export type StepKind = "prepare" | "hypothesize" | "search" | "evaluate" | "fetc
 export type StepStatus = "completed" | "empty" | "failed" | "cancelled"
 /** A safe summary of what a step was given, for a details view. Never a key, a header, a token, a path or a prompt. */
 export type StepInput = Record<string, string | number | boolean>
+/** A method specialist of one answer (specialists.ts). `agent` is who the step and the lab show: "specialist:<name>". */
+export interface AnswerSpecialist { name: string; title: string; agent: string; why: string; methods: { name: string; title: string }[] }
+
 export interface StepStart {
   step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput
   /** The hypothesis this step is for (its searches, their screening, the draft of its section). */
   hypothesis?: string
   /**
    * Who does the step: "planner", "searcher", "writer", "checker", "critic", or "investigator-1", "investigator-2", ...
-   * (one investigator works on one hypothesis, at the same time as the others).
+   * (one investigator works on one hypothesis, at the same time as the others), or "specialist:<name>" (a method specialist).
    */
   agent?: string
 }
@@ -270,6 +279,8 @@ export interface ResearchRecord {
   hypotheses?: Hypothesis[]
   /** Why no hypotheses were set, or which were set aside because the level's limits do not fit them. */
   hypothesesNote?: string
+  /** The method specialists added to this answer because their method notes fit the question (empty or absent: none fit, or the level adds none). */
+  specialists?: AnswerSpecialist[]
   steps: StepRecord[]
   searches: SearchLine[]
   sources: StoredSource[]
@@ -306,6 +317,7 @@ export type ResearchEvent =
   | { type: "opening"; text: string }
   | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin" | "agent">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
   | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note" | "agent" | "testedBy">)
+  | { type: "specialists"; items: AnswerSpecialist[] }
   | ({ type: "step.started" } & StepStart)
   | { type: "step.progress"; step: string; done: number; total?: number; note?: string }
   | ({ type: "step.finished" } & StepEnd)

@@ -407,6 +407,9 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
   }
   let lastWho: CharacterId | undefined
   let n = 0
+  // Method specialists the engine added to this answer: visitors, as in a team review. Keyed by the agent name of their steps.
+  const visitors = new Map<string, Visitor>()
+  const visitorSteps = new Map<string, { v: Visitor; label: string }>()
 
   for (const e of answerOrder(events)) {
     const at = num(e.at)
@@ -422,9 +425,27 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         m.startedAt = at ?? m.startedAt
         b.log(at, `The answer started${m.provenance === "practice" ? " (practice: fixed example text, nothing is searched)" : ""}.`)
         break
+      case "specialists": {
+        for (const item of Array.isArray(e.items) ? (e.items as Record<string, unknown>[]) : []) {
+          const agent = str(item?.agent), title = str(item?.title) ?? str(item?.name)
+          if (!agent || !title || visitors.has(agent)) continue
+          const v: Visitor = { id: agent, name: title, title, why: clip(str(item.why) ?? "", 200) || undefined, room: visitorRoom(`${str(item.name) ?? ""} ${title}`), state: "idle", doing: "Joined this answer. Waiting for the sources.", since: at }
+          visitors.set(agent, v); m.visitors.push(v)
+          b.log(at, `${title} joined this answer as a method specialist.${v.why ? ` ${v.why}` : ""}`, title)
+        }
+        break
+      }
       case "step.started": {
         const id = str(e.step), kind = str(e.kind) ?? "", label = str(e.label) || "Working"
         if (!id || steps.has(id)) break
+        const guest = visitors.get(str(e.agent) ?? "")
+        if (guest) {
+          if (visitorSteps.has(id)) break
+          visitorSteps.set(id, { v: guest, label })
+          guest.state = "working"; guest.doing = `${label}.`; guest.since = at
+          b.log(at, `${label}.`, guest.name, undefined, { kind: "write" })
+          break
+        }
         const provider = str(e.provider), inv = investigatorOf(str(e.agent)), hyp = clip(str(e.hypothesis) ?? "", 8)
         const who = inv?.who ?? stepCharacter(kind, provider)
         if (!who) { b.log(at, `${label}.`); break }
@@ -461,6 +482,16 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         break
       }
       case "step.finished": {
+        const mine = visitorSteps.get(str(e.step) ?? "")
+        if (mine) {
+          visitorSteps.delete(str(e.step) ?? "")
+          const said = clip(str(e.summary) ?? str(e.error) ?? "", 200)
+          mine.v.state = e.status === "failed" ? "failed" : e.status === "cancelled" ? "cancelled" : e.status === "empty" ? "idle" : "done"
+          mine.v.doing = e.status === "completed" ? `Gave its section to the writer.${said ? ` ${said}` : ""}` : said || "Wrote nothing for this answer."
+          mine.v.since = at
+          b.log(at, `${mine.v.name}: ${mine.v.doing.charAt(0).toLowerCase()}${mine.v.doing.slice(1)}`, mine.v.name, e.status === "failed" ? "bad" : e.status === "empty" ? "warn" : undefined, { kind: e.status === "failed" ? "failed" : "write" })
+          break
+        }
         const s = steps.get(str(e.step) ?? ""); if (!s?.running) break
         s.running = false
         const status = e.status === "empty" || e.status === "failed" || e.status === "cancelled" ? e.status : "completed"
@@ -532,6 +563,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "research.failed": {
         const why = clip(str(e.error) ?? "The answer could not be finished.", 300)
         m.status = "failed"; m.note = why
+        for (const v of visitors.values()) if (v.state === "working") { v.state = "idle"; v.doing = "Stopped: the answer failed."; v.since = at }
         const open = [...steps.values()].filter((s) => s.running)
         for (const s of open) {
           s.running = false
@@ -545,6 +577,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       }
       case "research.cancelled":
         for (const s of steps.values()) s.running = false
+        for (const v of visitors.values()) if (v.state === "working") { v.state = "cancelled"; v.doing = "Stopped: the answer was cancelled."; v.since = at }
         b.cancel(at, "This answer was cancelled.")
         b.log(at, "The answer was cancelled. Everyone is back at their desks.", undefined, "warn")
         break

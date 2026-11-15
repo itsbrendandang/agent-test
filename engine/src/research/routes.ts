@@ -37,6 +37,7 @@ import { take } from "../runlock.ts"
 import { FirstPass } from "../board/triage.ts"
 import { demoBrain } from "./demo.ts"
 import { type Database, Interrupted, modelNames, type PipelineDeps, realBrain, runAnswer } from "./pipeline.ts"
+import { type Match, matchSpecialists } from "../specialists.ts"
 import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThreadId, listArtifacts, listRecords, loadRecord, newAnswerId, newThreadId, readArtifact, ResearchLog, saveRecord, threadLines, threadRecords } from "./store.ts"
 import { plainBlock, scrub } from "./text.ts"
 import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts"
@@ -59,6 +60,8 @@ export interface ResearchDeps {
   literature?: (query: string) => Promise<SearchResult>
   database?: (source: Database, query: string) => Promise<SearchResult>
   now?: () => number
+  /** The method specialists that fit a question. Default: the matcher of specialists.ts over glhf/specialists. */
+  specialists?: (question: string) => Match[]
   /** Tests: called right after a step's outcome was stored (its key). Returning "stop" stops this process's work at that exact point, as a killed engine would. */
   onStored?: (key: string) => void | "stop"
 }
@@ -182,7 +185,7 @@ export function createResearch(deps: ResearchDeps) {
             return winner as never
           }
           const stored = async () => Object.keys(((await runtime.getTask(runtime.taskId, context)) as { memos?: Record<string, unknown> } | undefined)?.memos ?? {})
-          const shared = { config, limits, env, earlier, remember, stored, now: deps.now, interrupted: halted, cancel: active.get(id)?.cancel.signal, cancelRequested: () => existsSync(cancelFile(id)) }
+          const shared = { config, limits, env, earlier, remember, stored, specialists: deps.specialists ?? ((question: string) => matchSpecialists(question)), now: deps.now, interrupted: halted, cancel: active.get(id)?.cancel.signal, cancelRequested: () => existsSync(cancelFile(id)) }
           let pipeline: PipelineDeps
           if (record.mode === "demo") {
             pipeline = {

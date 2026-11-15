@@ -54,7 +54,7 @@ globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestIni
 
 // ── The fake models ──────────────────────────────────────────────────────────────────────────────
 
-export type Role = "plan" | "hypothesize" | "screen" | "check" | "stance" | "write" | "section" | "critic" | "revise" | "rejudge"
+export type Role = "plan" | "hypothesize" | "screen" | "check" | "stance" | "write" | "section" | "specialist" | "critic" | "revise" | "rejudge"
 export interface Call { role: Role; provider: string; model: string; system: string; user: string; options: { maxTokens?: number; reasoning?: string; signal?: AbortSignal } }
 /** What a fake model answers: text, or `{error}` for a call the vendor fails (the text is the vendor's message). */
 export type Reply = string | { error: string }
@@ -69,7 +69,8 @@ const roleOf = (system: string): Role =>
         : system.includes("# Your task now") ? "rejudge"
           : system.includes("# Your task here") ? "critic"
           : system.includes("# The revision") ? "revise"
-            : system.includes("# You are the investigator of one hypothesis") ? "section" : "write"
+            : system.includes("# You are the investigator of one hypothesis") ? "section"
+              : system.includes("# You are a method specialist added to this answer") ? "specialist" : "write"
 
 const unescape = (text: string) => text.replaceAll("&lt;", "<")
 /** The numbered sources a writer, reviser or critic was given, read back from the evidence block of its prompt. */
@@ -91,6 +92,12 @@ export const DEFAULTS: { [R in Role]: (call: Call, n: number) => string } = {
   section: (call) => {
     const label = /Yours is (H\d)\./.exec(call.system)?.[1] ?? "H1"
     return [`### ${label}: section`, `**For:** ${sourcesIn(call.user).map((s) => `${firstSentence(s.text).replace(/[.!?]$/, "")} [${s.n}].`).join(" ")}`].join("\n")
+  },
+  // A method specialist's section: the second sentence of one source it was given (the writer copies the first sentences; each specialist takes another source).
+  specialist: (call, n) => {
+    const s = sourcesIn(call.user)[n - 1]
+    const second = s?.text.split(/(?<=[.!?])\s+/)[1]
+    return ["### Method view: section", second ? `${second.replace(/[.!?]$/, "")} [${s.n}].` : "The sources found do not report this."].join("\n")
   },
   // No hypotheses unless a test asks for them: the question is treated as a plain one.
   hypothesize: () => JSON.stringify({ needed: false, reason: "This is a plain question with one answer to look up." }),
@@ -206,7 +213,7 @@ export async function engine(options: EngineOptions = {}) {
   const research = createResearch({
     config, env, hasToken: (req) => req.headers["x-glhf-token"] === token, tokenFile: "glhf/runs/.token",
     mock: () => options.demo === true || (env.NO_PAID_CALLS ?? "").trim() !== "0",
-    models: () => models, onStored: options.onStored, ...options.deps,
+    models: () => models, onStored: options.onStored, specialists: () => [], ...options.deps, // no method specialist unless a test asks for them
   })
   const server = createServer((req, res) => void research.handle(req, res, new URL(req.url ?? "/", "http://x").pathname.split("/").filter(Boolean)))
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready))
