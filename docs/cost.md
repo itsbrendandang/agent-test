@@ -5,6 +5,26 @@ Written 2026-11-14, **updated 2026-11-15** for the direct-provider rewire and th
 proposal is in sections 5 to 8. State described: commit `b749e38` plus the uncommitted edits to `board.ts`, `triage.ts`,
 `events.ts`, `board/config.yaml` and `chat/README.md` (tested in a private worktree).
 
+> **Read this first (update, branch `fm/engine-review-cost`).** The team-review roster changed after this file was
+> written. The `board:` list in `board/config.yaml` now has six members: scout, proposer, experimenter, methods-auditor,
+> critic, reporter. The experimenter has Pilot, Experimenter and Reviser modes (`board/agents/experimenter.md`); there is
+> no separate pilot, reviser or finisher. The scout has three search tools: `exa_search`, `literature_search` and
+> `database_search` (`board/agents/scout.md`). The lead has `converse` and `write_memo`; the other members have no tool.
+>
+> - The team-review estimates in sections 0, 3, 4, 5, 6 and 7 model the **old 9-role roster, with `tools: []` and Exa
+>   dormant**. They are superseded. They stay here as a record of the method.
+> - **One real team review on today's roster is recorded**, in `README.md` ("Where things stand", commit `dc37c8d`):
+>   3 Exa searches, 5 literature searches, 204 statements checked (71 supported, 28 without enough evidence, 105 not
+>   checked, none contradicted), **$1.31 and 8 minutes**. At that commit `board/config.yaml` already had the six-member
+>   roster and the same model tiers. It is one run. Its run folder and its tokens per model were not kept in the repo,
+>   so it cannot be split by model or by step. It is the only real figure for a team review; the old $0.37 has no
+>   searches, no screening of search results and no checks against retrieved sources.
+> - A team review's `run.json` now has a `usage` field: tokens (input, output, cache reads, cache writes) and cost for
+>   each model (`state.usage` in `engine/src/board/board.ts`, added on this branch). It is per model, not per member: in
+>   a real run the lead and the four strong members share `claude-sonnet-5-5` (`modelFor` in `engine/src/models.ts`).
+>   From now on a real run keeps the counts that can replace the estimate.
+> - The swarm numbers in sections 1a and 1b are measurements. The roster change does not touch them.
+
 **Labels.** `[measured]` comes from a recorded run in this repo. `[catalog]` is a price taken from the model catalog
 bundled in `@earendil-works/pi-ai` 1.5.2 (`engine/node_modules/.../providers/*.models.js`); it is a snapshot, not a live
 price list, and I could not check it against the providers without a key. `[estimate]` is my own number and the
@@ -17,14 +37,16 @@ Dollar amounts are US dollars per million tokens ("Mtok") unless said otherwise.
 |---|---|---|
 | One swarm run on the demo case, `claude-sonnet-5-5` | **$0.23** (200K-token cap, score 1.0) to **$0.38** (Exa on) | `[measured]` tokens, `[catalog]` prices (section 1) |
 | One single-agent run, same case | **$0.027** | `[measured]` + `[catalog]` |
-| One board run, **current config** (9 roles, no tools, Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic), 3 rounds | **about $0.37 with prompt caching, $0.49 without**; low-to-high $0.25 to $0.74 cached, $0.33 to $1.17 uncached | `[estimate]`: no real board run has ever been recorded (section 3) |
-| Of that, the five "strong" roles | about **three quarters** ($0.277 of $0.373) | `[estimate]` |
-| Lead on Opus instead of Sonnet | **+$0.08** (cached) to **+$0.12** (uncached) per run | `[estimate]` |
-| Strong tier on Haiku instead of Sonnet | **$0.11** per run (**-70%**), quality effect unmeasured | `[estimate]` |
-| Effect of removing Jev | **under $0.01 per run today**: no member has a search tool, so there is no triage, and only claims about the brief are checked first-pass (section 4). If search comes back: +$0.03 to +$0.10 per run | `[estimate]` |
-| Cheapest honest board run (section 7) | **about $0.10**, range **$0.05 to $0.25** (4 roles, 2 rounds); **about $0.13** if the scout also searches | `[estimate]` |
+| One board run, **today's 6-member roster** (the scout searches) | **$1.31**, 8 minutes: one real run | `[measured]` once, recorded in `README.md`; its tokens per model were not kept. The `usage` field in `run.json` keeps them from now on |
+| One board run, **old 9-role roster, superseded** (no tools, Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic), 3 rounds | **about $0.37 with prompt caching, $0.49 without**; low-to-high $0.25 to $0.74 cached, $0.33 to $1.17 uncached | `[estimate]`, made before any real board run (section 3) |
+| Of that (old roster), the five "strong" roles | about **three quarters** ($0.277 of $0.373) | `[estimate]` |
+| Lead on Opus instead of Sonnet (old roster) | **+$0.08** (cached) to **+$0.12** (uncached) per run | `[estimate]` |
+| Strong tier on Haiku instead of Sonnet (old roster) | **$0.11** per run (**-70%**), quality effect unmeasured | `[estimate]` |
+| Effect of removing Jev | **under $0.01 per run on the old roster**: no member had a search tool, so there was no triage, and only claims about the brief were checked first-pass (section 4). The old estimate with search (7 searching members) was +$0.03 to +$0.10 per run. Today the scout searches, so "under $0.01" no longer holds; not re-estimated | `[estimate]` |
+| Cheapest honest board run (section 7), old roster, superseded | **about $0.10**, range **$0.05 to $0.25** (4 roles, 2 rounds); **about $0.13** if the scout also searches | `[estimate]` |
+| One research answer, `quick` (Research screen) | **$0.074** and 30.9 s, one real answer; the rest are estimates | `[measured]` once, in `docs/research-answer.md` (section 10) |
 
-Three findings that change the plan:
+Three findings for the old roster (the second no longer holds):
 
 1. **Opus for the lead is not the money problem.** The lead makes 3 to 4 model calls and writes one memo, about 45K input and
    2K output tokens. It is 21 to 22% of a run. The money is in the **five "strong" roles** (proposer, experimenter, methods
@@ -33,7 +55,8 @@ Three findings that change the plan:
    `board/agents/*.md`, and the experimenter's own prompt says "You cannot run code on this board yet"). So a real run has no
    retrieved evidence and no computation: literature claims come back `unsupported` ("source is not in the screened evidence
    pool", no model call), computed claims are `unchecked`, and only claims about the brief's own tables can be `verified`. The
-   dollar cost is low *because* it does little research. See section 7.
+   dollar cost is low *because* it does little research. See section 7. **Superseded:** the scout now searches, so a
+   literature claim that cites a source it found can be checked.
 3. **The biggest swing in the checker is a setting, not a model**, and the rewire already handles it: see section 4.
 
 ## 1. What was measured
@@ -106,10 +129,10 @@ swarm; the present one has no real result.
 ### 1c. What the board runs recorded
 
 All 12 older runs under `board/runs` are scripted (`usd: 0`) and used the earlier 8-member drug roster with search tools. I
-also ran one scripted run on the current nine-role roster (below). Scripted runs give **counts of calls**, never token counts
+also ran one scripted run on the nine-role roster of that time (below; superseded since). Scripted runs give **counts of calls**, never token counts
 or dollars.
 
-| Item | Older 8-member roster (12 runs, identical) | Current 9-role roster (1 run, `b749e38` + edits) |
+| Item | Older 8-member roster (12 runs, identical) | 9-role roster, superseded (1 run, `b749e38` + edits) |
 |---|---|---|
 | Rounds (2 working + 1 final) | 3 | 3 |
 | Member replies | 24 | **27** |
@@ -127,7 +150,7 @@ or dollars.
 |---|---|---|---|---|---|
 | `claude-opus-5-5` | 4 | 20 | 0.20 | 5 | optional lead (comment in `board/config.yaml`) |
 | `claude-sonnet-5-5` | 2 | 10 | 0.10 | 2.50 | strong tier; swarm (measured) |
-| `claude-haiku-5-5` | 0.10 | 0.50 | 0.01 | 0.125 | cheap tier (scout, pilot, finisher); first-pass checker for the critic's claims |
+| `claude-haiku-5-5` | 0.10 | 0.50 | 0.01 | 0.125 | cheap tier (today the scout; the old roster also had pilot and finisher); first-pass checker for the critic's claims |
 | `gpt-5.5` | 5 | 30 | 0.50 | none | strong rival |
 | `gpt-5.4` | 2.5 | 15 | 0.25 | none | |
 | `gpt-5.4-mini` | 0.75 | 4.50 | 0.075 | none | rival |
@@ -143,8 +166,13 @@ check is **unknown**; `checkers.ts` reads `total_cost_usd` from its JSON output 
 
 ## 3. Cost of one board run `[estimate]`
 
-No real board run exists, so this is a model, not a measurement. The model is in `/tmp/costmodel/model.py` and `run5.py`; the
-logic is below so it can be redone by hand.
+> **Superseded: old 9-role roster.** This section models the roster before the change described at the top. It assumes
+> no tools and no searches. Today the scout searches, its results are screened by the first pass, and literature claims
+> can be checked against them. None of that is in these numbers. Do not quote $0.37 as the cost of a team review today:
+> the one real run recorded on today's roster cost $1.31 (`README.md`).
+
+No real board run existed when this was written, so this is a model, not a measurement. The model was in `/tmp/costmodel/model.py` and
+`run5.py`. These scripts are not kept in the repo. The logic is below so it can be redone by hand.
 
 ### Structure (read from `engine/src/board/board.ts`, `agents.ts`, `board/agents/*.md`, `board/config.yaml`)
 
@@ -184,7 +212,7 @@ Check, round 2: 2,000 x 0.10 + 7,175 x 2.50 + 700 x 10 = 200 + 17,938 + 7,000 = 
 members make 5 x $0.0553 = **$0.277**. Note that in round 1 caching costs slightly more (a write premium) and from round 3 it
 pays.
 
-### Result (current tier mapping, catalog prices)
+### Result (old roster's tier mapping, catalog prices)
 
 | Scenario | Input tokens | Output tokens | Uncached | Cached |
 |---|---|---|---|---|
@@ -224,6 +252,12 @@ Jev was a classifier at about $0.042 per Mtok of input and nothing for output (`
 replaced (`engine/src/board/triage.ts`, `providers.ts`) by a cheap model that answers in strict JSON and must quote the source; code
 accepts "verified" only if the quote is in the source and contains the claim's numbers. The checker is always from the other
 vendor than the member: Haiku for the critic's claims, `gpt-4o-mini` for everyone else's.
+
+> **Superseded in part.** "Today" below means the old roster. The scout now has the search tools, so search results
+> are screened and claims are checked against retrieved sources: the case "if a member gets the search tool back" is
+> the current one, with one searching member, not seven. One more correction: the screening is one call on the cheap
+> model for all new results of one search (`triage` in `engine/src/board/triage.ts`, called from `poolEvidence` in
+> `engine/src/board/board.ts`), not one call per result. Not re-estimated.
 
 **Today the effect is almost nothing**, for two reasons that follow from the roster:
 
@@ -277,7 +311,9 @@ None of these matters in dollars today: the whole first pass is under a cent.
 The vendor split is kept as a correctness property, not a cost line: **the lead (Anthropic) and the critic (OpenAI) are on
 different vendors, and no claim is first-checked by its own claimant's vendor.** `board/config.yaml` says so in its comments.
 
-What the config does now, with cost per tier `[estimate]`, mid scenario, cached:
+What the config did for the old roster, with cost per tier `[estimate]`, mid scenario, cached. Today, by `model:` in
+`board/agents/*.md`: strong is proposer, experimenter, methods-auditor and reporter (4); cheap is the scout; rival is the
+critic; the lead is on `models.lead`. The costs below were not redone for that.
 
 | Tier | Agents | What it does | Model now | Cost / run | What is lost by going a tier down |
 |---|---|---|---|---|---|
@@ -286,14 +322,14 @@ What the config does now, with cost per tier `[estimate]`, mid scenario, cached:
 | cheap | scout, pilot, finisher | Inventory, small test, completeness check. | `claude-haiku-5-5` | $0.008 | Already the cheapest Anthropic model. Nothing below it in the catalog worth using. |
 | rival | critic | Attacks the conclusions. 3 calls. | `gpt-5-mini` (comment: `gpt-5.5` is the stronger option) | $0.007 | `gpt-5.5` would cost $0.129 (+$0.12) for a stronger attacker. It is the role that supplies independence, so spend here before anywhere else. It must stay off the lead's vendor. |
 | first-pass checker | every claim about the brief; every search result if search returns | Strict JSON, quote must be in the source. | Haiku for the critic's claims, `gpt-4o-mini` for the rest, reasoning off | $0.002 to $0.007 | Jev gave calibrated probabilities; this gives a category and a quote. Verified means "a different vendor's model found a real passage with the claim's numbers". It does not prove the passage supports the claim (`triage.ts` says so). |
-| escalation | contested literature claims | OpenAI `gpt-5-mini` reads the evidence. | keep | $0.001 each | **Independence gap (read, `board.ts:580`):** the escalation always calls `openaiCheck`, whatever the claimant's vendor, so a claim by the OpenAI critic that the first pass cannot settle is escalated to an OpenAI model. The first pass is vendor-aware; the escalation is not. |
+| escalation | contested literature claims | A model of the other vendor reads the evidence. | keep | $0.001 each (on `gpt-5-mini`) | **Fixed since.** `escalationModel` (`engine/src/providers.ts`) picks the OpenAI checker model (`checkers.openai_model`) for a Claude member's claim and the strong-tier Claude model for an OpenAI member's claim (the critic). `engine/src/board/board.ts` calls it for each contested literature claim; with no model of another vendor the claim is recorded `unchecked`. An escalation of the critic's claim now runs on `claude-sonnet-5-5`, dearer per token than `gpt-5-mini` (section 2); not re-estimated. |
 | escalation, computed | computed claims | `claude -p --restricted` | **not called**: recorded `unchecked` | $0 | A computed claim is never verified by this board. |
 
 Alternatives, whole run, mid, `[estimate]`:
 
 | Mapping | Cached | Uncached |
 |---|---|---|
-| **Current** (Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic) | **$0.373** | **$0.493** |
+| **Old roster** (Sonnet lead and strong, Haiku cheap, `gpt-5-mini` critic) | **$0.373** | **$0.493** |
 | Opus lead | $0.453 | $0.615 |
 | Haiku strong, Sonnet lead | $0.110 | $0.160 |
 | Critic on `gpt-5.5` | $0.494 | $0.666 |
@@ -304,7 +340,8 @@ once with `strong: claude-haiku-5-5`, and compare the number and quality of chec
 
 ## 6. Biggest avoidable spend in the hot path
 
-Ranked by dollars, mid scale, `[estimate]` unless noted. The earlier hazards were fixed by the rewire; what remains is smaller.
+Ranked by dollars, mid scale, `[estimate]` unless noted, for the old roster. The earlier hazards were fixed by the rewire;
+what remains is smaller.
 
 | # | What | Cost | Status / how to cut | Saving |
 |---|---|---|---|---|
@@ -313,7 +350,7 @@ Ranked by dollars, mid scale, `[estimate]` unless noted. The earlier hazards wer
 | 3 | **Opus lead** (optional). | +$0.08 | Stay on Sonnet. | $0.08 |
 | 4 | **Rounds.** `max_rounds: 4`; a high run is 4 rounds and costs 2x the mid one ($0.74). | | The lead decides; the gate refuses a round whose estimated cost would pass `max_usd`. A demo caps at 2. | up to 50% |
 | 5 | **Claude Code on computed claims**: no longer a cost. Computed claims are `unchecked`. The old design would have paid $0.1 to $0.4 and up to 36 minutes. | $0 | done | |
-| 6 | **Exa uncounted**: fixed. Searches now count in `max_usd` and `daily_usd`; per-run cap 20; lifetime ledger with a $40 ceiling. Dormant today. | $0 today | done | |
+| 6 | **Exa uncounted**: fixed. Searches now count in `max_usd` and `daily_usd`; per-run cap 20; lifetime ledger with a $40 ceiling. No longer dormant: the scout now searches. | not measured | done | |
 | 7 | **Checker reasoning**: handled by `quietReasoning`. | | done; verify with `usage.reasoning` | |
 | 8 | **Plan limits not applied**: now applied for members and limits (measured: a quick plan ran 2 members for 1 round). **Not applied: model tier and search cap**, as the plan's own warning says. | | partly done | |
 | 9 | **Repeated claims**, triage memo | under $0.003 | done | |
@@ -331,7 +368,15 @@ different vendor's model found the claim's numbers in the brief's own table. The
 placeholders", so the verified claims restate placeholders. That is a demonstration of the machinery and nothing about
 the drug. Say so when showing it.
 
-### Demo A, as the board is today
+> **Superseded: old 9-role roster.** Demo A and Demo B were planned for the old roster. Demo B's change has been made:
+> the scout now has `exa_search` and two free search tools. Neither figure below ($0.10, $0.13) was checked by a real
+> run, and neither describes today's roster. The one real run recorded (`README.md`) used the full six-member roster and
+> cost $1.31. A real run now also needs `EXA_API_KEY`: `startRun` in
+> `engine/src/board/board.ts` asks for it when a roster member has `exa_search` (`missingKeys` in
+> `engine/src/providers.ts`). The current steps for one real run are in
+> [readiness.md section 9](readiness.md#9-to-do-one-real-run).
+
+### Demo A, as the board was then
 
 | Choice | Value |
 |---|---|
@@ -370,8 +415,9 @@ overshoot. At these prices that is a few cents; **the worst case is bounded by `
 $1.15 for the cap of $1 in the demo.
 
 What to look at in the result: `board/runs/<id>/verification_ledger.json` (each claim, its checker, `checkedBy`, `quoteFound`,
-the quoted passage), `run.json` fields `usd`, `firstPassUsd`, `checkerUsd`, `costEstimated`. After the run, **replace the
-estimates in this file** with the real token counts, cache reads and searches.
+the quoted passage), `run.json` fields `usd`, `firstPassUsd`, `checkerUsd`, `costEstimated`, and `usage` (tokens and cost
+for each model). After the run, **replace the estimates in this file** with the real token counts, cache reads and
+searches.
 
 ## 8. Cap and accounting notes
 
@@ -385,11 +431,22 @@ estimates in this file** with the real token counts, cache reads and searches.
 
 ## 9. What could not be verified without spending
 
-- Any real board token count, cache hit rate or dollar figure (no real run exists).
+- Any real board token count or cache hit rate. The one real run (`README.md`, $1.31) kept no tokens per model; the
+  `usage` field keeps them from now on.
 - That the catalog prices are the accounts' prices.
 - That the providers honour the reasoning setting (`usage.reasoning` on the first reply will show), and that `claude-haiku-5-5`,
-  `gpt-5-mini` and `gpt-4o-mini` are available to the keys. Only `claude-sonnet-5-5` and `gpt-4o` have been used for real.
-- That the board's members write the `CLAIMS` section on a real model as the scripted ones do. A real run that produces no
-  claims has nothing to check.
+  `gpt-5-mini` and `gpt-4o-mini` are available to the keys. Only `claude-sonnet-5-5` and `gpt-4o` are recorded as used for real; the
+  one real team review (`README.md`) kept no record per model.
+- That the board's members write the `CLAIMS` section on a real model as reliably as the scripted ones do. Shown once: the
+  real run in `README.md` checked 204 statements.
 - Exa's real price per search (the config's $0.007 is from two searches).
 - Quality loss from any lower tier; nothing in the repo measures it.
+
+## 10. The research answer (Research screen)
+
+The research answer is a different path from the team review: one question typed on the Research screen
+(the Search screen in older documents; `POST /api/research`). Its cost is in [research-answer.md](research-answer.md#what-one-answer-costs-estimate-not-measured).
+In short: one real `quick` answer was measured, 30.9 seconds and $0.074. All other figures there are estimates
+(expected about $0.05 for `quick` and about $0.07 for `standard`). The limits per answer are $0.15 (`quick`) and $0.60
+(`standard`), under `research:` in `board/config.yaml`. In Real mode a direct answer needs the engine started with
+`RESEARCH_PREVIEW=1` ([readiness.md section 10](readiness.md#10-direct-answers-on-the-research-screen)).

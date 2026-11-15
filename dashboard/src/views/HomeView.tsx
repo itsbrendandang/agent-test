@@ -16,7 +16,7 @@ import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type E
 import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, sourcesWords, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { PlanCard } from "@/home/PlanCard"
 import { plainWhen, runTitle } from "@/lib/format"
-import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
+import { cancelResearch, DIRECT_ANSWERS_OFF, DirectAnswersOff, ResearchRefused, startResearch } from "@/research/api"
 import { AgentsWorking } from "@/research/AgentsWorking"
 import { AskBox } from "@/research/AskBox"
 import { TryAsking } from "@/research/TryAsking"
@@ -66,6 +66,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const loadedTurns = useRef(turns) // what the page started with
   const thread = useRef<string | undefined>(undefined) // the engine's id for this conversation of direct answers
   const [canAnswer, setCanAnswer] = useState<"unknown" | "here" | "missing">("unknown") // whether this engine can answer directly
+  const [answersOff, setAnswersOff] = useState(false) // the engine said direct answers are switched off (Real mode without RESEARCH_PREVIEW=1)
 
   useEffect(() => {
     let stale = false
@@ -130,7 +131,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           return
         } catch (error) {
           if (!(error instanceof ResearchRefused) || error.status !== 404 || error.field) throw error
-          setCanAnswer("missing") // an older engine: it can plan a review but not answer directly
+          setCanAnswer("missing") // an older engine, or direct answers switched off: it can plan a review but not answer directly
+          if (error instanceof DirectAnswersOff) setAnswersOff(true) // said under the box, so the plan is not mistaken for an answer
         }
       }
       const request = chatRequest(turns, asked, how === "review" ? { ...choice, effort: choice.effort } : choice)
@@ -205,6 +207,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       invalid={problem?.control === "box"} describedBy={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`}
       beforeSend={activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
       sendLabel={activeId ? "Send (queued)" : undefined} sendTitle={activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
+      {(answersOff || catalog?.directAnswers === false) && <p className="muted small" role="status" id="home-direct-off">{DIRECT_ANSWERS_OFF}</p>}
       {stopNote && activeId === undefined && <p className="muted small" role="status">{stopNote}</p>}
       {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}

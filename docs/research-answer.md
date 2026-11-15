@@ -7,7 +7,9 @@ costs, and what the marks mean.
 > **Status.** Built and tested with fake models and a fake network (`engine/test/research-*.test.ts`). One real
 > answer has been written so far (a `quick` one: 30.9 seconds, $0.074, 14 cited sentences). That is one run, not a
 > measurement of quality. A real answer needs the engine to be started with `RESEARCH_PREVIEW=1`; without it, in
-> Real mode, `POST /api/research` answers 503. Demo mode works without it.
+> Real mode, `POST /api/research` answers 503 and the Search screen makes a team-review plan instead. Demo mode works
+> without it. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say
+> whether it is on, and the Search screen says so under the question box when it is off.
 
 The two levels on this page are `quick` and `standard`. The third level, `deep`, is the team review
 ([drug-board.md](drug-board.md)): it gives you a plan that you confirm. This page does not change it.
@@ -326,6 +328,10 @@ prepare, hypothesize, search, evaluate, write, check, review, revise, save; stat
 `board/runs/.research/<id>/` (the runs folder can be moved with `DRUG_BOARD_RUNS_DIR`): `record.json`,
 `events.jsonl`, `session.sqlite`, and for a finished answer `answer.md`, `sources.json`, `sources.csv` and
 `artifacts.json`. Threads have no file of their own: each record names its thread.
+
+`record.json` has a `manifest`: the commit the engine ran (`commit`, and `dirty` when tracked files had changes),
+hashes of `board/config.yaml`, the board's agent files and the prompts in `engine/src/research/prompts/`, and the
+versions of Node, pi-ai and pi-durable (`engine/src/manifest.ts`). Records written before it have none.
 
 ## Limits
 

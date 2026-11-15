@@ -10,7 +10,7 @@ Each local run has a folder `glhf/runs/<run-id>/`. Run folders are not in git.
 | File | Written by | Content |
 |---|---|---|
 | `record.json` | Run tracker | The run as the CLI and the dashboard show it: phase, score, settings. |
-| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. |
+| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. Token use has input, output and total, plus cache reads and writes, reasoning tokens and cost (`total_cost`) when Inspect reports them. `versions` has the git commit (`git_commit`) and whether tracked files had changes (`git_dirty`). |
 | `grade.json` | The benchmark's grader | The full grade. |
 | `runner.log`, `tracker.log` | Runner, run tracker | Logs. Read `runner.log` first when a run fails. |
 | `logs/` | Inspect | Every model call of the run. |
@@ -232,7 +232,7 @@ time limits end phases at different points.
 
 Fixed or recorded: the order of roles and their budgets (code), the verdicts (code), every model
 call (`logs/`), every search query and claim (ledger), the analysis scripts, and the settings,
-seed and versions (`run.json`).
+seed, versions and git commit (`run.json`).
 
 Report the mean and the range of several runs, not one run.
 
