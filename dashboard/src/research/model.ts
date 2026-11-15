@@ -20,7 +20,8 @@ export interface Step {
   ms?: number; found?: number; kept?: number; done?: number; total?: number; summary?: string; error?: string; consequence?: string
 }
 export interface Recommendation { label: string; text: string; why: string; basis: number[]; does?: string }
-export interface Artifact { id: string; name: string; type: string; bytes: number }
+export interface Artifact { id: string; name: string; type: string; bytes: number; at?: number }
+export interface Selection { criteria: string; selected: { n: number; why: string; limitation?: string }[]; notSelected: { title: string; url: string; provider: Provider; reason: string }[] }
 export type ResearchEvent = { type: string; at?: number; seq?: number } & Record<string, unknown>
 
 export interface AnswerState {
@@ -32,6 +33,10 @@ export interface AnswerState {
   /** The source numbers the final text cites, when the engine said. */
   cited?: number[]
   recommendations: Recommendation[]; artifacts: Artifact[]
+  /** Why these sources were chosen, and what was found but left out. Written by the engine's code, not by a model. */
+  selection?: Selection
+  /** The engine restarted while this answer was being made, and went on with it. */
+  resumed?: boolean
   /** The answer this one waits for (a follow-up sent while the thread was busy). */
   queuedAfter?: string
   /** The text to show now, and whether it is the engine's complete text (false: still being written). */
@@ -52,7 +57,10 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
   const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
   let deltas = "", written: string | undefined, revised: string | undefined
   const draft: Statement[] = [], final: Statement[] = []
-  for (const e of [...events].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
+  // In order of seq, each seq once: a replay after a reconnect, or events that arrive out of order, change nothing.
+  const once = new Map<number, ResearchEvent>(); const loose: ResearchEvent[] = []
+  for (const e of events) { if (typeof e.seq === "number") { if (!once.has(e.seq)) once.set(e.seq, e) } else loose.push(e) }
+  for (const e of [...[...once.values()].sort((a, b) => a.seq! - b.seq!), ...loose]) {
     if (s.status === "starting" || (s.status === "queued" && e.type !== "research.queued")) s.status = "running"
     switch (e.type) {
       case "research.started":
@@ -73,11 +81,24 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "opening": s.opening = str(e.text); break
+      case "selection":
+        s.selection = {
+          criteria: str(e.criteria) ?? "",
+          selected: Array.isArray(e.selected) ? (e.selected as Record<string, unknown>[]).flatMap((x) => (num(x?.n) !== undefined ? [{ n: num(x.n)!, why: str(x.why) ?? "", limitation: str(x.limitation) }] : [])) : [],
+          notSelected: Array.isArray(e.notSelected) ? (e.notSelected as Record<string, unknown>[]).flatMap((x) => (str(x?.title) !== undefined || str(x?.url) ? [{ title: str(x.title) ?? "", url: str(x.url) ?? "", provider: str(x.provider) ?? "", reason: str(x.reason) ?? "" }] : [])) : [],
+        }
+        break
       case "sources.cited": if (Array.isArray(e.n)) s.cited = (e.n as unknown[]).filter((n): n is number => typeof n === "number"); break
       case "recommendations":
         if (Array.isArray(e.items)) s.recommendations = (e.items as Record<string, unknown>[]).flatMap((r) => (str(r?.text) ? [{ label: str(r.label) ?? "Next step", text: str(r.text)!, why: str(r.why) ?? "", basis: Array.isArray(r.basis) ? (r.basis as unknown[]).filter((n): n is number => typeof n === "number") : [], does: str(r.does) }] : [])).slice(0, 3)
         break
-      case "artifact.created": if (str(e.name) && !s.artifacts.some((a) => a.name === e.name)) s.artifacts.push({ id: str(e.id) ?? str(e.name)!, name: str(e.name)!, type: str(e.type) ?? "", bytes: num(e.bytes) ?? 0 }); break
+      case "artifact.created": {
+        // The file is nested ({artifact: {...}}), because the envelope already uses `type` and `at`. The flat form is read too.
+        const f = (e.artifact && typeof e.artifact === "object" ? e.artifact : e) as Record<string, unknown>
+        if (str(f.name) && !s.artifacts.some((a) => a.name === f.name)) s.artifacts.push({ id: str(f.id) ?? str(f.name)!, name: str(f.name)!, type: e.artifact ? str(f.type) ?? "" : "", bytes: num(f.bytes) ?? 0, at: num(f.at) })
+        break
+      }
+      case "research.resumed": s.resumed = true; break
       case "research.cancelled": s.status = "cancelled"; s.spentUsd = num(e.spentUsd); s.seconds = num(e.seconds); break
       case "search.started": if (str(e.provider) && str(e.query) !== undefined) s.searches.push({ provider: str(e.provider)!, query: str(e.query)! }); break
       case "search.finished": {
@@ -194,3 +215,57 @@ export function withMarks(markdown: string, statements: Statement[], sources: So
 /** The answer as plain text with its numbered source list, for "Copy answer". */
 export const copyText = (s: AnswerState): string =>
   [s.markdown.trim(), s.sources.length ? `\nSources\n${s.sources.map((x) => `[${x.n}] ${x.title || x.url} ${x.url}`).join("\n")}` : ""].join("\n").trim()
+
+/** The measured preparation phase: the engine's "prepare" step. undefined when the engine reported none. */
+export const preparation = (s: AnswerState): { running: boolean; ms?: number; failed?: boolean } | undefined => {
+  const p = s.steps.find((x) => x.kind === "prepare")
+  return p ? { running: p.status === "running", ms: p.ms, failed: p.status === "failed" } : undefined
+}
+/** Found, selected and cited are three different things. Counts only what the engine reported. */
+export const sourceCounts = (s: AnswerState): { found?: number; selected: number; cited?: number } => {
+  const searches = s.steps.filter((x) => x.kind === "search" && x.found !== undefined)
+  return { found: searches.length ? searches.reduce((n, x) => n + (x.found ?? 0), 0) : s.selection ? s.selection.selected.length + s.selection.notSelected.length : undefined, selected: s.sources.length, cited: s.cited?.length }
+}
+
+/**
+ * A stored record (GET /api/research/:id, or an item of GET /api/research?thread=) as the same state the events
+ * give. This is how a reload shows a finished answer at once, before or without its event stream.
+ */
+export function fromRecord(record: unknown): AnswerState | undefined {
+  const r = record as Record<string, unknown> | null
+  if (!r || typeof r.id !== "string") return undefined
+  const events: ResearchEvent[] = []
+  let seq = 0
+  const push = (type: string, rest: object) => events.push({ type, seq: ++seq, ...rest })
+  push("research.started", { id: r.id, thread: r.thread, question: r.question, effort: r.effort, mode: r.mode, caps: r.caps, models: r.models })
+  if (r.status === "queued") push("research.queued", { after: r.after })
+  for (const st of Array.isArray(r.steps) ? (r.steps as Record<string, unknown>[]) : []) { push("step.started", st); if (st.status !== "running") push("step.finished", st) }
+  if (typeof r.opening === "string") push("opening", { text: r.opening })
+  if (Array.isArray(r.sources) && r.sources.length) push("sources", { items: r.sources })
+  if (r.selection) push("selection", r.selection as object)
+  const answer = r.answer as { markdown?: unknown } | undefined
+  if (typeof r.draft === "string") push("answer.written", { markdown: r.draft })
+  else if (typeof answer?.markdown === "string") push("answer.written", { markdown: answer.markdown })
+  const review = r.review as { notes?: unknown[]; revised?: unknown } | undefined
+  for (const n of Array.isArray(review?.notes) ? (review!.notes as object[]) : []) push("review.note", n)
+  const statements = Array.isArray(r.statements) ? (r.statements as Record<string, unknown>[]) : []
+  const revised = review?.revised === true && typeof r.draft === "string" && typeof answer?.markdown === "string" && answer.markdown !== r.draft
+  if (revised) push("answer.revised", { markdown: answer!.markdown, notes: Array.isArray(review?.notes) ? review!.notes : [] })
+  for (const st of statements) push("statement.checked", { ...st, stage: revised ? "final" : st.stage ?? "draft" })
+  const cited = (Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).filter((x) => x.cited === true).map((x) => x.n)
+  if ((Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).some((x) => typeof x.cited === "boolean")) push("sources.cited", { n: cited })
+  if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
+  for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })
+  if (r.status === "done") push("research.finished", { usd: r.usd, seconds: r.seconds, counts: r.counts, searches: {}, review: r.review, stopped: r.stopped, note: r.note })
+  else if (r.status === "failed") push("research.failed", { error: r.error, spentUsd: r.usd })
+  else if (r.status === "cancelled") push("research.cancelled", { spentUsd: r.usd, seconds: r.seconds })
+  return foldAnswer(events)
+}
+
+/** A duration the engine measured, short, for a label: "0.3s", "2s", "41s", "2m 5s". */
+export function seconds(ms: number | undefined): string {
+  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "–"
+  if (ms < 950) return `${Math.max(0.1, Math.round(ms / 100) / 10).toFixed(1)}s`
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+}

@@ -3,14 +3,14 @@
 // Everything shown comes from the answer's own events. A mark appears only where a check was recorded; a sentence
 // without one is background and carries no mark. A demo answer is labelled a demo and its marks say so.
 import { useEffect, useId, useMemo, useRef, useState } from "react"
-import { Loading } from "@/components/Crew"
 import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { SearchCredit, Verdict as VerdictChip } from "@/components/Shared"
 import { plainDuration } from "@/lib/format"
 import { outcomeOf } from "@/lib/verdict"
 import { safeUrl, VERDICT_WORD, verdictCount } from "@/lib/words"
 import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
-import { copyText, foldAnswer, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
+import { copyText, foldAnswer, preparation, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
+import { Working } from "./Working"
 
 const KNOWN = ["exa", "europepmc", "fixture"]
 const money = (usd: number) => (usd === 0 ? "nothing" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
@@ -46,6 +46,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone }: Props)
   const demo = s.mode === "demo"
   const working = s.status === "starting" || s.status === "queued" || s.status === "running"
   const prepared = s.steps.find((x) => x.kind === "prepare" && x.status === "completed")?.ms
+  const prep = preparation(s)
   const failedSteps = s.steps.filter((x) => x.status === "failed" || (x.status === "empty" && x.kind === "search"))
   const marked = useMemo(() => withMarks(s.markdown, s.complete ? s.statements : [], s.sources, key), [s.markdown, s.complete, s.statements, s.sources, key])
   const byIndex = new Map(s.statements.map((st) => [st.index, st]))
@@ -79,10 +80,17 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone }: Props)
         </span>
       </p>
 
+      {prep && (
+        <p className="answer-prep mono" data-running={prep.running || undefined}>
+          {prep.running ? "Preparing search…" : prep.failed ? "Preparation did not finish" : `Prepared in ${seconds(prep.ms)}`}
+          {s.status === "done" && s.finished && <> · Completed in {seconds(s.finished.seconds * 1000)}</>}
+        </p>
+      )}
       {s.opening && <p className="answer-opening">{s.opening}</p>}
+      {s.resumed && <p className="muted small">Continued after the engine restarted.</p>}
       {working && !lost && (
         <div className="answer-working">
-          <Loading>{progressLine(s)}</Loading>
+          <Working>{progressLine(s)}</Working>
           {!demo && s.caps && <span className="muted small">Limit for this answer: {money(s.caps.maxUsd)} and {plainDuration(s.caps.maxSeconds * 1000)}.</span>}
           <button type="button" className="btn" disabled={stopping !== undefined} onClick={() => { setStopping(""); void cancelResearch(id).then(setStopping) }}>Stop</button>
           {stopping && <span className="muted small" role="status">{stopping}</span>}

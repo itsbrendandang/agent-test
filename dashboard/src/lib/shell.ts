@@ -1,4 +1,4 @@
-// What every view shows in one plain line at the top: does the engine answer, and may it spend money.
+// What the shell knows about the engine: does it answer, and how will the next run be made (Demo or Real).
 // Read from the engine every few seconds. Reads only.
 import { useEffect, useState } from "react"
 import { problemOf, readEngine } from "@/lib/engine"
@@ -21,11 +21,16 @@ export function useShell(everyMs = 10_000): Shell {
     void tick()
     const timer = window.setInterval(tick, everyMs)
     window.addEventListener(PAID_CHANGED, tick) // the Demo / Real switch was used: read the state again now
-    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener(PAID_CHANGED, tick) }
+    window.addEventListener(RETRY, tick) // "Try again" on the engine notice
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener(PAID_CHANGED, tick); window.removeEventListener(RETRY, tick) }
   }, [everyMs])
   return shell
 }
 
-/** Open the "How this works" panel from anywhere (the link under the Search examples, the row in Settings). */
+/** Ask the shell to read the engine's state again now. */
+const RETRY = "app.engine.retry"
+export const retryEngine = () => window.dispatchEvent(new Event(RETRY))
+
+/** Open the "How this works" panel from anywhere (the row in Settings, a link in a view). */
 export const HELP = "app.help"
 export const openHelp = () => window.dispatchEvent(new Event(HELP))

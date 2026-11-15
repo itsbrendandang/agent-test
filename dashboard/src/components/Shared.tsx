@@ -1,20 +1,25 @@
 // Small pieces every engine-backed view uses, so titles, status words and the offline state look the same everywhere.
-import type { ReactNode } from "react"
+import { useEffect, useSyncExternalStore, type ReactNode } from "react"
 import type { Scripted } from "@/lib/scripted"
+import { retryEngine, type Shell } from "@/lib/shell"
 import { STATE_KIND, type RunState } from "@/lib/status"
 
-/** Page title with one sentence that says what the view is for. Controls go in `children`. */
+
 import type { Verdict as BoardVerdict } from "@/board/api"
 import { outcomeOf } from "@/lib/verdict"
 import { PRACTICE, VERDICT_WORD, verdictCount } from "@/lib/words"
 import type { ClaimVerdict } from "@/swarm/api"
 
+/**
+ * The top of a view: one short line that says what the view is for, and its controls (`children`). The place name
+ * is in the shell's header row, so the title here is for screen readers and for the document outline only.
+ */
 export function PageHead({ title, about, children }: { title: string; about: ReactNode; children?: ReactNode }) {
   return (
     <header className="page-head">
       <div>
-        <h1>{title}</h1>
-        <p className="muted small">{about}</p>
+        <h1 className="sr-only">{title}</h1>
+        <p className="page-about">{about}</p>
       </div>
       {children && <div className="page-tools">{children}</div>}
     </header>
@@ -30,11 +35,33 @@ export function RunId({ id }: { id: string }) {
   return <code className="run-id" title={id} aria-label={id}>{id}</code>
 }
 
+// How many EngineOffline cards are on screen. While a view says it itself, the shell's notice is not shown as well.
+const cards = { n: 0, listeners: new Set<() => void>(), tell() { for (const l of this.listeners) l() } }
+const watchCards = (l: () => void) => { cards.listeners.add(l); return () => { cards.listeners.delete(l) } }
+
+/**
+ * The shell's notice: shown in the page, above the view, only while the engine cannot be reached or answers with an
+ * error, and only when the view is not already saying so with its own card. One action: Try again.
+ */
+export function EngineNotice({ shell }: { shell: Shell }) {
+  const shown = useSyncExternalStore(watchCards, () => cards.n, () => 0)
+  if ((shell.engine !== "offline" && shell.engine !== "error") || shown > 0) return null
+  return (
+    <div className="engine-notice" role="alert">
+      {shell.engine === "offline"
+        ? <span><b>Engine offline.</b> The app's engine isn't running. Start it with <code>npm start</code>, then try again.</span>
+        : <span><b>The engine answered with an error.</b> {shell.said}</span>}
+      <button type="button" className="btn" onClick={retryEngine}>Try again</button>
+    </div>
+  )
+}
+
 /**
  * Shown by every view that needs the engine and did not get what it asked for. Two cases, never mixed up:
  * the engine cannot be reached ("Engine not running"), or it answered with an error (`said`, its own words, as text).
  */
 export function EngineOffline({ needs, said, onRetry }: { needs: string; said?: string; onRetry?: () => void }) {
+  useEffect(() => { cards.n++; cards.tell(); return () => { cards.n--; cards.tell() } }, []) // the shell's own notice steps aside
   return (
     <div className="engine-offline card-surface" role="alert">
       {said ? (

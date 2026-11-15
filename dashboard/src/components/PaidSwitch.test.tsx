@@ -1,13 +1,14 @@
 // The Demo / Real switch. Every request here goes to a stand-in engine; no test (and no person testing) turns Real
 // on against a real engine.
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ModeLabel } from "@/components/Shared"
 import { useShell } from "@/lib/shell"
 import { keepToken } from "@/lib/token"
 import { routes, to } from "@/test/engine"
-import { ModeIndicator, ModeSwitch } from "./PaidSwitch"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { ModeSwitch, NextRun } from "./PaidSwitch"
 
 const CAPS = { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 1.5, exaUsedUsd: 0, exaCeilingUsd: 40 }
 const DEMO = { paid: false, source: "env", locked: false, board: "scripted", missingKeys: [], missing: [], caps: CAPS }
@@ -21,16 +22,32 @@ const show = (table: Parameters<typeof routes>[0], paid: "off" | "on" = "off", l
 afterEach(() => vi.useRealTimers())
 
 describe("the control", () => {
-  it("the chip at the foot of the rail is compact; pressing it opens the switch, a radio group that shows the state", async () => {
+  it("the selector in the header is labelled Next run: a radio group that shows the state, and its label explains Demo and Real", async () => {
     routes({})
-    render(<ModeIndicator paid="off" short />)
-    expect(screen.queryByRole("radiogroup")).toBeNull() // compact until asked for
-    await userEvent.setup().click(screen.getByRole("button", { name: "Demo mode" }))
-    const group = screen.getByRole("radiogroup", { name: "Mode: Demo or Real" })
+    render(<TooltipProvider><NextRun paid="off" /></TooltipProvider>)
+    const group = screen.getByRole("radiogroup", { name: "Next run: Demo or Real" })
     expect(within(group).getByRole("radio", { name: "Demo" })).toBeChecked()
     expect(within(group).getByRole("radio", { name: "Real" })).not.toBeChecked()
     expect(group).toHaveAccessibleDescription("Practice runs. Fixed example answers. Free.")
-    expect(screen.getByRole("dialog", { name: "Demo or Real" })).toHaveTextContent("AI answers and web search are unavailable. You can search saved research")
+    const label = screen.getByRole("button", { name: "Next run: what Demo and Real mean" })
+    expect(label).toHaveTextContent("Next run")
+    fireEvent.click(label) // a press (touch has no hover); keyboard focus and hover open it too
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Demo: fixed example answers, free. Real: real models and searches, costs money.")
+    fireEvent.click(label)
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+    await userEvent.setup().tab() // the label is the first thing in the selector the keyboard reaches
+    expect(label).toHaveFocus()
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Demo: fixed example answers, free.")
+  })
+  it("choosing Real in the header opens the same confirm dialog and sends nothing", async () => {
+    const sent = routes({ "GET /api/paid": { status: 200, body: DEMO } })
+    render(<TooltipProvider><NextRun paid="off" /></TooltipProvider>)
+    await userEvent.setup().click(screen.getByRole("radio", { name: "Real" }))
+    expect(await screen.findByRole("dialog", { name: "Switch to Real?" })).toBeInTheDocument()
+    expect(await screen.findByRole("checkbox", { name: "I understand this costs money" })).not.toBeChecked()
+    expect(screen.getByRole("button", { name: "Switch to Real" })).toBeDisabled()
+    expect(screen.getByRole("radio", { name: "Real" })).not.toBeChecked()
+    expect(to(sent, "POST", "/api/paid")).toHaveLength(0)
   })
   it("says Real plainly while it is on", () => {
     show({}, "on")
@@ -147,26 +164,29 @@ describe("switching to Demo is immediate", () => {
 })
 
 describe("the state is the engine's, read again and again", () => {
-  function Line() { const shell = useShell(1000); return <ModeIndicator paid={shell.paid} locked={shell.locked} short /> }
+  function Line() { const shell = useShell(1000); return <TooltipProvider><NextRun paid={shell.paid} locked={shell.locked} /></TooltipProvider> }
+  const real = () => screen.getByRole("radio", { name: "Real" }), demo = () => screen.getByRole("radio", { name: "Demo" })
   it("a change made elsewhere shows up on the next poll, and nothing is stored in the browser", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let paidCalls = false
     routes({ "GET /api/glhf/status": () => ({ status: 200, body: { paidCalls, paidLocked: false } }) })
     render(<Line />)
-    expect(await screen.findByRole("button", { name: "Demo mode" })).toBeInTheDocument()
+    await waitFor(() => expect(demo()).toBeChecked())
+    expect(real()).not.toBeChecked()
     paidCalls = true // someone else switched, or the engine was restarted with another setting
     await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
-    expect(await screen.findByRole("button", { name: "Real mode" })).toBeInTheDocument()
+    await waitFor(() => expect(real()).toBeChecked())
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription("Real AI models and web search. Costs money.")
     paidCalls = false
     await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
-    expect(await screen.findByRole("button", { name: "Demo mode" })).toBeInTheDocument()
+    await waitFor(() => expect(demo()).toBeChecked())
     expect(Object.keys(localStorage).concat(Object.keys(sessionStorage)).filter((k) => /paid|mode|real|demo/i.test(k))).toEqual([])
   })
   it("a lock reported by the engine disables the control", async () => {
     routes({ "GET /api/glhf/status": { status: 200, body: { paidCalls: false, paidLocked: true } } })
     render(<Line />)
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Demo mode" }))
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Real" })).toBeDisabled())
+    await waitFor(() => expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(/Locked/))
+    expect(real()).toBeDisabled(); expect(demo()).toBeDisabled()
     expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(/Locked by the person running the engine/)
   })
 })

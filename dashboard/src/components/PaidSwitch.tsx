@@ -1,12 +1,14 @@
-// The Demo / Real switch. Demo: practice runs, fixed example answers, free. Real: real AI models and web search,
-// which cost money. It is a radio group that always shows the engine's current state. Choosing Real never flips
+// The Demo / Real switch: how the NEXT run will be made. (How an existing result was made is a different thing:
+// the Provenance badge, read from the result itself.) Demo: practice runs, fixed example answers, free. Real: real
+// AI models and web search, which cost money. It is a radio group that always shows the engine's current state. Choosing Real never flips
 // anything by itself: it opens a dialog that says what changes, the limits, what was spent today, and needs a
 // ticked box (and the session token). Choosing Demo is one click. The engine can lock the switch, and it refuses
 // when a key is missing; both are said plainly. Nothing here asks for or shows an API key, and the page never
 // keeps the state: it is read from the engine.
 import { useEffect, useId, useRef, useState } from "react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { EngineError } from "@/lib/engine"
-import { MODE_WORDS, type PaidState } from "@/lib/paid"
+import { MODE_TIP, MODE_WORDS, type PaidState } from "@/lib/paid"
 import { CONFIRM_TEXT, readPaid, setPaid, SwitchRefused, type PaidFacts } from "@/lib/paidSwitch"
 import { Loading } from "./Crew"
 
@@ -20,8 +22,11 @@ const why = (e: unknown): string => {
     : `${no.message} Nothing was changed.`
 }
 
-/** The control: "Demo" | "Real", with the plain words for the current state beside it. */
-export function ModeSwitch({ paid, locked, compact }: { paid: PaidState; locked?: boolean; compact?: boolean }) {
+/**
+ * The control: "Demo" | "Real", with the plain words for the current state beside it. `header`: the compact form in
+ * the header row (the words are kept for screen readers, and a message appears under the control).
+ */
+export function ModeSwitch({ paid, locked, compact, header }: { paid: PaidState; locked?: boolean; compact?: boolean; header?: boolean }) {
   const name = useId()
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -36,8 +41,8 @@ export function ModeSwitch({ paid, locked, compact }: { paid: PaidState; locked?
     finally { setBusy(false) }
   }
   return (
-    <span className="mode" data-compact={compact || undefined}>
-      <span className="mode-switch" role="radiogroup" aria-label="Mode: Demo or Real" aria-describedby={`${name}-words`} data-state={paid}>
+    <span className="mode" data-compact={compact || undefined} data-header={header || undefined}>
+      <span className="mode-switch" role="radiogroup" aria-label="Next run: Demo or Real" aria-describedby={`${name}-words`} data-state={paid}>
         <label data-on={paid === "off" || undefined}>
           <input type="radio" name={name} checked={paid === "off"} disabled={off} onChange={() => void toDemo()} /> Demo
         </label>
@@ -45,11 +50,11 @@ export function ModeSwitch({ paid, locked, compact }: { paid: PaidState; locked?
           <input type="radio" name={name} checked={paid === "on"} disabled={off} onChange={() => { setNote(undefined); setAsking(true) }} /> Real
         </label>
       </span>
-      <span className="mode-words" id={`${name}-words`}>
+      <span className={header ? "mode-words sr-only" : "mode-words"} id={`${name}-words`}>
         {paid === "unknown" ? "Not known: the engine did not say." : MODE_WORDS[paid]}
         {locked && " Locked by the person running the engine."}
       </span>
-      {note && <span className="mode-note" role="status">{note}</span>}
+      {note && <span className="mode-note" role="status">{note}{header && <button type="button" className="link-btn" onClick={() => setNote(undefined)}>Dismiss</button>}</span>}
       <RealDialog open={asking} onClose={(text) => { setAsking(false); if (text) setNote(text) }} />
     </span>
   )
@@ -125,25 +130,22 @@ export function RealDialog({ open, onClose }: { open: boolean; onClose: (done?: 
 }
 
 /**
- * The one compact indicator on every view: "Demo mode" or "Real mode". Pressing it opens the switch itself.
- * The full control also lives in Settings.
+ * The selector in the header row of every view: "Next run  Demo | Real". It says how the next run will be made,
+ * never how a result on screen was made. The label opens a short explanation (hover, focus or press).
  */
-export function ModeIndicator({ paid, locked, short }: { paid: PaidState; locked?: boolean; short?: boolean }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  const [open, setOpen] = useState(false)
-  useEffect(() => { const d = ref.current; if (!d) return; if (open && !d.open) d.showModal(); if (!open && d.open) d.close() }, [open])
-  const label = paid === "on" ? "Real mode" : paid === "off" ? "Demo mode" : "Mode not known"
-  const chip = paid === "on" ? "Real" : paid === "off" ? "Demo" : "?"
+export function NextRun({ paid, locked }: { paid: PaidState; locked?: boolean }) {
+  const [tip, setTip] = useState(false)
   return (
-    <>
-      <button type="button" className="mode-pill" data-state={paid} aria-haspopup="dialog" onClick={() => setOpen(true)}
-        aria-label={label} title={paid === "unknown" ? "Demo or Real is not known: the engine did not say. It may not be running." : `${label}. ${MODE_WORDS[paid]} Press to change.`}>{short ? chip : label}</button>
-      <dialog ref={ref} className="how paid-switch" aria-labelledby="mode-title" onClose={() => setOpen(false)} onClick={(e) => { if (e.target === ref.current) setOpen(false) }}>
-        <h2 id="mode-title">Demo or Real</h2>
-        <p className="muted small">Demo: AI answers and web search are unavailable. You can search saved research and try practice runs for free. Real: answers come from real AI models and web search, which cost money.</p>
-        {open && <ModeSwitch paid={paid} locked={locked} compact />}
-        <div className="newrun-foot"><button type="button" className="btn" onClick={() => setOpen(false)}>Close</button></div>
-      </dialog>
-    </>
+    <span className="next-run" data-state={paid}>
+      <Tooltip open={tip} onOpenChange={setTip}>
+        <TooltipTrigger asChild>
+          {/* Hover and keyboard focus open it (Radix). A press toggles it, so it also works by touch. */}
+          <button type="button" className="next-run-label" aria-label="Next run: what Demo and Real mean"
+            onPointerDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); setTip((on) => !on) }}>Next run</button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="next-run-tip">{MODE_TIP}</TooltipContent>
+      </Tooltip>
+      <ModeSwitch paid={paid} locked={locked} header />
+    </span>
   )
 }

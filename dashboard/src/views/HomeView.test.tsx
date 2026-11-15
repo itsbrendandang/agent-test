@@ -144,7 +144,6 @@ describe("sending", () => {
 describe("replies", () => {
   it.each([
     ["ai", "AI answer", "Written by an AI model."],
-    ["keyword", "Saved-research search", "Matched by words in saved research. No AI model read the question."],
     ["scripted", "Demo response", "Fixed example text. Not an AI answer and not research."],
   ] as const)("a %s reply is labelled '%s' and says what produced it", async (mode, label, means) => {
     const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode, note: `note for ${mode}` }) })
@@ -152,12 +151,42 @@ describe("replies", () => {
     const article = within(await screen.findByRole("article", { name: "Answer" }))
     expect(article.getByText(label)).toBeInTheDocument()
     expect(article.getByText(means)).toBeInTheDocument()
-    // only one of the three labels is ever on a reply
-    for (const other of ["AI answer", "Saved-research search", "Demo response"]) if (other !== label) expect(article.queryByText(other)).toBeNull()
-    // the engine's note names the model that wrote an AI answer; the other kinds need no second explanation
+    for (const other of ["AI answer", "Demo response"]) if (other !== label) expect(article.queryByText(other)).toBeNull()
+    // the engine's note names the model that wrote an AI answer; the other kind needs no second explanation
     if (mode === "ai") expect(article.getByText("note for ai")).toBeInTheDocument()
     else expect(article.queryByText(`note for ${mode}`)).toBeNull()
-    expect(article.queryByText(/✓|Holds up|verified/i)).toBeNull() // no mark of a check that was not made
+    expect(article.queryByText(/✓|Holds up|Supported|verified/i)).toBeNull() // no mark of a check that was not made
+  })
+  it("a keyword search of saved runs is shown as matches, never as an answer", async () => {
+    const runs = [1, 2, 3, 4, 5].map((n) => ({ kind: "board" as const, id: `run-${n}`, title: `Drug board · brief-${n}`, why: "contains: herg" }))
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode: "keyword", reply: "Saved research that mentions “herg”. This is a keyword match, not an answer to your question.", runs }) })
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true })
+    await t.ask("herg")
+    const result = await screen.findByRole("article", { name: "Matching saved research" })
+    const view = within(result)
+    expect(view.getByRole("heading", { name: "Matching saved research" })).toBeInTheDocument()
+    expect(result).toHaveTextContent("Found 5 matching runs. Keyword matches from saved runs.")
+    expect(view.getByText("Keyword matches from saved runs.")).toHaveAttribute("title", expect.stringContaining("not ranked by relevance")) // the fuller explanation, on demand
+    // it is not an answer, and it does not claim sources were used for one
+    expect(screen.queryByRole("article", { name: "Answer" })).toBeNull()
+    expect(result).not.toHaveTextContent(/Copy answer|this answer used|AI answer|Sources/)
+    expect(view.queryByRole("button", { name: /Synthesize/ })).toBeNull() // the engine cannot do that yet
+    // three rows, then the rest on request
+    const rows = () => within(view.getByRole("list", { name: "Matching saved runs" })).getAllByRole("button")
+    expect(rows()).toHaveLength(3)
+    await t.user.click(view.getByRole("button", { name: "View all 5" }))
+    expect(rows()).toHaveLength(5)
+    await t.user.click(view.getByRole("button", { name: "Copy links" }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/Brief 1\n.*#Board\/run-1\n\nBrief 2\n/))
+    expect(view.getByRole("button", { name: "Search again" })).toBeInTheDocument()
+  })
+  it("a keyword search that finds nothing says so, and what to try", async () => {
+    const t = home(CATALOG_ON, { "POST /api/chat": reply({ mode: "keyword", reply: "No matching research found. Try a shorter question or different keywords." }) })
+    await t.ask("zzzz")
+    const result = await screen.findByRole("article", { name: "Matching saved research" })
+    expect(result).toHaveTextContent("No matching research found. Try a shorter question or different keywords.")
+    expect(within(result).queryByRole("button", { name: "Copy links" })).toBeNull()
   })
   it("formats an answer (lists, a table, code, a safe link) and lets nothing in it run, load or mislead", async () => {
     const evil = [

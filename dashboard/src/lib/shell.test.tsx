@@ -1,14 +1,21 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
-import { ModeIndicator } from "@/components/PaidSwitch"
+import { NextRun } from "@/components/PaidSwitch"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { byConcern, boardFacts, outcomeOf } from "./verdict"
 
-describe("the one status indicator", () => {
-  it.each([["off", "Demo mode", "Demo"], ["on", "Real mode", "Real"], ["unknown", "Mode not known", "?"]] as const)("says %s as '%s', small", (paid, name, chip) => {
-    render(<ModeIndicator paid={paid} short />)
-    const button = screen.getByRole("button", { name })
-    expect(button).toHaveTextContent(chip)
-    expect(button).toHaveAttribute("data-state", paid)
+describe("the one mode selector, in the header", () => {
+  it.each([["off", "Demo"], ["on", "Real"]] as const)("the engine's state %s shows as %s chosen", (paid, chosen) => {
+    render(<TooltipProvider><NextRun paid={paid} /></TooltipProvider>)
+    const group = screen.getByRole("radiogroup", { name: "Next run: Demo or Real" })
+    expect(group).toHaveAttribute("data-state", paid)
+    expect(screen.getByRole("radio", { name: chosen })).toBeChecked()
+    expect(screen.getByRole("radio", { name: chosen === "Demo" ? "Real" : "Demo" })).not.toBeChecked()
+  })
+  it("an engine that did not say shows neither as chosen, and nothing can be pressed", () => {
+    render(<TooltipProvider><NextRun paid="unknown" /></TooltipProvider>)
+    for (const name of ["Demo", "Real"]) { expect(screen.getByRole("radio", { name })).not.toBeChecked(); expect(screen.getByRole("radio", { name })).toBeDisabled() }
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription("Not known: the engine did not say.")
   })
 })
 

@@ -213,7 +213,7 @@ describe("the plan card", () => {
   })
 })
 
-describe("the sources under a Search answer", () => {
+describe("the rows of a saved-research search", () => {
   const sse = (event: object) => `data: ${JSON.stringify({ key: "k", at: 0, ...event })}\n\n`
   it("each row can be told apart and trusted: the run's own title, when it ran, and real or practice, all from its record", async () => {
     const started = new Date(); started.setHours(16, 51, 0, 0)
@@ -234,7 +234,7 @@ describe("the sources under a Search answer", () => {
     }))
     render(<HomeView onOpen={() => {}} />)
     await userEvent.setup().type(screen.getByRole("textbox", { name: "Ask a research question" }), "herg{Enter}")
-    const rows = within(await screen.findByRole("list", { name: "Saved research this answer used" }))
+    const rows = within(await screen.findByRole("list", { name: "Matching saved runs" }))
     await waitFor(() => expect(rows.getAllByRole("button")[0]).toHaveTextContent("Should we advance a KRAS G12C hit that has a hERG liability?")) // the real question, capitals kept, not the cut file name
     const [real, demo, team] = rows.getAllByRole("button")
     await waitFor(() => expect(real).toHaveTextContent("Review · today at 4:51 pm · real model"))

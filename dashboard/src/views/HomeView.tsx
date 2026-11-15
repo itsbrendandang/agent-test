@@ -2,11 +2,11 @@
 // reply says plainly whether a model wrote it. A reply may cite runs and may carry a plan; a plan starts nothing
 // until a person confirms it in its card. The conversation is kept for the browser session only.
 import { useEffect, useRef, useState } from "react"
+import "@/research/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
-import { Loading } from "@/components/Crew"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
@@ -20,9 +20,10 @@ import { useStickToBottomContext } from "use-stick-to-bottom"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
 import { ResearchRefused, startResearch } from "@/research/api"
 import { ResearchAnswer } from "@/research/Answer"
+import { Working } from "@/research/Working"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
 import { PRACTICE_SHORT } from "@/lib/words"
-import { setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
+import { linkTo, setOpen, takeOpenAnswer, viewOfKind } from "@/lib/open"
 import { openHelp } from "@/lib/shell"
 
 const AUTO = "auto"
@@ -221,6 +222,28 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                         onDone={(done) => setTurns((old) => old.map((o) => (o.id === t.id && o.content !== done.markdown ? { ...o, content: done.markdown } : o)))} />
                     </MessageContent>
                   </Message>
+                ) : t.reply.mode === "keyword" ? (
+                  // A keyword search of saved runs is a list of matches. It is not an answer and is never shown as one.
+                  <Message key={t.id} from="assistant" role="article" aria-label="Matching saved research" className="answer saved-matches">
+                    <MessageContent>
+                      <h2 className="matches-title">Matching saved research</h2>
+                      {t.reply.runs && t.reply.runs.length > 0 ? (
+                        <>
+                          <p className="matches-sum">
+                            Found {t.reply.runs.length} matching run{t.reply.runs.length === 1 ? "" : "s"}.{" "}
+                            <span className="muted" title="These runs contain words from your question. Nothing read or answered the question, and the list is not ranked by relevance.">Keyword matches from saved runs.</span>
+                          </p>
+                          <SourceRows runs={t.reply.runs} onOpen={openRun} label="Matching saved runs" />
+                        </>
+                      ) : <p className="matches-sum">No matching research found. Try a shorter question or different keywords.</p>}
+                      <div className="answer-actions">
+                        {canCopy && t.reply.runs && t.reply.runs.length > 0 && (
+                          <button type="button" className="link-btn" onClick={() => copy(t.id, t.reply.runs!.map((r) => `${runTitle(r.title)}\n${linkTo(r.kind, r.id)}`).join("\n\n"))}>{copied === t.id ? "Copied" : "Copy links"}</button>
+                        )}
+                        {t.id === lastAnswer && <button type="button" className="link-btn" disabled={sending !== undefined} onClick={() => retry(t.id)}>Search again</button>}
+                      </div>
+                    </MessageContent>
+                  </Message>
                 ) : (
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
@@ -253,7 +276,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                 {sending !== undefined && (
                   <>
                     <UserMessage>{sending}</UserMessage>
-                    <Loading>{effort !== "deep" && canAnswer !== "missing" ? "Starting…" : catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the answer…"}</Loading>
+                    <Working>{effort !== "deep" && canAnswer !== "missing" ? "Starting…" : catalog?.paidCalls ? "Writing a plan. A real model usually takes about ten seconds…" : demo ? "Searching saved research…" : "Waiting for the reply…"}</Working>
                   </>
                 )}
               </ConversationContent>
@@ -320,7 +343,7 @@ interface Listed { startedAt?: number; scripted?: boolean; solver?: string; task
  * run's own title when it has one), when it ran, and whether it was real or a practice run, each from the run's
  * own record. The first five show; the rest are one press away.
  */
-function SourceRows({ runs, onOpen }: { runs: NonNullable<ChatReply["runs"]>; onOpen: (kind: "swarm" | "board", id: string) => void }) {
+function SourceRows({ runs, onOpen, label = "Saved research this answer used" }: { runs: NonNullable<ChatReply["runs"]>; onOpen: (kind: "swarm" | "board", id: string) => void; label?: string }) {
   const [all, setAll] = useState(false)
   const [listed, setListed] = useState<Record<string, Listed>>({})
   useEffect(() => {
@@ -336,13 +359,13 @@ function SourceRows({ runs, onOpen }: { runs: NonNullable<ChatReply["runs"]>; on
     })
     return () => { stale = true }
   }, [])
-  const shown = all ? runs : runs.slice(0, 5)
+  const shown = all ? runs : runs.slice(0, 3)
   const boardIds = shown.filter((r) => r.kind === "board").map((r) => r.id)
   const flags = useBoardScripted(boardIds)
   const titles = boardTitles(boardIds)
   return (
     <>
-      <ol className="source-rows" aria-label="Saved research this answer used">
+      <ol className="source-rows" aria-label={label}>
         {shown.map((r, i) => {
           const row = listed[`${r.kind}:${r.id}`]
           const scripted = r.kind === "board" ? flags[r.id] : row?.scripted
@@ -364,7 +387,7 @@ function SourceRows({ runs, onOpen }: { runs: NonNullable<ChatReply["runs"]>; on
           )
         })}
       </ol>
-      {runs.length > 5 && <button type="button" className="link-btn source-all" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${runs.length}`}</button>}
+      {runs.length > 3 && <button type="button" className="link-btn source-all" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `View all ${runs.length}`}</button>}
     </>
   )
 }

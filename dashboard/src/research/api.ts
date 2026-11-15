@@ -28,6 +28,8 @@ export async function startResearch(question: string, effort: "quick" | "standar
   catch { throw new ResearchRefused("The app's engine isn't running. Start it with: npm start. Then send your question again.", 0) }
   const body = (await r.json().catch(() => undefined)) as { id?: unknown; thread?: unknown; mode?: unknown; error?: unknown; field?: unknown } | undefined
   if (r.ok && typeof body?.id === "string" && typeof body.thread === "string") return { id: body.id, thread: body.thread, mode: body.mode === "demo" ? "demo" : body.mode === "real" ? "real" : undefined }
+  // Real mode before the owner has switched direct answers on: not an error. The caller uses the team-review plan instead.
+  if (r.status === 503 && (body as { preview?: unknown } | undefined)?.preview === false) throw new ResearchRefused("Direct answers are not switched on yet.", 404)
   const field = typeof body?.field === "string" ? body.field : undefined
   const said = typeof body?.error === "string" ? body.error.slice(0, 400) : `The engine answered ${r.status}.`
   throw new ResearchRefused((field && WHY[field]) ?? said, r.status, field)
