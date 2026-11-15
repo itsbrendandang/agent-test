@@ -137,14 +137,22 @@ labels them "Practice".
 
 ### 1. Overview: ask, and watch the team work
 
-The app opens here. Type a question in the **"Let's research together!"** box, choose Quick, Standard or Deep, and
-press Send. Under the box, **Try asking** shows biology questions; a click fills the box, and nothing is sent until
-you press Send. Below the box, the **Agent Lab** shows the team as characters in
-six rooms (Discovery, Planning, Experiment bench; Evidence review, Quality control, Report studio). Click a teammate to
-see what it does now, and its steps in the Agent Log. The activity panel follows the run. One quiet line counts
-research and practice apart. Spending and limits are in Settings.
+The app opens here. Choose Quick, Standard or Deep for a question, then press Send. Under the box, **Try asking**
+shows biology questions; a click fills the box, and nothing is sent until you press Send.
 
-![The Overview, idle: the question box, the Try asking cards, and the Agent Lab with six rooms](docs/images/overview.png)
+Ask in the "Let's research together!" question box. Its card shows under the box: the agents and their current step,
+with Stop, while the team researches, and "The answer is ready." when it ends. The answer itself is not written on the
+Overview: "See the answer and follow up in Research" opens its chat in Research, with the full answer and the box for
+a follow-up. Below it, follow the six-room Agent Lab and its activity panel. One quiet line counts research and
+practice apart.
+
+![The Overview while the team researches: the question card with the agents, the current step and Stop](docs/images/overview.png)
+
+![The Overview when the run ends: "The answer is ready." and the link "See the answer and follow up in Research"](docs/images/overview-done.png)
+
+The **Agent Lab** shows the team as characters in six rooms (Discovery, Planning, Experiment bench; Evidence review,
+Quality control, Report studio). Click a teammate to see what it does now, and its steps in the Agent Log. Spending
+and limits are in Settings.
 
 The Lab's look is by Anh Lam.
 
