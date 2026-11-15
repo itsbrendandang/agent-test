@@ -110,9 +110,12 @@ You need Node.js 24 or newer, [uv](https://docs.astral.sh/uv/) and Docker (runni
 npm run setup      # install the engine, the dashboard and the benchmark harness
 npm run doctor     # list what this machine has and what is missing
 npm run demo       # run the swarm on the demo case with the scripted model (about 15 seconds)
-npm run engine     # start the engine on http://127.0.0.1:8787
-npm run dashboard  # start the dashboard on http://localhost:5317 (run in a second terminal)
+npm start          # start the engine and the dashboard, and open the app in your browser
 ```
+
+`npm start` is the one command for everyday use. It runs practice runs only until paid calls are
+turned on. Press Ctrl+C to stop. To run the two parts yourself, use `npm run engine` and, in a
+second terminal, `npm run dashboard`.
 
 Or run everything in containers. Only Docker is needed:
 
