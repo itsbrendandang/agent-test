@@ -30,6 +30,7 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `engine/src/glhf/` | The run tracker for swarm runs: start, follow, cancel, grade. | In use. |
 | `engine/src/bixv1/` | Read-only results of the BixBench v1 adapter. | In use. |
 | `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch, the in-app Demo/Real switch, the free pre-check. | In use. |
+| `engine/src/db/`, `supabase/migrations/` | The optional copy of the records in Supabase, and its schema ([database.md](database.md)). | Off by default. |
 | `engine/src/http.ts`, `app.ts`, `server.ts` | Request checks, the request handler, the listener. | In use. |
 | `engine/test/` | One `*.test.ts` file per area. They use fakes and never reach the network. | In use. |
 | `dashboard/src/views/` | One file per view. `HomeView.tsx` is Search, `ExperimentsView.tsx` is Saved research, `SwarmView.tsx` is Compare, `WorldsView.tsx` is Graph. | In use. |

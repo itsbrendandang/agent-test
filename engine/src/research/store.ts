@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto"
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import type { BoardConfig } from "../config.ts"
+import { mirrorAnswer } from "../db/supabase.ts"
 import { writeWhole } from "../fsx.ts"
 import { isSafeId } from "../http.ts"
 import { dayStamp, researchRoot, staleAfterMs } from "./spend.ts"
@@ -25,6 +26,7 @@ export const eventsFile = (config: BoardConfig, id: string): string => `${answer
 export function saveRecord(config: BoardConfig, record: ResearchRecord): void {
   mkdirSync(answerDir(config, record.id), { recursive: true })
   writeWhole(`${answerDir(config, record.id)}/record.json`, JSON.stringify(record, null, 1))
+  mirrorAnswer(record) // the database copy, when one is set up (db/supabase.ts); never waits, never throws
 }
 
 /** How long a queued answer may wait before it is taken for lost: every answer before it in its thread, plus a minute. */

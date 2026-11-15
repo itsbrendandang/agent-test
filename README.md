@@ -403,6 +403,10 @@ memo. If the lead stops without one, the review is marked failed, not finished. 
 ask the lead again, so start a new review. A review whose `overrides.json` (the limits its chat plan
 set) cannot be read is also marked failed and does not start.
 
+The saved research is kept as files on your machine. The engine can also keep a copy in a
+Supabase database: set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`, and run
+`npm run db:backfill` once. It is off by default. See [docs/database.md](docs/database.md).
+
 ## Words
 
 | Word | Plain meaning |
@@ -443,6 +447,7 @@ model account; it is separate from the app's free Demo mode. See [docs/pi-setup.
 | Understand the folders and where new code goes | [docs/codebase.md](docs/codebase.md) |
 | See every command, the two parts of the project, the tests and the limits | [docs/developers.md](docs/developers.md) |
 | Know exactly what was tested | [docs/status.md](docs/status.md) |
+| Keep a copy of the records in Supabase | [docs/database.md](docs/database.md) |
 | Understand a team review and what "supported" means | [docs/drug-board.md](docs/drug-board.md) |
 | Read results and compare fairly | [docs/reading-results.md](docs/reading-results.md) |
 | Use a coding agent on this repository | [AGENTS.md](AGENTS.md) |

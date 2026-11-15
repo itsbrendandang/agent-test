@@ -41,6 +41,7 @@ import { DEFAULT_MAX_LITERATURE_SEARCHES, literatureLive, literatureOnce } from 
 import { databaseLive, databaseOnce, type DatabaseSource, DEFAULT_MAX_DATABASE_SEARCHES, QUERY_DESCRIPTION, SOURCE_DESCRIPTION, SOURCES } from "../sources/index.ts"
 import { maxSearches, reserveSearch, settleSearch } from "../paid/exaledger.ts"
 import { researchSpentToday } from "../research/spend.ts"
+import { mirrorMemo, mirrorRun } from "../db/supabase.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "../models.ts"
 import { holder, take } from "../runlock.ts"
@@ -564,7 +565,10 @@ export async function runBoard(runId: string, onLog?: (log: EventLog) => void, o
   if (!mock) assertBoardKeys(config, process.env, loadRoster(config).some((a) => a.tools.includes("exa_search"))) // also on resume: a missing key stops here, loudly, before the lock
   checkDailyBudget(config, new Date(), mock) // also on resume, so a restart cannot spend past the cap
   const release = acquireRunLock(runDir(config, runId))
-  try { await runLocked(config, runId, mock, onLog, options.models) } finally { release() }
+  try { await runLocked(config, runId, mock, onLog, options.models) } finally {
+    release()
+    try { mirrorRun(loadState(config, runId), false) } catch { /* best effort */ }
+  }
 }
 
 /** board.ts applies a run's overrides.json (members and limits only; not model tier or a search cap). */
@@ -781,6 +785,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
       const dir = runDir(config, runId)
       writeWhole(`${dir}/verification_ledger.json`, JSON.stringify(state.ledger, null, 2))
       writeWhole(`${dir}/memo.md`, args.memo) // last: the memo is what marks the run as written (runLocked checks for it)
+      mirrorMemo(state, `${dir}/memo.md`, args.decision)
       log.emit("memo", { type: "memo.written", path: `${dir}/memo.md`, decision: args.decision })
       return { output: [{ type: "text", text: "Memo saved." }], control: { terminate: true } }
     },
@@ -939,6 +944,7 @@ async function answerText(api: ToolExecutionApi, entryId: EntryId): Promise<stri
 /** In one step (writeWhole): a cut run.json would hide the run from the list, stop its resume and drop its spend from the daily cap. */
 function saveState(config: BoardConfig, state: RunState) {
   writeWhole(`${runDir(config, state.runId)}/run.json`, JSON.stringify(state, null, 2))
+  mirrorRun(state, lockHolder(runDir(config, state.runId)) !== undefined) // the database copy, when one is set up (db/supabase.ts); never waits, never throws
 }
 
 export function loadState(config: BoardConfig, runId: string): RunState {

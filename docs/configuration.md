@@ -79,6 +79,7 @@ Set these in `.env` or in your shell. All are optional.
 | `RESEARCH_PREVIEW` | not set, which means **off** | `1` turns on direct answers on the Research screen in Real mode (`POST /api/research`). Off: in Real mode the request answers 503 `{preview: false}`, and the Research screen makes a team-review plan instead and says that direct answers are off. Demo answers need no switch. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say whether it is on. | `engine/src/research/preview.ts` |
 | `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | not set | Both set: the engine also writes its records to a Supabase database, in the background. See [database.md](database.md). Never commit the key. | `engine/src/db/supabase.ts` |
 
 ### Run tracker
 
