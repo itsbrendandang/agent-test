@@ -60,6 +60,7 @@ import json
 import math
 import re
 from dataclasses import asdict, dataclass, field
+from decimal import ROUND_FLOOR, Decimal
 from typing import Literal
 
 ALPHA = 0.1  # family-wise, across all registered claims (Bonferroni)
@@ -83,6 +84,37 @@ def p_to_e(p: float, kappa: float = KAPPA) -> float:
     """Calibrate a p-value into an e-value (Vovk & Wang). Valid for any kappa in (0, 1)."""
     p = min(1.0, max(P_FLOOR, float(p)))
     return float(kappa * p ** (kappa - 1))
+
+
+def p_needed(threshold: float, kappa: float = KAPPA) -> float | None:
+    """The largest p-value whose calibrated e-value reaches `threshold`: what ONE registered test
+    must reach to support a claim on its own. None when no p-value can (e is capped at P_FLOOR's)."""
+    if p_to_e(P_FLOOR, kappa) < threshold:
+        return None
+    p = min(1.0, (kappa / threshold) ** (1 / (1 - kappa)))
+    while p > P_FLOOR and p_to_e(p, kappa) < threshold:  # floating-point rounding
+        p = math.nextafter(p, 0.0)
+    return p
+
+
+def p_shown(p: float) -> str:
+    """`p` rounded DOWN to two significant digits, so the value shown still reaches the bar."""
+    step = Decimal(f"1e{math.floor(math.log10(p)) - 1}")
+    return f"{float(Decimal(repr(p)).quantize(step, ROUND_FLOOR)):.2g}"
+
+
+def permutations_needed(threshold: float) -> int | None:
+    """The fewest permutations with which a permutation test can reach `threshold` on its own:
+    its smallest p-value is 1 / (permutations + 1). None when no p-value can (p_needed)."""
+    p = p_needed(threshold)
+    if p is None:
+        return None
+    count = max(0, math.ceil(1 / p) - 1)
+    while count > 0 and p_to_e(1 / count) >= threshold:  # floating-point rounding
+        count -= 1
+    while p_to_e(1 / (count + 1)) < threshold:
+        count += 1
+    return count
 
 
 def normalised_name(name: str) -> str:
@@ -489,6 +521,51 @@ class Ledger:
         self.log("issue.raised", issue=issue.id, severity=severity, problem=issue.problem, by=by)
         return issue
 
+    def flag_refuted(self, by: str = "harness") -> list[Issue]:
+        """Raise one major issue on the artifacts of each refuted claim that has none from `by`
+        yet, and return the new ones. A refutation (a counted contradicting test, or a failed
+        replication) often means an artifact is wrong: a swapped contrast, a flipped sign, a
+        mislabelled sample. As an open issue it reaches the Reviser, who fixes the artifact or
+        closes the issue as wontfix with the command and output that show it is right. "major",
+        not "blocking": the refuted verdict is not error-controlled, one mistaken test can refute
+        a true claim. The verdict itself is unchanged; this only routes it to a revision."""
+        raised: list[Issue] = []
+        for claim in self.claims.values():
+            if claim.verdict != "refuted":
+                continue
+            if any(claim.id in i.claim_ids and i.raised_by == by for i in self.issues.values()):
+                continue
+            refute_below = ALPHA / max(1, claim.family)
+            reasons = [
+                f"{t.name}: p = {t.p_value:.3g}, contradicts. {t.note}".strip()
+                for t in claim.tests
+                if t.contradicts
+                and t.counts
+                and t.p_value < refute_below
+                and normalised_name(t.name) != "independent replication"
+            ]
+            if claim.replication_failed:
+                failed = [
+                    t for t in claim.tests if normalised_name(t.name) == "independent replication"
+                ]
+                reasons.insert(
+                    0, f"independent replication failed. {failed[0].note if failed else ''}".strip()
+                )
+            raised.append(
+                self.raise_issue(
+                    "major",
+                    list(claim.artifact_ids),
+                    f"Claim {claim.id} was refuted: {claim.text} Check the artifacts it rests on "
+                    "(contrast direction, sign, sample labels, filters) and fix them, or close "
+                    "this issue as wontfix with the command and output that show they are right "
+                    "and the test was wrong.",
+                    " | ".join(reasons) or "refuted by the ledger",
+                    by,
+                    claim_ids=[claim.id],
+                )
+            )
+        return raised
+
     def resolve_issue(
         self, issue_id: str, status: Literal["fixed", "wontfix"], resolution: str, by: str
     ) -> Issue:
@@ -554,6 +631,17 @@ class Ledger:
             "last line. A test without a result, or judged not relevant, counts as zero; a "
             "typed-in result is accepted only when it contradicts):"
         ]
+        needed, permutations = p_needed(m / ALPHA), permutations_needed(m / ALPHA)
+        lines.append(
+            f"One registered test supports a claim on its own only with p <= {p_shown(needed)} (a "
+            f"permutation test needs at least {permutations:,} permutations; an "
+            "analytic test can go lower). A claim's tests are averaged: every further test of it "
+            "must be as strong, or it pulls the claim below the bar. The bar rises with each "
+            "claim registered."
+            if needed is not None and permutations is not None
+            else f"No single test can reach the bar of {m / ALPHA:g}: p is floored at {P_FLOOR:g} "
+            f"(e at most {p_to_e(P_FLOOR):g}), so no claim can be supported with {m} claims."
+        )
         for c in self.claims.values():
             tests = "; ".join(
                 f"{t.name}: p={t.p_value:.3g}{' CONTRADICTS' if t.contradicts else ''}"

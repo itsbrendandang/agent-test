@@ -432,10 +432,11 @@ export function readStances(text: string, n: number): Map<number, Stance> | unde
  *   both                    -> unsupported   (Insufficient evidence), with mixed: the sources disagree
  *   neither                 -> unsupported   (Insufficient evidence)
  *   none, and statements filed under it whose direction could not be judged -> unchecked (Not checked)
- * One checked statement from one source is enough for a mark; the counts are in the note, so a thin mark is seen as thin.
+ * One checked statement from one source is enough for a mark; the counts are in the note, and a Supported or
+ * Contradicted mark that rests on one source only is flagged `thin` (said in the note and under "What is missing").
  * "Tested" means checked against published sources. It is not an experiment.
  */
-export function markOf(id: string, statements: Statement[]): Required<Pick<Hypothesis, "verdict" | "for" | "against" | "forStatements" | "againstStatements" | "note">> & { mixed?: boolean } {
+export function markOf(id: string, statements: Statement[]): Required<Pick<Hypothesis, "verdict" | "for" | "against" | "forStatements" | "againstStatements" | "note">> & { mixed?: boolean; thin?: boolean } {
   const filed = statements.filter((s) => s.hypothesis === id && s.side)
   const passed = filed.filter((s) => s.verdict === "verified")
   const pro = passed.filter((s) => s.side === "for" && s.stance === "supports"), con = passed.filter((s) => s.side === "against" && s.stance === "contradicts")
@@ -446,8 +447,10 @@ export function markOf(id: string, statements: Statement[]): Required<Pick<Hypot
   const dropped = filed.length - pro.length - con.length
   const rest = dropped > 0 ? ` ${plural(dropped, "statement")} filed under it ${dropped === 1 ? "is" : "are"} not counted (not checked, not found in the source, or not pointing that way).` : ""
   if (pro.length && con.length) return { ...base, verdict: "unsupported", mixed: true, note: `The sources disagree: ${said(pro)} for it, ${said(con)} against it.${rest}` }
-  if (pro.length) return { ...base, verdict: "verified", note: `${said(pro)} for it; none against it.${rest}` }
-  if (con.length) return { ...base, verdict: "contradicted", note: `${said(con)} against it; none for it.${rest}` }
+  // A Supported or Contradicted mark that rests on one source only is thin: flagged, and said in the note.
+  const thin = (list: Statement[]) => (numbers(list).length === 1 ? { flag: { thin: true }, words: " It rests on one source only: a thin mark." } : { flag: {}, words: "" })
+  if (pro.length) return { ...base, verdict: "verified", ...thin(pro).flag, note: `${said(pro)} for it; none against it.${thin(pro).words}${rest}` }
+  if (con.length) return { ...base, verdict: "contradicted", ...thin(con).flag, note: `${said(con)} against it; none for it.${thin(con).words}${rest}` }
   if (unjudged.length) return { ...base, verdict: "unchecked", note: `${plural(unjudged.length, "statement")} filed under it passed the quote check, but which way ${unjudged.length === 1 ? "it points" : "they point"} was not judged.` }
   return { ...base, verdict: "unsupported", note: `No checked statement for or against it.${rest}` }
 }
@@ -663,6 +666,7 @@ export function missingOf(record: Pick<ResearchRecord, "searches" | "steps" | "s
   for (const h of record.hypotheses ?? []) {
     const name = h.id.toUpperCase()
     if (h.mixed) out.push(`The sources disagree on ${name}: ${quote(h.text)}`)
+    else if (h.thin) out.push(`${name} rests on one source only (a second, independent source would make its mark stronger): ${quote(h.text)}`)
     else if (h.verdict === "unsupported") out.push(`No checked evidence for or against ${name}: ${quote(h.text)}`)
     else if (h.verdict === "unchecked") out.push(`${name} was not checked: ${quote(h.text)}`)
   }
@@ -1519,7 +1523,7 @@ export async function runAnswer(deps: PipelineDeps, record: ResearchRecord, log:
       const testedBy = { kind: "sources" as const } // published sources; a swarm run on data would be {kind: "swarm", run} (not built)
       return stopped && mark.verdict === "unsupported" && !mark.mixed ? { ...h, ...mark, verdict: "unchecked" as const, note: `Not checked: ${STOP_WORDS[stopped]}.`, testedBy } : { ...h, ...mark, testedBy }
     })
-    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.note ? { note: h.note } : {}), ...(h.agent ? { agent: h.agent } : {}), testedBy: h.testedBy })
+    for (const h of record.hypotheses) emit(`hypothesis:${h.id}`, { type: "hypothesis.checked", id: h.id, verdict: h.verdict!, for: h.for!, against: h.against!, forStatements: h.forStatements!, againstStatements: h.againstStatements!, ...(h.mixed ? { mixed: true } : {}), ...(h.thin ? { thin: true } : {}), ...(h.note ? { note: h.note } : {}), ...(h.agent ? { agent: h.agent } : {}), testedBy: h.testedBy })
   }
 
   // ── what was used, what to do next, and the files ────────────────────────────────────────────────

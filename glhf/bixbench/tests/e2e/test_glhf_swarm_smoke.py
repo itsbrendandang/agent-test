@@ -58,7 +58,15 @@ def test_swarm_rejects_a_bad_artifact_then_reports(tmp_path: Path) -> None:
     assert (tmp_path / "FINDINGS.md").read_text() == (outputs / "glhf" / "FINDINGS.md").read_text()
     # Graded from the copy made after the sandbox was gone, never from the mounted folder.
     assert summary["outputs_rejected"] == [] and (tmp_path / "graded" / "gene_counts.csv").is_file()
-    assert [(i["id"], i["status"]) for i in ledger["issues"]] == [("I1", "fixed")]
+    assert [(i["id"], i["status"]) for i in ledger["issues"]] == [("I1", "fixed"), ("I2", "fixed")]
+    # The refutation of C2 reached the Reviser: code raised a major issue on C2's artifact.
+    refuted = ledger["issues"][1]
+    assert (refuted["raised_by"], refuted["severity"], refuted["claim_ids"]) == (
+        "harness",
+        "major",
+        ["C2"],
+    )
+    assert refuted["artifact_ids"] == ["gene_counts"] and "row count" in refuted["evidence"]
     phases = [e["phase"] for e in ledger["events"] if e["kind"] == "phase.started"]
     assert phases == [
         "scout",
@@ -349,7 +357,7 @@ def test_run_settings_are_recorded_for_disclosure(tmp_path: Path) -> None:
     )
     assert not (memory_dir / "lessons.md").exists()
     # The fix made in round 1 went through the critic's second pass.
-    assert [(i["id"], i["rechecked"]) for i in ledger["issues"]] == [("I1", True)]
+    assert [(i["id"], i["rechecked"]) for i in ledger["issues"]] == [("I1", True), ("I2", True)]
     assert "not re-checked" not in (tmp_path / "outputs" / "glhf" / "FINDINGS.md").read_text()
     # A second run on the same task must not be shown the lesson the first one saved.
     again = run_local(

@@ -117,6 +117,14 @@ Other rules:
 | The Critic was cut off by a limit and no issue is open | The next round starts, so the Critic can look again. |
 | The Critic did not run (no budget) | Review ends. The ledger records `review.incomplete`. |
 
+After the harness runs the registered tests, and before this decision, code raises one `major`
+issue for each claim that is now refuted (`flag_refuted` in `ledger.py`; `raised_by` is
+`harness`, and `claim_ids` names the claim). The issue is on the claim's artifacts, and its
+evidence is the contradicting test or the failed replication. So a refutation starts the
+Reviser, who fixes the artifact or closes the issue as `wontfix` with the command and output
+that show the artifact is right. It is `major` and not `blocking` because the refuted verdict
+has no error bound. The verdict does not change. This is in the phase engine only.
+
 A fix counts as checked again only after a later Critic phase finished. `FINDINGS.md` marks
 fixes that were not checked again.
 
@@ -150,6 +158,13 @@ Files are read as UTF-8 and a byte-order mark at the start is dropped, as the gr
 | Fatal problem | missing file, empty file, cannot be parsed, wrong delimiter, row-key column not in the header | yes |
 | Other problem | duplicate or blank row keys, rows with a different number of columns | no; the roles see it and the Critic can raise an issue |
 | Warning | one column only, header with no rows, empty JSON, more than half of the sampled cells empty or NA | no |
+| Warning (names and formats) | a column that the task's Required Outputs names for the file is not in the header, or differs only in case, spaces or `_`; row keys with spaces at the start or end; Ensembl IDs with a version suffix (`.12`), or a mix with and without; numbers written as `1,234`; infinite values | no |
+
+The grader matches column names and row keys as exact strings, so each of these can give an
+artifact a score of zero. Code reads the column names from the task text (`required_columns` in
+`swarm/tools.py`): the backticked words in the Required Outputs item that names the file (the
+whole section when there is one artifact), only in an item that says "column". This reading can
+be wrong, so these are warnings only.
 
 A warning can be correct for some tasks, so a role must compare it with the task before it
 changes anything.
@@ -295,6 +310,12 @@ Why the mean and not the product: the mean of e-values is an e-value under any d
 between the tests. A product is an e-value only if the tests are independent, and code cannot
 check that. The cost: evidence does not multiply, so one strong test is worth more than
 several weak tests.
+
+The ledger summary that the roles read states the p-value one test must reach on its own, and
+the number of permutations that takes (`p_needed` and `permutations_needed` in `ledger.py`).
+With 8 claims the bar is 80, so one test needs p <= 3.9e-05, or at least 25,599 permutations;
+10,000 permutations are not enough once there are 6 claims. The Critic's instructions say this.
+These are not new rules: they are read from the constants above.
 
 ### What the rules give, and what they do not
 

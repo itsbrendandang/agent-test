@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from bixbench3.inspect_harness.models import ExpectedOutput
 from bixbench3.inspect_harness.swarm import baseline, solver, tools
 
 
@@ -166,6 +167,119 @@ def test_a_check_that_could_not_run_never_starts_the_finisher() -> None:
     mixed = [*failed, {"artifact_id": "a", "problems": ["missing"], "fatal": True}]
     assert tools.needs_rescue(mixed) == [mixed[1]]
     assert not tools.check_failed([mixed[1]])
+
+
+# --- Column names and key formats the grader matches exactly ---------------------------------------
+
+DEMO_PROMPT = Path(__file__).parents[3] / "demo_case" / "prompt.md"
+
+
+def _outputs(*paths: str) -> list[ExpectedOutput]:
+    return [
+        ExpectedOutput(artifact_id=Path(path).stem, path=path, format="csv", row_key="gene_id")
+        for path in paths
+    ]
+
+
+def test_the_brief_s_column_names_are_read_per_artifact() -> None:
+    outputs = _outputs("outputs/gene_counts.csv", "outputs/treated_vs_control.csv")
+    assert tools.required_columns(DEMO_PROMPT.read_text(), outputs) == {
+        "gene_counts": ["gene_id"],
+        "treated_vs_control": ["gene_id", "log2fc"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("brief", "expected"),
+    [
+        # One artifact: the whole section, as in the synthetic fixture.
+        (
+            "## Required Outputs\n\nWrite a CSV with columns `gene_id` and `sample`.\n",
+            ["gene_id", "sample"],
+        ),
+        # No "column" in the item: backticked words there are not read as column names.
+        ("## Required Outputs\n\n- `outputs/de.csv`: use `DESeq2` with `alpha = 0.05`.\n", None),
+        # Paths, expressions and file names are never column names; the next heading ends it.
+        (
+            "# Task\n## Required Outputs\n- `outputs/de.csv` columns `gene`, `padj < 0.05`, "
+            "`log2FoldChange`, `notes.md`\n## Software\ncolumns `version`\n",
+            ["gene", "log2FoldChange"],
+        ),
+        ("## Method\ncolumns `gene_id`\n", None),  # no Required Outputs section
+    ],
+)
+def test_only_backticked_names_in_a_column_line_of_the_section_are_read(
+    brief: str, expected: list[str] | None
+) -> None:
+    found = tools.required_columns(brief, _outputs("outputs/de.csv"))
+    assert found == ({} if expected is None else {"de": expected})
+
+
+def test_a_file_name_inside_another_is_not_its_line() -> None:
+    brief = "## Required Outputs\n- `outputs/gene_counts.csv` with columns `gene_id`, `s1`\n"
+    outputs = _outputs("outputs/counts.csv", "outputs/gene_counts.csv")
+    assert tools.required_columns(brief, outputs) == {"gene_counts": ["gene_id", "s1"]}
+
+
+def test_a_column_the_brief_names_and_the_header_lacks_is_a_warning(tmp_path: Path) -> None:
+    text = "gene_id,Log2FC\ng1,1.5\ng2,-2\n"
+    r = _check(
+        tmp_path,
+        "t.csv",
+        text,
+        format="csv",
+        row_key="gene_id",
+        required_columns=["gene_id", "log2fc", "padj"],
+    )
+    assert r["problems"] == [] and not r["fatal"] and tools.needs_rescue([r]) == []
+    assert any("'Log2FC' is named 'log2fc'" in w for w in r["warnings"])
+    assert any("no column 'padj'" in w for w in r["warnings"])
+    assert "Warnings (not failures" in tools.contract_text([r])
+    good = _check(
+        tmp_path,
+        "g.csv",
+        "gene_id,log2fc\ng1,1\n",
+        format="csv",
+        row_key="gene_id",
+        required_columns=["gene_id", "log2fc"],
+    )
+    assert good["warnings"] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "warning"),
+    [
+        ("gene_id,a\nENSG00000000003.14,1\nENSG00000000005,2\n", "mixes Ensembl IDs"),
+        ("gene_id,a\nENSG00000000003.14,1\nENSG00000000005.6,2\n", "with a version suffix"),
+        ("gene_id,a\n g1,1\ng2 ,2\n", "leading or trailing spaces"),
+        ('gene_id,a\ng1,"1,234"\ng2,5\n', "thousands separators"),
+        ("gene_id,a\ng1,Inf\ng2,-inf\n", "2 sampled values are infinite"),
+    ],
+)
+def test_key_and_number_formats_the_grader_reads_differently_are_warnings(
+    tmp_path: Path, text: str, warning: str
+) -> None:
+    r = _check(tmp_path, "t.csv", text, format="csv", row_key="gene_id")
+    assert r["problems"] == [] and not r["fatal"]
+    assert any(warning in w for w in r["warnings"]), r["warnings"]
+
+
+def test_plain_ensembl_keys_and_ordinary_numbers_raise_nothing(tmp_path: Path) -> None:
+    text = "gene_id,a,b\nENSG00000000003,1234,0.5\nENSMUSG00000000001,-2,1e-3\n"
+    r = _check(tmp_path, "t.csv", text, format="csv", row_key="gene_id")
+    assert r["problems"] == [] and r["warnings"] == []
+
+
+def test_a_fatal_file_gets_no_column_warnings(tmp_path: Path) -> None:
+    r = _check(
+        tmp_path,
+        "t.tsv",
+        "gene_id,log2fc\ng1,1\n",
+        format="tsv",
+        row_key="gene_id",
+        required_columns=["log2fc"],
+    )
+    assert r["fatal"] and not any("no column" in w for w in r["warnings"])
 
 
 # --- Token budget -------------------------------------------------------------------------------

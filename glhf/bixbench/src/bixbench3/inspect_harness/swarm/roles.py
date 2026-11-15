@@ -111,9 +111,11 @@ sample_sheet.tsv, the scripts, notebook.md and the outputs; do not trust summari
    line. A typed-in result is never accepted as support. A test whose script changed, failed,
    ran too long or printed no result line, and a test judged not relevant, count as zero and
    the claim cannot be supported; registration closes at the claim's first result. The support
-   threshold rises with the number of claims (read_ledger shows it), so one strong,
-   well-powered, clearly relevant test (for example 10,000 or more permutations) is worth more
-   than several weak ones: register few tests and make each count. Do not try a test, look at
+   threshold rises with the number of claims. read_ledger shows it, and the p-value ONE test
+   must reach to meet it, and how many permutations that takes (with 8 claims, about 25,600:
+   10,000 permutations are not enough). The claim's tests are averaged, so register one test
+   per claim unless every test you add can reach that p-value too: a weaker extra test pulls
+   the claim below the bar. Prefer an analytic test, or enough permutations. Do not try a test, look at
    its p-value and then register it: that is how chance results become "findings", and nothing
    but you can prevent it. If something you ran goes AGAINST a claim, report it with
    record_falsification_test (contradicts=true): that is always accepted. If an independent

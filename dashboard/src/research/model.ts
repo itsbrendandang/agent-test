@@ -21,7 +21,7 @@ export interface Hypothesis {
   id: string; text: string; supportIf: string; contradictIf: string; origin?: "planner" | "user"
   /** The investigator that works on this hypothesis ("investigator-1"). */
   agent?: string
-  result?: { /** What it was tested with: "sources" today; a kind this page does not know is shown as text. */ testedBy?: { kind: string; run?: string }; verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; note?: string }
+  result?: { /** What it was tested with: "sources" today; a kind this page does not know is shown as text. */ testedBy?: { kind: string; run?: string }; verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; /** The mark rests on one source only. */ thin?: boolean; note?: string }
 }
 export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string
   /** Who says so: the critic re-reading the revision ("reviewer"), the engine's code ("code"), or only the writer's own report ("writer"). */
@@ -161,7 +161,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
       // The result of testing one hypothesis, computed by the engine's code from the checked statements. The only place a hypothesis's mark comes from.
       case "hypothesis.checked": {
         if (!str(e.id) || !VERDICTS.includes(e.verdict as string)) break
-        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, note: str(e.note),
+        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, ...(e.thin === true ? { thin: true } : {}), note: str(e.note),
           testedBy: ((t) => (t && str(t.kind) ? { kind: str(t.kind)!.slice(0, 40), run: str(t.run) && /^[\w.-]{1,120}$/.test(str(t.run)!) ? str(t.run) : undefined } : undefined))(e.testedBy as Record<string, unknown> | undefined) }
         results.set(str(e.id)!, result)
         const hit = s.hypotheses.find((h) => h.id === e.id); if (hit) hit.result = result

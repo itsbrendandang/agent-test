@@ -53,7 +53,7 @@ not a benchmark score.
 | Supported findings | Claims with the verdict supported. |
 | Rejected claims | Claims with the verdict refuted. |
 | Not established | Claims with the verdict insufficient or untested. They are not findings. |
-| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. |
+| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. An issue raised by `harness` comes from a refuted claim: code raises it so that the Reviser checks the claim's artifacts. |
 | Unresolved issues | Issues that are still open or were not fixed. |
 
 ## Verdict rules

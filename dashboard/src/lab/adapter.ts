@@ -548,7 +548,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const nums = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [])
         const sides = sidesLine({ verdict: "unchecked", for: nums(e.for), against: nums(e.against), forStatements: [], againstStatements: [], mixed: e.mixed === true })
         const practice = m.provenance === "practice"
-        const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : ""}`
+        const said = practice ? `Example result: ${MARK_WORD[mark]}` : `${MARK_GLYPH[mark]} ${MARK_WORD[mark]}${e.mixed === true ? ": the sources disagree" : e.thin === true ? ": one source only" : ""}`
         const label = `the result for hypothesis ${id}: ${said} (${sides})`
         // code works the result out; the Guardian carries it to the investigator whose hypothesis it is, else to where the hypotheses were set up
         const to = investigatorOf(str(e.agent))?.who ?? "proposer"

@@ -170,7 +170,7 @@ models produced.
 ![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
 
 **Research.** You ask; the answer is split into hypotheses, each with the sources for and against
-it.
+it. A mark that rests on one source only says so ("one source only").
 
 ![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
 
@@ -281,7 +281,8 @@ it is not a benchmark result.
 - **No answers in reach.** The answer key never enters the sandbox or the prompt. Only data
   files are copied in; solution notebooks and write-ups are left out.
 - **What was rejected is reported.** Each swarm run lists the answers it threw out and why,
-  next to the answers it kept.
+  next to the answers it kept. In the nine-role swarm, a claim that a test rejects also sends the
+  files it rests on back for a fix (tested with the scripted model only).
 - **Honest statistics.** Each report says how it was graded and whether its numbers can be
   compared with published ones. Today the answer is "no", with the reasons: for example, our
   sandbox has no network and the official one does. Questions that share a dataset are not

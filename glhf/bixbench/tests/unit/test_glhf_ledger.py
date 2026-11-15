@@ -5,20 +5,26 @@ import random
 
 import pytest
 
+from bixbench3.inspect_harness.swarm import roles
 from bixbench3.inspect_harness.swarm.ledger import (
     ALPHA,
     KAPPA,
     MAX_SCRIPT_BYTES,
     MAX_TESTS,
+    P_FLOOR,
     RELEVANCE_THRESHOLD,
     Claim,
     Ledger,
     Relevance,
     Run,
     RunStatus,
+    p_needed,
+    p_shown,
     p_to_e,
     parse_result_line,
+    permutations_needed,
 )
+from bixbench3.inspect_harness.swarm.solver import PhaseResult, review_step
 
 
 def _claim(ledger: Ledger) -> Claim:
@@ -770,3 +776,99 @@ def test_reports_list_rejections_and_fixed_issues() -> None:
     data = json.loads(ledger.to_json())
     assert [c["verdict"] for c in data["claims"]] == ["supported", "refuted"]
     assert ledger.open_issues() == []
+
+
+# --- A refutation reaches the Reviser ---------------------------------------------------------------
+
+
+def test_a_refuted_claim_becomes_one_major_issue_on_its_artifacts() -> None:
+    ledger = Ledger()
+    kept, flipped = _claim(ledger), _claim(ledger)
+    _test(ledger, kept, "permutation", 1e-6)
+    _register(ledger, flipped, "marker direction")
+    _run(ledger, flipped, "marker direction", 0.001, contradicts=True)
+    assert (kept.verdict, flipped.verdict) == ("supported", "refuted")
+    assert ledger.open_issues() == []  # until now a refutation never reached the Reviser
+
+    [issue] = ledger.flag_refuted()
+    assert (issue.severity, issue.raised_by, issue.claim_ids) == ("major", "harness", [flipped.id])
+    assert issue.artifact_ids == ["degs"] and "marker direction: p = 0.001" in issue.evidence
+    assert f"Claim {flipped.id} was refuted" in issue.problem and "wontfix" in issue.problem
+    assert ledger.open_issues() == [issue]
+    finished = PhaseResult(ran=True)
+    assert review_step(finished, len(ledger.open_issues())) == "revise"
+    assert ledger.events[-1]["kind"] == "issue.raised"
+
+    # Once per claim: not again in a later round, and not again after the Reviser closed it.
+    assert ledger.flag_refuted() == []
+    ledger.resolve_issue(issue.id, "wontfix", "the test read the wrong column: ran X, got Y", "e")
+    assert ledger.flag_refuted() == [] and ledger.open_issues() == []
+
+
+def test_a_failed_replication_and_a_typed_contradiction_are_flagged_too() -> None:
+    ledger = Ledger()
+    a, b, quiet = _claim(ledger), _claim(ledger), _claim(ledger)
+    ledger.fail_replication(a.id, "edgeR finds 12 DEGs vs 480", "critic")
+    ledger.record_test(b.id, "direction", 1e-4, True, "went down, not up", "critic")
+    ledger.record_test(quiet.id, "direction", 0.4, True, "weak", "critic")  # not refuted
+    issues = ledger.flag_refuted()
+    assert [i.claim_ids for i in issues] == [[a.id], [b.id]]
+    assert issues[0].evidence.startswith("independent replication failed. edgeR finds 12")
+    assert "direction: p = 0.0001, contradicts. went down, not up" in issues[1].evidence
+    # A critic's own issue about the claim does not stop the harness from raising its own.
+    c = _claim(ledger)
+    ledger.raise_issue("minor", ["degs"], "style", "x", "critic", claim_ids=[c.id])
+    ledger.fail_replication(c.id, "no", "critic")
+    assert [i.claim_ids for i in ledger.flag_refuted()] == [[c.id]]
+
+
+def test_supported_insufficient_and_untested_claims_raise_nothing() -> None:
+    ledger = Ledger()
+    good, weak, _untested = _claim(ledger), _claim(ledger), _claim(ledger)
+    _test(ledger, good, "permutation", 0.0)
+    _test(ledger, weak, "permutation", 0.3)
+    assert (good.verdict, weak.verdict) == ("supported", "insufficient")
+    assert ledger.flag_refuted() == [] and ledger.issues == {}
+
+
+# --- What one test must reach, said to the Critic ---------------------------------------------------
+
+
+@pytest.mark.parametrize("claims", range(1, 51))
+def test_the_p_value_shown_for_one_test_reaches_the_bar(claims: int) -> None:
+    bar = claims / ALPHA
+    p = p_needed(bar)
+    assert p is not None and p_to_e(p) >= bar and p_to_e(p * 1.01) < bar
+    assert p_to_e(float(p_shown(p))) >= bar  # rounded down, never up
+    permutations = permutations_needed(bar)
+    assert permutations is not None
+    assert p_to_e(1 / (permutations + 1)) >= bar  # the smallest p of that many permutations
+    assert p_to_e(1 / permutations) < bar  # and one fewer is not enough
+
+
+def test_no_single_test_can_reach_a_bar_above_the_floor() -> None:
+    assert p_needed(p_to_e(P_FLOOR) * 1.001) is None
+    assert permutations_needed(p_to_e(P_FLOOR) * 1.001) is None
+    ledger = Ledger()
+    for _ in range(60):
+        _claim(ledger)
+    assert "No single test can reach the bar of 600" in ledger.summary()
+
+
+def test_the_summary_says_what_one_test_must_reach() -> None:
+    ledger = Ledger()
+    for _ in range(8):
+        _claim(ledger)
+    summary = ledger.summary()
+    assert "only with p <= 3.9e-05" in summary and "at least 25,599 permutations" in summary
+    one = Ledger()
+    _claim(one)
+    assert "only with p <= 0.0025" in one.summary() and "at least 399 permutations" in one.summary()
+
+
+def test_the_critic_is_not_told_a_test_that_cannot_reach_the_bar() -> None:
+    # It used to suggest 10,000 permutations, which cannot support a claim once there are 6.
+    assert "10,000 or more permutations" not in roles.CRITIC
+    assert "about 25,600" in roles.CRITIC
+    assert abs((permutations_needed(8 / ALPHA) or 0) - 25_600) <= 1
+    assert p_to_e(1 / 10_001) < 8 / ALPHA

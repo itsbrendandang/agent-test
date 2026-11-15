@@ -198,6 +198,8 @@ export interface Hypothesis {
   againstStatements?: number[]
   /** True when checked statements stand on both sides: shown as Insufficient evidence, "the sources disagree". */
   mixed?: boolean
+  /** True when a Supported or Contradicted mark rests on one source only: shown as "one source only". */
+  thin?: boolean
   note?: string
   /** The investigator that works on it: "investigator-1" for h1, and so on. */
   agent?: string
@@ -317,7 +319,7 @@ export type ResearchEvent =
   | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
   | { type: "opening"; text: string }
   | { type: "hypotheses"; items: Pick<Hypothesis, "id" | "text" | "supportIf" | "contradictIf" | "origin" | "agent">[]; needed: boolean; reason?: string; cut?: { text: string; reason: string }[] }
-  | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "note" | "agent" | "testedBy">)
+  | ({ type: "hypothesis.checked" } & Required<Pick<Hypothesis, "id" | "verdict" | "for" | "against" | "forStatements" | "againstStatements">> & Pick<Hypothesis, "mixed" | "thin" | "note" | "agent" | "testedBy">)
   | { type: "specialists"; items: AnswerSpecialist[] }
   | ({ type: "step.started" } & StepStart)
   | { type: "step.progress"; step: string; done: number; total?: number; note?: string }
