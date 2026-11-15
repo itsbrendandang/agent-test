@@ -38,8 +38,11 @@ export interface LabSceneProps {
   settleKey?: string | number
   /** A small scene for a side panel: fewer words around the map. */
   compact?: boolean
-  /** Three columns, two below 800 px, one below 600 px. */
-  layout?: "auto" | "wide" | "tall"
+  /**
+   * "auto": three columns, two below 800 px, one below 600 px. "compact" (a strip beside or above other content):
+   * three columns from 560 px, else two; never the one tall column.
+   */
+  layout?: "auto" | "compact" | "wide" | "tall"
   /** Shown in the bar under the map, before the status and "Pause motion": a replay's controls. */
   footer?: ReactNode
   className?: string
@@ -95,7 +98,8 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const root = useRef<HTMLElement>(null), lab = useRef<HTMLDivElement>(null)
   const [sceneWidth, setSceneWidth] = useState(1000)
   const scale = useRef(1) // px for one map unit
-  const layout: LabLayout = wanted === "tall" || (wanted === "auto" && sceneWidth < 600) ? TALL : wanted === "auto" && sceneWidth < 800 ? WIDE : GRID
+  const layout: LabLayout = wanted === "tall" || (wanted === "auto" && sceneWidth < 600) ? TALL
+    : (wanted === "auto" && sceneWidth < 800) || (wanted === "compact" && sceneWidth < 560) ? WIDE : GRID
   const sim = useMemo(() => createSim(layout), [layout]) // one simulation a map; it is changed in place, outside React
 
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})

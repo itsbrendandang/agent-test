@@ -45,7 +45,7 @@ view adds one. See "How the screens connect" in the main README.
 | Label (navigation) | Key (address) | File | What it shows |
 |---|---|---|---|
 | Overview | `Overview` | `OverviewView.tsx`, `src/overview/` | The question box, the answer asked from there right under it, then the Agent Lab scene. One quiet line of counts. |
-| Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work, read the answer with its sources. |
+| Research | `Home` | `HomeView.tsx`, `src/research/`, `src/home/` | The conversation: ask a question, watch the work in the live Agent Lab beside it (`research/ResearchLive.tsx`), read the answer with its sources. |
 | Saved research | `Runs` | `ExperimentsView.tsx` | Everything that was researched, newest first, with keyword search. Runs of the same brief are one row with their history. |
 | Compare | `Compare` | `SwarmView.tsx` | One agent alone and a team of nine on the same task, side by side. Start a run here (see below). |
 | Team review | `Board` | `BoardView.tsx` | One team review: the decision, how many statements were checked and why the rest were not, the discussion, the sources. |

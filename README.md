@@ -136,7 +136,7 @@ Benchmarks and Compare are not in the sidebar. They open only by their address (
 | Screen | What it is for |
 |---|---|
 | Overview | Ask in the "Let's research together!" question box. The answer is written right under the box. Below it, follow the six-room Agent Lab and its activity panel. The answer is also the conversation in Research, so a follow-up there continues it. One quiet line counts research and practice apart. |
-| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. |
+| Research | The chat. Ask a question and read the answer with its sources and its hypotheses. An example question fills the box; nothing is sent until you press Send. While the answer is made, the Agent Lab sits beside it (above it on a narrow screen); when the answer is done the Lab folds into one line. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | Not in the sidebar; open `#Compare`. A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
@@ -252,6 +252,16 @@ models produced.
 it. A mark that rests on one source only says so ("one source only").
 
 ![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
+
+**Research's live Agent Lab.** While an answer is made, the conversation is on the left and the
+Agent Lab is on the right. A narrow screen puts the Lab above the conversation. The Lab uses the same
+scene as the Overview. Agents move only for steps the engine reports. Agents with no step stay at
+their desks. Click an agent to see what it is doing. "Hide the lab" folds it into one line. The
+browser remembers this choice for the next answer. When the answer is done, the Lab folds by itself.
+"Show the lab" opens it again, and "Replay" plays the recorded events again. A Demo answer is
+finished in a fraction of a second, so the Lab replays a new Demo answer once, labelled "Replay".
+"Pause motion" stops all movement. With the system's reduced-motion setting, nothing moves and
+nothing replays by itself. Code: `dashboard/src/research/ResearchLive.tsx`.
 
 **Team review.** The decision first, then how many statements were checked and how each one did.
 

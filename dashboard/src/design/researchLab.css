@@ -1,0 +1,44 @@
+/* The Research page with its live Agent Lab (src/research/ResearchLive.tsx): the conversation on the left and the lab
+   on the right while an answer is made, the lab above the conversation when there is no room for both, and one
+   folded line once the answer is finished. The lab's own look is in lab.css. */
+
+/* With the lab open beside it, the column is wider: the conversation keeps its reading width, the lab gets the rest. */
+.search-main:has(> .research-live[data-lab="open"]) { max-width: 1320px; }
+
+.research-live { container-type: inline-size; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.research-live-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.research-live:not([data-lab]) .research-live-grid { grid-template-rows: minmax(0, 1fr); }
+.research-live-chat { display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; width: 100%; max-width: 800px; margin: 0 auto; }
+
+/* The lab: a card with one line on top (what the team is doing, and the controls), then the scene and its panel. */
+.research-lab { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 100%; max-width: 800px; margin: 0 auto; border: 1px solid var(--edge, #dedbd2); border-radius: var(--radius-card, 12px); background: var(--surface, #fdfcfa); }
+.research-lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px 6px 12px; min-height: 44px; font-size: 13px; }
+.research-lab-title { font-weight: 650; color: var(--text, #1d1c19); }
+.research-lab-status { white-space: nowrap; }
+.research-lab-status[data-status="running"] > span:first-child { color: var(--success, #0d5f37); }
+.research-lab-status[data-status="failed"] { color: var(--danger, #9c1414); }
+.research-lab-latest { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-lab-actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.research-lab-actions .btn { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+.research-lab-body { display: flex; flex-direction: column; min-height: 0; padding: 0 8px 8px; overflow: auto; overscroll-behavior: contain; }
+.research-lab-body .lab-scene { border-radius: 10px; }
+.research-lab-body .lab-panel { max-height: 260px; overflow: auto; }
+.research-lab-replay { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+
+/* On a tall enough window the conversation scrolls inside itself; the lab above it is kept to part of the height. */
+@media (min-width: 1001px) { .research-live[data-lab="open"] .research-lab-body { max-height: min(46vh, 460px); } }
+
+/* Room for both: the conversation on the left at its reading width, the lab on the right, each scrolling on its own. */
+@container (min-width: 1040px) {
+  .research-live[data-lab="open"] .research-live-grid { grid-template-columns: minmax(0, 1fr) clamp(340px, 38%, 500px); grid-template-rows: minmax(0, 1fr); gap: 20px; }
+  .research-live[data-lab="open"] .research-live-chat { grid-column: 1; grid-row: 1; }
+  .research-live[data-lab="open"] .research-lab { grid-column: 2; grid-row: 1; align-self: start; max-height: 100%; max-width: none; margin: 0; }
+  .research-live[data-lab="open"] .research-lab-body { max-height: none; }
+  .research-live[data-lab="open"] .research-lab-body .lab-panel { max-height: none; overflow: visible; }
+}
+
+@media (max-width: 1000px) {
+  /* The page scrolls as a whole here, as the conversation does. */
+  .research-live, .research-live-grid { flex: none; }
+  .research-lab-body { overflow: visible; }
+}

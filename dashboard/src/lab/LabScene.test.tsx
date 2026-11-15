@@ -286,6 +286,20 @@ describe("LabScene", () => {
     expect(screen.getAllByRole("button", { name: /^Inspect / })).toHaveLength(12)
   })
 
+  it("the compact map (a strip beside other content) has three columns from 560 px, else two, never the one tall column", () => {
+    const at = (width: number) => {
+      const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+      const view = render(<LabScene model={emptyLab()} layout="compact" />)
+      const layout = document.querySelector(".lab-scene")?.getAttribute("data-layout")
+      view.unmount(); spy.mockRestore()
+      return layout
+    }
+    expect(at(900)).toBe("grid")
+    expect(at(560)).toBe("grid")
+    expect(at(480)).toBe("wide")
+    expect(at(320)).toBe("wide")
+  })
+
   it("lights a room's equipment only while the model says a teammate of it is working or fetching", () => {
     const room = (id: string) => document.querySelector(`.lab-room[data-room="${id}"]`)!
     const label = (name: string) => screen.getByText(name).closest(".lab-room-name")!
