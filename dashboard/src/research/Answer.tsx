@@ -2,6 +2,9 @@
 // numbered citations, a mark beside each statement that was checked, the source list, and what it cost.
 // Everything shown comes from the answer's own events. A mark appears only where a check was recorded; a sentence
 // without one is background and carries no mark. A demo answer is labelled a demo and its marks say so.
+// While the answer is made, its text appears as the engine streams it (live Markdown with a caret), under the line of
+// the current step and quiet lines saying how the last steps ended (LiveChat.tsx LiveSteps). A finished answer is
+// drawn at once, never typed out.
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { SafeMarkdown, type Inline } from "@/components/SafeMarkdown"
 import { Provenance } from "@/components/Provenance"
@@ -18,6 +21,7 @@ import { artifactUrl, cancelResearch, useResearchEvents } from "./api"
 import { searchPlace } from "./providers"
 import { copyText, foldAnswer, oncePractice, ownLines, preparation, sourceCounts, seconds, progressLine, providerPlace, stepLine, withMarks, type AnswerState, type Statement } from "./model"
 import { Working } from "./Working"
+import { LiveSteps } from "./LiveChat"
 
 const money = (usd: number) => (usd === 0 ? "nothing" : usd < 0.01 ? "less than 1 cent" : `$${usd.toFixed(2)}`)
 const STOPPED: Record<string, string> = {
@@ -131,12 +135,13 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
           {stopping && <span className="muted small" role="status">{stopping}</span>}
         </div>
       )}
+      {working && !waiting && !lost && <LiveSteps state={s} ended />}
       <Activity steps={s.steps} working={working} place={searchPlace} totalSeconds={s.finished?.seconds ?? s.seconds} preparedMs={prep && !prep.running && !prep.failed ? prep.ms : undefined} />
       {lost && working && (
         <p className="newrun-error" role="alert">The connection to the engine was lost while this answer was being made. {s.markdown ? "What arrived so far is below. " : ""}{onAgain && <button type="button" className="link-btn" onClick={onAgain}>Ask again</button>}</p>
       )}
 
-      {s.markdown && <SafeMarkdown className="answer-text" inline={inline}>{marked.text}</SafeMarkdown>}
+      {s.markdown && <SafeMarkdown className="answer-text" inline={inline} live={working && !s.complete}>{marked.text}</SafeMarkdown>}
       {s.markdown && <AnswerImages sources={s.sources} onSource={setLit} />}
       {!s.complete && s.markdown && <p className="muted small">Still being written. It has not been checked yet.</p>}
 

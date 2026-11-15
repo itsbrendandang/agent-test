@@ -7,6 +7,9 @@
 // The caller may pass `inline`: private addresses ("#<key>-cite-2", "#<key>-check-0") that it put into the text
 // itself, drawn as a citation chip or a check mark. The key is made by the caller for one render, so text from a
 // model cannot produce one.
+// `live`: the text is still arriving (an answer being written). Streamdown then reads it as a stream: an unfinished
+// "**bold" or "[link" at the end is drawn as it will be, and a caret marks the end. Only for text that is really still
+// coming: a finished text is drawn at once (static), never typed out.
 import { type ComponentProps, type ReactNode, useMemo } from "react"
 import { Streamdown } from "streamdown"
 import { safeUrl } from "@/lib/words"
@@ -15,7 +18,7 @@ export interface Inline { key: string; cite: (n: number) => ReactNode; check: (i
 const Image = ({ alt }: { alt?: string }) => <span className="md-noimage">[image not shown{alt ? `: ${alt}` : ""}]</span>
 const NO_PLUGINS: [] = []
 
-export function SafeMarkdown({ children, className = "", inline }: { children: string; className?: string; inline?: Inline }) {
+export function SafeMarkdown({ children, className = "", inline, live = false }: { children: string; className?: string; inline?: Inline; live?: boolean }) {
   const components = useMemo(() => {
     const own = inline ? new RegExp(`^#${inline.key}-(cite|check)-(\\d+)$`) : undefined
     function Link({ href, children: label }: { href?: string; children?: ReactNode }) {
@@ -28,8 +31,8 @@ export function SafeMarkdown({ children, className = "", inline }: { children: s
   }, [inline])
   const allow = (url: string) => (inline && url.startsWith(`#${inline.key}-`) ? url : safeUrl(url) ?? "")
   return (
-    <div className={`md ${className}`}>
-      <Streamdown mode="static" skipHtml rehypePlugins={NO_PLUGINS} components={components} linkSafety={{ enabled: false }} controls={false} urlTransform={allow}>{children}</Streamdown>
+    <div className={`md ${className}`} data-live={live || undefined}>
+      <Streamdown mode={live ? "streaming" : "static"} isAnimating={live} caret={live ? "block" : undefined} skipHtml rehypePlugins={NO_PLUGINS} components={components} linkSafety={{ enabled: false }} controls={false} urlTransform={allow}>{children}</Streamdown>
     </div>
   )
 }
