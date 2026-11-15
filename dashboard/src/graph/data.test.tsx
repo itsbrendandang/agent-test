@@ -9,7 +9,8 @@ class FakeEventSource {
   onerror: (() => void) | null = null
   readyState = 1
   closed = false
-  constructor(public url: string) { FakeEventSource.all.push(this) }
+  url: string
+  constructor(url: string) { this.url = url; FakeEventSource.all.push(this) }
   close() { this.closed = true; this.readyState = 2 }
   emit(e: unknown) { this.onmessage?.({ data: JSON.stringify(e) }) }
 }
