@@ -64,7 +64,7 @@ were kept so that saved runs still open.
 
 | You see | In the code |
 |---|---|
-| AI Scientist Bot | The repository is `agent-test`; some scripts and variables say `glhf` or `drug-board`. |
+| Bit Crew | The repository is `agent-test`; some scripts and variables say `glhf` or `drug-board`. |
 | Team review | `board` (`board/`, `engine/src/board/board.ts`, `/api/runs`, `BoardView.tsx`, `DRUG_BOARD_*` variables). |
 | Search | `HomeView.tsx`, `dashboard/src/home/`, `/api/chat`. |
 | Saved research | `ExperimentsView.tsx`, "runs". |
