@@ -6,8 +6,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message"
 import { SearchCredit, Verdict as VerdictChip } from "@/components/Shared"
 import type { Verdict } from "@/board/api"
 import type { ClaimVerdict } from "@/swarm/api"
-import { outcomeOf } from "@/lib/verdict"
-import { safeUrl, splitReply, VERDICT_WORD } from "@/lib/words"
+import { MARK_WORD, markOf, safeUrl, splitReply } from "@/lib/words"
 
 /** A person's own message. */
 export function UserMessage({ children, label = "You asked" }: { children: string; label?: string }) {
@@ -37,7 +36,7 @@ export function TeamMessage({ name, job, text, short, state, fullLabel = "Show f
   const brief = short ?? reply.short
   // A line given from outside (the engine's own summary of the reply) is used as it is. The full reply never repeats it.
   const rest = short === undefined || reply.marked ? reply.rest : text.trim() === short.trim() ? "" : text.trim()
-  const wrong = checks.filter((c) => outcomeOf(c.verdict) === "fails").length
+  const wrong = checks.filter((c) => markOf(c.verdict) === "contradicted").length
   const [open, setOpen] = useState<string>()
   const uid = useId()
   const shown = checks.find((c) => c.key === open)
@@ -48,14 +47,14 @@ export function TeamMessage({ name, job, text, short, state, fullLabel = "Show f
         <p className="thread-short">{brief || "(This reply was empty.)"}</p>
         {(wrong > 0 || flag) && (
           <p className="thread-flag">
-            <span aria-hidden="true">✕</span> {flag ?? (wrong === 1 ? "A check proved one statement here wrong." : `A check proved ${wrong} statements here wrong.`)}
+            <span aria-hidden="true">✕</span> {flag ?? (wrong === 1 ? "A check contradicted one statement here." : `A check contradicted ${wrong} statements here.`)}
           </p>
         )}
         {checks.length > 0 && (
           <div className="thread-chips" role="group" aria-label={`What the checks found about ${name}'s statements`}>
             {checks.map((c, i) => (
               <button key={c.key} type="button" className="thread-chip" aria-expanded={open === c.key} aria-controls={`${uid}-detail`}
-                aria-label={`Statement ${i + 1}: ${VERDICT_WORD[outcomeOf(c.verdict)]}. ${open === c.key ? "Hide" : "Show"} the statement and why.`}
+                aria-label={`Statement ${i + 1}: ${MARK_WORD[markOf(c.verdict)]}. ${open === c.key ? "Hide" : "Show"} the statement and why.`}
                 onClick={() => setOpen(open === c.key ? undefined : c.key)}>
                 <VerdictChip verdict={c.verdict} />
               </button>

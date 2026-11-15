@@ -515,7 +515,28 @@ td { border-bottom: 1px solid var(--line); }
 .pill[data-kind="waiting"], .pill[data-mode="scripted"] { background: transparent; color: #55504a; border: 1px dashed #8a8478; }
 .sv-supported::before, .v-verified::before { content: "✓"; }
 .sv-refuted::before, .v-contradicted::before { content: "✕"; }
-.sv-insufficient::before, .sv-untested::before, .v-unsupported::before, .v-unchecked::before { content: "?"; }
+.sv-insufficient::before, .v-unsupported::before { content: "?"; }
+.sv-untested::before, .v-unchecked::before { content: "○"; }
+/* the four marks: Supported, Contradicted, Insufficient evidence, Not checked. The glyph is in the text. */
+.pill.mark[data-mark="supported"] { background: var(--success-bg); color: var(--success); }
+.pill.mark[data-mark="contradicted"] { background: var(--danger-bg); color: var(--danger); }
+.pill.mark[data-mark="insufficient"] { background: var(--warning-bg); color: var(--warning); }
+.pill.mark[data-mark="unchecked"] { background: transparent; color: var(--neutral); border: 1px dashed #8a8983; }
+.mark-glyph { font-weight: 700; }
+.marks-legend { font-size: 13px; }
+.marks-legend summary { cursor: pointer; color: var(--text-muted); width: fit-content; border-radius: 4px; }
+.marks-legend ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.marks-legend li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.marks-legend p { margin-top: var(--space-2); color: var(--text-muted); }
+
+/* how a result was made: Practice / Live research / Local model. Icon and word; the border style differs too. */
+.prov { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-pill); border: 1px solid var(--edge); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; color: var(--text); background: var(--surface); vertical-align: middle; }
+.prov[data-provenance="practice"] { border: 1px dashed #8a8983; background: transparent; color: var(--neutral); }
+.prov[data-provenance="live"] { border-color: var(--info); color: var(--info); background: var(--info-bg); }
+.prov[data-provenance="local"] { border-color: #8a8983; }
+.prov svg { flex: none; }
+.prov-detail { font-weight: 500; font-family: var(--font-mono); font-size: 11px; }
+.prov[data-compact] { padding: 1px 6px; font-size: 11px; }
 
 /* ---- one button system: .btn, with .btn-primary and .btn-danger; .link-btn for a text link. ---- */
 .btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fffdf6; }

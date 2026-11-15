@@ -2,6 +2,7 @@
 // This file is the pure part of the dashboard's Lab: the rooms, who the teammates are, and the ACTIVITY MODEL the
 // scene draws. The model is made from engine events only (adapter.ts). Nothing here invents work: a teammate that
 // no event mentions stays idle at its desk.
+import type { ProvenanceKind } from "@/lib/provenance"
 
 /** The map is drawn in a 1000 x 740 box (Anh's coordinates). Everything on it is placed in these units. */
 export const MAP = { width: 1000, height: 740, corridorX: 500 } as const
@@ -103,9 +104,8 @@ export interface LogLine { id: string; at: number; text: string; who?: string; t
 
 export type RunKind = "board" | "answer" | "swarm"
 export const KIND_WORD: Record<RunKind, string> = { board: "Team review", answer: "Research answer", swarm: "Swarm run" }
-/** "local": a real model on this machine (free, nothing leaves it). The same three kinds as the shell's Provenance badge. */
-export type Provenance = "practice" | "live" | "local"
-export const PROVENANCE_WORD: Record<Provenance, string> = { practice: "Practice", live: "Live research", local: "Local model" }
+/** How a run was made, from its own record: the shell's one vocabulary (lib/provenance.ts). */
+export type Provenance = ProvenanceKind
 
 export interface LabModel {
   kind?: RunKind
@@ -136,16 +136,6 @@ export const STATE_WORD: Record<LabState, string> = {
 export const STATE_GLYPH: Record<LabState, string> = { idle: "", working: "…", fetching: "⇄", "handing-off": "→", done: "✓", failed: "✕", cancelled: "■" }
 export const NOT_IN_RUN = "Not in this run"
 
-/** The app's four marks for a checked statement, with their glyphs. */
-export type Mark = "supported" | "contradicted" | "insufficient" | "unchecked"
-export const MARK_WORD: Record<Mark, string> = { supported: "Supported", contradicted: "Contradicted", insufficient: "Insufficient evidence", unchecked: "Not checked" }
-export const MARK_GLYPH: Record<Mark, string> = { supported: "✓", contradicted: "✕", insufficient: "?", unchecked: "○" }
-/** The engine's verdict words (a team review's and an answer's, and the swarm's) as the app's four marks. Anything else is "Not checked". */
-export const markOf = (verdict: unknown): Mark =>
-  verdict === "verified" || verdict === "supported" ? "supported"
-    : verdict === "contradicted" || verdict === "refuted" ? "contradicted"
-      : verdict === "unsupported" || verdict === "insufficient" ? "insufficient" : "unchecked"
-
 const idleActivity = (id: CharacterId): Activity => ({ id, inRun: false, standsFor: "", state: "idle", doing: "", trips: [] })
 /** The lab with nobody at work: what is shown when there is no run. */
 export function emptyLab(): LabModel {
@@ -160,3 +150,27 @@ export const LOG_KEPT = 200
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 export const clip = (text: string, max: number) => { const flat = text.replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat }
+
+/** A trip that came back longer ago than this is history when the scene first sees it, and is not walked. */
+export const FRESH_MS = 20_000
+
+/** What a screen reader hears for one teammate. */
+export const describeActivity = (name: string, a: Activity): string => (a.inRun ? `${name}: ${STATE_WORD[a.state]}. ${a.doing}`.trim() : `${name}: ${NOT_IN_RUN}.`)
+
+/** The teammate whose state changed last, among those doing something. The Scout when nobody is. */
+export function latestActive(model: LabModel): CharacterId {
+  let best: CharacterId = "scout", at = -Infinity
+  for (const id of CHARACTER_IDS) {
+    const a = model.characters[id]
+    if (!a.inRun || a.state === "idle" || a.since === undefined) continue
+    if (a.since >= at) { best = id; at = a.since }
+  }
+  return best
+}
+
+/** A time of day with seconds: "4:51:07 pm". Engine time, shown in the reader's time zone. */
+export function clockTime(at: number | undefined): string {
+  if (at === undefined || !Number.isFinite(at)) return ""
+  const d = new Date(at), h = d.getHours()
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`
+}

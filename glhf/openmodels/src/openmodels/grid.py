@@ -127,6 +127,9 @@ def child_env(
         env[f"{SERVICE.upper()}_API_KEY"] = str(key)
         for name in paid.PAID_KEYS:
             env[name] = ""
+    elif model.base_url_env and model.base_url and not env.get(model.base_url_env):
+        # A hosted OpenAI-compatible service: its public address. The key is the owner's.
+        env[model.base_url_env] = model.base_url
     return env
 
 

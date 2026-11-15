@@ -15,7 +15,8 @@
 //   GET  /api/runs/:id/events    SSE: the whole event log, then live events (204 for a run with no log, 429 past
 //                                MAX_STREAMS_PER_RUN streams on one run or MAX_STREAMS in total)
 //   GET  /api/runs/:id/memo      the memo (Markdown)
-//   GET  /api/search?q=          keyword search over all runs
+//   GET  /api/search?q=          keyword search over all runs and saved research answers
+//   /api/research/*              a direct, sourced answer to one question (see research/routes.ts)
 //   POST /api/ask {question}     a small model answers from the run records (see ask.ts). Needs the dashboard's
 //                                Origin or the token; the model is asked only for a token holder
 //   /api/glhf/*                  GLHF benchmark runs (see glhf/routes.ts)
@@ -37,6 +38,7 @@ import { gate, guard, HttpError, isSafeId, linesFrom, readJson, safeId, tokenNee
 import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid.ts"
 import { handlePaid } from "./paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
+import { createResearch } from "./research/routes.ts"
 import { search } from "./search.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -97,6 +99,7 @@ export function createApp(options: AppOptions = {}) {
   }
 
   const trust = { hasToken, env, tokenFile: TOKEN_FILE }
+  const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow }) // the direct, sourced answer (research/routes.ts)
   /**
    * May this request start or resume a board run? With scripted models anyone local may (it costs nothing). With
    * real models only a holder of the token: false, with 403 or the 401 that asks for the token sent, otherwise.
@@ -153,6 +156,7 @@ export function createApp(options: AppOptions = {}) {
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
     if (parts[0] === "api" && parts[1] === "bixv1") return handleBixV1(req, res, parts)
     if (url.pathname === "/api/paid") return handlePaid(req, res, { config, env, hasToken, tokenFile: TOKEN_FILE, stopPaidRuns: cancelPaidRuns }) // the runtime paid switch (paidswitch.ts)
+    if (parts[0] === "api" && parts[1] === "research") return research.handle(req, res, parts) // POST a question, GET its events, record and files
     if (parts[0] === "api" && parts[1] === "chat") return handleChat(req, res, parts, { config, mock: mockNow(), env, hasToken, start, launch, listRuns }) // the Home chat (chat/routes.ts)
     try {
       if (url.pathname === "/api/status") return json(res, 200, {
@@ -163,7 +167,7 @@ export function createApp(options: AppOptions = {}) {
         keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
-      if (url.pathname === "/api/search") return json(res, 200, search(url.searchParams.get("q") ?? "", listRuns()))
+      if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? "")].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")
       if (url.pathname === "/api/token") return hasToken(req) ? json(res, 200, { ok: true }) : json(res, 401, tokenNeeded("this", TOKEN_FILE))
       if (url.pathname === "/api/ask") { // AI search over experiments
         // The keyword answer for the dashboard or a token holder; the model call (money) for a token holder only.
@@ -218,7 +222,10 @@ export function createApp(options: AppOptions = {}) {
   }
 
   /** Continue runs a previous process left unfinished. runBoard refuses one past the daily cap or held by another process, and says so. */
-  const resumePaused = () => { for (const r of listRuns()) if (r.status === "paused") { console.log(`resuming ${r.id}`); launch(r.id) } }
+  const resumePaused = () => {
+    for (const r of listRuns()) if (r.status === "paused") { console.log(`resuming ${r.id}`); launch(r.id) }
+    for (const id of research.resume()) console.log(`continuing research answer ${id}`) // answers and queued questions an earlier process left unfinished
+  }
 
   return { handler, listRuns, launch, resumePaused, get mock() { return mockNow() } }
 }

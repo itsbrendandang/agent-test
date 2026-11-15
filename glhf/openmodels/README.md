@@ -5,15 +5,21 @@ This folder serves open-weight models on Modal GPUs and runs the BixBench v1 ada
 
 | Contestant | Where it runs | Inspect model id | State |
 |---|---|---|---|
-| Qwen3.6-35B-A3B (FP8) | our own endpoint on a Modal GPU | `openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8` | **waiting**: Modal refuses GPUs until the account has a payment method |
+| Qwen3.6-35B-A3B (FP8) | our own endpoint on a Modal GPU | `openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8` | **smoke-tested**; the grid was started on 2026-11-14 |
 | Claude Opus 5.5 | Anthropic's API, the owner's key | `anthropic/claude-opus-5-5` | prepared, never run |
-| OpenAI Sol | OpenAI's API, the owner's key | `openai/gpt-6.1-sol` (an assumption: the newest Sol id) | prepared, never run |
+| OpenAI Sol | OpenAI's API, the owner's key | `openai/gpt-6.1-sol` | prepared, never run |
+| Kimi K3.1 Pro | hosted: Tinker, or Moonshot's API | `openai-api/tinker/moonshotai/Kimi-K3.1-Pro:peft:262144` or `openai-api/moonshot/kimi-k3.1-pro` | prepared, never run |
+
+Sol: the model table bundled with the engine (pi-ai 1.5.2, `openai.json`) lists three Sol ids:
+`gpt-5.6-sol`, `gpt-6-sol`, `gpt-6.1-sol`. 6.1 is the highest version, so it is the one used.
+The table has no release dates; "newest" is read from the version number.
 
 Each contestant runs with both solvers (single agent, three-role swarm) on the same 20 capsules.
 The question: which models can do real bioinformatics analysis, at what cost, and does a
 checking swarm help a weaker model more than a strong one?
 
-**No benchmark result exists yet.** No open model has been served. Nothing here is a score.
+**No benchmark result exists yet.** One open model ran one small capsule as a smoke test. That
+is not a score. Read the run folders for the grid's own results when it ends.
 
 ## What is in this folder
 
@@ -25,12 +31,12 @@ checking swarm help a weaker model more than a strong one?
 | `apps/authcheck.py` | A CPU-only stand-in server, to test the endpoint lock without a GPU. |
 | `capsules.json` | The fixed capsule list of the grid, with the seed and the pool it was drawn from. |
 | `src/openmodels/` | `registry` (rules for `models.yaml`), `ledger` (cost ledger and cap), `serve` (deploy, stop, key), `checks` (key check, tool-call check, speed), `grid` (the runner), `estimate`, `cli`. |
-| `tests/` | 43 tests with fakes. None reaches the network or Modal. |
+| `tests/` | 45 tests with fakes. None reaches the network or Modal. |
 | `CONTAINERS.md` | Notes on running container benchmarks on Modal Sandboxes. |
 | `.secrets/endpoint.json` | The endpoint key. Mode 600. Not in git. Never printed. |
 
 Changes in `../bixbench_v1`: `paid.py` (`refuse_modal`, `isolate_endpoint`), two lines in
-`cli.py`, 4 tests in `tests/test_paid.py`, and `tests/test_endpoint_model.py`.
+`cli.py`, 5 tests in `tests/test_paid.py`, and `tests/test_endpoint_model.py`.
 
 ## How a model is served
 
@@ -49,8 +55,9 @@ Changes in `../bixbench_v1`: `paid.py` (`refuse_modal`, `isolate_endpoint`), two
   parser `qwen3_coder`, reasoning parser `qwen3` (thinking stays on, as the model ships).
   The agents compact their context at 100,000 tokens, so 131,072 is the length they need.
 - GPU choice for Qwen: one **L40S** (48 GB, 1.95 USD an hour; 2.40 with its 4 CPU cores and
-  32 GiB of memory). It is the cheapest Modal GPU that should hold the 35 GiB of FP8 weights
-  and that context. This is computed from the model's config. It is **not measured**.
+  32 GiB of memory). It is the cheapest Modal GPU that holds the 35 GiB of FP8 weights and
+  that context. Measured: it starts, the first cold start took 285 s, and it writes 105
+  output tokens a second for one request at a time.
 
 ## How the harness reaches it
 
@@ -87,10 +94,13 @@ uv run openmodels weights   --model qwen3.6-35b-a3b    # weights to the Volume, 
 uv run openmodels preflight --model qwen3.6-35b-a3b    # does vLLM know our flags? on CPU (done)
 uv run openmodels authcheck                            # test the lock on a CPU stand-in (done)
 
-# Needs a GPU. Deploy, key check, tool-call check, speed, stop. Worst case 1.20 USD.
+# Deploy, key check, tool-call check, speed, stop. Measured: 316 s, 0.21 USD.
 NO_PAID_CALLS=0 uv run openmodels check --model qwen3.6-35b-a3b --name smoke
 
-# Smoke test: ONE small capsule, both solvers. Worst case 4.15 USD; expected under 1 USD.
+# One tool-call round trip against a HOSTED model (Tinker, Moonshot). Under one cent. Owner only.
+NO_PAID_CALLS=0 uv run openmodels toolcheck --model kimi-k3.1-pro-tinker
+
+# Smoke test: ONE small capsule, both solvers. Measured: 474 s, 0.32 USD.
 NO_PAID_CALLS=0 uv run openmodels grid --name smoke --models qwen3.6-35b-a3b \
     --solvers single,swarm --only bix-46_d37acffb
 
@@ -100,6 +110,10 @@ NO_PAID_CALLS=0 uv run openmodels grid --name grid1 --models qwen3.6-35b-a3b \
 
 # The vendor cells. These are paid API calls on the owner's keys. An agent never runs them.
 NO_PAID_CALLS=0 uv run openmodels grid --name grid1 --models claude-opus-5-5,gpt-6.1-sol \
+    --solvers single,swarm --capsules capsules.json --total-token-cap 12200000
+
+# Kimi, hosted. Run `toolcheck` for it first. Owner only.
+NO_PAID_CALLS=0 uv run openmodels grid --name grid1 --models kimi-k3.1-pro-tinker \
     --solvers single,swarm --capsules capsules.json --total-token-cap 12200000
 
 # One judge pass over each finished folder, the same judge for all three (paid: OpenAI).
@@ -134,7 +148,7 @@ the tool-call check gets no benchmark run. One model is served at a time.
   the session is refused.
 - `NO_PAID_CALLS` covers Modal. With it on (the default) nothing deploys and no request is sent.
 
-Spent so far: 0.04 USD by Modal's own report, all CPU (see `uv run openmodels ledger`).
+Spent before the grid: 0.56 USD by this ledger (see `uv run openmodels ledger`).
 
 ## The capsule list
 
@@ -202,17 +216,24 @@ and Sol may think more and write more; the grid has larger capsules; OpenAI cach
 rules. The estimate is a guide for the decision, not a quote. `--total-token-cap` is the hard
 stop.
 
-**Qwen cells: not measured.** No GPU could be started, so there are no tokens per second and
-no seconds per capsule. The cost is seconds x 0.000665 USD. Scenarios, all assumptions:
+**Qwen cells: measured on one small capsule.** Smoke test, bix-46 (2 questions), one L40S at
+0.000665 USD a second:
 
-| Scenario | single, s per question | swarm, s per question | Both cells |
-|---|---|---|---|
-| As fast as the Sonnet pilot x 3 | 60 | 100 | 8.73 USD |
-| Middle | 150 | 255 | 22.09 USD |
-| Every run ends at its time limit | (1,860 s a run x 40 runs) | | 49.50 USD |
-| What the guard reserves | | | 60.28 USD |
+| Solver | Seconds | Seconds per question | Tokens | USD per question |
+|---|---|---|---|---|
+| single | 54.2 | 27.1 | 187,051 (2,941 output) | 0.018 |
+| swarm | 143.7 | 71.9 | 326,262 (8,466 output) | 0.048 |
 
-The smoke test (two runs on bix-46) will replace these with a measurement.
+Both solvers gave -4.96 and -4.10, and code rules graded all four answers correct. The Sonnet
+pilot took 26 s and 42 s on the same capsule with 37,504 and 76,351 tokens: Qwen used about
+five times the tokens (more, smaller steps) and two to three times the seconds.
+
+Projection for the grid: 82 x 27.1 s x 0.000665 = 1.48 USD (single) and 82 x 71.9 s x 0.000665
+= 3.92 USD (swarm), **5.40 USD for both cells**, plus about 0.25 USD for the cold start and
+checks. bix-46 is the smallest capsule; the pilot's other capsules took about 1.5 times as
+long per question, which gives about 8 USD. The ceiling is every run ending at its 1800 s
+limit: 49.50 USD. The guard reserves 60.28 USD. The real figure is in the ledger when the grid
+ends.
 
 ## Kimi
 
@@ -234,18 +255,57 @@ can have: 56.80). That is far over the 10 USD an hour limit, so it was **not dep
 5-hour grid would be about 250 to 285 USD, plus 1,561 GB on a Volume (about 131 USD a month).
 Cold start was not measured; loading 1.5 TB takes tens of minutes at best.
 
-Options:
+Hosted paths (prices in USD per million tokens: input / cached input / output). Costs are for
+both cells, from the pilot's tokens per question; "no cache" prices every input token in full.
 
-1. **Modal Shared Endpoint** (Modal hosts the model; billed per token). Kimi-K3.1-Pro: 2.00
-   input, 0.20 cached, 10.00 output USD per million tokens. With the pilot's tokens: single
-   2.40 USD, swarm 4.21 USD, **6.61 USD for both cells** (no cache hits: 19.86). Kimi-K3
-   (3.00 / 0.30 / 15.00): 9.92 USD. Modal's docs say plan credit **cannot** pay for Shared
-   Endpoints, so this is real money and needs a payment method. It would use the same key
-   and the same harness path as Qwen. Not tried.
-2. **Moonshot's own API** (`platform.kimi.ai`). Needs a key from the owner. Then Kimi is an
-   API contestant like Opus and Sol. Its prices were not looked up.
-3. An older, smaller Kimi: K2.6 is 1.03 trillion parameters, 595 GB. Still 3 B300 or more
-   (21.30 USD an hour). Not a current model.
+| Path | Price | Both cells | No cache | Who pays | Tool calls |
+|---|---|---|---|---|---|
+| Tinker (`kimi-k3.1-pro-tinker`), 256K context | 6.00 / 1.20 / 25.00 | 22.72 | 58.06 | Tinker balance; the docs do not say that credits pay for sampling | not documented on its OpenAI-compatible endpoint |
+| Moonshot's API (`kimi-k3.1-pro-moonshot`) | 2.00 / 0.20 / 10.00 | 6.61 | 19.86 | real money, a key from the owner | documented |
+| Modal Shared Endpoint | 2.00 / 0.20 / 10.00 | 6.61 | 19.86 | real money: Modal's docs say plan credit cannot pay | not checked |
+| Self-served on Modal, 7 B300 | 49.70 an hour | 250 to 285 | | Modal credit | parser exists in vLLM nightly |
+
+Kimi always thinks, so its output tokens may be several times the pilot's. An older, smaller
+Kimi (K2.6, 595 GB) still needs 3 B300 or more to self-serve.
+
+## Tinker
+
+Read from Tinker's public docs on 2026-11-14 (`tinker-docs.thinkingmachines.ai`). No request
+was sent to Tinker and no key was used.
+
+- **OpenAI-compatible inference: yes, in beta.** Base URL
+  `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`, key `TINKER_API_KEY`,
+  `/chat/completions` and `/completions`. The docs give a checkpoint path
+  (`tinker://.../sampler_weights/...`) as the model name. They do **not** say that a base
+  model's name works there.
+- **Tool calls: not documented on that endpoint.** Tool use is documented on Tinker's
+  Anthropic-compatible endpoint (`.../tinker-prod/anthropic/api`), which also takes base model
+  names. Inspect 0.3.220 cannot use that one for these models: its Anthropic provider drops
+  the part before the slash, so `Qwen/Qwen3.6-35B-A3B` would be sent as `Qwen3.6-35B-A3B`
+  (checked in the installed source, no request).
+- **Models:** Kimi-K3.1-Pro (256K context) and Qwen3.6-35B-A3B (64K, or 256K with the id
+  `Qwen/Qwen3.6-35B-A3B:peft:262144`) are both listed, with prices for sampling. Also Kimi-K2.6,
+  Qwen3.8-27B, GLM-5.3, DeepSeek-V4.1-Flash, Inkling and others.
+- **Prices** (prefill / cached prefill / sample): Qwen3.6-35B-A3B 0.45 / 0.09 / 1.335.
+  Kimi-K3.1-Pro 6.00 / 1.20 / 25.00. Prompt caching is automatic on the OpenAI path as far as
+  the docs say ("a discount on cached prefill tokens"); how often it hits is not stated.
+- **Credits:** the docs describe billing by usage against the organisation's balance. They do
+  not mention credits, so whether the owner's credits pay for sampling is **not stated**.
+- "Serverless Inference" in the docs is a separate beta for the Inkling models only.
+
+So Tinker fits on paper and is wired (`openai-api/tinker/<id>`, `TINKER_BASE_URL`,
+`TINKER_API_KEY`; tested with a scripted server only). Three things need one tiny paid request
+to settle: the base-model id on the OpenAI endpoint, tool calls, and credits.
+`NO_PAID_CALLS=0 uv run openmodels toolcheck --model kimi-k3.1-pro-tinker` asks exactly that.
+
+### Where each open model should run
+
+Cheapest path that credits can pay, first.
+
+| Model | First choice | Why | Second choice |
+|---|---|---|---|
+| Qwen3.6-35B-A3B | **Modal GPU** (one L40S), Modal credit | Smoke-tested, tool calls work, about 5 to 8 USD for both cells (measured basis) | Tinker: 0.45 / 0.09 / 1.335. With Qwen's own measured tokens: 2.48 USD if every input token is cached, 9.89 USD if none is. Not cheaper for sure, and tool calls are unverified there. |
+| Kimi K3.1 Pro | **Tinker**, if `toolcheck` passes and credits pay: about 23 USD for both cells (58 with no cache) | The only path the owner's credits might pay | Moonshot's API or Modal Shared Endpoint: about 7 USD (20 with no cache), real money. Cheaper per token than Tinker, so if credits do not pay on Tinker, use Moonshot. |
 
 ## How to shut everything down
 
@@ -261,13 +321,13 @@ A stopped app costs nothing. The Volumes cost storage until they are deleted.
 
 ## Limits and what is not verified
 
-- **No model was served.** Modal answers "Please add a payment method to use L40S GPU
-  functions" for every GPU type. So: no real tool-call request, no tokens per second, no
-  smoke test, no measured cost. The tool-call check exists and is tested with a fake only.
-- That Qwen fits one L40S with a 131,072 context is computed, not measured.
-- The vLLM flags were checked against vLLM's source on CPU, not by starting the server.
-- The lock was tested on a CPU stand-in with the same `@app.server` settings, not on the
-  model's own app: 8 paths answered 401 without the key and with a wrong key, 200 with it.
+- One open model was served and ran ONE small capsule. Nothing here is a benchmark result.
+- The lock was tested on the model's own app: 8 paths answered 401 without the key and with a
+  wrong key, 200 with it.
+- Qwen's tool calls were checked with one scripted request and one capsule. Long runs on
+  larger capsules are what the grid itself shows.
+- Hosted models (Tinker, Moonshot) were never called. Their wiring is tested with a scripted
+  server only.
 - Inspect builds a model object for `anthropic/claude-opus-5-5` and `openai/gpt-6.1-sol`
   without a request. Inspect 0.3.220 has no entry for either id, so it treats them as generic
   models of their vendor. Whether each API accepts every parameter the harness sends (the

@@ -11,6 +11,7 @@ import { type BoardConfig, mockMode, ROOT } from "../config.ts"
 import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal } from "../exaledger.ts"
 import { MODEL_CHOICES } from "../glhf/types.ts"
 import { paidCallsOff, paidState } from "../paid.ts"
+import { type DatabaseSource, SOURCES } from "../sources/index.ts"
 
 export type ProviderId = "anthropic" | "openai"
 export interface Provider { id: ProviderId; keyPresent: boolean; models: string[] }
@@ -31,7 +32,9 @@ export interface Catalog {
   providers: Provider[]
   /** exa.usedUsd: Exa spend this engine has recorded in board/runs/.exa-ledger.jsonl; ceilingUsd: the lifetime limit it enforces (meeting.exa_ceiling_usd). */
   /** `provider`: what a board run started now would search with: "exa" (live search; paid calls on, and the key is set) or "fixture" (a practice run's example sources). */
-  search: { provider: "exa" | "fixture"; exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number }; literature: { provider: "europepmc"; free: true; keyNeeded: false; available: boolean } }
+  search: { provider: "exa" | "fixture"; exa: { keyPresent: boolean; usedUsd: number; ceilingUsd: number }; literature: { provider: "europepmc"; free: true; keyNeeded: false; available: boolean }
+    /** The public databases database_search can read (engine/src/sources/): free, no key. `available` is true when a board member has the tool. */
+    databases: { providers: DatabaseSource[]; free: true; keyNeeded: false; available: boolean } }
   agents: CatalogAgent[]
   skills: CatalogSkill[]
   methodLibrary: MethodLibrary
@@ -113,7 +116,9 @@ export function buildCatalog(config: BoardConfig, env: NodeJS.ProcessEnv = proce
     providers: providers(config, env),
     search: { provider: mockMode(env) || !env.EXA_API_KEY ? "fixture" : "exa", exa: { keyPresent: Boolean(env.EXA_API_KEY), usedUsd: Math.round(exaTotal(exaLedgerFile(config), exaAssumed(config)) * 1e6) / 1e6, ceilingUsd: exaCeiling(config) },
       // Europe PMC literature search (PubMed abstracts and preprints): free, no key. `available` is true when a board member has the tool.
-      literature: { provider: "europepmc", free: true, keyNeeded: false, available: members.some((m) => m.tools.includes("literature_search")) } },
+      literature: { provider: "europepmc", free: true, keyNeeded: false, available: members.some((m) => m.tools.includes("literature_search")) },
+      // The database lookups (ChEMBL, ClinicalTrials.gov, openFDA, Open Targets, UniProt, PubChem): free, no key.
+      databases: { providers: [...SOURCES], free: true, keyNeeded: false, available: members.some((m) => m.tools.includes("database_search")) } },
     agents: [...board, ...specialists.map(({ basedOn: _b, purpose: _p, ...agent }) => agent)],
     skills: loadSkills(SKILLS_DIR, library),
     methodLibrary: library,

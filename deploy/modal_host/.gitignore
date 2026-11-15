@@ -1,0 +1,4 @@
+# Access codes, the cookie key and the cloud test notes of this machine. Never commit them.
+.local/
+__pycache__/
+.pytest_cache/

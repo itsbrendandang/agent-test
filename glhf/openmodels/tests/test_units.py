@@ -309,3 +309,19 @@ def test_a_vendor_cell_is_the_pilots_tokens_per_question_at_the_models_prices() 
         "seconds": 9840,
         "usd": 6.54,
     }
+
+
+def test_hosted_endpoint_models_name_the_variables_inspect_reads() -> None:
+    tinker = REPO_REGISTRY.get("kimi-k3.1-pro-tinker")
+    assert tinker.status == "prepared" and tinker.inspect_model.startswith("openai-api/tinker/")
+    assert (tinker.base_url_env, tinker.api_key_env) == ("TINKER_BASE_URL", "TINKER_API_KEY")
+    assert REPO_REGISTRY.get("kimi-k3.1-pro-moonshot").api_key_env == "MOONSHOT_API_KEY"
+    data = copy.deepcopy(RAW)
+    entry = next(m for m in data["models"] if m["name"] == "kimi-k3.1-pro-tinker")
+    entry["api_key_env"] = "KIMI_KEY"
+    with pytest.raises(registry.RegistryError, match="TINKER_BASE_URL and TINKER_API_KEY"):
+        registry.validate(data)
+    entry["api_key_env"] = "TINKER_API_KEY"
+    entry["inspect_model"] = "openai-api/openmodels/moonshotai/Kimi-K3.1-Pro"
+    with pytest.raises(registry.RegistryError, match="our own Modal endpoint"):
+        registry.validate(data)

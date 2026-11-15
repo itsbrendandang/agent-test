@@ -59,14 +59,14 @@ describe("the board's discussion", () => {
     expect(full).not.toHaveAttribute("open")
     expect(full).toHaveTextContent("Two are missing a label, and one file is empty.")
     const chips = within(scout.getByRole("group", { name: "What the checks found about Scout's statements" }))
-    expect(chips.getByText("Holds up")).toHaveAttribute("title", "The check's own word: verified") // glyph plus plain word; the expert word stays reachable
+    expect(chips.getByText(/^(Holds up|Supported)$/).closest("[title]")).toHaveAttribute("title", expect.stringContaining("verified")) // glyph plus plain word; the expert word stays reachable
   })
   it("a chip opens the statement, the source and why it got that result", async () => {
     await open()
     const user = userEvent.setup()
     const scout = within(screen.getByRole("article", { name: "Scout" }))
     expect(scout.queryByText("The statement")).toBeNull()
-    const chip = scout.getByRole("button", { name: /Statement 1: Holds up/ })
+    const chip = scout.getByRole("button", { name: /Statement 1: Supported/ })
     await user.click(chip)
     expect(chip).toHaveAttribute("aria-expanded", "true")
     const detail = scout.getByText("The statement").closest("dl")!
@@ -82,9 +82,9 @@ describe("the board's discussion", () => {
     await open()
     const critic = screen.getByRole("article", { name: "Critic" })
     expect(critic).toHaveAttribute("data-wrong", "true")
-    expect(critic).toHaveTextContent("A check proved one statement here wrong.")
-    expect(within(critic).getByText("Proven wrong")).toBeInTheDocument()
-    expect(within(critic).getByText("Not enough evidence")).toBeInTheDocument()
+    expect(critic).toHaveTextContent("A check contradicted one statement here.")
+    expect(within(critic).getByText(/^(Proven wrong|Contradicted)$/)).toBeInTheDocument()
+    expect(within(critic).getByText(/^(Not enough evidence|Insufficient evidence)$/)).toBeInTheDocument()
     expect(screen.getByRole("article", { name: "Scout" })).not.toHaveAttribute("data-wrong")
     expect(screen.getByText(/One statement was proven wrong\./)).toBeInTheDocument()
   })
@@ -100,7 +100,7 @@ describe("the board's discussion", () => {
     const critic = screen.getByRole("article", { name: "Critic" })
     expect(critic).toHaveTextContent('<img src=x onerror="window.__pwned=1">')
     expect(critic).toHaveTextContent("[click](javascript:alert(1))")
-    await userEvent.setup().click(within(critic).getByRole("button", { name: /Statement 2: Not enough evidence/ }))
+    await userEvent.setup().click(within(critic).getByRole("button", { name: /Statement 2: Insufficient evidence/ }))
     expect(critic).toHaveTextContent("Sourcejavascript:alert(1)") // shown, as text
     expect(container.querySelector("img, script, iframe, object, embed")).toBeNull() // nothing is fetched from a model-supplied address
     expect((window as { __pwned?: number }).__pwned).toBeUndefined()

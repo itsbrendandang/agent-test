@@ -24,10 +24,10 @@
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
-import { bool, map, obj, opt, str } from "@earendil-works/pi-schema"
+import { bool, map, obj, oneOf, opt, str } from "@earendil-works/pi-schema"
 import { createRegistry, defineExtension, defineTool, type ConversationId, type EntryId, Harness, type ToolExecutionApi } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { type AgentDef, instructionsFor, loadAgent, loadRoster } from "./agents.ts"
+import { type AgentDef, instructionsFor, loadAgent, loadRoster, SEARCH_TOOLS } from "./agents.ts"
 import { rosterEntries, runSpecialists } from "./specialists.ts"
 import { type Brief, loadBrief } from "./brief.ts"
 import { type Claim, parseClaims, shortSummary, stripClaims } from "./claims.ts"
@@ -35,10 +35,12 @@ import { claudeCodeCheck, computedCanRun, literatureCheck, NOT_RERUN, openaiChec
 import { type BoardConfig, loadConfig, MOCK, path } from "./config.ts"
 import { assertBoardKeys, describeModelFailure, escalationModel, FatalModelError, isFatalModelError } from "./providers.ts"
 import { paidCallsOff, refusePaid } from "./paid.ts"
-import { type Checker, EventLog, type EvidenceItem, type SearchProvider, type Verdict } from "./events.ts"
+import { type Checker, EventLog, type EvidenceItem, SEARCH_PROVIDERS, type SearchProvider, type Verdict } from "./events.ts"
 import { exaSearch, OBJECTIVE_DESCRIPTION, type SearchResult } from "./exa.ts"
 import { DEFAULT_MAX_LITERATURE_SEARCHES, literatureLive, literatureOnce } from "./literature.ts"
+import { databaseLive, databaseOnce, type DatabaseSource, DEFAULT_MAX_DATABASE_SEARCHES, QUERY_DESCRIPTION, SOURCE_DESCRIPTION, SOURCES } from "./sources/index.ts"
 import { exaAssumed, maxSearches, reserveSearch, settleSearch } from "./exaledger.ts"
+import { researchSpentToday } from "./research/spend.ts"
 import { FirstPass } from "./triage.ts"
 import { buildModels, modelFor } from "./models.ts"
 import { holder, take } from "./runlock.ts"
@@ -63,6 +65,8 @@ export interface RunState {
   searched?: Record<string, { items: EvidenceItem[]; notices: string[]; usd: number; basis: "reported" | "assumed" }>
   /** Results of the free literature searches (literature.ts), by tool call id: a crash replay reads them here instead of searching again. */
   literature?: Record<string, { items: EvidenceItem[]; notices: string[] }>
+  /** Results of the free database lookups (sources/), by tool call id: a crash replay reads them here instead of asking the service again. */
+  databases?: Record<string, { source: DatabaseSource; query: string; items: EvidenceItem[]; notices: string[] }>
   lastRoundUsd?: number // what the last round cost; the next round is refused when it would not fit under max_usd
   droppedKeys?: string[] // search results the triage dropped (url + key question), so no member's repeat search pays to screen them again
   usd?: number // running total for the run: models + first-pass checker + escalation checkers
@@ -150,7 +154,7 @@ export function spentToday(config: BoardConfig, now = new Date()): number {
     const inFlight = !state.finished && !state.mock && lockHolder(`${dir}/${id}`) !== undefined
     usd += inFlight ? Math.max(today, config.meeting.max_usd) : today
   }
-  return usd
+  return usd + researchSpentToday(config, now) // the research answers (research/) count against the same daily cap
 }
 
 /** Throws BudgetReached once today's runs have used the daily cap. Scripted runs cost nothing and always pass. */
@@ -205,7 +209,7 @@ export function summarize(dir: string, state: Pick<RunState, "rounds" | "ledger"
       if (!line.includes('"round.started"') && !line.includes('"claim.checked"') && !line.includes('"evidence.triaged"')) continue
       try {
         const e = JSON.parse(line) as { type?: string; key?: string; round?: number; provider?: string }
-        if (e.type === "evidence.triaged") { searches++; if (provider === undefined && (e.provider === "exa" || e.provider === "europepmc" || e.provider === "fixture")) provider = e.provider }
+        if (e.type === "evidence.triaged") { searches++; if (provider === undefined && (SEARCH_PROVIDERS as readonly string[]).includes(e.provider ?? "")) provider = e.provider as SearchProvider }
         if (e.type === "round.started" && typeof e.round === "number") rounds = Math.max(rounds, e.round)
         if (e.type === "claim.checked") claims.add(e.key ?? line)
       } catch { /* partial line */ }
@@ -420,6 +424,51 @@ export async function searchOnce(deps: SearchDeps, callId: string, args: { query
   return { result }
 }
 
+/** The label on what a search tool found: "fixture" in a practice run (example sources, no search), else the search itself. For database_search it is the database. */
+export const foundBy = (tool: (typeof SEARCH_TOOLS)[number], mock: boolean, source?: DatabaseSource): SearchProvider =>
+  mock ? "fixture" : tool === "exa_search" ? "exa" : tool === "literature_search" ? "europepmc" : (source as DatabaseSource)
+
+/** Does this member hold a search tool? Such members reply first in a round, and are not handed the pool they fill. */
+export const searches = (agent: Pick<AgentDef, "tools">): boolean => agent.tools.some((t) => (SEARCH_TOOLS as readonly string[]).includes(t))
+
+export interface PoolDeps {
+  state: Pick<RunState, "evidence" | "droppedKeys">
+  /** The first-pass screening of new results (triage.ts): each item with its study type and relevance, and whether to keep it. */
+  triage: (items: EvidenceItem[], keyQuestion: string) => Promise<{ keep: boolean; item: EvidenceItem }[]>
+  /** Called once the pool is updated: the board saves the run here. */
+  save: () => void
+  emit: (key: string, event: { type: "evidence.triaged"; member: string; query: string; kept: number; dropped: number; items: EvidenceItem[]; provider: SearchProvider }) => void
+}
+
+/**
+ * Put what one search found into the run's evidence pool, whichever search it was, and return what the member is told.
+ * - Every result is stamped with the search that found it (`provider`) and the query (`query`); both stay on the item
+ *   in run.json and in the `evidence.triaged` event. A result the pool already has keeps its first finder.
+ * - Results the pool already has, or already dropped for this key question, are not screened (and paid for) again.
+ * - The rest are screened by the first pass; the member is given only what was kept.
+ * - `records` (a database lookup): a record is kept unless the screening says it is off-topic. The screening's other
+ *   rule, "reports no results of its own", fits papers; a trial registration or a label section is a record of fact.
+ */
+export async function poolEvidence(deps: PoolDeps, result: SearchResult, found: { provider: SearchProvider; member: string; callId: string; query: string; keyQuestion: string; records?: boolean }) {
+  const { state } = deps
+  const { provider, query, keyQuestion } = found
+  const items = result.items.map((i) => ({ ...i, provider, query }))
+  const dropKey = (url: string) => createHash("sha1").update(`${url}\n${keyQuestion}`).digest("hex").slice(0, 16)
+  const known = items.filter((i) => state.evidence[i.url] || state.droppedKeys?.includes(dropKey(i.url)))
+  const fresh = items.filter((i) => !known.includes(i))
+  const triaged = (await deps.triage(fresh, keyQuestion)).map((t) => ({ item: t.item, keep: t.keep || (found.records === true && t.item.relevance !== 0) }))
+  for (const t of triaged) if (!t.keep) state.droppedKeys = [...(state.droppedKeys ?? []), dropKey(t.item.url)]
+  const kept = [...known.filter((i) => state.evidence[i.url]).map((i) => state.evidence[i.url]), ...triaged.filter((t) => t.keep).map((t) => t.item)]
+  for (const item of kept) state.evidence[item.url] = item
+  deps.save()
+  deps.emit(`evidence:${found.callId}`, { type: "evidence.triaged", member: found.member, query, kept: kept.length, dropped: items.length - kept.length, items: kept, provider })
+  const results = kept.length
+    ? kept.map((i) => `- ${i.title} [${i.studyType ?? "?"}] ${i.url}\n  ${i.text}`).join("\n")
+    : "Nothing relevant found. Say so in your reply."
+  const text = [results, ...result.notices.map((n) => `Note from the search engine: ${n}`)].join("\n\n")
+  return { output: [{ type: "text" as const, text }] }
+}
+
 const MEMORY_MARK = "## From earlier runs"
 
 /**
@@ -561,24 +610,12 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
   // What a search found goes into the evidence pool through here, whichever search it was: results the pool already
   // has (or already dropped for this key question) are not screened and paid for again, the rest are screened by the
   // first pass, and the member is given only what was kept.
-  const intoPool = async (result: SearchResult, provider: SearchProvider, member: string, callId: string, query: string, keyQuestion: string) => {
-    const found = { ...result, items: result.items.map((i) => ({ ...i, provider })) }
-    const dropKey = (url: string) => createHash("sha1").update(`${url}\n${keyQuestion}`).digest("hex").slice(0, 16)
-    const known = found.items.filter((i) => state.evidence[i.url] || state.droppedKeys?.includes(dropKey(i.url)))
-    const fresh = found.items.filter((i) => !known.includes(i))
-    const triaged = await firstPass.triage(fresh, keyQuestion)
-    for (const t of triaged) if (!t.keep) state.droppedKeys = [...(state.droppedKeys ?? []), dropKey(t.item.url)]
-    const kept = [...known.filter((i) => state.evidence[i.url]).map((i) => state.evidence[i.url]), ...triaged.filter((t) => t.keep).map((t) => t.item)]
-    for (const item of kept) state.evidence[item.url] = item
-    state.firstPassUsd = firstPassBefore + firstPass.usd
-    save()
-    log.emit(`evidence:${callId}`, { type: "evidence.triaged", member, query, kept: kept.length, dropped: found.items.length - kept.length, items: kept, provider })
-    const results = kept.length
-      ? kept.map((i) => `- ${i.title} [${i.studyType ?? "?"}] ${i.url}\n  ${i.text}`).join("\n")
-      : "Nothing relevant found. Say so in your reply."
-    const text = [results, ...found.notices.map((n) => `Note from the search engine: ${n}`)].join("\n\n")
-    return { output: [{ type: "text" as const, text }] }
-  }
+  const intoPool = (result: SearchResult, provider: SearchProvider, member: string, callId: string, query: string, keyQuestion: string, records = false) =>
+    poolEvidence({
+      state, triage: (items, question) => firstPass.triage(items, question),
+      save: () => { state.firstPassUsd = firstPassBefore + firstPass.usd; save() },
+      emit: (key, event) => log.emit(key, event),
+    }, result, { provider, member, callId, query, keyQuestion, records })
 
   const exaTool = defineTool({
     name: "exa_search",
@@ -597,7 +634,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
         save()
         return { output: [{ type: "text", text: out.refused }] }
       }
-      return intoPool(out.result as SearchResult, providerOf(mock), memberOf(api), api.callId, args.query, args.key_question)
+      return intoPool(out.result as SearchResult, foundBy("exa_search", mock), memberOf(api), api.callId, args.query, args.key_question)
     },
   })
 
@@ -620,7 +657,31 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
         if (!out.failed) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })
         return { output: [{ type: "text", text: out.refused }] }
       }
-      return intoPool(out.result as SearchResult, mock ? "fixture" : "europepmc", memberOf(api), api.callId, args.query, args.key_question)
+      return intoPool(out.result as SearchResult, foundBy("literature_search", mock), memberOf(api), api.callId, args.query, args.key_question)
+    },
+  })
+
+  const databaseTool = defineTool({
+    name: "database_search",
+    description: "Look up records in one public biomedical database: ChEMBL (bioactivity, mechanism, clinical phase), ClinicalTrials.gov (trials), openFDA (drug label sections, adverse-event report counts), Open Targets (target-disease evidence, tractability, safety), UniProt (protein function, disease, variants) or PubChem (compound identity and properties). Free. Results are records, not papers, and are screened for relevance before you see them.",
+    parameters: obj({
+      source: oneOf(SOURCES, { description: SOURCE_DESCRIPTION }),
+      query: str({ description: QUERY_DESCRIPTION }),
+      key_question: str({ description: "The one question from the brief this lookup serves" }),
+    }),
+    replay: "safe",
+    execute: async (args, api) => {
+      const out = await databaseOnce({
+        state, mock, maxSearches: config.meeting.max_database_searches ?? DEFAULT_MAX_DATABASE_SEARCHES,
+        search: (source, q) => databaseLive(source, q), // never reached in a practice run: databaseOnce gives it the example sources
+        capReached: async () => (await spend()) >= config.meeting.max_usd, paidOff: () => paidCallsOff(),
+      }, api.callId, args.source, args.query)
+      save()
+      if (out.refused) {
+        if (!out.failed) log.emit(`constraint:search:${api.callId}`, { type: "constraint", reason: "budget", detail: out.refused })
+        return { output: [{ type: "text", text: out.refused }] }
+      }
+      return intoPool(out.result as SearchResult, foundBy("database_search", mock, args.source), memberOf(api), api.callId, args.query, args.key_question, true)
     },
   })
 
@@ -657,7 +718,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
       for (const phase of replyPhases(roster)) {
         const pool = evidenceBlock(state.evidence)
         await Promise.all(phase.map(async (agent) => {
-          const input = memberInput({ round, message: args.message, digest, final: args.final, pool: agent.tools.includes("exa_search") ? "" : pool, mode: modeLine(agent) })
+          const input = memberInput({ round, message: args.message, digest, final: args.final, pool: searches(agent) ? "" : pool, mode: modeLine(agent) })
           const conversation = await api.conversation(state.members[agent.name] as ConversationId, ctx)
           if (!conversation) throw new Error(`No conversation for ${agent.name}`)
           const submission = await conversation.submit({ type: "input", content: input, requestId: `${runId}:r${round}:${agent.name}` }, ctx)
@@ -720,7 +781,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
 
   // ── Harness ────────────────────────────────────────────────────────────────────────────────────
   const registry = createRegistry()
-  registry.install(defineExtension({ name: "board", tools: [exaTool, literatureTool, converseTool, memoTool] }))
+  registry.install(defineExtension({ name: "board", tools: [exaTool, literatureTool, databaseTool, converseTool, memoTool] }))
   const harness = await Harness.open(await openNodeSqliteStorage(`${runDir(config, runId)}/session.sqlite`), {
     models, registry,
     identity: { attribution: { name: "drug-board", url: "https://github.com/" } },
@@ -745,7 +806,7 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     if (state.members[agent.name]) continue
     const c = await harness.createConversation({
       ownership: { kind: "ownerless" },
-      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: [exaTool, literatureTool].filter((t) => agent.tools.includes(t.name)), maxTurns: config.meeting.member_turns ?? 6 },
+      agent: { model: modelFor(config, agent, mock), instructions: instructionsFor(config, agent, brief, roster), tools: [exaTool, literatureTool, databaseTool].filter((t) => agent.tools.includes(t.name)), maxTurns: config.meeting.member_turns ?? 6 },
     }, ctx)
     state.members[agent.name] = c.id
     save()
@@ -793,9 +854,9 @@ export function overLimit(config: BoardConfig, rounds: number, startedAt: number
 /** Where a run's sources come from, for the label "Search powered by Exa": a live search is exa, a practice run's example sources are fixture. */
 export const providerOf = (mock: boolean): SearchProvider => (mock ? "fixture" : "exa")
 
-/** The members that can search first, then the rest; one phase when there is no such member or nobody else. */
+/** The members that can search (any search tool) first, then the rest; one phase when there is no such member or nobody else. */
 export function replyPhases(roster: AgentDef[]): AgentDef[][] {
-  const searchers = roster.filter((a) => a.tools.includes("exa_search"))
+  const searchers = roster.filter(searches)
   const others = roster.filter((a) => !searchers.includes(a))
   return searchers.length && others.length ? [searchers, others] : [roster]
 }

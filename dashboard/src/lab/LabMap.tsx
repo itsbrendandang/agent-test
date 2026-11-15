@@ -1,6 +1,6 @@
 // Agent Lab design by Anh Lam. The map behind the teammates: a central corridor and six rooms, each with a name
 // plate, an accent line, an open doorway, two desks with a screen, a bench and a plant. Drawn as Anh drew it, with
-// the app's colours through CSS variables (lab.css). It holds no characters and nothing in it moves.
+// the app's colours through CSS variables (lab.css). It holds no characters and nothing in it moves. The room names are text over the map (LabScene), so they stay readable when the map is small.
 import { memo, useId } from "react"
 import { MAP, ROOMS } from "./model"
 
@@ -30,7 +30,6 @@ export const LabMap = memo(function LabMap() {
             <path d={`M${r.x + 65} ${r.y + 7}h290`} stroke={r.accent} strokeWidth="4" strokeLinecap="round" />
             <rect x={r.x + 20} y={r.y + 17} width="210" height="28" rx="8" fill="var(--lab-plate)" stroke="var(--lab-line)" />
             <circle cx={r.x + 34} cy={r.y + 31} r="4.5" fill={r.accent} />
-            <text x={r.x + 46} y={r.y + 36} fill="var(--lab-ink)" fontSize="14" fontWeight="600">{r.name}</text>
             {/* An open doorway connects each room to the corridor. */}
             <rect x={doorX - 7} y={r.y + 110} width="14" height="70" fill="var(--lab-door)" />
             <path d={`M${doorX} ${r.y + 108}v-13M${doorX} ${r.y + 182}v13`} stroke="#cfc8b8" strokeWidth="5" strokeLinecap="round" />

@@ -22,6 +22,7 @@ import { exaAssumed, exaCeiling, exaLedgerFile, exaTotal, maxSearches } from "./
 import { checkTierPrices } from "./models.ts"
 import { paidSwitchLocked } from "./paid.ts"
 import { modelsNeeded, parseModelId, type Vendor, VENDOR_KEY } from "./providers.ts"
+import { serviceName, SOURCES } from "./sources/index.ts"
 
 export interface PreflightDeps { env: NodeJS.ProcessEnv; fetch: typeof fetch; config: BoardConfig; log: (line: string) => void }
 export interface PreflightResult { ok: boolean; refused?: boolean; problems: string[]; endpoints: string[]; worstCaseUsd?: number }
@@ -77,6 +78,7 @@ export async function runPreflight(deps: PreflightDeps): Promise<PreflightResult
   }
   // 3. Exa: the key only. (The Europe PMC literature search needs no key and costs nothing, so there is nothing to check.)
   if (loadRoster(config).some((a) => a.tools.includes("literature_search"))) log("- Europe PMC literature search: free, no key (not called)")
+  if (loadRoster(config).some((a) => a.tools.includes("database_search"))) log(`- Database lookups (${SOURCES.map(serviceName).join(", ")}): free, no key (not called)`)
   if (searchers) {
     if (env.EXA_API_KEY?.trim()) log("✓ EXA_API_KEY: set (not tested: a search would cost money)")
     else { problems.push("EXA_API_KEY is not set (a member searches)"); log("✗ EXA_API_KEY: not set, and a member searches") }

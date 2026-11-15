@@ -1,0 +1,28 @@
+20.5kB	RUN /bin/sh -c mamba clean --all -f -y &&     conda clean --all -f -y &&     rm -rf /root/.cache/pip # buildkit
+4.1kB	WORKDIR /workspace
+1.25GB	RUN /bin/sh -c udocker --allow-root install &&     udocker --allow-root pull ezlabgva/busco:v5.8.0_cv1 # buildkit
+2.7GB	RUN /bin/sh -c mamba install -c conda-forge --file requirements.txt -y # buildkit
+12.3kB	COPY requirements.txt . # buildkit
+4.32GB	RUN /bin/sh -c mamba install -c conda-forge -c bioconda -y     biokit=0.5.0     gseapy=1.1.4     blast=2.16.0     clipkit=2.3.0     fastqc=0.12.1     iqtree=2.3.6     mafft=7.526     metaeuk=7.bba0d80     mygene=3.2.2     perl=5.32.1     phykit=2.0.1     pydeseq2=0.4.12     spades=4.0.0     trim-galore=0.6.10     bioconductor-enhancedvolcano=1.20.0     bioconductor-deseq2=1.42.0     bioconductor-clusterprofiler=4.10.0     bioconductor-org.hs.eg.db=3.18.0     bioconductor-genomicranges=1.54.1     bioconductor-summarizedexperiment=1.32.0     bioconductor-apeglm=1.24.0 # buildkit
+61.4kB	RUN /bin/sh -c R -e 'IRkernel::installspec(name = "R", displayname = "R (4.3.3)")' # buildkit
+65.5kB	RUN /bin/sh -c python -m ipykernel install --user --name python3 --display-name "Python 3 (ipykernel)" # buildkit
+2.82GB	RUN /bin/sh -c mamba install -c conda-forge -y     r-base=4.3.3     r-recommended=4.3     r-irkernel=1.3.2     r-factominer=2.11     r-rcolorbrewer=1.1_3     r-devtools=2.4.5     r-broom=1.0.7     r-data.table=1.15.4     r-enrichr=3.2     r-factoextra=1.0.7     r-ggnewscale=0.5.0     r-ggrepel=0.9.6     r-ggpubr=0.6.0     r-ggvenn=0.1.10     r-janitor=2.2.1     r-multcomp=1.4_26     r-matrix=1.6_5     r-pheatmap=1.0.12     r-tidyverse=2.0.0     r-readxl=1.4.3     r-reshape=0.8.9     r-rstatix=0.7.2     r-viridis=0.6.5     udocker=1.3.17     imbalanced-learn=0.13.0     ipykernel=6.29.5     sqlite=3.47.2 # buildkit
+567MB	RUN /bin/sh -c conda install mamba=2.0.5 -c conda-forge -y # buildkit
+369MB	RUN /bin/sh -c apt-get update &&     apt-get install -yq --no-install-recommends         wget         gpg         software-properties-common         build-essential &&     rm -rf /var/lib/apt/lists/* # buildkit
+0B	ENV DEBIAN_FRONTEND=noninteractive
+4.1kB	WORKDIR /envs
+12.3kB	RUN /bin/sh -c mkdir /workspace &&     mkdir /envs # buildkit
+303MB	RUN |6 INSTALLER_URL_LINUX64=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-x86_64.sh SHA256SUM_LINUX64=8d936ba600300e08eca3d874dee88c61c6f39303597b2b66baee54af4f7b4122 INSTALLER_URL_S390X=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-s390x.sh SHA256SUM_S390X=876db345b31db6d2b96ab1e2aedfbcea8af6b951a3218e6fd36f657452d1305c INSTALLER_URL_AARCH64=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-aarch64.sh SHA256SUM_AARCH64=86b8df7481646cf87e77873e9789adb7569b58248d3aa629eb2da35e6f2e2eed /bin/sh -c set -x &&     UNAME_M="$(uname -m)" &&     if [ "${UNAME_M}" = "x86_64" ]; then         INSTALLER_URL="${INSTALLER_URL_LINUX64}";         SHA256SUM="${SHA256SUM_LINUX64}";     elif [ "${UNAME_M}" = "s390x" ]; then         INSTALLER_URL="${INSTALLER_URL_S390X}";         SHA256SUM="${SHA256SUM_S390X}";     elif [ "${UNAME_M}" = "aarch64" ]; then         INSTALLER_URL="${INSTALLER_URL_AARCH64}";         SHA256SUM="${SHA256SUM_AARCH64}";     fi &&     wget "${INSTALLER_URL}" -O miniconda.sh -q &&     echo "${SHA256SUM} miniconda.sh" > shasum &&     sha256sum --check --status shasum &&     mkdir -p /opt &&     bash miniconda.sh -b -p /opt/conda &&     rm miniconda.sh shasum &&     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh &&     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc &&     echo "conda activate base" >> ~/.bashrc &&     find /opt/conda/ -follow -type f -name '*.a' -delete &&     find /opt/conda/ -follow -type f -name '*.js.map' -delete &&     /opt/conda/bin/conda clean -afy # buildkit
+0B	ARG SHA256SUM_AARCH64=86b8df7481646cf87e77873e9789adb7569b58248d3aa629eb2da35e6f2e2eed
+0B	ARG INSTALLER_URL_AARCH64=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-aarch64.sh
+0B	ARG SHA256SUM_S390X=876db345b31db6d2b96ab1e2aedfbcea8af6b951a3218e6fd36f657452d1305c
+0B	ARG INSTALLER_URL_S390X=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-s390x.sh
+0B	ARG SHA256SUM_LINUX64=8d936ba600300e08eca3d874dee88c61c6f39303597b2b66baee54af4f7b4122
+0B	ARG INSTALLER_URL_LINUX64=https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-x86_64.sh
+0B	CMD ["/bin/bash"]
+0B	ENV PATH=/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+200MB	RUN /bin/sh -c apt-get update -q &&     apt-get install -q -y --no-install-recommends         bzip2         ca-certificates         git         libglib2.0-0         libsm6         libxext6         libxrender1         mercurial         openssh-client         procps         subversion         wget     && apt-get clean     && rm -rf /var/lib/apt/lists/* # buildkit
+0B	ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+0B	LABEL maintainer=Anaconda, Inc
+0B	/bin/sh -c #(nop)  CMD ["bash"]
+108MB	/bin/sh -c #(nop) ADD file:702193928cded0bcec5edbf4a5660961e7caef8c9d9cafea3337b7f6720c4464 in / 

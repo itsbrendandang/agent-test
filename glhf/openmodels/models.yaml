@@ -27,7 +27,7 @@ models:
   # ---- the three contestants ------------------------------------------------------------------
   - name: qwen3.6-35b-a3b
     kind: modal-app
-    status: waiting
+    status: smoke-tested
     inspect_model: openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8
     hf_repo: Qwen/Qwen3.6-35B-A3B-FP8
     revision: c653bba46dfa06e9658dcc0b0dc87fe4685f14a2
@@ -48,17 +48,13 @@ models:
     tool_call_parser: qwen3_coder
     reasoning_parser: qwen3
     notes: >-
-      WAITING FOR THE OWNER: Modal refuses every GPU type on this account with "Please add a
-      payment method to use L40S GPU functions" (tried 2026-11-14; credit alone is not enough).
-      So it has never been served: no tool-call check and no smoke test were possible.
-      Done without a GPU: the weights are in the Volume openmodels-hf-cache (37.49 GB, this
-      revision, fetched with no token); vLLM 0.33.0's source defines all 15 flags and both
-      parsers the app passes; the endpoint lock was tested on a CPU stand-in.
-      35B parameters, 3B active per token. Modal's own example serves it with SGLang on 2 H100
-      (7.90 USD an hour) for low latency; one L40S (1.95) is the cheapest GPU on Modal that
-      should hold the FP8 weights (35 GiB) and a 131,072-token context (about 2.7 GB of cache).
-      That it fits is computed from the model's config, not measured. If it does not fit, the
-      next choices are A100-80GB (2.50) and H100 (3.95; the GPU vLLM's recipe names).
+      Smoke-tested 2026-11-14 on one L40S (48 GB) with the 131,072-token context: it fits.
+      First cold start 285 s; 105 output tokens a second; a real tool-call round trip works
+      (parsed call, right value, text answer after the tool result). One capsule (bix-46, 2
+      questions): single agent 54 s and 187,051 tokens; swarm 144 s and 326,262 tokens; all four
+      answers graded correct by code rules. 35B parameters, 3B active per token; thinking on.
+      Modal's own example serves it with SGLang on 2 H100 (7.90 USD an hour) for low latency;
+      one L40S (1.95) is the cheapest Modal GPU that holds it.
 
   - name: claude-opus-5-5
     kind: api
@@ -86,7 +82,8 @@ models:
       source: "engine/node_modules/@earendil-works/pi-ai/dist/providers/data/openai.json (pi-ai 1.5.2), id gpt-6.1-sol; a higher tier (4 / 0.2 / 15) applies above 272,000 input tokens, which a run here cannot reach"
     notes: >-
       Paid vendor model on the owner's key. Never run by an agent. "OpenAI Sol" is read as the
-      newest Sol id on the account (gpt-6.1-sol); that choice is an assumption.
+      newest Sol id: the pi-ai model table lists gpt-5.6-sol, gpt-6-sol and gpt-6.1-sol, and
+      6.1 is the highest version (the table has no release dates).
 
   # ---- Kimi: looked at, not deployed ----------------------------------------------------------
   - name: kimi-k3.1-pro
@@ -103,9 +100,10 @@ models:
     notes: >-
       2.8 trillion parameters (104B active), released already quantised (MXFP4 weights). vLLM's
       recipe needs 1,874 GB of GPU memory and a nightly vLLM (0.34): at least 7 B300 (288 GB
-      each), 49.70 USD an hour, over the 10 USD an hour limit. Not deployed. Options: Modal's
-      Shared Endpoint for this model (2.00 / 0.20 cached / 10.00 USD per million tokens; plan
-      credit cannot pay for it), or Moonshot's own API (needs a key from the owner). See README.
+      each), 49.70 USD an hour, over the 10 USD an hour limit. Not self-served. Hosted paths:
+      kimi-k3.1-pro-tinker and kimi-k3.1-pro-moonshot below, or Modal's Shared Endpoint for this
+      model (2.00 / 0.20 cached / 10.00 USD per million tokens; plan credit cannot pay for it;
+      it needs `modal endpoint create --shared`, which was not done). See README.
 
   - name: kimi-k3
     kind: not-deployed
@@ -122,6 +120,67 @@ models:
       Same size as K3.1 Pro (2.8T parameters), so the same answer. Modal Shared Endpoint price:
       3.00 / 0.30 cached / 15.00 USD per million tokens. Older and smaller: Kimi K2.6 (1.03T
       parameters, 595 GB; nvidia/Kimi-K2.6-NVFP4 is the same size on disk), still 3 B300 or more.
+
+  # ---- hosted open models: prepared, never run ------------------------------------------------
+  - name: kimi-k3.1-pro-tinker
+    kind: api
+    status: prepared
+    provider: tinker
+    inspect_model: openai-api/tinker/moonshotai/Kimi-K3.1-Pro:peft:262144
+    base_url: https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1
+    base_url_env: TINKER_BASE_URL
+    api_key_env: TINKER_API_KEY
+    context_length: 262144
+    usd_per_mtok:
+      input: 6.0
+      cached_input: 1.2
+      output: 25.0
+      source: "tinker-docs.thinkingmachines.ai/tinker/models.json, read 2026-11-14 (prefill 6.00, cached prefill 1.20, sample 25.00)"
+    notes: >-
+      Kimi as the fourth contestant, hosted on Tinker (the owner has Tinker credits). NOT VERIFIED,
+      and needs one small paid request to find out: (1) Tinker's OpenAI-compatible endpoint is
+      documented with a checkpoint path as the model name; that it takes this base-model id is not
+      stated. (2) Its docs do not mention `tools` on that endpoint (tool use is documented only on
+      the Anthropic-compatible one, which Inspect 0.3.220 cannot address with this model name).
+      (3) The docs do not say that credits pay for sampling. Check with `openmodels toolcheck`.
+
+  - name: kimi-k3.1-pro-moonshot
+    kind: api
+    status: prepared
+    provider: moonshot
+    inspect_model: openai-api/moonshot/kimi-k3.1-pro
+    base_url: https://api.moonshot.ai/v1
+    base_url_env: MOONSHOT_BASE_URL
+    api_key_env: MOONSHOT_API_KEY
+    context_length: 1048576
+    usd_per_mtok:
+      input: 2.0
+      cached_input: 0.2
+      output: 10.0
+      source: "engine/node_modules/@earendil-works/pi-ai/dist/providers/data/moonshotai.json (pi-ai 1.5.2), id kimi-k3.1-pro; Moonshot's own pricing page shows no numbers without a browser"
+    notes: >-
+      Kimi on Moonshot's own API (platform.kimi.ai). Needs a key from the owner; real money.
+      Tool calls are documented there. The model card says the whole assistant message, with its
+      reasoning content, must be sent back each turn; whether Inspect does that was not checked.
+
+  - name: qwen3.6-35b-a3b-tinker
+    kind: api
+    status: prepared
+    provider: tinker
+    inspect_model: openai-api/tinker/Qwen/Qwen3.6-35B-A3B:peft:262144
+    base_url: https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1
+    base_url_env: TINKER_BASE_URL
+    api_key_env: TINKER_API_KEY
+    context_length: 262144
+    usd_per_mtok:
+      input: 0.45
+      cached_input: 0.09
+      output: 1.335
+      source: "tinker-docs.thinkingmachines.ai/tinker/models.json, read 2026-11-14 (prefill 0.45, cached prefill 0.09, sample 1.335)"
+    notes: >-
+      The same model as the Modal contestant, hosted on Tinker (full-precision weights there, FP8
+      on Modal). A second path only: the Modal one is smoke-tested. Same three unknowns as
+      kimi-k3.1-pro-tinker.
 
   # ---- optional extras: no app file yet -------------------------------------------------------
   - name: ministral-3-8b

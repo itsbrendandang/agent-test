@@ -73,8 +73,8 @@ describe("a review's sources", () => {
     expect(sources.getAllByRole("link", { name: "Exa" })[0]).toHaveAttribute("href", "https://exa.ai")
     const item = sources.getByRole("link", { name: "hERG margins in practice" }).closest("li")!
     expect(item).toHaveTextContent("example.org · kind of study: review · relevance 0.82")
-    expect(within(item).getByRole("list", { name: "Statements that rest on this source" })).toHaveTextContent("Holds up The margin is under 30xThe quoted passage was found in this source.")
-    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1: Holds up/ }))
+    expect(within(item).getByRole("list", { name: "Statements that rest on this source" })).toHaveTextContent(/(Holds up|Supported) ?The margin is under 30xThe quoted passage was found in this source\./)
+    await userEvent.setup().click(screen.getByRole("button", { name: /Statement 1: Supported/ }))
     const detail = screen.getByText("The statement").closest("dl")!
     expect(detail).toHaveTextContent("Sourcehttps://example.org/herg · Search powered by Exa")
     expect(detail).toHaveTextContent("Quoted passageFound in the source: “margin of 12x”")

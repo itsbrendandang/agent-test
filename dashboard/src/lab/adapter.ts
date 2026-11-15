@@ -9,8 +9,10 @@
 //
 // Rules: a teammate moves only for an event that names its agent or step. What a field does not say is not guessed.
 // Text from a run (questions, statements, errors) is untrusted and is only ever passed on as text.
+import { provenanceOf } from "@/lib/provenance"
+import { MARK_GLYPH, MARK_WORD, markOf } from "@/lib/words"
 import {
-  CHARACTER_IDS, LOG_KEPT, MARK_GLYPH, MARK_WORD, TRIPS_KEPT, characterOf, clip, markOf, plural,
+  CHARACTER_IDS, LOG_KEPT, TRIPS_KEPT, characterOf, clip, plural,
   type Activity, type CharacterId, type LabModel, type LabState, type LogLine, type Provenance, type RoomId, type RunKind, type Trip, type Visitor,
 } from "./model"
 
@@ -129,6 +131,10 @@ export function visitorRoom(nameAndTitle: string): RoomId {
 
 const NO_TASK = /^\s*no task\.?\s*$/i
 
+/** Events of the same millisecond are put in the order the engine emits them, so the model does not depend on the order they arrive in. */
+const BOARD_RANK = ["run.started", "run.resumed", "run.roster", "lead.framed", "round.started", "evidence.triaged", "member.replied", "claim.checked", "constraint", "memo.written", "run.finished", "run.failed"]
+const rank = (type: unknown) => { const i = BOARD_RANK.indexOf(String(type)); return i < 0 ? BOARD_RANK.length : i }
+
 /** Events with the same key replace each other (a replay after a crash emits the same keys); then oldest first. */
 function boardOrder(events: readonly LabEvent[]): LabEvent[] {
   const last = new Map<string, number>()
@@ -136,7 +142,7 @@ function boardOrder(events: readonly LabEvent[]): LabEvent[] {
   return events
     .map((e, i) => ({ e, i }))
     .filter(({ e, i }) => e && typeof e.type === "string" && (str(e.key) === undefined || last.get(str(e.key)!) === i))
-    .sort((a, b) => (num(a.e.at) ?? 0) - (num(b.e.at) ?? 0) || a.i - b.i)
+    .sort((a, b) => (num(a.e.at) ?? 0) - (num(b.e.at) ?? 0) || rank(a.e.type) - rank(b.e.type) || (str(a.e.key) ?? "").localeCompare(str(b.e.key) ?? "") || a.i - b.i)
     .map(({ e }) => e)
 }
 
@@ -167,7 +173,7 @@ export function boardLab(events: readonly LabEvent[], runId?: string): LabModel 
       case "run.started":
         m.status = "running"; m.startedAt = at ?? m.startedAt
         m.title = str(e.title)
-        m.provenance = e.mock === true ? "practice" : e.mock === false ? "live" : undefined
+        m.provenance = provenanceOf({ scripted: typeof e.mock === "boolean" ? e.mock : undefined })
         m.runId ??= str(e.runId)
         b.set("navigator", "working", "Framing the question for the team.", at)
         b.log(at, `The review started${m.provenance === "practice" ? " (practice run: fixed text, not research)" : ""}.`)
@@ -339,10 +345,23 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
   const m = b.model
   const steps = new Map<string, StepSeen>()
   const running = (who: CharacterId) => [...steps.values()].filter((s) => s.who === who && s.running)
-  // Hand-offs: whoever finished a step gives its work to whoever starts the next one.
-  const waiting = new Map<CharacterId, string>() // finished, not yet handed over -> what it made
-  let lastGivers = new Map<CharacterId, string>()
-  const gave = new Map<CharacterId, Set<CharacterId>>() // since its last finished step
+  // Hand-offs: when a step starts, the teammate whose finished step it builds on carries that work over. Once per pair.
+  const finished: StepSeen[] = [] // completed steps, in the order they ended
+  const handed = new Set<string>()
+  const latest = (...kinds: string[]) => finished.findLast((s) => kinds.includes(s.kind))
+  /** The finished steps a starting step builds on. */
+  const feeds = (id: string, kind: string): (StepSeen | undefined)[] => {
+    switch (kind) {
+      case "search": case "fetch": return [latest("prepare")]
+      case "evaluate": { const twin = finished.find((s) => s.id === id.replace(/^evaluate:/, "search:")); return [twin ?? latest("search", "fetch")] }
+      case "write": return [latest("evaluate")]
+      case "check": return [latest("write", "revise")]
+      case "review": return [latest("write")]
+      case "revise": return [latest("check"), latest("review")]
+      case "save": return [latest("revise", "check", "review", "write")]
+      default: return []
+    }
+  }
   let lastWho: CharacterId | undefined
   let n = 0
 
@@ -355,7 +374,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "research.resumed": b.log(at, "The answer went on after the engine restarted."); break
       case "research.started":
         m.title = str(e.question)
-        m.provenance = e.mode === "demo" ? "practice" : e.mode === "real" ? "live" : undefined
+        m.provenance = provenanceOf({ mode: e.mode })
         m.runId ??= str(e.id) ?? str(e.run)
         m.startedAt = at ?? m.startedAt
         b.log(at, `The answer started${m.provenance === "practice" ? " (practice: fixed example text, nothing is searched)" : ""}.`)
@@ -366,16 +385,14 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const provider = str(e.provider), who = stepCharacter(kind, provider)
         if (!who) { b.log(at, `${label}.`); break }
         // the hand-off into this step
-        const givers = waiting.size ? new Map(waiting) : lastGivers
-        waiting.clear()
-        for (const [giver, made] of givers) {
-          if (giver === who || gave.get(giver)?.has(who)) continue
-          gave.set(giver, (gave.get(giver) ?? new Set()).add(who))
-          b.trip(giver, { id: `handoff:${id}:${giver}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
+        for (const from of feeds(id, kind)) {
+          if (!from || from.who === who || handed.has(`${from.id}>${who}`)) continue
+          handed.add(`${from.id}>${who}`)
+          const made = MADE[from.kind] ?? "its work", giver = from.who
+          b.trip(giver, { id: `handoff:${from.id}>${who}`, kind: "handoff", room: characterOf(who).room, to: who, label: `${made} for the ${name(who)}`, short: made.replace(/^(the|its) /, ""), at: at ?? 0 })
           if (!running(giver).length && b.who(giver).state !== "failed") b.set(giver, "handing-off", `Gave ${made} to the ${name(who)}.`, at)
           b.log(at, `${name(giver)} gave ${made} to the ${name(who)}.`, name(giver))
         }
-        lastGivers = givers
         steps.set(id, { id, kind, label, provider, who, at: at ?? 0, running: true })
         lastWho = who
         const query = str(e.query)
@@ -411,7 +428,7 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
         const left = running(s.who)
         if (left.length) { const next = left.at(-1)!; b.set(s.who, isFetch(next.kind) ? "fetching" : "working", `${next.label}.`, b.who(s.who).since) }
         else b.set(s.who, status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : "done", line, at)
-        if (status === "completed") { waiting.set(s.who, MADE[s.kind] ?? "its work"); gave.delete(s.who) }
+        if (status === "completed") finished.push(s)
         b.log(at, `${name(s.who)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`, name(s.who), status === "failed" ? "bad" : status === "empty" ? "warn" : undefined)
         break
       }
@@ -426,6 +443,8 @@ export function answerLab(events: readonly LabEvent[], runId?: string): LabModel
       case "review.note": if (str(e.text)) b.log(at, `${name("critic")} raised a ${str(e.severity) ?? "minor"} note: ${clip(str(e.text)!, 160)}`, name("critic"), e.severity === "blocking" ? "warn" : undefined); break
       case "sources": if (Array.isArray(e.items)) b.log(at, `${plural(e.items.length, "source")} numbered for the writer.`); break
       case "selection": if (Array.isArray(e.selected)) b.log(at, `${plural(e.selected.length, "source")} selected${Array.isArray(e.notSelected) ? `, ${e.notSelected.length} not selected` : ""}.`, name("auditor")); break
+      case "artifact.created": { const file = str((e.artifact as Record<string, unknown> | undefined)?.name); if (file) b.log(at, `${name("finisher")} saved ${clip(file, 60)}.`, name("finisher")); break }
+      case "missing": if (Array.isArray(e.items) && e.items.length) b.log(at, `Named as not found or not checked: ${plural(e.items.length, "item")}.`, undefined, "warn"); break
       case "answer.written": b.log(at, "The draft is written.", name("reporter")); break
       case "answer.revised": b.log(at, "The answer was revised.", name("reviser")); break
       case "research.finished": {
@@ -593,5 +612,4 @@ export function swarmLab(run: SwarmRun | undefined, notes: SwarmNotes | null | u
 }
 
 /** Practice, live or local, from the run's own record: the scripted model is a practice run. */
-export const swarmProvenance = (run: SwarmRun): Provenance | undefined =>
-  run.modelClass === "scripted" || run.model === "mock" ? "practice" : run.modelClass === "local" || run.model?.startsWith("ollama/") ? "local" : typeof run.model === "string" ? "live" : undefined
+export const swarmProvenance = (run: SwarmRun): Provenance | undefined => (run.modelClass === "scripted" ? "practice" : run.modelClass === "local" ? "local" : provenanceOf({ model: run.model }))

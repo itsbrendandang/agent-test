@@ -12,7 +12,7 @@ export const stationPoint = (c: Pick<Character, "room" | "slot">): Point => { co
 /** Where a teammate stands to pick something up, between the desks. A small offset per teammate keeps two pick-ups apart. */
 export const pickupPoint = (room: RoomId, index: number): Point => { const r = roomOf(room); return { x: r.x + 220 + ((index % 3) - 1) * 18, y: r.y + 145 + (index % 2 ? 12 : -12) } }
 /** Where a teammate puts down what it hands over: beside the desk of the one it is for. */
-export const dropPoint = (to: CharacterId, index: number): Point => { const c = characterOf(to), s = stationPoint(c); return { x: s.x + (c.slot === 0 ? 52 : -52), y: s.y + (index % 2 ? 10 : -10) } }
+export const dropPoint = (to: CharacterId, index: number): Point => { const c = characterOf(to), s = stationPoint(c); return { x: s.x + (c.slot === 0 ? 80 : -80), y: s.y + (index % 2 ? 14 : -14) } }
 /** Where the n-th visitor of a room stands: the first between the desks, the second by the wall away from the door. Clear of the walking routes. */
 export const visitorPoint = (room: RoomId, n: number): Point => {
   const r = roomOf(room), left = r.x < MAP.corridorX

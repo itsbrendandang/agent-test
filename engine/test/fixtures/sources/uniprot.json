@@ -1,0 +1,3110 @@
+[
+ {
+  "name": "up-kras",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28kras%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "method": "GET",
+  "status": 200,
+  "body": {
+   "results": [
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "P01116",
+     "uniProtkbId": "RASK_HUMAN",
+     "organism": {
+      "scientificName": "Homo sapiens",
+      "commonName": "Human",
+      "taxonId": 9606
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "GTPase KRas"
+       },
+       "ecNumbers": [
+        {
+         "value": "3.6.5.2"
+        }
+       ]
+      },
+      "alternativeNames": [
+       {
+        "fullName": {
+         "value": "K-Ras 2"
+        }
+       },
+       {
+        "fullName": {
+         "value": "Ki-Ras"
+        }
+       },
+       {
+        "fullName": {
+         "value": "c-K-ras"
+        }
+       },
+       {
+        "fullName": {
+         "value": "c-Ki-ras"
+        }
+       }
+      ],
+      "contains": [
+       {
+        "recommendedName": {
+         "fullName": {
+          "value": "GTPase KRas, N-terminally processed"
+         }
+        }
+       }
+      ],
+      "flag": "Precursor"
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "KRAS"
+       },
+       "synonyms": [
+        {
+         "value": "KRAS2"
+        },
+        {
+         "value": "RASK2"
+        }
+       ]
+      }
+     ],
+     "comments": [
+      {
+       "texts": [
+        {
+         "value": "Signal transducer in the Ras-MAPK signaling pathway that regulates cell proliferation and survival (PubMed:22711838, PubMed:23698361). Ras proteins bind GDP/GTP and possess intrinsic GTPase activity (PubMed:20949621, PubMed:39809765). Activates MAPK1/MAPK3 resulting in phosphorylation and ultimately degradation of GJA1 (By similarity). Plays a role in promoting oncogenic events by inducing transcriptional silencing of tumor suppressor genes (TSGs) in colorectal cancer (CRC) cells in a ZNF304-dependent manner (PubMed:24623306). Recognized by LZTR1 that mediates its ubiquitination by a BCR (BTB-CUL3-RBX1) E3 ubiquitin-protein ligase complex (PubMed:40934300)"
+        }
+       ],
+       "commentType": "FUNCTION"
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Cell membrane",
+          "id": "SL-0039"
+         },
+         "topology": {
+          "value": "Lipid-anchor",
+          "id": "SL-9901"
+         },
+         "orientation": {
+          "value": "Cytoplasmic side",
+          "id": "SL-9910"
+         }
+        },
+        {
+         "location": {
+          "value": "Endomembrane system",
+          "id": "SL-0147"
+         }
+        },
+        {
+         "location": {
+          "value": "Cytoplasm",
+          "id": "SL-0086"
+         }
+        }
+       ]
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "molecule": "Isoform 2B",
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Cell membrane",
+          "id": "SL-0039"
+         },
+         "topology": {
+          "value": "Lipid-anchor",
+          "id": "SL-9901"
+         }
+        }
+       ]
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Leukemia, acute myelogenous",
+        "diseaseAccession": "DI-01171",
+        "acronym": "AML",
+        "description": "A subtype of acute leukemia, a cancer of the white blood cells. AML is a malignant disease of bone marrow characterized by maturational arrest of hematopoietic precursors at an early stage of development. Clonal expansion of myeloid blasts occurs in bone marrow, blood, and other tissue. Myelogenous leukemias develop from changes in cells that normally produce neutrophils, basophils, eosinophils and monocytes.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "601626"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Leukemia, juvenile myelomonocytic",
+        "diseaseAccession": "DI-01851",
+        "acronym": "JMML",
+        "description": "An aggressive pediatric myelodysplastic syndrome/myeloproliferative disorder characterized by malignant transformation in the hematopoietic stem cell compartment with proliferation of differentiated progeny. Patients have splenomegaly, enlarged lymph nodes, rashes, and hemorrhages.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "607785"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Noonan syndrome 3",
+        "diseaseAccession": "DI-02073",
+        "acronym": "NS3",
+        "description": "A form of Noonan syndrome, a disease characterized by short stature, facial dysmorphic features such as hypertelorism, a downward eyeslant and low-set posteriorly rotated ears, and a high incidence of congenital heart defects and hypertrophic cardiomyopathy. Other features can include a short neck with webbing or redundancy of skin, deafness, motor delay, variable intellectual deficits, multiple skeletal defects, cryptorchidism, and bleeding diathesis. Individuals with Noonan syndrome are at risk of juvenile myelomonocytic leukemia, a myeloproliferative disorder characterized by excessive production of myelomonocytic cells.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "609942"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Gastric cancer",
+        "diseaseAccession": "DI-02971",
+        "acronym": "GASC",
+        "description": "A malignant disease which starts in the stomach, can spread to the esophagus or the small intestine, and can extend through the stomach wall to nearby lymph nodes and organs. It also can metastasize to other parts of the body. The term gastric cancer or gastric carcinoma refers to adenocarcinoma of the stomach that accounts for most of all gastric malignant tumors. Two main histologic types are recognized, diffuse type and intestinal type carcinomas. Diffuse tumors are poorly differentiated infiltrating lesions, resulting in thickening of the stomach. In contrast, intestinal tumors are usually exophytic, often ulcerating, and associated with intestinal metaplasia of the stomach, most often observed in sporadic disease.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "613659"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "note": {
+        "texts": [
+         {
+          "value": "Defects in KRAS are a cause of pylocytic astrocytoma (PA). Pylocytic astrocytomas are neoplasms of the brain and spinal cord derived from glial cells which vary from histologically benign forms to highly anaplastic and malignant tumors"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Cardiofaciocutaneous syndrome 2",
+        "diseaseAccession": "DI-03779",
+        "acronym": "CFC2",
+        "description": "A form of cardiofaciocutaneous syndrome, a multiple congenital anomaly disorder characterized by a distinctive facial appearance, heart defects and intellectual disability. Heart defects include pulmonic stenosis, atrial septal defects and hypertrophic cardiomyopathy. Some affected individuals present with ectodermal abnormalities such as sparse, friable hair, hyperkeratotic skin lesions and a generalized ichthyosis-like condition. Typical facial features are similar to Noonan syndrome. They include high forehead with bitemporal constriction, hypoplastic supraorbital ridges, downslanting palpebral fissures, a depressed nasal bridge, and posteriorly angulated ears with prominent helices. CFC2 patients often do not have the skin abnormalities, such as ichthyosis, hyperkeratosis, and hemangioma observed in CFC1.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "615278"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "note": {
+        "texts": [
+         {
+          "value": "KRAS mutations are involved in cancer development"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Oculoectodermal syndrome",
+        "diseaseAccession": "DI-05645",
+        "acronym": "OES",
+        "description": "A syndrome characterized by the association of epibulbar dermoids and aplasia cutis congenita. Affected individuals show multiple, asymmetric, atrophic, non-scarring and hairless regions that may be associated with hamartomas. Ectodermal changes include linear hyperpigmentation that may follow the lines of Blaschko and rarely epidermal nevus-like lesions. Epibulbar dermoids may be uni-or bilateral. Additional ocular anomalies such as skin tags of the upper eyelid, rarely optic nerve or retinal changes, and microphthalmia can be present. The phenotypic expression is highly variable, and various other abnormalities have occasionally been reported including growth failure, lymphedema, cardiovascular defects, as well as neurodevelopmental symptoms like developmental delay, epilepsy, learning difficulties, and behavioral abnormalities. Benign tumor-like lesions such as nonossifying fibromas of the long bones and giant cell granulomas of the jaws have repeatedly been observed and appear to be age-dependent, becoming a common manifestation in individuals aged 5 years or older.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "600268"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Schimmelpenning-Feuerstein-Mims syndrome",
+        "diseaseAccession": "DI-03512",
+        "acronym": "SFM",
+        "description": "A disease characterized by sebaceous nevi, often on the face, associated with variable ipsilateral abnormalities of the central nervous system, ocular anomalies, and skeletal defects. Many oral manifestations have been reported, not only including hypoplastic and malformed teeth, and mucosal papillomatosis, but also ankyloglossia, hemihyperplastic tongue, intraoral nevus, giant cell granuloma, ameloblastoma, bone cysts, follicular cysts, oligodontia, and odontodysplasia. Sebaceous nevi follow the lines of Blaschko and these can continue as linear intraoral lesions, as in mucosal papillomatosis.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "163200"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "RAS-associated autoimmune leukoproliferative disorder 2",
+        "diseaseAccession": "DI-07162",
+        "acronym": "RALD2",
+        "description": "A disease characterized by lymphadenopathy, splenomegaly, and autoimmunity causing hemolytic anemia, idiopathic thrombocytopenic purpura, and neutropenia.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "621582"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      }
+     ],
+     "features": [
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 5,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 5,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; dbSNP:rs193929331",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs193929331"
+        }
+       ],
+       "featureId": "VAR_065144",
+       "alternativeSequence": {
+        "originalSequence": "K",
+        "alternativeSequences": [
+         "E"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 5,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 5,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC; found also in a patient with Costello syndrome; exhibits only minor alterations in its in vitro biochemical behavior compared to wild-type protein; dbSNP:rs104894361",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894361"
+        }
+       ],
+       "featureId": "VAR_064849",
+       "alternativeSequence": {
+        "originalSequence": "K",
+        "alternativeSequences": [
+         "N"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 10,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 10,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in AML; expression in 3T3 cell causes cellular transformation; expression in COS cells activates the Ras-MAPK signaling pathway; lower GTPase activity; faster GDP dissociation rate",
+       "featureId": "VAR_034601",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "GG"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in colorectal cancer samples; somatic mutation; dbSNP:rs121913529",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913529"
+        }
+       ],
+       "featureId": "VAR_036305",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "A"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in lung carcinoma; somatic mutation; also found in metastatic colorectal cancer; dbSNP:rs121913530",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913530"
+        }
+       ],
+       "featureId": "VAR_006839",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC, JMML, SFM and RALD2; somatic mutation; also found in pancreatic carcinoma and lung carcinoma; also found in metastatic colorectal cancer; dbSNP:rs121913529",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913529"
+        }
+       ],
+       "featureId": "VAR_016026",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "D"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in lung cancer and bladder cancer; somatic mutation; dbSNP:rs121913530",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913530"
+        }
+       ],
+       "featureId": "VAR_016027",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC and JMML; also found in lung carcinoma; somatic mutation; dbSNP:rs121913530",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913530"
+        }
+       ],
+       "featureId": "VAR_016028",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "S"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 12,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 12,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC; also found in lung carcinoma, pancreatic carcinoma and colon cancer; also found in metastatic colorectal cancer; somatic mutation; it is constitutively activated and stimulates transcription activation of tumor suppressor genes in non-transformed fibroblasts; promotes GTP binding; dbSNP:rs121913529",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913529"
+        }
+       ],
+       "featureId": "VAR_006840",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "V"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 13,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 13,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in RALD2",
+       "featureId": "VAR_091736",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 13,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 13,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC, JMML, OES and RALD2; also found in a breast carcinoma cell line; somatic mutation; dbSNP:rs112445441",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs112445441"
+        }
+       ],
+       "featureId": "VAR_016029",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "D"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 13,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 13,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in pylocytic astrocytoma; somatic mutation; increase activation of the Ras pathway; dbSNP:rs121913535",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913535"
+        }
+       ],
+       "featureId": "VAR_065145",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 14,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 14,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; affects activity and impairs responsiveness to GTPase activating proteins; characterized by a strong increase of both intrinsic and guanine nucleotide exchanged factor-catalyzed nucleotide exchange leading to an increased level of the activated state; dbSNP:rs104894365",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894365"
+        }
+       ],
+       "featureId": "VAR_026109",
+       "alternativeSequence": {
+        "originalSequence": "V",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 19,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 19,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in OES; somatic mutation; dbSNP:rs121913538",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913538"
+        }
+       ],
+       "featureId": "VAR_083261",
+       "alternativeSequence": {
+        "originalSequence": "L",
+        "alternativeSequences": [
+         "F"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 22,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 22,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in CFC2; exhibits an increase in intrinsic and guanine nucleotide exchange factor catalyzed nucleotide exchange in combination with an impaired GTPase-activating protein-stimulated GTP hydrolysis but functional in interaction with effectors; dbSNP:rs121913236",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913236"
+        }
+       ],
+       "featureId": "VAR_064850",
+       "alternativeSequence": {
+        "originalSequence": "Q",
+        "alternativeSequences": [
+         "E"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 22,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 22,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; impairs GTPase-activating protein stimulated GTP hydrolysis with unaffected intrinsic functions and a virtually functional effector interaction; dbSNP:rs727503110",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs727503110"
+        }
+       ],
+       "featureId": "VAR_064851",
+       "alternativeSequence": {
+        "originalSequence": "Q",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 34,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 34,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; characterized by a defective GTPase-activating protein sensitivity and a strongly reduced interaction with effectors; dbSNP:rs104894366",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894366"
+        }
+       ],
+       "featureId": "VAR_064852",
+       "alternativeSequence": {
+        "originalSequence": "P",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 34,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 34,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; dbSNP:rs104894366",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894366"
+        }
+       ],
+       "featureId": "VAR_064853",
+       "alternativeSequence": {
+        "originalSequence": "P",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 34,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 34,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in CFC2; characterized by a defective GTPase-activating protein sensitivity and a strongly reduced interaction with effectors; dbSNP:rs104894366",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894366"
+        }
+       ],
+       "featureId": "VAR_026110",
+       "alternativeSequence": {
+        "originalSequence": "P",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 36,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 36,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; dbSNP:rs727503109",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs727503109"
+        }
+       ],
+       "featureId": "VAR_064854",
+       "alternativeSequence": {
+        "originalSequence": "I",
+        "alternativeSequences": [
+         "M"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 58,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 58,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; affects activity and impairs responsiveness to GTPase activating proteins; exhibits only minor alterations in its in vitro biochemical behavior compared to wild-type protein; dbSNP:rs104894364",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894364"
+        }
+       ],
+       "featureId": "VAR_026111",
+       "alternativeSequence": {
+        "originalSequence": "T",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 59,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 59,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GASC; also found in bladder cancer; somatic mutation; dbSNP:rs121913528",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913528"
+        }
+       ],
+       "featureId": "VAR_016030",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "T"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 60,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 60,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in CFC2; characterized by a defective GTPase-activating protein sensitivity and a strongly reduced interaction with effectors; dbSNP:rs104894359",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894359"
+        }
+       ],
+       "featureId": "VAR_026112",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 60,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 60,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS3; dbSNP:rs104894359",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894359"
+        }
+       ],
+       "featureId": "VAR_065146",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "S"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 61,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 61,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in lung carcinoma; dbSNP:rs17851045",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs17851045"
+        }
+       ],
+       "featureId": "VAR_006841",
+       "alternativeSequence": {
+        "originalSequence": "Q",
+        "alternativeSequences": [
+         "H"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 61,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 61,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in a colorectal cancer sample; somatic mutation; promotes interaction with SHOC2 and PP1C; dbSNP:rs121913240",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913240"
+        }
+       ],
+       "featureId": "VAR_036306",
+       "alternativeSequence": {
+        "originalSequence": "Q",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 71,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 71,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in CFC2; dbSNP:rs387907205",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs387907205"
+        }
+       ],
+       "featureId": "VAR_069784",
+       "alternativeSequence": {
+        "originalSequence": "Y",
+        "alternativeSequences": [
+         "H"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 117,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 117,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in colorectal cancer samples; somatic mutation; dbSNP:rs770248150",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs770248150"
+        }
+       ],
+       "featureId": "VAR_036307",
+       "alternativeSequence": {
+        "originalSequence": "K",
+        "alternativeSequences": [
+         "N"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 146,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 146,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in OES; somatic mutation; also found in colorectal cancer samples; dbSNP:rs121913527",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs121913527"
+        }
+       ],
+       "featureId": "VAR_036308",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "T"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 146,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 146,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in OES; somatic mutation; dbSNP:rs1057519725",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1057519725"
+        }
+       ],
+       "featureId": "VAR_083262",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "V"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 147,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 147,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in CFC2; dbSNP:rs387907206",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs387907206"
+        }
+       ],
+       "featureId": "VAR_069785",
+       "alternativeSequence": {
+        "originalSequence": "K",
+        "alternativeSequences": [
+         "E"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 152,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 152,
+         "modifier": "EXACT"
+        },
+        "sequence": "P01116-2"
+       },
+       "description": "in NS3; dbSNP:rs104894367",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894367"
+        }
+       ],
+       "featureId": "VAR_082908",
+       "alternativeSequence": {
+        "originalSequence": "V",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 153,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 153,
+         "modifier": "EXACT"
+        },
+        "sequence": "P01116-2"
+       },
+       "description": "in CFC2 and NS3; exhibits only minor alterations in its in vitro biochemical behavior compared to wild-type protein; dbSNP:rs104894360",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894360"
+        }
+       ],
+       "featureId": "VAR_082909",
+       "alternativeSequence": {
+        "originalSequence": "D",
+        "alternativeSequences": [
+         "V"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 156,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 156,
+         "modifier": "EXACT"
+        },
+        "sequence": "P01116-2"
+       },
+       "description": "in NS3; the patient also has features of cardiofaciocutaneous syndrome; dbSNP:rs397517042",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs397517042"
+        }
+       ],
+       "featureId": "VAR_082910",
+       "alternativeSequence": {
+        "originalSequence": "F",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 156,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 156,
+         "modifier": "EXACT"
+        },
+        "sequence": "P01116-2"
+       },
+       "description": "found in a patient with Costello syndrome; exhibits an increase in intrinsic and guanine nucleotide exchange factor catalyzed nucleotide exchange in combination with an impaired GTPase-activating protein-stimulated GTP hydrolysis but functional in interaction with effectors; dbSNP:rs104894362",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs104894362"
+        }
+       ],
+       "featureId": "VAR_082911",
+       "alternativeSequence": {
+        "originalSequence": "F",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "Q9UQ13",
+     "uniProtkbId": "SHOC2_HUMAN",
+     "organism": {
+      "scientificName": "Homo sapiens",
+      "commonName": "Human",
+      "taxonId": 9606
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "Leucine-rich repeat protein SHOC-2"
+       }
+      },
+      "alternativeNames": [
+       {
+        "fullName": {
+         "value": "Protein soc-2 homolog"
+        }
+       },
+       {
+        "fullName": {
+         "value": "Protein sur-8 homolog"
+        }
+       }
+      ]
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "SHOC2"
+       },
+       "synonyms": [
+        {
+         "value": "KIAA0862"
+        }
+       ]
+      }
+     ],
+     "comments": [
+      {
+       "texts": [
+        {
+         "value": "Core component of the SHOC2-MRAS-PP1c (SMP) holophosphatase complex that regulates activation of the MAPK pathway (PubMed:10783161, PubMed:16630891, PubMed:25137548, PubMed:35768504, PubMed:35830882, PubMed:35831509, PubMed:36175670). Acts as a scaffolding protein in the SMP complex (PubMed:35768504, PubMed:35830882, PubMed:35831509, PubMed:36175670). The SMP complex specifically dephosphorylates the inhibitory phosphorylation at 'Ser-259' of RAF1 kinase, 'Ser-365' of BRAF kinase and 'Ser-214' of ARAF kinase, stimulating their kinase activities (PubMed:10783161, PubMed:16630891, PubMed:35768504, PubMed:35830882, PubMed:35831509, PubMed:36175670). The SMP complex enhances the dephosphorylation activity and substrate specificity of PP1c (PubMed:35768504, PubMed:36175670). Acts as an inhibitor of keratinocyte differentiation via interaction with RAS protein complexes that promote ERK activation (PubMed:23524970)"
+        }
+       ],
+       "commentType": "FUNCTION"
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "note": {
+        "texts": [
+         {
+          "value": "Translocates from cytoplasm to nucleus upon growth factor stimulation"
+         }
+        ]
+       },
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Cytoplasm",
+          "id": "SL-0086"
+         }
+        },
+        {
+         "location": {
+          "value": "Nucleus",
+          "id": "SL-0191"
+         }
+        }
+       ]
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Noonan syndrome-like disorder with loose anagen hair 1",
+        "diseaseAccession": "DI-02076",
+        "acronym": "NSLH1",
+        "description": "A syndrome characterized by Noonan dysmorphic features such as macrocephaly, high forehead, hypertelorism, palpebral ptosis, low-set and posteriorly rotated ears, short and webbed neck, pectus anomalies, in association with pluckable, sparse, thin and slow-growing hair.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "607721"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      }
+     ],
+     "features": [
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 2,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 2,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NSLH1; creates a N-myristoylation site, resulting in myristoylation of the protein and aberrant targeting to the plasma membrane; dbSNP:rs267607048",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs267607048"
+        }
+       ],
+       "featureId": "VAR_060199",
+       "alternativeSequence": {
+        "originalSequence": "S",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 173,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 173,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NSLH1; significantly decreases ERK1/2 activity; does not affect cytoplasm and nucleus localization; does not affect SHOC2-MRAS-RAF1 complex assembly; impairs interaction with phosphatase 1c; promotes SMP complex formation; promotes dephosphorylation of 'S-365' of BRAF by SMP complex; dbSNP:rs730881020",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs730881020"
+        }
+       ],
+       "featureId": "VAR_074030",
+       "alternativeSequence": {
+        "originalSequence": "M",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "Q8N653",
+     "uniProtkbId": "LZTR1_HUMAN",
+     "organism": {
+      "scientificName": "Homo sapiens",
+      "commonName": "Human",
+      "taxonId": 9606
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "Leucine-zipper-like transcriptional regulator 1"
+       },
+       "shortNames": [
+        {
+         "value": "LZTR-1"
+        }
+       ]
+      }
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "LZTR1"
+       },
+       "synonyms": [
+        {
+         "value": "TCFL2"
+        }
+       ]
+      }
+     ],
+     "comments": [
+      {
+       "texts": [
+        {
+         "value": "Substrate-specific adapter of a BCR (BTB-CUL3-RBX1) E3 ubiquitin-protein ligase complex that mediates ubiquitination of Ras GTPases (M-Ras/MRAS, K-Ras/KRAS, N-Ras/NRAS and H-Ras/HRAS) and Ras-like protein RIT1 (PubMed:30442762, PubMed:30442766, PubMed:30481304, PubMed:40934300). Acts as a negative regulator of RAS-MAPK signaling by controlling Ras levels and decreasing Ras association with membranes (PubMed:30442762, PubMed:30442766, PubMed:30481304, PubMed:40934300)"
+        }
+       ],
+       "commentType": "FUNCTION"
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Endomembrane system",
+          "id": "SL-0147"
+         }
+        },
+        {
+         "location": {
+          "value": "Recycling endosome",
+          "id": "SL-0232"
+         }
+        },
+        {
+         "location": {
+          "value": "Golgi apparatus",
+          "id": "SL-0132"
+         }
+        }
+       ]
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Glioma",
+        "diseaseAccession": "DI-02566",
+        "acronym": "GLM",
+        "description": "Gliomas are benign or malignant central nervous system neoplasms derived from glial cells. They comprise astrocytomas and glioblastoma multiforme that are derived from astrocytes, oligodendrogliomas derived from oligodendrocytes and ependymomas derived from ependymocytes.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "137800"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The protein represented in this entry may be involved in disease pathogenesis"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Schwannomatosis 2",
+        "diseaseAccession": "DI-04051",
+        "acronym": "SWN2",
+        "description": "A form of schwannomatosis, a tumor predisposition syndrome characterized by the development of multiple benign nerve sheath tumors called schwannomas on cranial, spinal, and peripheral nerves, without involvement of the vestibular nerve. SWN2 affected individuals have multiple schwannomas in various areas of the body. SWN2 transmission pattern is consistent with autosomal dominant inheritance and incomplete penetrance.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "615670"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "Disease susceptibility is associated with variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Noonan syndrome 10",
+        "diseaseAccession": "DI-04517",
+        "acronym": "NS10",
+        "description": "A form of Noonan syndrome, a disease characterized by short stature, facial dysmorphic features such as hypertelorism, a downward eyeslant and low-set posteriorly rotated ears, and a high incidence of congenital heart defects and hypertrophic cardiomyopathy. Other features can include a short neck with webbing or redundancy of skin, deafness, motor delay, variable intellectual deficits, multiple skeletal defects, cryptorchidism, and bleeding diathesis. Individuals with Noonan syndrome are at risk of juvenile myelomonocytic leukemia, a myeloproliferative disorder characterized by excessive production of myelomonocytic cells. NS10 inheritance is autosomal dominant.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "616564"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease is caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      },
+      {
+       "commentType": "DISEASE",
+       "disease": {
+        "diseaseId": "Noonan syndrome 2",
+        "diseaseAccession": "DI-05439",
+        "acronym": "NS2",
+        "description": "A form of Noonan syndrome, a disease characterized by short stature, facial dysmorphic features such as hypertelorism, a downward eyeslant and low-set posteriorly rotated ears, and a high incidence of congenital heart defects and hypertrophic cardiomyopathy. Other features can include a short neck with webbing or redundancy of skin, deafness, motor delay, variable intellectual deficits, multiple skeletal defects, cryptorchidism, and bleeding diathesis. Individuals with Noonan syndrome are at risk of juvenile myelomonocytic leukemia, a myeloproliferative disorder characterized by excessive production of myelomonocytic cells. NS2 inheritance is autosomal recessive.",
+        "diseaseCrossReference": {
+         "database": "MIM",
+         "id": "605275"
+        }
+       },
+       "note": {
+        "texts": [
+         {
+          "value": "The disease may be caused by variants affecting the gene represented in this entry"
+         }
+        ]
+       }
+      }
+     ],
+     "features": [
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 71,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 71,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs1359555609",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1359555609"
+        }
+       ],
+       "featureId": "VAR_081292",
+       "alternativeSequence": {
+        "originalSequence": "H",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 81,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2",
+       "featureId": "VAR_081293",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 105,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 105,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GLM; increased Ras signaling",
+       "featureId": "VAR_081294",
+       "alternativeSequence": {
+        "originalSequence": "W",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 119,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 119,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; increased Ras signaling",
+       "featureId": "VAR_075657",
+       "alternativeSequence": {
+        "originalSequence": "Y",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 121,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 121,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance; no effect on RAS-MAPK signaling; no effect on stability; dbSNP:rs1569154492",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1569154492"
+        }
+       ],
+       "featureId": "VAR_081295",
+       "alternativeSequence": {
+        "originalSequence": "H",
+        "alternativeSequences": [
+         "D"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 122,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 122,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; decreased binding to Ras; dbSNP:rs587777177",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs587777177"
+        }
+       ],
+       "featureId": "VAR_071145",
+       "alternativeSequence": {
+        "originalSequence": "S",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 125,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 125,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs755783378",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs755783378"
+        }
+       ],
+       "featureId": "VAR_081296",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 143,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 143,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; uncertain significance",
+       "featureId": "VAR_081297",
+       "alternativeSequence": {
+        "originalSequence": "N",
+        "alternativeSequences": [
+         "S"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 170,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 170,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased RAS-MAPK signaling; dbSNP:rs781431741",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs781431741"
+        }
+       ],
+       "featureId": "VAR_081298",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 170,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 170,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; when associated in cis with T-205; dbSNP:rs757502214",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs757502214"
+        }
+       ],
+       "featureId": "VAR_081299",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "W"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 187,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 187,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; decreased binding to Ras",
+       "featureId": "VAR_081300",
+       "alternativeSequence": {
+        "originalSequence": "L",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 198,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 198,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GLM; increased Ras signaling; decreased ubiquitination of Ras",
+       "featureId": "VAR_081301",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 202,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 202,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; decreased binding to Ras",
+       "featureId": "VAR_081302",
+       "alternativeSequence": {
+        "originalSequence": "M",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 205,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 205,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; when associated in cis with W-170; uncertain significance; dbSNP:rs1287917092",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1287917092"
+        }
+       ],
+       "featureId": "VAR_081303",
+       "alternativeSequence": {
+        "originalSequence": "I",
+        "alternativeSequences": [
+         "T"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 210,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2 and SWN2",
+       "featureId": "VAR_081304",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 217,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 217,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance; no effect on RAS-MAPK signaling; decreased stability",
+       "featureId": "VAR_081305",
+       "alternativeSequence": {
+        "originalSequence": "E",
+        "alternativeSequences": [
+         "A"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 247,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 247,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; increased RAS-MAPK signaling; decreased stability; no effect on localization to Golgi apparatus; abolishes interaction with RIT1; dbSNP:rs797045166",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs797045166"
+        }
+       ],
+       "featureId": "VAR_075658",
+       "alternativeSequence": {
+        "originalSequence": "S",
+        "alternativeSequences": [
+         "N"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 248,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 248,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10 and GLM; increased RAS-MAPK signaling; decreased ubiquitination of Ras; decreased stability; no effect on localization to Golgi apparatus; abolishes interaction with RIT1; dbSNP:rs869320686",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs869320686"
+        }
+       ],
+       "featureId": "VAR_075659",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 253,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 253,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; uncertain significance",
+       "featureId": "VAR_081306",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 283,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 283,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; dbSNP:rs1223430276",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1223430276"
+        }
+       ],
+       "featureId": "VAR_081307",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 284,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 284,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10 and SWN2; increased RAS-MAPK signaling; decreased stability; no effect on localization to Golgi apparatus; abolishes interaction with RIT1; dbSNP:rs797045165",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs797045165"
+        }
+       ],
+       "featureId": "VAR_075660",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 286,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 286,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; no effect on stability; dbSNP:rs773016962",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs773016962"
+        }
+       ],
+       "featureId": "VAR_081308",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 287,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 287,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; increased Ras signaling",
+       "featureId": "VAR_075661",
+       "alternativeSequence": {
+        "originalSequence": "H",
+        "alternativeSequences": [
+         "Y"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 288,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 288,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GLM; increased Ras signaling",
+       "featureId": "VAR_081309",
+       "alternativeSequence": {
+        "originalSequence": "T",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 294,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 294,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; uncertain significance",
+       "featureId": "VAR_081310",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 322,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2",
+       "featureId": "VAR_081311",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 340,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2",
+       "featureId": "VAR_081312",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 392,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 392,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs767354230",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs767354230"
+        }
+       ],
+       "featureId": "VAR_081313",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "V"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 400,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 400,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; no effect on stability; no effect on localization to Golgi apparatus",
+       "featureId": "VAR_081314",
+       "alternativeSequence": {
+        "originalSequence": "M",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 404,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 404,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; decreased binding to Ras; dbSNP:rs1470449160",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1470449160"
+        }
+       ],
+       "featureId": "VAR_071146",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 447,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 447,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in dbSNP:rs201016956",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs201016956"
+        }
+       ],
+       "featureId": "VAR_075662",
+       "alternativeSequence": {
+        "originalSequence": "F",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 456,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 456,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; impaired subcellular location",
+       "featureId": "VAR_071147",
+       "alternativeSequence": {
+        "originalSequence": "V",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 465,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 465,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs753757778",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs753757778"
+        }
+       ],
+       "featureId": "VAR_081315",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "E"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 466,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 466,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; decreased interaction with CUL3; impaired subcellular location; impaired subcellular location; dbSNP:rs587777180",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs587777180"
+        }
+       ],
+       "featureId": "VAR_071148",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 520,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 520,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; impaired subcellular location; dbSNP:rs1569157089",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1569157089"
+        }
+       ],
+       "featureId": "VAR_071149",
+       "alternativeSequence": {
+        "originalSequence": "P",
+        "alternativeSequences": [
+         "L"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 528,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 528,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs1924724869",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1924724869"
+        }
+       ],
+       "featureId": "VAR_081316",
+       "alternativeSequence": {
+        "originalSequence": "L",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 539,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 539,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; somatic mutation; dbSNP:rs1232362523",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1232362523"
+        }
+       ],
+       "featureId": "VAR_081317",
+       "alternativeSequence": {
+        "originalSequence": "G",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 554,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 554,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS10; uncertain significance",
+       "featureId": "VAR_081318",
+       "alternativeSequence": {
+        "originalSequence": "A",
+        "alternativeSequences": [
+         "P"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 563,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 563,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance; no effect on RAS-MAPK signaling; strongly decreased stability; dbSNP:rs1374240053",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1374240053"
+        }
+       ],
+       "featureId": "VAR_081319",
+       "alternativeSequence": {
+        "originalSequence": "E",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 603,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2",
+       "featureId": "VAR_081320",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 619,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 619,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "has not effect on protein abundance; does not affect localization to Golgi apparatus; does not affect function in regulation of RAS-MAPK signaling; dbSNP:rs568213908",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs568213908"
+        }
+       ],
+       "featureId": "VAR_086931",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "H"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 647,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 647,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in dbSNP:rs148916790",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs148916790"
+        }
+       ],
+       "featureId": "VAR_075663",
+       "alternativeSequence": {
+        "originalSequence": "I",
+        "alternativeSequences": [
+         "V"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 654,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 654,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance",
+       "featureId": "VAR_081321",
+       "alternativeSequence": {
+        "originalSequence": "D",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 668,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 668,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs776005012",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs776005012"
+        }
+       ],
+       "featureId": "VAR_081322",
+       "alternativeSequence": {
+        "originalSequence": "D",
+        "alternativeSequences": [
+         "Y"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 688,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 688,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; decreased interaction with CUL3; impaired subcellular location; dbSNP:rs587777178",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs587777178"
+        }
+       ],
+       "featureId": "VAR_071150",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "C"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 688,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 688,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance",
+       "featureId": "VAR_081323",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "G"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 697,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 697,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; dbSNP:rs370638947",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs370638947"
+        }
+       ],
+       "featureId": "VAR_081324",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 697,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 697,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs751516987",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs751516987"
+        }
+       ],
+       "featureId": "VAR_081325",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "W"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 701,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 701,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; dbSNP:rs1327579827",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1327579827"
+        }
+       ],
+       "featureId": "VAR_081326",
+       "alternativeSequence": {
+        "originalSequence": "P",
+        "alternativeSequences": [
+         "H"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 726,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; decreased ubiquitination of Ras",
+       "featureId": "VAR_081327",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 755,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 755,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance; dbSNP:rs762834512",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs762834512"
+        }
+       ],
+       "featureId": "VAR_081328",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "Q"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 760,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 760,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; uncertain significance; dbSNP:rs1419388177",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1419388177"
+        }
+       ],
+       "featureId": "VAR_081329",
+       "alternativeSequence": {
+        "originalSequence": "C",
+        "alternativeSequences": [
+         "R"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 762,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 840,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2",
+       "featureId": "VAR_081330",
+       "alternativeSequence": {}
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 810,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 810,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in GLM; increased Ras signaling; dbSNP:rs776893978",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs776893978"
+        }
+       ],
+       "featureId": "VAR_081331",
+       "alternativeSequence": {
+        "originalSequence": "R",
+        "alternativeSequences": [
+         "W"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 812,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 812,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; decreased interaction with CUL3; impaired subcellular location; decreased ubiquitination of Ras; dbSNP:rs773059569",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs773059569"
+        }
+       ],
+       "featureId": "VAR_081332",
+       "alternativeSequence": {
+        "originalSequence": "L",
+        "alternativeSequences": [
+         "P"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 813,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 813,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in SWN2; increased Ras signaling; dbSNP:rs2147970970",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs2147970970"
+        }
+       ],
+       "featureId": "VAR_071151",
+       "alternativeSequence": {
+        "originalSequence": "S",
+        "alternativeSequences": [
+         "I"
+        ]
+       }
+      },
+      {
+       "type": "Natural variant",
+       "location": {
+        "start": {
+         "value": 821,
+         "modifier": "EXACT"
+        },
+        "end": {
+         "value": 821,
+         "modifier": "EXACT"
+        }
+       },
+       "description": "in NS2; uncertain significance; no effect on RAS-MAPK signaling; decreased localization to Golgi apparatus; no effect on stability; dbSNP:rs1275511136",
+       "featureCrossReferences": [
+        {
+         "database": "dbSNP",
+         "id": "rs1275511136"
+        }
+       ],
+       "featureId": "VAR_081333",
+       "alternativeSequence": {
+        "originalSequence": "I",
+        "alternativeSequences": [
+         "T"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "up-fallback",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29+AND+%28organism_id%3A9606%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "method": "GET",
+  "status": 200,
+  "body": {
+   "results": []
+  }
+ },
+ {
+  "name": "up-fallback",
+  "url": "https://rest.uniprot.org/uniprotkb/search?query=%28lacz%29+AND+%28reviewed%3Atrue%29&format=json&size=3&fields=accession%2Cid%2Creviewed%2Cprotein_name%2Cgene_names%2Corganism_name%2Ccc_function%2Ccc_disease%2Ccc_subcellular_location%2Cft_variant",
+  "method": "GET",
+  "status": 200,
+  "body": {
+   "results": [
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "P00722",
+     "uniProtkbId": "BGAL_ECOLI",
+     "organism": {
+      "scientificName": "Escherichia coli (strain K12)",
+      "taxonId": 83333
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "Beta-galactosidase"
+       },
+       "shortNames": [
+        {
+         "value": "Beta-gal"
+        }
+       ],
+       "ecNumbers": [
+        {
+         "value": "3.2.1.23"
+        }
+       ]
+      },
+      "alternativeNames": [
+       {
+        "fullName": {
+         "value": "Lactase"
+        }
+       }
+      ]
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "lacZ"
+       },
+       "orderedLocusNames": [
+        {
+         "value": "b0344"
+        },
+        {
+         "value": "JW0335"
+        }
+       ]
+      }
+     ],
+     "comments": [],
+     "features": []
+    },
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "P07833",
+     "uniProtkbId": "HGXR_PLAFK",
+     "organism": {
+      "scientificName": "Plasmodium falciparum (isolate K1 / Thailand)",
+      "taxonId": 5839
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "Hypoxanthine-guanine-xanthine phosphoribosyltransferase"
+       },
+       "shortNames": [
+        {
+         "value": "HGPRT"
+        },
+        {
+         "value": "HGXPRT"
+        },
+        {
+         "value": "HGXPRTase"
+        }
+       ],
+       "ecNumbers": [
+        {
+         "value": "2.4.2.22"
+        },
+        {
+         "value": "2.4.2.8"
+        }
+       ]
+      }
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "LACZ"
+       }
+      }
+     ],
+     "comments": [
+      {
+       "texts": [
+        {
+         "value": "Catalyzes the transfer of a ribosyl phosphate group from 5-phosphoribose 1-diphosphate to the N(9) of hypoxanthine, guanine or xanthine, leading to IMP, GMP and XMP, respectively. Plays a central role in the generation of purine nucleotides through the purine salvage pathway"
+        }
+       ],
+       "commentType": "FUNCTION"
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Cytoplasm",
+          "id": "SL-0086"
+         }
+        }
+       ]
+      }
+     ],
+     "features": []
+    },
+    {
+     "entryType": "UniProtKB reviewed (Swiss-Prot)",
+     "primaryAccession": "P20035",
+     "uniProtkbId": "HGXR_PLAFG",
+     "organism": {
+      "scientificName": "Plasmodium falciparum (isolate FCR-3 / Gambia)",
+      "taxonId": 5838
+     },
+     "proteinDescription": {
+      "recommendedName": {
+       "fullName": {
+        "value": "Hypoxanthine-guanine-xanthine phosphoribosyltransferase"
+       },
+       "shortNames": [
+        {
+         "value": "HGPRT"
+        },
+        {
+         "value": "HGXPRT"
+        },
+        {
+         "value": "HGXPRTase"
+        }
+       ],
+       "ecNumbers": [
+        {
+         "value": "2.4.2.22"
+        },
+        {
+         "value": "2.4.2.8"
+        }
+       ]
+      }
+     },
+     "genes": [
+      {
+       "geneName": {
+        "value": "LACZ"
+       }
+      }
+     ],
+     "comments": [
+      {
+       "texts": [
+        {
+         "value": "Catalyzes the transfer of a ribosyl phosphate group from 5-phosphoribose 1-diphosphate to the N(9) of hypoxanthine, guanine or xanthine, leading to IMP, GMP and XMP, respectively. Plays a central role in the generation of purine nucleotides through the purine salvage pathway"
+        }
+       ],
+       "commentType": "FUNCTION"
+      },
+      {
+       "commentType": "SUBCELLULAR LOCATION",
+       "subcellularLocations": [
+        {
+         "location": {
+          "value": "Cytoplasm",
+          "id": "SL-0086"
+         }
+        }
+       ]
+      }
+     ],
+     "features": []
+    }
+   ]
+  }
+ }
+]

@@ -14,6 +14,7 @@ meeting:
   max_escalations: 12      # OpenAI + Claude Code checks per run (the expensive checkers)
   max_searches: 20         # Exa searches per run (as in the swarm). The scout is the member with the exa_search tool
   max_literature_searches: 20 # free literature searches per run (Europe PMC: PubMed abstracts and preprints, no key). Free to make; each one's results are screened by the first pass, which is why they are counted
+  max_database_searches: 20   # free lookups per run in the public databases (ChEMBL, ClinicalTrials.gov, openFDA, Open Targets, UniProt, PubChem: no key). Counted for the same reason: each one's records are screened by the first pass
   exa_usd_per_search: 0.007 # price assumed per search until Exa's response states one: measured once (2 live searches, $0.014), a small sample. Counted against max_usd and daily_usd
   exa_ceiling_usd: 40      # lifetime Exa spend the engine will allow, from board/runs/.exa-ledger.jsonl. The account holds $50 and is not topped up; the rest is room for searches made outside the engine
   # exa_highlight_chars: 2000  # optional: ask Exa for longer highlights (default: Exa's own length). A claim is checked against what is kept, so thin highlights make 'verified' rarer; the price of longer highlights is not verified
@@ -95,3 +96,28 @@ board:                       # order = speaking order in the transcript; remove 
   - methods-auditor
   - critic
   - reporter
+
+# The research answer (POST /api/research; engine/src/research/, docs/research-answer.md): one question in, a sourced
+# and reviewed answer out. It uses the tiers above: the planner and the screening on `cheap`, the writer on `strong`,
+# the statement checker on checkers.first_pass.alt and the critic on `rival` (both must be another vendor than the writer).
+# Every dollar counts against meeting.daily_usd above, and every Exa search against meeting.exa_ceiling_usd.
+research:
+  time_limit_seconds: 120    # wall clock for one answer; past it the answer ends with what it has and says so
+  max_question_chars: 2000
+  max_in_progress: 3         # answers being written at once, over all callers
+  per_origin_per_minute: 6   # questions one browser origin may ask a minute
+  quick:
+    max_usd: 0.15            # checked before every paid step against that step's worst case; expected cost about $0.06
+    queries: 2               # literature (Europe PMC) queries, at most
+    exa_searches: 1          # always exactly 1 at this level: one web search opens every answer
+    sources_kept: 6          # numbered sources the writer gets
+    max_output_tokens: 2000  # the writer's output for the draft, and again for the revision (reasoning tokens count in it)
+    words: 220               # the length the writer is asked for
+  standard:
+    max_usd: 0.60            # expected cost about $0.12
+    queries: 3
+    exa_searches: 3          # at most 3
+    database_lookups: 2      # lookups in the public databases (engine/src/sources/), when that module is present
+    sources_kept: 12
+    max_output_tokens: 3000
+    words: 380

@@ -9,13 +9,21 @@ import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, reply, PLAN } from "@/test/home"
 import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
+import { Activity } from "./Activity"
 import { ResearchAnswer } from "./Answer"
+import { identifierOf, markOf } from "./marks"
 import { copyText, foldAnswer, fromRecord, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
 // A whole demo answer exactly as the engine's own route produced it (my locked test engine, Demo mode, contract v2).
 import DEMO_V2_LINES from "@/test/research/demo-v2.jsonl?raw"
+// The engine's generated example streams (engine/test/fixtures/research/stream-*.jsonl), copied: made by its real pipeline with fake models.
+import S_CANCELLED from "@/test/research/stream-cancelled.jsonl?raw"
+import S_DEMO from "@/test/research/stream-demo.jsonl?raw"
+import S_FAILED from "@/test/research/stream-failed-source.jsonl?raw"
+import S_REAL from "@/test/research/stream-real.jsonl?raw"
+import { reviewActivity } from "./boardAdapter"
 
 const lines = (raw: string): ResearchEvent[] => raw.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
 const REAL = lines(REAL_LINES), DEMO = lines(DEMO_LINES)
@@ -96,12 +104,12 @@ describe("citations and marks in the text", () => {
 describe("the answer on the page", () => {
   it("a real answer: label, citations, marks only from recorded checks, sources with where they came from, and the cost", async () => {
     const { container } = await show(REAL)
-    expect(screen.getByText("AI answer")).toBeInTheDocument()
-    expect(container).toHaveTextContent("A second AI, from another company, checked each cited statement against its source.")
+    expect(screen.getByText("Live research")).toBeInTheDocument()
+    expect(container).toHaveTextContent("A second model, from another company, checked the cited statements.")
     expect(container.querySelectorAll(".md .answer-mark")).toHaveLength(4)
-    expect(screen.getAllByRole("button", { name: /^Check: Holds up\./ })).toHaveLength(4)
+    expect(screen.getAllByRole("button", { name: /^Check: Supported\./ })).toHaveLength(4)
     expect(container).not.toHaveTextContent("This proves the benefit holds for everyone") // only the final text is shown
-    expect(screen.getByRole("status")).toHaveTextContent("Checked against the sources: 4 held up, 0 were proven wrong, 0 had too little evidence. A sentence without a mark was not checked.")
+    expect(screen.getByRole("status")).toHaveTextContent("4 of 4 cited statements checked: 4 supported, 0 contradicted, 0 insufficient evidence. A sentence without a mark was not checked.")
     const sources = within(screen.getByRole("region", { name: "Sources" }))
     expect(sources.getAllByRole("listitem")).toHaveLength(4)
     expect(sources.getAllByRole("link", { name: "Europe PMC" })[0]).toHaveAttribute("href", "https://europepmc.org")
@@ -109,17 +117,17 @@ describe("the answer on the page", () => {
     const paper = sources.getByRole("link", { name: /Semaglutide and Cardiovascular Outcomes/ })
     expect(paper).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/37952131/"); expect(paper).toHaveAttribute("target", "_blank"); expect(paper).toHaveAttribute("rel", "noopener noreferrer")
     expect(sources.getByText("Preprint: not peer reviewed")).toBeInTheDocument()
-    expect(container).toHaveTextContent("It cost $0.09 and took 22 seconds. A critic raised 2 points; 2 were dealt with in one revision.")
+    expect(container).toHaveTextContent("Spent: $0.09 of a run limit of $0.60. Completed in 22s. A critic raised 2 points; 2 were dealt with in one revision.")
   })
   it("pressing a mark opens the statement, the quoted passage and who checked it; pressing a citation points at its source", async () => {
     const { container } = await show(REAL)
     const user = userEvent.setup()
-    await user.click(screen.getAllByRole("button", { name: /^Check: Holds up\./ })[1])
+    await user.click(screen.getAllByRole("button", { name: /^Check: Supported\./ })[1])
     const detail = screen.getByLabelText("The check on this statement")
     expect(detail).toHaveTextContent("The statementThe primary study is a randomized trial of 17,604 patients.")
     expect(detail).toHaveTextContent("“A total of 17,604 patients were enrolled” Found in source 1.")
     expect(detail).toHaveTextContent("Checked byopenai/gpt-4o-mini (checked on the first draft; the sentence did not change)")
-    expect(within(detail).getByText("verified")).toBeInTheDocument() // the checker's own word, as secondary text
+    expect(detail).toHaveTextContent("✓ Supported (the checker's word: verified)") // glyph, plain word, and the checker's own word as secondary text
     await user.click(container.querySelector(".md .answer-cite")!)
     expect(container.querySelector(".answer-sourcelist li[data-lit]")).toHaveTextContent("Semaglutide and Cardiovascular Outcomes")
   })
@@ -134,18 +142,18 @@ describe("the answer on the page", () => {
   })
   it("a demo answer is labelled a demo, credits no search engine, and its marks are not shown as real checks", async () => {
     const { container } = await show(DEMO)
-    expect(screen.getByText("Demo response")).toBeInTheDocument()
-    expect(screen.queryByText("AI answer")).toBeNull()
-    expect(container).toHaveTextContent("Fixed example text and example sources. No search ran and no AI model was asked.")
-    expect(screen.getAllByRole("button", { name: /^Demo check: Holds up\./ }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull()
-    expect(screen.getByRole("status")).toHaveTextContent("Demo checks, not real ones:")
+    expect(screen.getByText("Practice")).toBeInTheDocument()
+    expect(screen.queryByText("Live research")).toBeNull()
+    expect(container).toHaveTextContent("Example text and example sources. Nothing was searched and no AI model was asked.")
+    expect(screen.getAllByRole("button", { name: /^Example check: Supported\./ }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull() // no mark is offered as a real check
+    expect(screen.getByRole("status")).toHaveTextContent("Example checks, not real ones:")
     expect(container).toHaveTextContent("Example sources (practice run)")
     expect(screen.queryByRole("link", { name: "Exa" })).toBeNull(); expect(container).not.toHaveTextContent("powered by Exa")
-    expect(container).toHaveTextContent("Demo: it cost nothing.")
-    await userEvent.setup().click(screen.getAllByRole("button", { name: /^Demo check/ })[0])
-    expect(screen.getByLabelText("The check on this statement")).toHaveTextContent("Demo: this is an example, not a real check.")
-    expect(screen.getByLabelText("The check on this statement")).toHaveTextContent("Checked bynobody: demo text")
+    expect(container).toHaveTextContent("Practice: nothing was spent.")
+    await userEvent.setup().click(screen.getAllByRole("button", { name: /^Example check/ })[0])
+    expect(screen.getByLabelText("The check on this statement")).toHaveTextContent("Practice: this is an example, not a real check.")
+    expect(screen.getByLabelText("The check on this statement")).toHaveTextContent("Checked bynobody: practice text")
   })
   it("a search that did not run is said so with its reason, under the sources", async () => {
     await show([REAL[0], { type: "search.started", seq: 1, provider: "exa", query: "q" }, { type: "search.finished", seq: 2, provider: "exa", query: "q", ran: false, found: 0, kept: 0, reason: "the Exa spending ceiling was reached" },
@@ -156,7 +164,7 @@ describe("the answer on the page", () => {
   })
   it("says when it stopped early at a limit", async () => {
     const { container } = await show([REAL[0], { type: "answer.written", seq: 1, markdown: "Short." }, { type: "research.finished", seq: 2, usd: 0.6, seconds: 40, counts: {}, searches: {}, stopped: "cap" }])
-    expect(container).toHaveTextContent("It cost $0.60 and took 40 seconds. It stopped at its spending limit, so it is shorter than planned.")
+    expect(container).toHaveTextContent("Spent: $0.60 of a run limit of $0.60. Completed in 40s. It stopped at its spending limit, so it is shorter than planned.")
   })
   it("a failed answer shows the engine's plain message and offers to ask again", async () => {
     const onAgain = vi.fn()
@@ -203,7 +211,7 @@ describe("asking on Search", () => {
     expect(t.chats()).toHaveLength(0) // no plan is made for a direct answer
     await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true))
     await feed(REAL, /a-1\/events$/)
-    expect(within(screen.getByRole("article", { name: "Answer" })).getByText("AI answer")).toBeInTheDocument()
+    expect(within(screen.getByRole("article", { name: "Answer" })).getByText("Live research")).toBeInTheDocument()
     await t.ask("And in people without heart disease?")
     await waitFor(() => expect(t.research()).toHaveLength(2))
     expect(t.research()[1].body).toEqual({ question: "And in people without heart disease?", effort: "standard", thread: "t-1" })
@@ -231,7 +239,7 @@ describe("asking on Search", () => {
     await screen.findByRole("radio", { name: "Standard" })
     await t.ask("A costly question")
     const prompt = within(await screen.findByRole("dialog"))
-    expect(screen.getByText("A costly question")).toBeInTheDocument() // still on screen while the token is asked for
+    expect(screen.getAllByText("A costly question").length).toBeGreaterThan(0) // still on screen while the token is asked for
     await t.user.type(prompt.getByLabelText("Session token"), "s3cr3t-token-value")
     await t.user.click(prompt.getByRole("button", { name: "Use this token" }))
     await waitFor(() => expect(t.research()).toHaveLength(2))
@@ -280,7 +288,7 @@ describe("asking on Search", () => {
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
     await feed(DEMO)
     const answer = within(screen.getByRole("article", { name: "Answer" }))
-    expect(answer.getByText("Demo response")).toBeInTheDocument()
+    expect(answer.getByText("Practice")).toBeInTheDocument()
     expect(answer.queryByRole("button", { name: /^Check:/ })).toBeNull()
   })
 })
@@ -304,10 +312,10 @@ describe("Saved research", () => {
     list.unmount()
     render(<HomeView onOpen={() => {}} />)
     expect(screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["You asked", "Answer"])
-    expect(screen.getByText("Does semaglutide lower heart risk?")).toBeInTheDocument()
+    expect(screen.getAllByText("Does semaglutide lower heart risk?").length).toBeGreaterThan(0)
     await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-real/events"))).toBe(true)) // the saved answer is replayed from the engine
     await feed(REAL, /a-real\/events$/)
-    expect(screen.getByText("AI answer")).toBeInTheDocument()
+    expect(screen.getByText("Live research")).toBeInTheDocument()
   })
 })
 
@@ -395,7 +403,7 @@ describe("the adapter, contract v2", () => {
     await feed(DONE.filter((e) => e.seq! > 2 && e.seq! <= 5))
     expect(container).toHaveTextContent("Prepared in 2s")
     expect(container).toHaveTextContent("I will search the web and the research literature, then check every cited statement.")
-    expect(container).toHaveTextContent("Limit for this answer: $0.60 and 2 minutes.")
+    expect(container).toHaveTextContent("Run limit: $0.60 · 2 minutes")
     await userEvent.setup().click(screen.getByRole("button", { name: "Stop" }))
     await waitFor(() => expect(to(sent, "POST", "/api/research/a-1/cancel")).toHaveLength(1))
     expect(await screen.findByText("Stopped. Nothing more will be spent on it.")).toBeInTheDocument()
@@ -403,7 +411,7 @@ describe("the adapter, contract v2", () => {
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
     expect(container).toHaveTextContent("Prepared in 2s · Completed in 12s")
     expect(screen.getByRole("region", { name: "Sources" })).toHaveTextContent("Searching the web: did not work. The Exa key was refused. No web search was used.")
-    expect(within(screen.getByRole("region", { name: "Sources" })).getByText("Page B").closest("li")).toHaveTextContent("Read, but not cited in the answer.")
+    expect(within(screen.getByRole("region", { name: "Sources" })).getByText("Page B").closest("li")).toHaveTextContent("Selected, but not cited in the answer")
     expect(within(screen.getByRole("region", { name: "What to do next" })).getByText("Confirm the dose in the trial report.")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "answer.md" }).getAttribute("href")).toMatch(/\/api\/research\/a-1\/artifacts\/answer\.md$/)
   })
@@ -435,9 +443,196 @@ describe("a demo answer exactly as the engine streams it today (contract v2)", (
   })
   it("renders as a Demo response with no real check marks and no search engine credited", async () => {
     const { container } = await show(EVENTS)
-    expect(screen.getByText("Demo response")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull()
+    expect(screen.getByText("Practice")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull() // no mark is offered as a real check
     expect(container).not.toHaveTextContent("powered by Exa")
     expect(container.querySelector(".answer-prep")).toHaveTextContent(/^Prepared in .+ · Completed in /)
+  })
+})
+
+describe("activity, selection and sources (checkpoint B)", () => {
+  const EVENTS = lines(DEMO_V2_LINES)
+  const STEPS = foldAnswer(EVENTS).steps
+  it("is one quiet line until asked: the step count and the engine's total, then the rows", async () => {
+    const user = userEvent.setup()
+    render(<Activity steps={STEPS} working={false} totalSeconds={41} />)
+    expect(screen.getByText(new RegExp(`^${STEPS.length} steps · 41s$`))).toBeInTheDocument()
+    expect(screen.queryByRole("list", { name: "Activity" })).toBeNull()
+    await user.click(screen.getByRole("button", { name: "View activity" }))
+    const rows = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
+    expect(rows).toHaveLength(STEPS.length)
+    expect(rows[0]).toHaveTextContent(STEPS[0].label)
+    expect(rows[0]).toHaveAttribute("data-status", "completed")
+  })
+  it("a row shows its status in words and a glyph, the engine's own duration, and opens to query, counts and consequence; raw JSON sits behind Details", async () => {
+    const user = userEvent.setup()
+    const steps = [
+      { step: "search:exa:1", kind: "search", label: "Searching the web", provider: "exa", query: "semaglutide heart", input: { maxResults: 10 }, status: "failed" as const, ms: 30, error: "The Exa key was refused.", consequence: "No web search was used." },
+      { step: "search:europepmc:1", kind: "search", label: "Searching PubMed and preprints", provider: "europepmc", status: "empty" as const, ms: 812 },
+      { step: "write", kind: "write", label: "Writing the answer", status: "running" as const },
+      { step: "check", kind: "check", label: "Checking 6 statements", status: "running" as const, done: 2, total: 6 },
+    ]
+    render(<Activity steps={steps} working defaultOpen />)
+    const [failed, empty, writing, checking] = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
+    expect(failed).toHaveTextContent("✕"); expect(failed).toHaveTextContent("failed"); expect(failed).toHaveTextContent("0.1s") // never shown as done
+    expect(empty).toHaveTextContent("○"); expect(empty).toHaveTextContent("found nothing"); expect(empty).toHaveTextContent("0.8s")
+    expect(writing).toHaveTextContent("…"); expect(checking).toHaveTextContent("2/6") // a count only where the engine has one
+    expect(screen.queryByText("Expand all")).toBeNull() // fewer than six rows
+    await user.click(within(failed).getByRole("button", { name: /Searching the web/ }))
+    expect(failed).toHaveTextContent("Querysemaglutide heart"); expect(failed).toHaveTextContent("maxResults10")
+    expect(failed).toHaveTextContent("What went wrongThe Exa key was refused."); expect(failed).toHaveTextContent("What it meansNo web search was used.")
+    expect(failed.querySelector("pre")).toBeNull()
+    await user.click(within(failed).getByRole("button", { name: "Details" }))
+    expect(failed.querySelector("pre")).toHaveTextContent('"step": "search:exa:1"')
+  })
+  it("offers Expand all from six rows", async () => {
+    const user = userEvent.setup()
+    render(<Activity steps={STEPS} working={false} defaultOpen />)
+    expect(STEPS.length).toBeGreaterThanOrEqual(6)
+    await user.click(screen.getByRole("button", { name: "Expand all" }))
+    expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(STEPS.length)
+    await user.click(screen.getByRole("button", { name: "Collapse all" }))
+    expect(screen.queryByRole("button", { name: "Details" })).toBeNull()
+  })
+  it("the selection is a summary, not a form: how many were selected, why, their limits, and what was found but left out", async () => {
+    await show(EVENTS)
+    const sel = screen.getByRole("region", { name: "How the sources were selected" })
+    const state = foldAnswer(EVENTS)
+    expect(sel).toHaveTextContent(`Selected ${state.selection!.selected.length} of ${state.selection!.selected.length + state.selection!.notSelected.length} sources automatically.`)
+    expect(sel).toHaveTextContent(state.selection!.criteria)
+    expect(within(sel).getByText("Why these, and their limits").closest("details")).not.toHaveAttribute("open")
+    expect(sel.querySelector("input, select")).toBeNull() // nothing to fill in before the search
+    if (state.selection!.notSelected.length) expect(sel).toHaveTextContent(`View all found (${state.selection!.notSelected.length} not selected)`)
+  })
+  it("cited and merely selected sources are told apart in words", async () => {
+    await show(EVENTS)
+    const state = foldAnswer(EVENTS)
+    const rows = within(screen.getByRole("region", { name: "Sources" })).getAllByRole("listitem")
+    for (const [i, src] of state.sources.entries()) expect(rows[i]).toHaveTextContent(state.cited!.includes(src.n) ? "Cited in the answer" : "Selected, but not cited in the answer")
+  })
+  it("reads a source's own identifier from its address, and nothing when there is none", () => {
+    expect(identifierOf("https://pubmed.ncbi.nlm.nih.gov/37952131/")).toBe("PMID 37952131")
+    expect(identifierOf("https://europepmc.org/article/MED/37952131")).toBe("PMID 37952131")
+    expect(identifierOf("https://europepmc.org/article/PPR/PPR000001")).toBe("PPR000001")
+    expect(identifierOf("https://doi.org/10.1056/NEJMoa2307563")).toBe("DOI 10.1056/NEJMoa2307563")
+    expect(identifierOf("https://clinicaltrials.gov/study/NCT03574597")).toBe("NCT03574597")
+    expect(identifierOf("https://www.ebi.ac.uk/chembl/compound_report_card/CHEMBL25/")).toBe("ChEMBL CHEMBL25")
+    expect(identifierOf("https://example.org/news/12345678")).toBeUndefined()
+    expect(identifierOf("not a url")).toBeUndefined()
+  })
+  it("only the engine's 'verified' is Supported", () => {
+    expect(["verified", "contradicted", "unsupported", "unchecked"].map(markOf)).toEqual(["supported", "contradicted", "insufficient", "unchecked"])
+    expect(markOf("anything else")).not.toBe("supported") // an unknown verdict is never a pass
+  })
+})
+
+describe("the engine's generated streams", () => {
+  const real = lines(S_REAL), demo = lines(S_DEMO), failed = lines(S_FAILED), cancelled = lines(S_CANCELLED)
+  it("a standard answer: overlapping searches, statements placed by index, final checks, cited sources, files", () => {
+    const s = foldAnswer(real)
+    expect(s).toMatchObject({ status: "done", mode: "real", revised: true })
+    expect(s.steps.map((x) => x.step)).toEqual(expect.arrayContaining(["prepare", "search:exa:1", "search:europepmc:1", "search:europepmc:2", "search:clinicaltrials:1", "write", "check", "review", "revise", "save"]))
+    expect(s.steps.every((x) => x.status !== "running" && x.ms !== undefined)).toBe(true)
+    expect(s.statements.map((x) => x.index)).toEqual([...s.statements.map((x) => x.index)].sort((a, b) => a - b))
+    expect(s.statements.every((x) => x.stage === "final")).toBe(true)
+    expect(s.cited!.length).toBeGreaterThan(0); expect(s.artifacts).toHaveLength(4); expect(s.recommendations).toHaveLength(1)
+    expect(foldAnswer([...real].reverse())).toEqual(s)
+    // while the three later searches run at once, the line names each of them
+    const mid = real.findIndex((e) => e.type === "step.started" && e.step === "search:clinicaltrials:1")
+    expect(progressLine(foldAnswer(real.slice(0, mid + 1)))).toMatch(/ · .* · /)
+  })
+  it("failed and empty searches stay failed and empty, the answer still finishes, and 'What is missing' lists them", async () => {
+    const s = foldAnswer(failed)
+    expect(s.status).toBe("done")
+    expect(Object.fromEntries(s.steps.filter((x) => x.kind === "search").map((x) => [x.step, x.status]))).toMatchObject({ "search:exa:1": "failed", "search:europepmc:2": "empty", "search:clinicaltrials:1": "failed" })
+    expect(s.steps.find((x) => x.step === "search:exa:1")).toMatchObject({ error: expect.any(String), consequence: expect.any(String) })
+    expect(s.steps.some((x) => x.step === "evaluate:exa:1")).toBe(false) // nothing to screen after a search that failed
+    expect(s.missing.length).toBeGreaterThanOrEqual(3)
+    const { container } = await show(failed)
+    const missing = within(screen.getByRole("region", { name: "What is missing" }))
+    expect(missing.getAllByRole("listitem")).toHaveLength(s.missing.length)
+    expect(container.querySelectorAll('.md li').length + 0).toBeGreaterThanOrEqual(0)
+    expect(screen.getAllByText(s.missing[0])).toHaveLength(1) // once, not also inside the answer text
+    await userEvent.setup().click(screen.getByRole("button", { name: "View activity" }))
+    const rows = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
+    expect(rows.filter((r) => r.getAttribute("data-status") === "failed")).toHaveLength(s.steps.filter((x) => x.status === "failed").length)
+    expect(rows.filter((r) => r.getAttribute("data-status") === "empty")).toHaveLength(1)
+    expect(container).toHaveTextContent(/steps · .* · 2 failed/)
+  })
+  it("a cancelled answer keeps what had arrived and is not shown as finished", async () => {
+    const s = foldAnswer(cancelled)
+    expect(s.status).toBe("cancelled")
+    expect(s.steps.find((x) => x.step === "write")!.status).toBe("cancelled")
+    expect(s.sources.length).toBeGreaterThan(0); expect(s.selection).toBeDefined()
+    const { container } = await show(cancelled, { onAgain: () => {} })
+    expect(container).toHaveTextContent("This answer was stopped before it was finished")
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
+    expect(container.querySelector(".answer-foot")).toBeNull() // no "Spent / Completed" line for an answer that did not complete
+    expect(screen.getByRole("button", { name: "Ask again" })).toBeInTheDocument()
+  })
+  it("the demo stream is Practice end to end", async () => {
+    const { container } = await show(demo)
+    expect(screen.getByText("Practice")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Check:/ })).toBeNull()
+    expect(container).not.toHaveTextContent("powered by Exa")
+    expect(foldAnswer(demo).markdown).not.toContain(foldAnswer(demo.filter((e) => e.type === "statement.checked" && e.stage === "draft" && e.verdict === "contradicted"))?.statements[0]?.text ?? "\u0000")
+  })
+})
+
+describe("stopping and queueing from the composer (checkpoint C)", () => {
+  const home = (table: Parameters<typeof routes>[0] = {}) => {
+    const sent = routes({ "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/status": { status: 200, body: {} }, "POST /api/research": [{ status: 202, body: { id: "a-1", thread: "t-1", mode: "real" } }, { status: 202, body: { id: "a-2", thread: "t-1", mode: "real", queued: true, after: "a-1" } }], ...table })
+    render(<HomeView onOpen={() => {}} />)
+    const user = userEvent.setup()
+    const box = () => screen.getByRole("textbox", { name: "Ask a research question" })
+    return { sent, user, box, ask: async (q: string) => { await user.type(box(), `${q}{Enter}`) } }
+  }
+  const running = lines(S_REAL).slice(0, 6)
+  it("the composer is not disabled while an answer is written: Stop cancels it, and a follow-up waits as Queued and can be removed", async () => {
+    const t = home({ "POST /api/research/a-1/cancel": { status: 200, body: { id: "a-1", status: "cancelled", cancelled: true, message: "Stopped." } }, "POST /api/research/a-2/cancel": { status: 200, body: { id: "a-2", status: "cancelled", cancelled: true, message: "Removed from the queue." } } })
+    await screen.findByRole("radio", { name: "Standard" })
+    expect(screen.getByRole("button", { name: "Send" })).toHaveAttribute("title", "Type a question first.") // a disabled Send says why
+    await t.ask("First question")
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/a-1/events"))).toBe(true))
+    await feed(running, /a-1\/events$/)
+    expect(t.box()).not.toBeDisabled()
+    expect(screen.getAllByRole("button", { name: "Stop" }).length).toBeGreaterThan(0)
+    await t.user.type(t.box(), "A follow-up")
+    expect(screen.getByRole("button", { name: "Send" })).toHaveTextContent("Send (queued)")
+    await t.user.keyboard("{Enter}")
+    await waitFor(() => expect(to(t.sent, "POST", "/api/research")).toHaveLength(2))
+    expect(to(t.sent, "POST", "/api/research")[1].body).toMatchObject({ question: "A follow-up", thread: "t-1" })
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/a-2/events"))).toBe(true))
+    await feed([{ seq: 1, at: 1, run: "a-2", type: "research.queued", after: "a-1" }], /a-2\/events$/)
+    const queued = screen.getAllByRole("article", { name: "Answer" })[1]
+    expect(queued).toHaveTextContent("Queued"); expect(queued).toHaveTextContent("It does not change the answer being written now.")
+    await t.user.click(within(queued).getByRole("button", { name: "Remove" }))
+    await waitFor(() => expect(to(t.sent, "POST", "/api/research/a-2/cancel")).toHaveLength(1))
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1))
+    expect(screen.queryByText("A follow-up")).toBeNull()
+    // Stop in the composer cancels the answer being written
+    await t.user.click(screen.getAllByRole("button", { name: "Stop" }).at(-1)!)
+    await waitFor(() => expect(to(t.sent, "POST", "/api/research/a-1/cancel")).toHaveLength(1))
+  })
+})
+
+describe("a team review as the same activity (Deep)", () => {
+  const ev = (at: number, e: object) => ({ key: String(at), at, ...e }) as never
+  it("rounds and searches become steps with the engine's own times; a failure stays a failure", () => {
+    const events = [ev(1000, { type: "run.started", runId: "r", brief: "b", title: "T", mock: false }),
+      ev(1500, { type: "evidence.triaged", member: "scout", query: "kras herg", kept: 3, dropped: 2, provider: "exa", items: [] }),
+      ev(1600, { type: "evidence.triaged", member: "scout", query: "none", kept: 0, dropped: 0, provider: "europepmc", items: [] }),
+      ev(2000, { type: "round.started", round: 1, message: "", final: false }), ev(2500, { type: "member.replied", round: 1, member: "scout", text: "x" }), ev(2600, { type: "claim.checked", round: 1, member: "scout", claim: "c", kind: "k", verdict: "verified", checker: "first-pass" }),
+      ev(9000, { type: "round.started", round: 2, message: "", final: true })]
+    const live = reviewActivity(events)
+    expect(live.working).toBe(true)
+    expect(live.steps.map((s) => [s.step, s.status, s.ms])).toEqual([["search:1", "completed", undefined], ["search:2", "empty", undefined], ["round:1", "completed", 7000], ["round:2", "running", undefined]])
+    expect(live.steps[0]).toMatchObject({ label: "Searching the web", found: 5, kept: 3, query: "kras herg" })
+    expect(live.steps[2].summary).toBe("1 reply, 1 statement checked")
+    const done = reviewActivity([...events, ev(12000, { type: "memo.written", path: "m", decision: "Go" }), ev(12500, { type: "run.finished", usd: 1, minutes: 0.2 })])
+    expect(done).toMatchObject({ working: false, seconds: 12 }); expect(done.steps.at(-1)).toMatchObject({ step: "write", summary: "Go" })
+    const broke = reviewActivity([...events, ev(9500, { type: "run.failed", error: "The provider refused the model." })])
+    expect(broke.steps.at(-1)).toMatchObject({ status: "failed", error: "The provider refused the model." }); expect(broke.failed).toBe("The provider refused the model.")
+    expect(reviewActivity([])).toEqual({ steps: [], working: false, seconds: undefined, failed: undefined })
   })
 })

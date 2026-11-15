@@ -69,6 +69,7 @@ from inspect_ai.util import Limit, message_limit, sample_limits, sandbox, time_l
 from . import roles
 from .answers import AnswerLedger, Keep, compare
 from .dataset import PublicQuestion
+from .modal_boundary import FreshSandbox
 from .text import normalise, parse_number
 
 USER_A = "deriv_a"
@@ -722,11 +723,29 @@ async def user_processes(users: list[str], kill: bool, user: str = "root") -> li
     return found
 
 
+def fresh_provider(environment: Any) -> FreshSandbox | None:
+    """The sandbox provider behind `environment` if it can start a second, new sandbox."""
+    inner = getattr(environment, "_sandbox", environment)  # Inspect wraps it in a proxy
+    return inner if isinstance(inner, FreshSandbox) else None
+
+
 async def blind_check() -> list[str]:
     """Seal the analyst's traces, then look for them as the critic's user. Returns what the
     critic could still see (empty = blind): files, a process of the analyst's user (it could
     serve data on loopback), a POSIX message queue, a System V IPC object."""
     lines: list[str] = []
+    fresh = fresh_provider(sandbox())  # None for local Docker: one container, sealed below
+    if fresh is not None:
+        # A provider that can start a second sandbox (Modal): the critic works in a new one,
+        # made from the same image and the same read-only data. The analyst's scripts are
+        # collected first and kept on the host. The steps below then run in the new sandbox.
+        try:
+            await sandbox().exec(["bash", "-c", "mkdir -p /outputs/glhf"], user="root")
+            await sandbox().exec(["bash", "-c", _COLLECT], user="root", timeout=120)
+            await fresh.fresh_sandbox(keep=["/outputs/glhf/work"])
+            await _setup()
+        except Exception as error:
+            return [f"fresh sandbox for the critic failed: {error}"[:200]]
     try:
         await user_processes([USER_A], kill=True)
     except Exception as error:

@@ -222,3 +222,25 @@ def test_a_model_that_is_not_deployed_is_refused(world: dict[str, Any], allowed:
         and "not deployed" in result["error"]
         and world["modal"].commands == []
     )
+
+
+def test_a_hosted_model_gets_its_address_and_the_owners_key_and_no_modal(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kimi = world["registry"].get("kimi-k3.1-pro-tinker")
+    monkeypatch.setenv("TINKER_API_KEY", "fake-key-for-tests")
+    monkeypatch.delenv("TINKER_BASE_URL", raising=False)
+    [result] = grid.run_grid([kimi.name], world["registry"], world["plan"], world["deps"])
+    assert result["ok"] and world["modal"].commands == [] and world["endpoint"].requests == []
+    [(command, env)] = world["harness_calls"]
+    assert env["TINKER_BASE_URL"] == kimi.base_url and env["TINKER_API_KEY"] == "fake-key-for-tests"
+    assert paid.SWITCH not in env and "OPENMODELS_API_KEY" not in env
+    assert (
+        command[command.index("--model") + 1]
+        == "openai-api/tinker/moonshotai/Kimi-K3.1-Pro:peft:262144"
+    )
+    monkeypatch.setenv("TINKER_BASE_URL", "https://other.invalid/v1")  # the owner's own value wins
+    assert (
+        grid.child_env(kimi, dict(__import__("os").environ), None, None)["TINKER_BASE_URL"]
+        == "https://other.invalid/v1"
+    )

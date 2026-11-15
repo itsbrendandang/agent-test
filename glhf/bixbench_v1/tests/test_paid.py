@@ -238,3 +238,91 @@ def test_every_profiles_default_judge_is_behind_the_switch(
         "--judge-temperature", "default",
     )  # fmt: skip
     assert built == [("openai/gpt-4o", None)] and outbound == []
+
+
+# --- Modal and our own OpenAI-compatible endpoint (glhf/openmodels) ---------------------------
+
+ENDPOINT = "openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8"
+
+
+def _keys() -> str:
+    return "blank" if not any(os.environ.get(k) for k in paid.PAID_KEYS) else "set"
+
+
+def test_modal_is_refused_while_the_switch_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(paid.PaidCallsOff) as refused:
+        paid.refuse_modal("deploy openmodels-qwen")
+    assert "NO_PAID_CALLS" in str(refused.value) and "Modal (deploy openmodels-qwen)" in str(
+        refused.value
+    )
+    monkeypatch.setenv(paid.SWITCH, "1")
+    with pytest.raises(paid.PaidCallsOff):
+        paid.refuse_modal("request")
+    monkeypatch.setenv(paid.SWITCH, "0")
+    paid.refuse_modal("request")  # allowed only by the exact value 0
+
+
+def test_a_model_on_our_endpoint_is_a_paid_model_while_the_switch_is_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outbound: list[str], reached: list[str]
+) -> None:
+    monkeypatch.setenv("OPENMODELS_API_KEY", "fake-endpoint-key")
+    monkeypatch.setenv("OPENMODELS_BASE_URL", "https://example.invalid/v1")
+    out = tmp_path / "runs"
+    with pytest.raises(SystemExit) as stopped:
+        command(
+            monkeypatch, "run", "--capsules", "bix-1", "--out", str(out), "--model", ENDPOINT,
+            "--no-judge",
+        )  # fmt: skip
+    assert "NO_PAID_CALLS" in str(stopped.value.code) and "paid model" in str(stopped.value.code)
+    assert reached == ["load_env keys=blank"] and outbound == [] and not out.exists()
+
+
+def test_an_endpoint_only_run_without_a_judge_has_no_vendor_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outbound: list[str], reached: list[str]
+) -> None:
+    """Paid calls allowed (fakes only): the run gets as far as choosing capsules, and by then
+    every vendor key is blank, so only the endpoint could be reached."""
+
+    def run(*extra: str) -> str:
+        for key in paid.PAID_KEYS:
+            monkeypatch.setenv(key, "fake-key-for-tests")
+        monkeypatch.setenv(paid.SWITCH, "0")
+        reached.clear()
+        with pytest.raises(Reached):
+            command(monkeypatch, "run", "--capsules", "bix-1", "--out", str(tmp_path / "r"), *extra)
+        assert "capsules" in reached
+        return _keys()
+
+    assert run("--model", ENDPOINT, "--no-judge") == "blank"
+    assert run("--model", ENDPOINT, "--role-model", f"critic={ENDPOINT}", "--no-judge") == "blank"
+    # A judge, or one vendor model among the roles, needs a vendor key: nothing is blanked.
+    assert run("--model", ENDPOINT) == "set"
+    assert run("--model", ENDPOINT, "--role-model", "critic=openai/gpt-5.5", "--no-judge") == "set"
+    assert run("--model", REAL, "--no-judge") == "set"
+    assert outbound == []
+
+
+def test_endpoint_ids_are_recognised_by_form_only() -> None:
+    assert paid.endpoint_service(ENDPOINT) == "openmodels"
+    assert paid.is_endpoint_model("openai-api/modal/x")
+    for other in ("openai/gpt-5.5", "openai-api/x", "openai-api//x", "openai-api/x/", "mock",
+                  "xopenai-api/a/b", "ollama/qwen2.5:14b", ""):  # fmt: skip
+        assert not paid.is_endpoint_model(other), other
+    env = {"ANTHROPIC_API_KEY": "k"}
+    assert paid.isolate_endpoint([], judge=False, environ=env) is False and env == {
+        "ANTHROPIC_API_KEY": "k"
+    }
+    assert paid.isolate_endpoint([ENDPOINT], judge=False, environ=env) is True
+    assert all(env[k] == "" for k in paid.PAID_KEYS)
+
+
+def test_isolating_an_endpoint_run_keeps_the_key_of_its_own_service() -> None:
+    """`openai-api/tinker/...` needs TINKER_API_KEY, which is one of the named paid keys."""
+    env = dict.fromkeys(paid.PAID_KEYS, "fake-key-for-tests")
+    tinker = "openai-api/tinker/Qwen/Qwen3.6-35B-A3B:peft:262144"
+    assert paid.isolate_endpoint([tinker], judge=False, environ=env) is True
+    assert env["TINKER_API_KEY"] == "fake-key-for-tests"
+    assert all(env[k] == "" for k in paid.PAID_KEYS if k != "TINKER_API_KEY")
+    env = dict.fromkeys(paid.PAID_KEYS, "fake-key-for-tests")
+    assert paid.isolate_endpoint([ENDPOINT], judge=False, environ=env) is True
+    assert all(env[k] == "" for k in paid.PAID_KEYS)  # our own endpoint: every named key goes

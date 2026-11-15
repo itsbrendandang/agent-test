@@ -35,7 +35,7 @@ from typing import Any
 from inspect_ai import eval as inspect_eval
 from inspect_ai.model import Model, ModelOutput, get_model
 
-from . import roles, staging
+from . import modal_image, modal_run, roles, staging
 from .dataset import (
     HF_REVISION,
     AnswerMode,
@@ -56,11 +56,19 @@ from .solvers import (
     swarm_budget_mode,
 )
 from .stats import summarise
-from .task import DEFAULT_IMAGE, backstop_tokens, bixbench_v1, write_compose
+from .task import (
+    DEFAULT_IMAGE,
+    TIME_BACKSTOP_SECONDS,
+    backstop_tokens,
+    bixbench_v1,
+    write_compose,
+)
 
 MOCK = "mockllm/model"
 SALT_FILE = "shuffle_salt.json"
 MOUNTS_DIR = "mounts"  # beside the staged capsules; one random folder per run, removed after
+SANDBOXES = ("docker", "modal")
+MODAL_IMAGE = modal_image.PUBLISHED  # the image of `--sandbox modal`: our amd64 rebuild
 
 
 def load_env(path: Path) -> list[str]:
@@ -233,8 +241,15 @@ def run_capsule(
     swarm_budget: str | None = None,
     budget_policy: dict[str, Any] | None = None,
     repeat: int = 0,
+    sandbox: str = "docker",
+    modal_cpu: float = 4.0,
+    modal_memory_mib: int = 16384,
+    modal_ledgers: list[Path] | None = None,
+    modal_usd_cap: float | None = None,
 ) -> dict[str, Any]:
     """Run the solver. Does not grade and never touches the key beyond building the public view.
+    `sandbox` is "docker" (local, the default) or "modal" (a Modal Sandbox made from our amd64
+    rebuild of the image; see modal_run.py; refused while NO_PAID_CALLS is on).
     `repeat` numbers repeated runs of the same unit with the same solver and model (0 first).
     `question_ids` restricts the run to some of the capsule's questions (one per run mirrors the
     official protocol). `mock_outputs` replaces the fixed script of `--model mock` (tests).
@@ -276,6 +291,11 @@ def run_capsule(
     del _key
     check_prompt(roles.brief(public), capsule, answer_mode)
 
+    if sandbox not in SANDBOXES:
+        raise ValueError(f"unknown sandbox {sandbox!r}; use one of {SANDBOXES}")
+    on_modal = sandbox == "modal"
+    if on_modal:
+        image = image or MODAL_IMAGE
     image = image or os.environ.get("BIXBENCH_V1_IMAGE") or DEFAULT_IMAGE
     if model == "mock":
         if role_models:
@@ -320,8 +340,9 @@ def run_capsule(
             "seed": seed,
             "repeat": repeat,
             "option_shuffle": None if answer_mode == "open" else f"host-only salt ({SALT_FILE})",
+            "sandbox": sandbox,
             "image": image,
-            "image_id": _image_digest(image),
+            "image_id": None if on_modal else _image_digest(image),
             "network": "none",
             # The BixBench3 swarm's extras are not wired into this solver; both are always off.
             "documentation_search": False,
@@ -353,8 +374,34 @@ def run_capsule(
         role_args["critic_hints"] = critic_hints
         role_args["swarm_budget"] = mode
     mount = neutral_mount(staged_root, data_dir, manifest)
+    modal: modal_run.ModalRun | None = None
+    leftover: list[str] = []
     try:
-        compose = write_compose(mount / "compose.yaml", image, mount / "data", mount / "outputs")
+        if on_modal:
+            # The staged data goes to the Volume (once); the sandbox's /outputs is copied into
+            # the same neutral folder a Docker run mounts, so what follows is the same code.
+            modal = modal_run.prepare(
+                data_dir=data_dir,
+                manifest=manifest,
+                outputs_dir=mount / "outputs",
+                run_dir=out_dir,
+                run_name=f"{capsule.key}/{out_dir.name}",
+                capsule=capsule.key,
+                solver=solver,
+                time_limit_seconds=time_limit_seconds,
+                backstop_seconds=TIME_BACKSTOP_SECONDS,
+                image=image,
+                cpu=modal_cpu,
+                memory_mib=modal_memory_mib,
+                ledgers=modal_ledgers,
+                usd_cap=modal_usd_cap,
+            )
+            where: dict[str, Any] = modal.task_args()
+        else:
+            compose = write_compose(
+                mount / "compose.yaml", image, mount / "data", mount / "outputs"
+            )
+            where = {"compose_file": str(compose)}
         logs = inspect_eval(
             bixbench_v1(
                 questions=[q.model_dump() for q in public],
@@ -364,7 +411,7 @@ def run_capsule(
                 max_tokens=max_tokens,
                 max_messages_per_role=max_messages_per_role,
                 seed=seed,
-                compose_file=str(compose),
+                **where,
                 **role_args,
             ),
             model=resolved,
@@ -372,7 +419,15 @@ def run_capsule(
             display="none",
         )
     finally:
-        _collect_outputs(mount, outputs)
+        try:
+            if modal is not None:  # also after an error or Ctrl+C: no sandbox is left running
+                leftover = modal.finish()
+        finally:
+            _collect_outputs(mount, outputs)
+    if modal is not None:
+        summary["settings"]["modal"] = modal.settings(leftover)
+        summary["settings"]["image_id"] = summary["settings"]["modal"].get("image_id")
+        summary["settings"]["network_probe"] = summary["settings"]["modal"]["network_probe"]
     log = logs[0]
     usage: dict[str, dict[str, int | None]] = {}
     for name, u in (log.stats.model_usage or {}).items():

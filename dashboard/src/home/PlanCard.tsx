@@ -9,8 +9,10 @@ import { ModeLabel, RunId, SearchCredit, StatusPill } from "@/components/Shared"
 import { plainCost, plainDuration } from "@/lib/format"
 import { HOW_TO_TURN_ON } from "@/lib/paid"
 import { boardFacts } from "@/lib/verdict"
-import { verdictCount } from "@/lib/words"
+import { markCount } from "@/lib/words"
 import { ChatRefused, startPlan, type Effort, type EffortId, type Plan } from "./api"
+import { Activity } from "@/research/Activity"
+import { reviewActivity } from "@/research/boardAdapter"
 import { EffortPicker } from "./EffortPicker"
 import { controlOf, editsOf, estimateText, startBlock, startRequest, type Edits, type PlanState, type StartControl, type StartErrors } from "./chat"
 
@@ -246,6 +248,7 @@ function Fold({ folded, label, children }: { folded: boolean; label: string; chi
 export function RunFollow({ runId, onOpen, maxRounds }: { runId: string; onOpen: () => void; maxRounds?: number }) {
   const events = useRunEvents(runId)
   const f = boardFacts(events)
+  const review = reviewActivity(events)
   const replies = events.filter((e) => e.type === "member.replied").length
   const done = events.find((e) => e.type === "run.finished")
   const progress = events.length === 0 ? "Starting the review…"
@@ -258,13 +261,14 @@ export function RunFollow({ runId, onOpen, maxRounds }: { runId: string; onOpen:
       {f.state === "done" && (
         <>
           <p role="status">
-            The review is finished. {f.claims.length} statement{f.claims.length === 1 ? "" : "s"} checked: {verdictCount("holds", f.verified)}, {verdictCount("fails", f.contradicted)}, {verdictCount("unknown", f.unsupported + f.unchecked)}.
+            The review is finished. {f.claims.length - f.unchecked} of {f.claims.length} statement{f.claims.length === 1 ? "" : "s"} checked: {markCount("supported", f.verified)}, {markCount("contradicted", f.contradicted)}, {markCount("insufficient", f.unsupported)}.
             {done?.type === "run.finished" && <span className="muted small"> It took {plainDuration(done.minutes * 60_000)} and {plainCost(done.usd, f.scripted === true)}.</span>}
           </p>
           {f.decision && <p className="home-decision">Decision: {f.decision}</p>}
         </>
       )}
       {f.error && <p className="newrun-error" role="alert">{f.error}</p>}
+      <Activity steps={review.steps} working={review.working} totalSeconds={review.seconds} />
       <p className="muted small">Run id: <RunId id={runId} /></p>
       <span className="home-run-open">
         {f.state === "done" && <Mascots mood="happy" size={32} />}

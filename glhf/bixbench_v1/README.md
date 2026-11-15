@@ -74,12 +74,13 @@ gitignored. Never commit benchmark data.
 
 Paid calls are off unless `NO_PAID_CALLS` is exactly `0`. This package uses the switch of
 `bixbench3` (`../bixbench/src/bixbench3/paid.py`) through `src/bixbench_v1/paid.py`. Tests:
-`tests/test_paid.py` (6 tests, with fakes).
+`tests/test_paid.py` (11 tests, with fakes).
 
 | While the switch is on | What happens |
 |---|---|
 | `bixbench-v1 run` with a real model or a real `--role-model` | Refused before anything starts. |
 | The LLM judge, in `run` or in `grade` | Refused, whichever profile's default it is (`openai/gpt-4o` for per-mode and official, `anthropic/claude-3-5-sonnet-20241022` for paper) or a named one. Use `--no-judge`: the code rules grade what they can and the rest stays ungraded. |
+| A model on our own endpoint (`openai-api/<service>/<model>`), and any use of Modal | Refused: it is billed by the second. See the next section. |
 | `--model mock` | Runs. With the default judge setting it uses no judge. If you name a judge model, that is refused. |
 | `download`, `list`, `audit`, `report` | Work. They call no model. |
 | Provider keys | Set to empty in the process before `.env` is loaded, so `.env` cannot put them back. |
@@ -94,6 +95,38 @@ command line. Only seven named provider keys are blanked (see
 credentials and a saved Hugging Face login pass through.
 
 The real-model commands under "Commands" above need `NO_PAID_CALLS=0`.
+
+## Open models on our own endpoint (`glhf/openmodels`)
+
+A model served behind an OpenAI-compatible endpoint runs like any other model. Nothing in the
+solvers changed.
+
+```bash
+# The endpoint's address and key come from the environment; the service name is `openmodels`.
+OPENMODELS_BASE_URL=https://.../v1 OPENMODELS_API_KEY=... \
+uv run bixbench-v1 run --capsules bix-46 --solvers single,glhf --no-judge \
+    --model openai-api/openmodels/Qwen/Qwen3.6-35B-A3B-FP8 --out runs/try-qwen
+```
+
+- The id is Inspect's `openai-api/<service>/<model>`. Inspect reads `<SERVICE>_BASE_URL` and
+  `<SERVICE>_API_KEY`. Token counts are recorded in `run.json` as for other models
+  (`tests/test_endpoint_model.py`, with a scripted server).
+- Such a model is a paid model for the switch: refused unless `NO_PAID_CALLS=0`. So is every
+  use of Modal (`paid.refuse_modal`).
+- When every model of the run is on our endpoint and `--no-judge` is given, all vendor keys
+  are blanked (`paid.isolate_endpoint`). The run can then reach the endpoint and nothing else.
+  With a judge, or with one vendor model among the roles, the keys stay.
+- Do not start the server by hand. `glhf/openmodels` serves the models on Modal GPUs, checks
+  the key and tool calls, runs this command for a list of models, stops the server, and keeps
+  a cost ledger with a cap. It also holds the fixed 20-capsule list and the plan for the
+  three-model comparison (Qwen, Claude Opus, OpenAI Sol). See
+  [../openmodels/README.md](../openmodels/README.md).
+- The same path serves a hosted OpenAI-compatible service, for example Tinker
+  (`openai-api/tinker/<model>`, `TINKER_BASE_URL`, `TINKER_API_KEY`). The service's own key is
+  kept when the other keys are blanked. Hosted services were never called; tests use a
+  scripted server.
+- State: Qwen3.6-35B-A3B was served on one Modal L40S and ran one small capsule (bix-46) with
+  both solvers as a smoke test. That is not a benchmark result.
 
 ## Integrity boundary
 

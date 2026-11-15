@@ -181,3 +181,52 @@
 .page .matches-title { font-size: 16px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--text); }
 .matches-sum { font-size: 15px; line-height: 1.5; }
 .matches-sum .muted[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+
+/* ---- activity ---- */
+.activity { display: flex; flex-direction: column; gap: 6px; }
+.activity-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+.activity-line .link-btn { font-size: 12px; }
+.activity-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.activity-rows > li + li { border-top: 1px solid var(--edge); }
+.activity-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; border: 0; background: none; font: inherit; font-size: 13px; color: inherit; text-align: left; cursor: pointer; }
+.activity-row:hover { background: rgba(0, 0, 0, .03); }
+.activity-row:focus-visible { outline: 2px solid #3f7cc4; outline-offset: -2px; }
+.activity-icon { width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0; font-weight: 700; font-size: 12px; }
+.activity-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.activity-status { font-size: 12px; font-weight: 600; }
+.activity-ms { color: var(--text-muted); flex-shrink: 0; }
+.activity-rows li[data-status="failed"] .activity-icon, .activity-rows li[data-status="failed"] .activity-status { color: #9c1414; }
+.activity-rows li[data-status="running"] .activity-label { font-weight: 600; }
+.activity-rows li[data-status="completed"] .activity-icon { color: #0d5f37; }
+.activity-detail { padding: 4px 12px 10px 38px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.activity-detail dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; font-size: 12px; }
+.activity-detail dl > div { display: contents; }
+.activity-detail dt { color: var(--text-muted); } .activity-detail dd { margin: 0; overflow-wrap: anywhere; }
+.activity-raw { margin: 0; padding: 8px 10px; border-radius: 8px; background: #1b1a17; color: #fffdf6; font-size: 11px; line-height: 1.5; max-width: 100%; overflow-x: auto; white-space: pre; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* ---- marks: four words, each with its glyph; a practice mark is drawn dashed ---- */
+.answer-mark[data-mark="supported"], .answer-markword[data-mark="supported"] { background: #cdf2dd; color: #0d5f37; }
+.answer-mark[data-mark="contradicted"], .answer-markword[data-mark="contradicted"] { background: #ffd5d5; color: #9c1414; }
+.answer-mark[data-mark="insufficient"], .answer-markword[data-mark="insufficient"] { background: #ffe3bd; color: #7a4300; }
+.answer-mark[data-mark="unchecked"], .answer-markword[data-mark="unchecked"] { background: #e9e6dd; color: #55504a; }
+.answer-mark[data-demo] { border: 1px dashed #8a8478; }
+.answer-markword { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+/* ---- selection; found, selected and cited look different ---- */
+.answer-selection { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.5; padding: 12px 14px; border: 1px solid var(--edge); border-radius: 12px; }
+.answer-selection summary { cursor: pointer; color: var(--text-muted); }
+.answer-selection ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.answer-notselected li { opacity: .85; overflow-wrap: anywhere; } .answer-notselected a { text-decoration: underline; }
+.source-use[data-cited="true"] { color: #0d5f37; font-weight: 600; }
+.source-use[data-cited="false"] { color: var(--text-muted); }
+.answer-sourcelist li[data-unused] .source-n { background: transparent; border: 1px dashed #8a8478; }
+
+.header-slot-inline { display: contents; }
+.search-new { padding: 5px 12px; font-size: 13px; }
+.search-main > .header-slot-inline .btn { align-self: flex-end; }
+
+.search-send { display: inline-flex; align-items: center; gap: 8px; }
+.answer-queued { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.answer-missing { display: flex; flex-direction: column; gap: 6px; }
+.page .answer-missing h2 { font-size: 16px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--text); }
+.answer-missing ul { margin: 0; padding-left: 1.3em; list-style: disc; font-size: 15px; line-height: 1.55; }

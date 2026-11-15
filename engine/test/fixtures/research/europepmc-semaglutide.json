@@ -1,0 +1,169 @@
+{
+ "_note": "Trimmed real answer of Europe PMC (one live request, free, no key). Query: semaglutide cardiovascular outcomes obesity without diabetes. Only the fields literature.ts reads are kept.",
+ "hitCount": 7304,
+ "resultList": {
+  "result": [
+   {
+    "id": "43010688",
+    "source": "MED",
+    "pmid": "43010688",
+    "doi": "10.1111/dom.71550",
+    "title": "Cardiovascular Outcomes in Semaglutide Versus Tirzepatide Users With Obesity and Atherosclerotic Disease: A Target Trial Emulation.",
+    "abstractText": "<h4>Aims</h4>Semaglutide, a glucagon-like peptide-1 (GLP-1) receptor agonist, is approved for cardiovascular risk reduction in individuals with overweight or obesity and cardiovascular disease. Whether tirzepatide, a dual GLP-1 and glucose-dependent insulinotropic polypeptide receptor agonist, has similar cardiovascular benefits remains unknown. The objective was to compare the effectiveness of semaglutide versus tirzepatide on the risk of major adverse cardiovascular events (MACE) in individuals with overweight or obesity and atherosclerotic cardiovascular disease (ASCVD) without diabetes.<h4>Materials and methods</h4>This active comparator, new user study emulated a trial using national claims data from Komodo Health. Eligible individuals had a history of ASCVD and, within 1 year prior to initiation: BMI ≥ 27 with a diagnosis of overweight or obesity, continuous insurance coverage and no diabetes or contraindications. Prior GLP-1 receptor agonist or obesity medication users were excluded. The primary outcome was a composite of myocardial infarction, stroke, hospitalization for heart failure or unstable angina, coronary revascularization and mortality (revised 5-point MACE). Secondary outcomes included revised 3-point MACE and individual endpoints. Hazard ratios were estimated using Cox models with inverse probability weighting.<h4>Results</h4>There was a non-significant difference in risk of revised 5-point MACE (HR = 1.21, 95% CI: 0.99-1.51) or secondary outcomes between semaglutide and tirzepatide. Sensitivity analyses showed directionally consistent point estimates for revised 5-point MACE but highlighted sensitivity to decisions surrounding early events, off-label use, analytic approach and outcome definition.<h4>Conclusions</h4>Among adults with overweight or obesity and ASCVD without diabetes, there was no significant difference in cardiovascular risk between semaglutide and tirzepatide.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "Diabetes, obesity & metabolism"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42033237",
+    "source": "MED",
+    "pmid": "42033237",
+    "doi": "10.1093/ajhp/zxag121",
+    "title": "Cardiovascular outcomes of glucagon-like peptide-1 receptor agonists: A systematic review.",
+    "abstractText": "<h4>Purpose</h4>To identify and evaluate cardiovascular outcome trials for glucagon-like peptide-1 receptor agonists (GLP1RAs) in various patient populations, including those with or without type 2 diabetes (T2D).<h4>Summary</h4>A systematic search of MEDLINE identified 12 cardiovascular outcome-based randomized controlled trials: 10 in patients with T2D, one in patients with overweight/obesity and atherosclerotic cardiovascular disease (ASCVD) but not T2D, and one in patients with obesity and heart failure with preserved ejection fraction (HFpEF). Most trials had a low risk of bias. The GLP1RA was administered as a weekly subcutaneous injection in 8 trials, and 2 trials used once-daily oral semaglutide. Follow-up ranged from 1.2 to 5.4 years. GLP1RA therapy showed a consistent reduction in major adverse cardiovascular events (MACE) in patients with T2D. The effect on cardiovascular and all-cause death was less certain. Individually, only liraglutide demonstrated a reduction in MACE, cardiovascular death, and all-cause death. In patients with overweight/obesity and ASCVD (but without T2D), weekly subcutaneous semaglutide lowered the risk of MACE but not cardiovascular death. In patients with obesity and HFpEF (with or without T2D), tirzepatide lowered the occurrence of the composite endpoint of adverse heart failure events and cardiovascular death. Discontinuation of GLP1RA therapy due to gastrointestinal adverse events was common across the trials.<h4>Conclusion</h4>These data support the use of GLP1RAs to lower MACE in patients with T2D. A cardiovascular benefit with GLP1RA therapy was also observed in 2 additional patient populations: those with overweight/obesity and ASCVD but without T2D and those with obesity and HFpEF with or without T2D.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "American journal of health-system pharmacy : AJHP : official journal of the American Society of Health-System Pharmacists"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "brief-report",
+      "Systematic Review",
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42964480",
+    "source": "MED",
+    "pmid": "42964480",
+    "doi": "10.3389/fendo.2026.1977433",
+    "title": "Beyond glycemic control: cardiovascular and kidney benefits of GLP-1 receptor agonists and the dual GIP/GLP-1 receptor agonist tirzepatide: a narrative review.",
+    "abstractText": "Cardiovascular-kidney-metabolic (CKM) syndrome reflects the complex interplay among cardiovascular disease, chronic kidney disease, type 2 diabetes, and obesity. GLP-1 receptor agonists and tirzepatide have emerged as important therapeutic options within CKM syndrome, although the strength and maturity of evidence differ across individual agents and cardiovascular and kidney outcomes. This narrative review summarizes current evidence on the cardiovascular and kidney effects of GLP-1 receptor agonists and the dual GIP/GLP-1 receptor agonist tirzepatide. Large randomized controlled trials have established reductions in major adverse cardiovascular events with several GLP-1 receptor agonists, while dedicated evidence for clinically meaningful chronic kidney disease progression is currently strongest for semaglutide. Cardiovascular benefits of semaglutide have also been demonstrated in individuals with overweight or obesity without type 2 diabetes, supporting effects beyond glucose lowering. Tirzepatide provides substantial improvements in glycemic control and body weight, with expanding evidence supporting cardiovascular benefit, including particularly encouraging findings in obesity-related heart failure with preserved ejection fraction. In contrast, its kidney evidence remains less mature and is derived predominantly from secondary and <i>post-hoc</i> analyses rather than from a dedicated kidney outcome trial. Collectively, these findings support a phenotype-oriented and multimodal role for incretin-based therapies in CKM syndrome management while highlighting important differences in the maturity of outcome evidence.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "Frontiers in endocrinology"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "review-article",
+      "Review",
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "43022342",
+    "source": "MED",
+    "pmid": "43022342",
+    "doi": "10.1016/j.ahjo.2026.101003",
+    "title": "Cardiovascular outcomes with semaglutide versus tirzepatide in patients with obesity and atherosclerotic cardiovascular disease without diabetes.",
+    "abstractText": "<h4>Background</h4>Comparative cardiovascular data on glucagon-like peptide-1 (GLP-1) agonists versus dual glucose-dependent insulinotropic polypeptide (GIP)/GLP-1 agonists in atherosclerotic cardiovascular disease (ASCVD) without diabetes are limited.<h4>Methods</h4>This propensity score-matched retrospective TriNetX study compared adults aged ≥45 years with body mass index ≥27 kg/m<sup>2</sup> and ASCVD initiating treatment with semaglutide or tirzepatide. Hazard ratios (HRs) with 95% confidence intervals (CIs) were used to analyze 3-point major adverse cardiovascular events (MACE: all-cause mortality, myocardial infarction, or ischemic stroke) and 5-point MACE (3-point MACE plus heart failure exacerbation and revascularization).<h4>Results</h4>After matching, 5665 patients were analyzed per group. No statistically significant differences were observed between semaglutide and tirzepatide in 5-point MACE (19.5% vs 17.1%; HR 1.03; 95% CI 0.94-1.12), 3-point MACE (17.4% vs 15.4%; HR 1.04; 95% CI 0.95-1.14), or any individual component.<h4>Conclusions</h4>Semaglutide and tirzepatide were associated with similar cardiovascular outcomes. Prospective head-to-head trials are warranted to validate these results.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "American heart journal plus : cardiology research and practice"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42858539",
+    "source": "MED",
+    "pmid": "42858539",
+    "doi": "10.1016/j.jacadv.2026.103311",
+    "title": "Cardiovascular Risk in SELECT-Eligible MI Patients With Overweight or Obesity: The Western Denmark Heart Registry.",
+    "abstractText": "<h4>Background</h4>In the SELECT (Semaglutide Effects on Cardiovascular Outcomes in People with Overweight or Obesity) trial, treatment with semaglutide reduced the risk of major adverse cardiovascular events (MACE) in patients with cardiovascular disease, overweight or obesity, and no diabetes.<h4>Objectives</h4>The purpose of this study was to estimate cardiovascular risk in first-time myocardial infarction (MI) patients meeting the SELECT-eligibility criteria and the preventive potential for treatment with semaglutide.<h4>Methods</h4>We conducted an observational cohort study applying the SELECT trial's inclusion and exclusion criteria to patients with first-time MI recorded between 2010 and 2021 in the Western Denmark Heart Registry. Five-year incidence of second MI, MACE, and all-cause death was estimated for SELECT-eligible patients with a body mass index (BMI) ≥27 kg/m<sup>2</sup>. In an assumption-dependent scenario analysis the preventive potential for semaglutide was estimated as the postponement of MACE incidence.<h4>Results</h4>In 21,777 first-time MI patients without diabetes, 10,768 patients were SELECT-eligible with BMI ≥27 kg/m<sup>2</sup>. Median age at first-time MI was 65 years for the SELECT-eligible MI patients and 69 years for normal-weight (BMI 20-26 kg/m<sup>2</sup>) comparisons. Five-year incidence of second MI (n = 544), MACE (n = 975), and all-cause death (n = 914) was 5.9% (95% CI: 5.4%-6.4%), 10.7% (95% CI: 10.1%-11.4%), and 10.3% (95% CI: 9.7%-11.0%) in SELECT-eligible MI patients, respectively. Among these, treatment with semaglutide was estimated to postpone a 5% MACE incidence by 12 months.<h4>Conclusions</h4>In SELECT-eligible first-time MI patients with overweight or obesity and no diabetes, the cardiovascular risk was substantial with 1 in 10 having a MACE event within 5 years after first-time MI. Based on the SELECT trial results, semaglutide may markedly postpone MACE incidence in these patients.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "JACC. Advances"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "research-article",
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42968774",
+    "source": "MED",
+    "pmid": "42968774",
+    "doi": "10.1007/s40200-026-02108-x",
+    "title": "Efficacy and safety of semaglutide versus placebo in adults with overweight or obesity without diabetes: updated meta-analysis of randomized trials.",
+    "abstractText": "<h4>Background</h4>Obesity poses significant challenges for those seeking long-term weight loss through diet and exercise alone. Semaglutide is a GLP-1 receptor agonist approved for chronic weight management in eligible adults.<h4>Methods</h4>In this systematic review and meta-analysis, we aimed to evaluate the efficacy and safety of semaglutide for treating obesity in adults without diabetes. The protocol was registered in PROSPERO (CRD420261338170). PubMed, Embase, Cochrane Library, Web of Science, and ClinicalTrials.gov were searched through February 28, 2026. We included randomized controlled trials (RCTs) comparing semaglutide with placebo in adults without diabetes with BMI ≥ 30 kg/m<sup>2</sup> or ≥ 27 kg/m<sup>2</sup> and at least one obesity-related comorbidity. The Cochrane Risk of Bias 2 Tool, GRADE methodology, RevMan v5.4, and CMA v3 were used for risk-of-bias assessment, certainty-of-evidence assessment, data analyses, and meta-regression analyses respectively.<h4>Results</h4>We included 10 RCTs with a total of 7,131 participants. Risk-of-bias was judged at the level of each outcome: all included trials were at low risk-of-bias for the efficacy outcomes and the prespecified safety outcomes, while cardiovascular and psychiatric disorders raised some concerns. Compared to placebo, semaglutide produced significantly greater reductions in percentage change in body weight (WMD -12.29%, 95% CI -13.38 to -11.20, I<sup>2</sup> 88%, 95% PI -16.06 to -8.52; 10 studies, <i>n</i> = 6975), absolute change in body weight from baseline (WMD -12.67 kg, 95% CI -13.53 to -11.81, I<sup>2</sup> 77%, 95% PI -15.36 to -9.98; 10 studies, <i>n</i> = 6975), BMI (WMD -4.55 kg/m<sup>2</sup>, 95% CI -5.08 to -4.03, I<sup>2</sup> 86%, 95% PI -6.33 to -2.78; 8 studies, <i>n</i> = 6573), and waist circumference (WMD -9.42 cm, 95% CI -10.27 to -8.56, I<sup>2</sup> 79%, 95% PI -12.12 to -6.71; 10 studies, <i>n</i> = 6970). Participants assigned to semaglutide also had a higher probability of reaching a ≥ 5%, 10%, 15%, or 20% loss of body weight (9 studies, <i>n</i> = 6103). However, substantial between-study heterogeneity was observed for efficacy outcomes, indicating that the magnitude of benefit varied across trials. With semaglutide, individuals experienced a greater number of total adverse events (aggregate proportions 90.0% vs. 85.0%; RR 1.06, 95% CI 1.03 to 1.10, I<sup>2</sup> 72%; 9 studies, <i>n</i> = 6922) and discontinuation due to adverse events (aggregate proportions 6.0% vs. 3.0%; RR 1.86, 95% CI 1.41 to 2.45, I<sup>2</sup> 0%; 10 studies, <i>n</i> = 7129) than did individuals taking the placebo; while for serious adverse events (RR 1.16, 95% CI 0.90 to 1.51, I<sup>2</sup> 40%; 10 studies, <i>n</i> = 7129) the estimate was imprecise, did not establish a clear difference and the interval remains compatible with a potentially important increase in risk. These pooled figures represent average effects and may not apply equally across different semaglutide doses, formulations, treatment duration, or patient populations. Certainty-of-evidence was low for the primary outcome of percentage change in body weight and for absolute change in body weight and change in BMI, and very low for change in waist circumference.<h4>Conclusion</h4>Semaglutide was associated with clinically meaningful weight loss during trial treatment periods in adults with overweight or obesity without diabetes; however, low-certainty evidence and substantial between-study heterogeneity warrant cautious interpretation of the magnitude of benefit.<h4>Supplementary information</h4>The online version contains supplementary material available at https://doi.org/10.1007/s40200-026-02108-x.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "Journal of diabetes and metabolic disorders"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "Review",
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42918905",
+    "source": "MED",
+    "pmid": "42918905",
+    "doi": "10.1007/s00228-026-04199-0",
+    "title": "GLP-1-based therapies in cardiovascular disease: outcomes, mechanisms, and emerging clinical applications.",
+    "abstractText": "<h4>Background</h4>Glucagon-like peptide-1 receptor agonists (GLP-1 RAs) have shown cardiovascular benefits beyond their established role in treating type 2 diabetes mellitus (T2DM). This review evaluates recent clinical evidence, potential mechanisms, and the expanding use of GLP-1-based therapies in cardiovascular disease.<h4>Methods</h4>We reviewed major randomized clinical trials assessing cardiovascular, kidney, and heart failure outcomes, along with related mechanistic studies and clinical guidelines published through July 2026.<h4>Results</h4>Early trials, including LEADER, SUSTAIN-6, and REWIND, reported 12%-26% reductions in major adverse cardiovascular events (MACE) in patients with T2DM. More recent trials have extended these findings to other populations. SELECT showed a 20% reduction in MACE among individuals with obesity and established cardiovascular disease but without diabetes, while FLOW demonstrated a 24% reduction in its primary kidney composite outcome. SOUL reported a 14% reduction in MACE with oral semaglutide, and SUMMIT showed a 38% reduction in cardiovascular death or worsening heart failure with tirzepatide. SURPASS-CVOT found tirzepatide to be noninferior, but not superior, to dulaglutide for MACE. These benefits likely involve several mechanisms beyond glucose lowering and weight loss, although gastrointestinal adverse effects still remain a concern.<h4>Conclusions</h4>Growing clinical evidence supports the use of GLP-1-based therapies beyond diabetes management, particularly in patients with cardiovascular disease, chronic kidney disease, or obesity-related heart failure. Further studies will be needed to understand their mechanisms better, long-term safety, and optimal use in clinical practice.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "European journal of clinical pharmacology"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "Review",
+      "Journal Article"
+     ]
+    }
+   },
+   {
+    "id": "42819943",
+    "source": "MED",
+    "pmid": "42819943",
+    "doi": "10.3389/fcvm.2026.1926629",
+    "title": "Cardiovascular protection beyond glucose lowering: GLP-1 receptor agonists and dual GIP/GLP-1 receptor agonism in contemporary cardiology.",
+    "abstractText": "Glucagon-like peptide-1 receptor agonists (GLP-1RAs) and the dual glucose-dependent insulinotropic polypeptide (GIP)/GLP-1 receptor agonist tirzepatide have expanded from glucose-lowering therapy into cardiovascular medicine. In type 2 diabetes, several long-acting GLP-1RAs reduce major adverse cardiovascular events (MACE). SELECT extended this benefit to adults with established cardiovascular disease and overweight or obesity without diabetes, while SOUL demonstrated MACE reduction with oral semaglutide. SURPASS-CVOT established cardiovascular noninferiority of tirzepatide to dulaglutide but did not demonstrate superiority. Obesity-related heart failure with preserved ejection fraction (HFpEF) has emerged as a particularly responsive phenotype: semaglutide improves symptoms and physical function, whereas tirzepatide also reduces worsening heart failure events. FLOW further supports kidney and cardiovascular protection with semaglutide in type 2 diabetes and chronic kidney disease. Randomised human studies support effects on adiposity, haemodynamic burden, inflammation and cardiorenal outcomes, whereas endothelial, coronary microvascular and direct myocardial mechanisms remain less clinically validated. This Review integrates the current evidence, distinguishes randomised outcomes from observational and mechanistic signals, and provides a practical phenotype-directed treatment algorithm incorporating atherosclerotic cardiovascular disease, obesity, type 2 diabetes, chronic kidney disease, HFpEF, sodium-glucose cotransporter 2 inhibitor use and patient-specific treatment constraints. Current practice should be guided by indication-specific outcome evidence rather than weight-loss magnitude or indirect cross-trial comparisons.",
+    "pubYear": "2026",
+    "journalInfo": {
+     "journal": {
+      "title": "Frontiers in cardiovascular medicine"
+     }
+    },
+    "pubTypeList": {
+     "pubType": [
+      "review-article",
+      "Review",
+      "Journal Article"
+     ]
+    }
+   }
+  ]
+ }
+}

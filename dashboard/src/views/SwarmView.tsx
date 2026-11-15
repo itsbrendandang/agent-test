@@ -1,13 +1,15 @@
-// AI Scientist Swarm (GLHF). By default a plain summary: where the run is, what it scored, what was
-// rejected. "Show details" opens the timeline, every claim with its tests, the critic's issues and the reports.
+// Compare: one agent alone against a team of nine, on the same task. By default a plain summary: where the run is,
+// what it scored, what was rejected. "See how each statement was tested" opens every statement with its tests, the
+// reviewers' problems and the reports.
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
-import { EngineOffline, ModeLabel, PageHead, RunId, StatusPill, Verdict } from "@/components/Shared"
+import { Provenance } from "@/components/Provenance"
+import { EngineOffline, MarkChip, PageHead, RunId, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
-import { outcomeOf } from "@/lib/verdict"
-import { VERDICT_WORD, verdictCount } from "@/lib/words"
+import { provenanceOf } from "@/lib/provenance"
+import { MARK_WORD, markCount, markOf } from "@/lib/words"
 import { swarmScripted } from "@/lib/scripted"
 import { runState } from "@/lib/status"
 import { fmtDuration, fmtScore, fmtTokens, plainDuration, plainLimit, plainWhen } from "@/lib/format"
@@ -25,7 +27,7 @@ const round = (phase: string) => phase.match(/\d+/)?.[0]
 const num = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : String(Number(x.toPrecision(3))))
 const score = fmtScore
 const STEP_TEXT = { now: "● working", done: "✓ ran", todo: "○ did not run" } as const
-const ABOUT = "The same task, done two ways: by one AI agent working alone, and by a team of nine that check each other. This page shows what each did and how it scored."
+const ABOUT = "The same task, done two ways: by one AI agent working alone, and by a team of nine that check each other."
 const plainScore = (x: number | undefined) => (x === undefined ? "nothing" : `${fmtScore(x)} out of 1`)
 const solverName = (s: Solver) => (s === "glhf" ? "Team of nine" : "One agent alone")
 const text = (x: unknown) => (typeof x === "string" || typeof x === "number" ? String(x) : "")
@@ -98,7 +100,7 @@ function headline(run: GlhfRun | undefined, current: string | undefined, missing
   }
 }
 
-const plainVerdict = (v: unknown) => (v === "supported" || v === "refuted" || v === "insufficient" || v === "untested" ? `${VERDICT_WORD[outcomeOf(v)].toLowerCase()} (${v})` : text(v))
+const plainVerdict = (v: unknown) => (v === "supported" || v === "refuted" || v === "insufficient" || v === "untested" ? `${MARK_WORD[markOf(v)].toLowerCase()} (${v})` : text(v))
 
 function describe(e: LedgerEvent): string | undefined {
   switch (e.kind) {
@@ -154,12 +156,12 @@ export function SwarmView() {
 
   if (offline && !runs) return (
     <div className="page swarm">
-      <PageHead title="One agent or a team?" about={ABOUT} />
+      <PageHead title="Compare: one agent or a team" about={ABOUT} />
       <EngineOffline needs="Runs and scores come from the engine. The demo task also needs Docker, but no API keys." said={problem.said} onRetry={() => setNudge((n) => n + 1)} />
     </div>
   )
 
-  if (!runs) return <div className="page swarm"><PageHead title="One agent or a team?" about={ABOUT} /><p className="muted" role="status">Loading runs…</p></div>
+  if (!runs) return <div className="page swarm"><PageHead title="Compare: one agent or a team" about={ABOUT} /><p className="muted" role="status">Loading runs…</p></div>
 
   const list = runs
   const runId = picked ?? list[0]?.id
@@ -176,7 +178,8 @@ export function SwarmView() {
   const count = {
     supported: claims.filter((c) => c.verdict === "supported").length,
     refuted: claims.filter((c) => c.verdict === "refuted").length,
-    open: claims.filter((c) => c.verdict === "insufficient" || c.verdict === "untested").length,
+    insufficient: claims.filter((c) => c.verdict === "insufficient").length,
+    untested: claims.filter((c) => c.verdict === "untested").length,
     fixed: issues.filter((i) => i.status === "fixed").length,
   }
   const noKeys = status && !status.keys.ANTHROPIC_API_KEY && !status.keys.OPENAI_API_KEY
@@ -194,7 +197,7 @@ export function SwarmView() {
 
   return (
     <div className="page swarm" ref={page}>
-      <PageHead title="One agent or a team?" about={ABOUT}>
+      <PageHead title="Compare: one agent or a team" about={ABOUT}>
         {noKeys && <span className="pill" data-kind="warning" title="The engine has no model API keys. Only practice runs (fixed steps, no model) can run.">Practice runs only</span>}
         {offline && <span className="pill" data-kind="danger" title={`${problem.said ?? "The engine cannot be reached."} Showing the last data received. Retrying every 15 seconds.`}>{problem.said ? "Engine error" : "Engine offline"}</span>}
         <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>New run</button>
@@ -223,7 +226,7 @@ export function SwarmView() {
               <h2 className="story-title">{taskName(run.task)}</h2>
               <p className="story-facts">
                 <StatusPill state={runState(run.phase, run.score !== undefined)} />
-                <ModeLabel scripted={swarmScripted(run)} demo={run.task === "demo"} />
+                <span data-testid="run-mode" className="story-mode"><Provenance kind={provenanceOf({ model: run.model })} />{run.task === "demo" && <DemoTask />}</span>
                 <span className="muted small">
                   Started {plainWhen(run.startedAt)}
                   {run.finishedAt !== undefined && <> · took {plainDuration(run.finishedAt - run.startedAt)}</>}
@@ -234,7 +237,7 @@ export function SwarmView() {
             </>
           )}
           <p className="story-headline" role="status">{headline(run, activePhase, runId)}</p>
-          {run?.solver === "glhf" && ledger && count.refuted > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {count.refuted === 1 ? "One statement was proven wrong" : `${count.refuted} statements were proven wrong`} by the team's own tests. Look for the marked steps below.</p>}
+          {run?.solver === "glhf" && ledger && count.refuted > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {count.refuted === 1 ? "One statement was contradicted" : `${count.refuted} statements were contradicted`} by the team's own tests. Look for the marked steps below.</p>}
         </div>
         {run?.phase === "done" && (
         <div className="swarm-result" role="group" aria-label="Result">
@@ -256,10 +259,11 @@ export function SwarmView() {
           )}
           {run.solver === "glhf" && ledger && (
             <p className="swarm-counts">
-              <Verdict verdict="supported" count={count.supported} />
-              <Verdict verdict="refuted" count={count.refuted} />
-              <Verdict verdict="untested" count={count.open} />
-              <span className="muted small">of {claims.length} statement{claims.length === 1 ? "" : "s"} the team tested · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
+              <MarkChip verdict="supported" count={count.supported} />
+              <MarkChip verdict="refuted" count={count.refuted} />
+              <MarkChip verdict="insufficient" count={count.insufficient} />
+              {count.untested > 0 && <MarkChip verdict="untested" count={count.untested} />}
+              <span className="muted small"><span data-testid="tested-count">{claims.length - count.untested} of {claims.length} statement{claims.length === 1 ? "" : "s"} tested</span> · {count.fixed} problem{count.fixed === 1 ? "" : "s"} found by review and fixed</span>
             </p>
           )}
           {run.solver === "single" && <p className="swarm-note">One agent alone has nobody checking it, so there are no tested statements or rejections to show.</p>}
@@ -286,7 +290,7 @@ export function SwarmView() {
             <p className="swarm-note">
               {run.phase === "queued" ? "Nothing has run yet."
                 : run.solver === "glhf"
-                ? <>So far: {claims.length} statement{claims.length === 1 ? "" : "s"} written down, {verdictCount("holds", count.supported)}, {verdictCount("fails", count.refuted)}, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
+                ? <>So far: {claims.length} statement{claims.length === 1 ? "" : "s"} written down, {markCount("supported", count.supported)}, {markCount("contradicted", count.refuted)}, {issues.length} problem{issues.length === 1 ? "" : "s"} raised by the reviewers.</>
                 : "One agent alone keeps no list of statements, so there is nothing to count until it finishes."}
             </p>
           </div>
@@ -346,11 +350,10 @@ export function SwarmView() {
             </tr></thead>
             <tbody>
               {scoreboard.map((row) => {
-                const label = [row.task === "demo" && "demo case", row.model === "mock" && "practice run"].filter(Boolean).join(", ")
                 return (
                   <tr key={`${row.task}|${row.model}|${row.timeLimit}|${row.maxTokens}`}>
                     <td>
-                      {row.task}{label && <> <span className="pill" data-kind="warning">{label}</span></>}
+                      {row.task} <Provenance kind={provenanceOf({ model: row.model })} compact />{row.task === "demo" && <DemoTask />}
                       <div className="muted small"><code>{row.model}</code> · {budget(row)}</div>
                       {row.note && <div className="swarm-rownote">{row.note}</div>}
                     </td>
@@ -373,9 +376,10 @@ export function SwarmView() {
             <h3>Statements</h3>
             <p>The team writes down what it thinks it found. Each of these is a statement (experts say "claim"). Then it tests each one and tries to prove it wrong.</p>
             <ul>
-              <li><Verdict verdict="supported" technical /> The statement passed its tests. It counts as a finding.</li>
-              <li><Verdict verdict="refuted" technical /> A test went against the statement. It is rejected and is not reported as a finding.</li>
-              <li><Verdict verdict="insufficient" technical /> There was not enough evidence, or a planned test has no result, or no test was run. It is not reported as a finding.</li>
+              <li><MarkChip verdict="supported" technical /> The statement passed its tests. It counts as a finding.</li>
+              <li><MarkChip verdict="refuted" technical /> A test went against the statement. It is rejected and is not reported as a finding.</li>
+              <li><MarkChip verdict="insufficient" technical /> Its tests gave too little evidence, or a planned test has no result. It is not reported as a finding.</li>
+              <li><MarkChip verdict="untested" technical /> No test of it has a result. It is not reported as a finding.</li>
             </ul>
             <p>Code decides each result from the test numbers. One agent alone has no reviewer, so it has no tested statements.</p>
             <h3>Difference</h3>
@@ -396,7 +400,7 @@ export function SwarmView() {
           <p className="story-eyebrow">{live ? "While you wait" : "What next?"}</p>
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)} disabled={live}>Run it again, both ways</button>
           <button type="button" className="btn" aria-pressed={details} onClick={() => setDetails(!details)}>{details ? "Hide the tests, problems and reports" : "See how each statement was tested"}</button>
-          <a className="btn" href="#Graph" onClick={() => setOpen("swarm", run.id)}>Watch it as a graph</a>
+          <a className="btn" href="#Graph" onClick={() => setOpen("swarm", run.id)}>See this run as a graph</a>
           <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(linkTo("swarm", run.id)).then(() => setCopied(true), () => setCopied(false)) }}>{copied ? "Link copied" : "Copy a link to this run"}</button>
         </nav>
       )}
@@ -420,7 +424,7 @@ export function SwarmView() {
             {claims.length === 0 && <p className="muted small">{run.solver === "single" ? "A single agent writes down no statements to test." : "None yet."}</p>}
             {claims.map((c) => (
               <article key={c.id} className="swarm-claim">
-                <header><Verdict verdict={c.verdict} technical /><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
+                <header><MarkChip verdict={c.verdict} technical /><b>{c.id}</b><span className="muted small">from {c.proposed_by}</span></header>
                 <p>{c.text}</p>
                 <p className="swarm-note">If the statement were false: {c.null_hypothesis}</p>
                 <p className="swarm-note">
@@ -495,6 +499,11 @@ export function SwarmView() {
   )
 }
 
+
+/** The task is the small made-up dataset: said next to the provenance badge, because a real model on it is still not research. */
+function DemoTask() {
+  return <span className="pill" data-kind="outline" title="The demo task is a small made-up dataset, used to test that everything works. Its result is not a research result.">Demo task</span>
+}
 
 /** Shows a duration that keeps counting, without reading the clock during render. */
 function Elapsed({ since }: { since: number }) {

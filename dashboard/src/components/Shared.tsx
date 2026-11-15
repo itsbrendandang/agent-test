@@ -6,8 +6,9 @@ import { STATE_KIND, type RunState } from "@/lib/status"
 
 
 import type { Verdict as BoardVerdict } from "@/board/api"
-import { outcomeOf } from "@/lib/verdict"
-import { PRACTICE, VERDICT_WORD, verdictCount } from "@/lib/words"
+import { Provenance } from "@/components/Provenance"
+import { provenanceOf } from "@/lib/provenance"
+import { MARK_ABOUT, MARK_GLYPH, MARK_WORD, markCount, markOf, MARKS } from "@/lib/words"
 import type { ClaimVerdict } from "@/swarm/api"
 
 /**
@@ -86,32 +87,50 @@ export function EngineOffline({ needs, said, onRetry }: { needs: string; said?: 
 }
 
 /**
- * How a result was made, from the run itself: by scripted models (fixed text, no research) or by real ones. Shown
- * next to every result. Nothing is shown while the run has not said.
+ * How a result was made, from the run itself: the Provenance badge ("Practice" or "Live research"), and for a swarm
+ * run on the made-up demo dataset a second small label. Nothing is shown while the run has not said.
  */
-export function ModeLabel({ scripted, demo }: { scripted: Scripted; demo?: boolean }) {
-  if (scripted === undefined && !demo) return null
+export function ModeLabel({ scripted, demo, model }: { scripted?: Scripted; demo?: boolean; model?: string }) {
   return (
-    <span className="pill" data-kind={scripted ? "neutral" : scripted === false ? "info" : "warning"} data-mode={scripted ? "scripted" : scripted === false ? "real" : "demo"}>
-      {scripted ? PRACTICE : scripted === false ? "real model" : ""}{demo ? `${scripted === undefined ? "" : " · "}demo case` : ""}
-    </span>
+    <>
+      <Provenance kind={provenanceOf({ scripted, model })} />
+      {demo && <span className="pill" data-kind="outline" title="The demo task is a small made-up dataset, used to test that everything works. Its result is not a research result.">Demo task</span>}
+    </>
   )
 }
 
 /**
- * What a check found, in plain words with its glyph: "✓ Holds up", "✕ Proven wrong", "? Not enough evidence".
- * The checker's own word (verified, refuted, untested…) is the tooltip and, with `technical`, a small second line.
+ * What a check found: one of the four marks, with its glyph and its word ("✓ Supported", "✕ Contradicted",
+ * "? Insufficient evidence", "○ Not checked"). The glyph is in the text, so the mark never rests on colour. The
+ * check's own word (verified, refuted, untested…) is in the tooltip and, with `technical`, a small second part.
+ * With `count`: "9 supported".
  */
-export function Verdict({ verdict, count, technical }: { verdict: BoardVerdict | ClaimVerdict; count?: number; technical?: boolean }) {
-  const outcome = outcomeOf(verdict)
-  const cls = verdict === "verified" || verdict === "contradicted" || verdict === "unsupported" || verdict === "unchecked" ? `v-${verdict}` : `sv-${verdict}`
+export function MarkChip({ verdict, count, technical }: { verdict: BoardVerdict | ClaimVerdict | string; count?: number; technical?: boolean }) {
+  const mark = markOf(verdict)
   return (
-    <span className={`pill ${cls}`} data-outcome={outcome} title={`The check's own word: ${verdict}`}>
-      {count === undefined ? VERDICT_WORD[outcome] : verdictCount(outcome, count)}
+    <span className="pill mark" data-mark={mark} title={`${MARK_ABOUT[mark]} The check's own word: ${verdict}.`}>
+      <span className="mark-glyph" aria-hidden="true">{MARK_GLYPH[mark]}</span>
+      {count === undefined ? MARK_WORD[mark] : markCount(mark, count)}
       {technical && <span className="pill-tech">{verdict}</span>}
     </span>
   )
 }
+
+/** The four marks and what each means, behind one short disclosure. `who`: one line on who decides them here. */
+export function MarksLegend({ who }: { who?: string }) {
+  return (
+    <details className="marks-legend">
+      <summary>What the marks mean</summary>
+      <ul>
+        {MARKS.map((m) => <li key={m}><span className="pill mark" data-mark={m}><span className="mark-glyph" aria-hidden="true">{MARK_GLYPH[m]}</span>{MARK_WORD[m]}</span> <span>{MARK_ABOUT[m]}</span></li>)}
+      </ul>
+      {who && <p>{who}</p>}
+    </details>
+  )
+}
+
+/** The same chip under its older name. */
+export const Verdict = MarkChip
 
 /** Where sources came from. Exa is credited only for a live Exa search; a practice run's sources are examples. */
 export function SearchCredit({ provider }: { provider: "exa" | "fixture" | "europepmc" | undefined }) {

@@ -1,0 +1,254 @@
+// The research answer: one question in, a sourced and reviewed answer out. This file holds the contract the dashboard is
+// built against (events and the saved record) and the levels with their caps. docs/research-answer.md describes the flow.
+//
+// DO NOT rename a field here without telling the dashboard's owner: the Search screen reads these shapes.
+import type { BoardConfig } from "../config.ts"
+import type { Verdict } from "../events.ts"
+
+export type Effort = "quick" | "standard"
+export const EFFORTS: Effort[] = ["quick", "standard"]
+export const isEffort = (value: unknown): value is Effort => value === "quick" || value === "standard"
+
+/** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/. */
+export type Provider = "exa" | "europepmc" | "fixture" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem"
+
+export interface Level {
+  /** Dollars one answer may cost. Checked before every paid step, against that step's worst case. */
+  maxUsd: number
+  /** Literature (Europe PMC) queries, at most. */
+  queries: number
+  /** Exa web searches, at most. The first search of every answer is an Exa search. */
+  exaSearches: number
+  /** Database lookups (sources/), at most. 0 = none. */
+  databaseLookups: number
+  /** Numbered sources the writer gets, at most. */
+  sourcesKept: number
+  /** Output tokens of the writer, for the draft and again for the revision. Hidden reasoning tokens count in it. */
+  maxOutputTokens: number
+  /** The length the writer is asked for, in words. */
+  words: number
+}
+
+export interface ResearchLimits {
+  /** Wall clock for one answer, in seconds. */
+  maxSeconds: number
+  maxQuestionChars: number
+  /** Answers in progress at once, over all callers. */
+  maxInProgress: number
+  /** Questions one Origin may ask a minute. */
+  perOriginPerMinute: number
+  levels: Record<Effort, Level>
+}
+
+// DEFAULTS. Justified from the prices in board/config.yaml (docs/research-answer.md has the arithmetic):
+// a quick answer is expected to cost about $0.06 and cannot pass $0.15; a standard one about $0.12 and cannot pass $0.60.
+export const DEFAULTS: ResearchLimits = {
+  maxSeconds: 120,
+  maxQuestionChars: 2_000,
+  maxInProgress: 3,
+  perOriginPerMinute: 6,
+  levels: {
+    quick: { maxUsd: 0.15, queries: 2, exaSearches: 1, databaseLookups: 0, sourcesKept: 6, maxOutputTokens: 2_000, words: 220 },
+    standard: { maxUsd: 0.6, queries: 3, exaSearches: 3, databaseLookups: 2, sourcesKept: 12, maxOutputTokens: 3_000, words: 380 },
+  },
+}
+
+// What board/config.yaml may hold under `research:`. Every key is optional; a value that is not a sane number is ignored.
+export interface ResearchYaml {
+  time_limit_seconds?: number; max_question_chars?: number; max_in_progress?: number; per_origin_per_minute?: number
+  quick?: LevelYaml; standard?: LevelYaml
+}
+export interface LevelYaml { max_usd?: number; queries?: number; exa_searches?: number; database_lookups?: number; sources_kept?: number; max_output_tokens?: number; words?: number }
+
+const num = (value: unknown, fallback: number, min: number, max: number, whole = true): number =>
+  typeof value === "number" && Number.isFinite(value) && value >= min && value <= max && (!whole || Number.isInteger(value)) ? value : fallback
+
+/**
+ * The limits in force: the defaults, changed by the `research:` block of board/config.yaml. Hard bounds hold whatever
+ * the file says: quick makes exactly one Exa search, standard at most 3, and no level is given more than $5 or 20 sources.
+ */
+export function limitsOf(config: Pick<BoardConfig, "research">): ResearchLimits {
+  const y = (config.research ?? {}) as ResearchYaml
+  const level = (effort: Effort): Level => {
+    const d = DEFAULTS.levels[effort], l = (y[effort] ?? {}) as LevelYaml
+    return {
+      maxUsd: num(l.max_usd, d.maxUsd, 0.01, 5, false),
+      queries: num(l.queries, d.queries, 1, 3),
+      exaSearches: effort === "quick" ? 1 : num(l.exa_searches, d.exaSearches, 1, 3),
+      databaseLookups: effort === "quick" ? 0 : num(l.database_lookups, d.databaseLookups, 0, 3),
+      sourcesKept: num(l.sources_kept, d.sourcesKept, 1, 20),
+      maxOutputTokens: num(l.max_output_tokens, d.maxOutputTokens, 300, 8_000),
+      words: num(l.words, d.words, 60, 1_000),
+    }
+  }
+  return {
+    maxSeconds: num(y.time_limit_seconds, DEFAULTS.maxSeconds, 1, 600, false),
+    maxQuestionChars: num(y.max_question_chars, DEFAULTS.maxQuestionChars, 20, 8_000),
+    maxInProgress: num(y.max_in_progress, DEFAULTS.maxInProgress, 1, 10),
+    perOriginPerMinute: num(y.per_origin_per_minute, DEFAULTS.perOriginPerMinute, 1, 60),
+    levels: { quick: level("quick"), standard: level("standard") },
+  }
+}
+
+// ── The saved record and its parts ───────────────────────────────────────────────────────────────
+
+export interface Source {
+  n: number
+  url: string
+  title: string
+  provider: Provider
+  /** A short plain label: "preprint", "review", "clinical", "in vitro", "example source"; comma-joined when two apply. */
+  note?: string
+  /** True for a source of an earlier answer in the thread that this answer lists again. */
+  earlier?: boolean
+  /** Set once the final text exists: does it cite this source? */
+  cited?: boolean
+}
+/** A source as the record keeps it: with the text every check was made against (an abstract or excerpts, never a full paper). */
+export interface StoredSource extends Source { text: string; studyType?: string; relevance?: number }
+
+export interface SearchLine { provider: Provider; query: string; ran: boolean; found: number; kept: number; reason?: string }
+
+/** What a step is. "prepare" is the one measured preparation phase (planning the queries). */
+export type StepKind = "prepare" | "search" | "evaluate" | "fetch" | "write" | "check" | "review" | "revise" | "save"
+/** "empty": a search that ran and found nothing. Not a failure and not a success. */
+export type StepStatus = "completed" | "empty" | "failed" | "cancelled"
+/** A safe summary of what a step was given, for a details view. Never a key, a header, a token, a path or a prompt. */
+export type StepInput = Record<string, string | number | boolean>
+export interface StepStart { step: string; kind: StepKind; label: string; provider?: Provider; query?: string; input?: StepInput }
+export interface StepEnd { step: string; status: StepStatus; ms: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
+/** A step as the record keeps it: "running" until its end is known. */
+export interface StepRecord extends StepStart { status: StepStatus | "running"; ms?: number; found?: number; kept?: number; summary?: string; error?: string; consequence?: string }
+
+export interface Selection {
+  /** The rule that was applied, in plain words, written by code. */
+  criteria: string
+  selected: { n: number; why: string; limitation?: string }[]
+  notSelected: { title: string; url: string; provider: Provider; reason: string }[]
+}
+
+export type RecommendationLabel = "Recommended next step" | "Alternative" | "Needs verification"
+export interface Recommendation {
+  label: RecommendationLabel
+  text: string
+  why: string
+  /** Source numbers it rests on. Never empty: code drops a recommendation with no basis. */
+  basis: number[]
+  /** What taking the step would do. */
+  does: string
+}
+
+export interface Artifact { id: string; name: string; type: string; bytes: number; at: number }
+
+export interface Statement {
+  stage: "draft" | "final"
+  /** Position among the cited sentences of that stage's text, from 0. */
+  index: number
+  text: string
+  sources: number[]
+  /** Set by code only (triage.ts route). "verified" is the only verdict shown as "holds up". */
+  verdict: Verdict
+  quote?: string
+  quoteFound: boolean
+  /** The source the quote is from. */
+  quoteSource?: number
+  /** The model that checked, "vendor/model", "scripted" in a demo answer. */
+  checker: string
+  /** Why it is not verified, in plain words. */
+  note?: string
+  /** Final stage only: true when this sentence stood unchanged in the draft and its verdict was copied. */
+  carried?: boolean
+}
+
+export type Severity = "blocking" | "major" | "minor"
+export interface ReviewNote {
+  index: number
+  reviewer: "critic"
+  severity: Severity
+  text: string
+  /** The draft statement the note is about, or null for the answer as a whole. */
+  statement: number | null
+  resolved?: boolean
+  how?: string
+}
+
+export interface Counts { sources: number; statements: number; verified: number; contradicted: number; unsupported: number; unchecked: number }
+export type Stopped = "cap" | "time" | "paid_off"
+export interface ModelNames { planner: string; writer: string; checker: string; critic: string }
+export type Status = "queued" | "running" | "done" | "failed" | "cancelled"
+
+export interface ResearchRecord {
+  id: string
+  thread: string
+  kind: "answer"
+  question: string
+  effort: Effort
+  mode: "real" | "demo"
+  status: Status
+  /** When the question was asked. For a queued answer the work starts later; `workStartedAt` says when. */
+  startedAt: number
+  workStartedAt?: number
+  /** Milliseconds the answer has been worked on. Time while the engine was down is not in it; the time limit counts this. */
+  workedMs?: number
+  finishedAt?: number
+  /** A queued answer: the answer it waits for. */
+  after?: string
+  caps: { maxUsd: number; maxSeconds: number }
+  models: ModelNames
+  /** The one sentence that says what will be done. */
+  opening?: string
+  steps: StepRecord[]
+  searches: SearchLine[]
+  sources: StoredSource[]
+  selection?: Selection
+  /** The first draft, after code removed markers that name no source. */
+  draft?: string
+  /** The final text (the revision when one ran, else the draft) and its first paragraph without markers. */
+  answer?: { markdown: string; direct: string }
+  /** The cited sentences of the final text, each with the verdict code gave it. */
+  statements: Statement[]
+  review: { checker: string; critic: string; revised: boolean; notes: ReviewNote[] }
+  recommendations: Recommendation[]
+  /**
+   * "What is missing": plain sentences built by code from what did not run, what found nothing and what did not pass
+   * its check. It is part of the answer whenever it is not empty, whatever the writer wrote.
+   */
+  missing?: string[]
+  /** Dollars spent so far: models, screening, checks and Exa. Written after every paid step. */
+  usd: number
+  seconds?: number
+  counts?: Counts
+  /** Set when the answer ended early with what it had, and `note` says so in plain words. */
+  stopped?: Stopped
+  note?: string
+  error?: string
+}
+
+// ── Events (events.jsonl, and the SSE stream) ────────────────────────────────────────────────────
+
+export type ResearchEvent =
+  | { type: "research.queued"; after: string }
+  | { type: "research.resumed"; afterSeq: number }
+  | { type: "research.started"; id: string; thread: string; question: string; effort: Effort; mode: "real" | "demo"; caps: { maxUsd: number; maxSeconds: number }; models: ModelNames }
+  | { type: "opening"; text: string }
+  | ({ type: "step.started" } & StepStart)
+  | { type: "step.progress"; step: string; done: number; total?: number; note?: string }
+  | ({ type: "step.finished" } & StepEnd)
+  | { type: "sources"; items: Source[] }
+  | ({ type: "selection" } & Selection)
+  | { type: "answer.delta"; text: string }
+  | { type: "answer.written"; markdown: string }
+  | { type: "review.started"; reviewer: "checker" | "critic"; model: string; step: string }
+  | ({ type: "statement.checked" } & Statement)
+  | ({ type: "review.note" } & Omit<ReviewNote, "resolved" | "how">)
+  | { type: "answer.revised"; markdown: string; notes: { index: number; resolved: boolean; how?: string }[] }
+  | { type: "sources.cited"; n: number[] }
+  | { type: "recommendations"; items: Recommendation[] }
+  | { type: "missing"; items: string[] }
+  | { type: "artifact.created"; artifact: Artifact } // nested: the envelope already has `type` and `at`
+  | { type: "research.finished"; usd: number; seconds: number; counts: Counts; searches: Partial<Record<Provider, number>>; review: { checker: string; critic: string; revised: boolean; notes: { raised: number; resolved: number } }; stopped?: Stopped; note?: string }
+  | { type: "research.failed"; error: string; spentUsd: number }
+  | { type: "research.cancelled"; spentUsd: number; seconds: number }
+
+/** Every event as stored and streamed: `seq` from 1, strictly increasing in one answer; `run` is the answer id. */
+export type Stamped = ResearchEvent & { seq: number; at: number; run: string; key: string }

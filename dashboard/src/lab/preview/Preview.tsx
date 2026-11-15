@@ -1,20 +1,18 @@
-// Development only: http://127.0.0.1:<dev port>/src/lab/preview.html. Not part of the built app. It shows the lab
+// Development only: http://127.0.0.1:<dev port>/src/lab/preview/index.html. Not part of the built app. It shows the lab
 // from the hand-written fixtures, with no engine, to look at the scene while changing it.
 //   ?model=fixture            one teammate in every state (the default)
 //   ?play=review|answer|real|cancelled|swarm   feed a fixture stream one event at a time (&pace=700 ms an event)
-import { StrictMode, useEffect, useMemo, useState } from "react"
-import { createRoot } from "react-dom/client"
-import "../index.css"
-import { answerLab, boardLab, swarmLab } from "./adapter"
-import { PRACTICE_ANSWER, PRACTICE_REVIEW } from "./fixtures/practice"
-import { CANCELLED_ANSWER, REAL_ANSWER, REVIEW_WITH_VISITOR, SWARM_NOTES, SWARM_RUN, fixtureModel } from "./fixtures/streams"
-import { Lab } from "./Lab"
+import { useEffect, useMemo, useState } from "react"
+import { answerLab, boardLab, swarmLab } from "../adapter"
+import { PRACTICE_ANSWER, PRACTICE_REVIEW } from "../fixtures/practice"
+import { CANCELLED_ANSWER, REAL_ANSWER, REVIEW_WITH_VISITOR, SWARM_NOTES, SWARM_RUN, fixtureModel } from "../fixtures/streams"
+import { Lab } from "../Lab"
 
 const query = new URLSearchParams(window.location.search)
 const play = query.get("play"), pace = Number(query.get("pace") ?? 700), compact = query.has("compact")
 const STREAMS = { review: PRACTICE_REVIEW, visitor: REVIEW_WITH_VISITOR, answer: PRACTICE_ANSWER, real: REAL_ANSWER, cancelled: CANCELLED_ANSWER }
 
-function Preview() {
+export function Preview() {
   const [n, setN] = useState(0)
   const total = play === "swarm" ? (SWARM_NOTES.events as unknown[]).length : play && play in STREAMS ? STREAMS[play as keyof typeof STREAMS].length : 0
   useEffect(() => {
@@ -36,4 +34,3 @@ function Preview() {
     </div>
   )
 }
-createRoot(document.getElementById("root")!).render(<StrictMode><Preview /></StrictMode>)

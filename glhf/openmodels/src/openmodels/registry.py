@@ -75,6 +75,11 @@ class Model:
     tool_call_parser: str | None = None
     reasoning_parser: str | None = None
     usd_per_mtok: dict[str, Any] = field(default_factory=dict)  # api models: input, cached, output
+    # A hosted OpenAI-compatible service that is not ours (kind api, id openai-api/<service>/...):
+    provider: str | None = None
+    base_url: str | None = None  # the service's public address, ending in /v1
+    base_url_env: str | None = None  # the variable Inspect reads it from: <SERVICE>_BASE_URL
+    api_key_env: str | None = None  # the variable Inspect reads the key from: <SERVICE>_API_KEY
     limits: str = ""
     notes: str = ""
 
@@ -172,8 +177,23 @@ def validate(data: dict[str, Any], root: Path = ROOT) -> Registry:
         if model.status not in STATUSES:
             problems.append(f"{name}: status {model.status!r} is not one of {STATUSES}")
         if model.kind == "api":
-            if not model.inspect_model or model.inspect_model.startswith("openai-api/"):
-                problems.append(f"{name}: an api model needs a vendor `inspect_model` id")
+            if not model.inspect_model:
+                problems.append(f"{name}: an api model needs an `inspect_model` id")
+            elif model.inspect_model.startswith("openai-api/"):
+                service = model.inspect_model.split("/")[1]
+                wanted = service.upper().replace("-", "_")
+                if service == SERVICE:
+                    problems.append(f"{name}: the service `{SERVICE}` is our own Modal endpoint")
+                if not (model.base_url or "").startswith("https://"):
+                    problems.append(f"{name}: a hosted endpoint needs its https `base_url`")
+                if (
+                    model.base_url_env != f"{wanted}_BASE_URL"
+                    or model.api_key_env != f"{wanted}_API_KEY"
+                ):
+                    problems.append(
+                        f"{name}: Inspect reads {wanted}_BASE_URL and {wanted}_API_KEY for this id; "
+                        "base_url_env and api_key_env must name them"
+                    )
             price = model.usd_per_mtok
             if not all(
                 isinstance(price.get(k), int | float) for k in ("input", "cached_input", "output")

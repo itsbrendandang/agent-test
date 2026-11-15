@@ -23,9 +23,21 @@ export type BoardEvent =
   | { type: "run.finished"; usd: number; minutes: number }
   | { type: "run.failed"; error: string }
 
-/** `provider`: where the source came from: "exa" (a live Exa search), "europepmc" (a free literature search, literature.ts) or "fixture" (a practice run's example source). Absent in runs recorded before this field. */
-export type SearchProvider = "exa" | "europepmc" | "fixture"
-export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider }
+/**
+ * `provider`: the search that found a source. "exa": a live Exa web search. "europepmc": a free literature search
+ * (literature.ts). "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem": a record from that
+ * public database (sources/). "fixture": a practice run's example source, not a search. Absent in runs recorded before
+ * this field.
+ */
+export type SearchProvider = "exa" | "europepmc" | "chembl" | "clinicaltrials" | "openfda" | "opentargets" | "uniprot" | "pubchem" | "fixture"
+export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", "chembl", "clinicaltrials", "openfda", "opentargets", "uniprot", "pubchem", "fixture"]
+/**
+ * One source in the evidence pool. `provider` and `query` say which search found it and with which query; they are set
+ * when the source enters the pool and stay on it in every saved record (run.json `evidence`, the `evidence.triaged`
+ * event), so a reader can show "found through Exa" per source. A source found again by a later search keeps the
+ * search that found it first. `query` is absent in runs recorded before the field.
+ */
+export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider; query?: string }
 
 /** One member of a run. `source`: "board" (a file in board/agents) or "specialist" (a method specialist a plan added for this run: `why` it was chosen and the `methods` whose notes it reads). */
 export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; why?: string; methods?: { name: string; title: string }[] }

@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
 import sys
 from pathlib import Path
 from typing import Any
 
-from . import paid, roles, staging
+from . import modal_cost, paid, roles, staging
 from . import report as reporting
 from .dataset import (
     ANSWER_MODES,
@@ -35,7 +37,7 @@ from .dataset import (
     public_view,
 )
 from .grading import PROFILE_JUDGES, PROFILES, InspectJudge, Profile
-from .runner import check_prompt, grade_run, load_env, run_capsule
+from .runner import SANDBOXES, check_prompt, grade_run, load_env, run_capsule
 from .solvers import CRITIC_HINTS, SWARM_BUDGETS, swarm_budget_mode
 from .task import SOLVERS, backstop_tokens
 
@@ -44,6 +46,8 @@ DATA = REPO / "glhf" / "data" / "bixbench_v1"
 # The default profile's judge. Each profile has its own default: see grading.PROFILE_JUDGES.
 DEFAULT_JUDGE = PROFILE_JUDGES["per-mode"].model
 JUDGE_RESERVE_TOKENS = 20_000  # per run, when checking a total token cap
+# Every Modal line of every run folder, shared with glhf/openmodels (gitignored).
+MODAL_LEDGER = REPO / "glhf" / "bixbench_v1" / "runs" / modal_cost.LEDGER_NAME
 
 
 def _capsules(arguments: argparse.Namespace) -> list[Capsule]:
@@ -203,6 +207,12 @@ def cmd_run(arguments: argparse.Namespace) -> int:
             sys.exit(f"--role-model expects ROLE=MODEL (analyst, critic, reconciler); got {item!r}")
         role_models[role] = name
     paid.refuse_models(arguments.model, *role_models.values())  # NO_PAID_CALLS
+    # Only our own endpoint and no judge: blank the vendor keys, so nothing else can be reached.
+    paid.isolate_endpoint([arguments.model, *role_models.values()], judge=not arguments.no_judge)
+    if arguments.sandbox == "modal":  # NO_PAID_CALLS: a Modal sandbox is billed by the second
+        paid.refuse_modal("--sandbox modal: the analysis sandbox would run on Modal")
+        # A plain `kill` (SIGTERM) is handled like Ctrl+C, so the sandboxes are terminated.
+        signal.signal(signal.SIGTERM, lambda *_: os.kill(os.getpid(), signal.SIGINT))
     out: Path = arguments.out
     out.mkdir(parents=True, exist_ok=True)
     budget_file = out / "budget.json"
@@ -267,6 +277,11 @@ def cmd_run(arguments: argparse.Namespace) -> int:
                         image=arguments.image,
                         swarm_budget=swarm_budget,
                         repeat=repeat,
+                        sandbox=arguments.sandbox,
+                        modal_cpu=arguments.modal_cpu,
+                        modal_memory_mib=int(arguments.modal_memory_gib * 1024),
+                        modal_ledgers=[out / modal_cost.LEDGER_NAME, MODAL_LEDGER],
+                        modal_usd_cap=arguments.modal_usd_cap,
                     )
                 except Exception as error:
                     # Unknown spend: charge the most the run could have used, so the cap holds.
@@ -292,6 +307,7 @@ def cmd_run(arguments: argparse.Namespace) -> int:
                         "judge_tokens": judge_tokens,
                         "seconds": summary["seconds"],
                         "status": summary["status"],
+                        **_sandbox_cost(summary),
                     }
                 )
                 budget_file.write_text(json.dumps(budget, indent=2))
@@ -305,7 +321,37 @@ def cmd_run(arguments: argparse.Namespace) -> int:
         if stopped:
             break
     _write_report(out, profiles[0])
+    if arguments.sandbox == "modal":
+        _print_modal_costs(out)
     return 2 if stopped else 0
+
+
+def _sandbox_cost(summary: dict[str, Any]) -> dict[str, Any]:
+    """Modal sandbox seconds and dollars of one run, for budget.json (nothing for Docker)."""
+    modal = summary.get("settings", {}).get("modal")
+    if not modal:
+        return {}
+    return {
+        "sandbox": "modal",
+        "sandboxes": modal.get("sandboxes"),
+        "sandbox_seconds": modal.get("sandbox_seconds"),
+        "sandbox_usd": modal.get("sandbox_usd"),
+    }
+
+
+def _print_modal_costs(out: Path) -> None:
+    """Per-capsule Modal sandbox cost of this --out folder, from its ledger."""
+    rows = modal_cost.read(out / modal_cost.LEDGER_NAME)
+    per = modal_cost.per_capsule(rows)
+    if not per:
+        return
+    print(f"Modal sandboxes ({modal_cost.PRICES_READ}; our estimate from wall-clock seconds):")
+    for capsule, cell in sorted(per.items()):
+        print(
+            f"  {capsule:22} {int(cell['sandboxes'])} sandbox(es) "
+            f"{cell['seconds']:8.1f} s  {cell['usd']:.4f} USD"
+        )
+    print(f"  total {modal_cost.spent(rows):.4f} USD in {out / modal_cost.LEDGER_NAME}")
 
 
 def cmd_grade(arguments: argparse.Namespace) -> int:
@@ -327,6 +373,21 @@ def cmd_grade(arguments: argparse.Namespace) -> int:
 def cmd_report(arguments: argparse.Namespace) -> int:
     _write_report(arguments.out, arguments.grading.split(",")[0], arguments.model)
     return 0
+
+
+def cmd_modal_sandboxes(arguments: argparse.Namespace) -> int:
+    """List the Modal sandboxes of this adapter that are still running; with --terminate, end
+    them. A run ends its own sandboxes; this is for a process that was killed outright, whose
+    sandboxes would otherwise live until their timeout."""
+    paid.refuse_modal("listing or terminating Modal sandboxes")  # NO_PAID_CALLS
+    from . import modal_image, modal_sandbox
+
+    if arguments.terminate:
+        ended = modal_sandbox.terminate_all(modal_image.APP_NAME)
+        print(f"terminated {len(ended)} sandbox(es): {' '.join(ended) or 'none were running'}")
+    alive = modal_sandbox.live_sandboxes(modal_image.APP_NAME)
+    print(f"{len(alive)} sandbox(es) running in app {modal_image.APP_NAME}: {' '.join(alive)}")
+    return 1 if alive else 0
 
 
 def _grading_options(parser: argparse.ArgumentParser) -> None:
@@ -408,9 +469,32 @@ def main() -> int:
     sub.add_argument("--total-token-cap", type=int, help="stop before a run that could exceed it")
     sub.add_argument("--seed", type=int, default=0, help="option shuffling; sent to the provider")
     sub.add_argument("--image", help="sandbox image (default: the official BixBench image)")
+    sub.add_argument(
+        "--sandbox",
+        choices=SANDBOXES,
+        default="docker",
+        help="where the analysis runs: local 'docker' (default, the official arm64 image) or "
+        "'modal' (a Modal Sandbox from our amd64 rebuild; billed; refused while NO_PAID_CALLS "
+        "is on; needs `uv run --group modal`; results are not comparable with a Docker run)",
+    )
+    sub.add_argument("--modal-cpu", type=float, default=4.0, help="cores per Modal sandbox")
+    sub.add_argument("--modal-memory-gib", type=float, default=16.0, help="GiB per Modal sandbox")
+    sub.add_argument(
+        "--modal-usd-cap",
+        type=float,
+        default=modal_cost.DEFAULT_CAP_USD,
+        help="stop before a run whose worst case would take this --out folder's Modal sandbox "
+        f"spend past this many dollars (default {modal_cost.DEFAULT_CAP_USD})",
+    )
     sub.add_argument("--force", action="store_true", help="rerun runs that are already done")
     _grading_options(sub)
     sub.set_defaults(run=cmd_run)
+
+    sub = commands.add_parser(
+        "modal-sandboxes", help="list (and with --terminate, end) running Modal sandboxes"
+    )
+    sub.add_argument("--terminate", action="store_true")
+    sub.set_defaults(run=cmd_modal_sandboxes)
 
     sub = commands.add_parser("grade", help="grade finished runs again")
     sub.add_argument("--out", type=Path, required=True)

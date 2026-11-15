@@ -8,6 +8,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message"
 import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
+import { HeaderSlot } from "@/components/HeaderSlot"
 import { UserMessage } from "@/components/Thread"
 import { ENGINE } from "@/board/api"
 import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type EffortId, type ProviderId } from "@/home/api"
@@ -18,7 +19,7 @@ import { Checked } from "@/home/Checked"
 import { PlanCard } from "@/home/PlanCard"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 import { plainDuration, plainWhen, runTitle } from "@/lib/format"
-import { ResearchRefused, startResearch } from "@/research/api"
+import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
 import { ResearchAnswer } from "@/research/Answer"
 import { Working } from "@/research/Working"
 import { boardTitles, useBoardScripted } from "@/lib/scripted"
@@ -41,8 +42,10 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const [whyNone, setWhyNone] = useState<string>() // why there is no catalog although the engine answered
   const [chosenEffort, setChosenEffort] = useState(loadEffort)
   const [boardStatus, setBoardStatus] = useState<Parameters<typeof boardScriptedWhy>[0]>() // GET /api/status: what the board would run on
+  const [stopNote, setStopNote] = useState<string>() // what the engine answered to Stop
   const [panel, setPanel] = useState(false) // the optional details panel: recent results and setup
   const [copied, setCopied] = useState<number>()
+  const [statuses, setStatuses] = useState<Record<string, string>>({}) // each direct answer's status, as its own events report it
   const box = useRef<HTMLTextAreaElement>(null)
   const asking = useRef<AbortController | undefined>(undefined)
   const thread = useRef<string | undefined>(undefined) // the engine's id for this conversation of direct answers
@@ -132,6 +135,11 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const empty = turns.length === 0 && sending === undefined
   const level = efforts.find((e) => e.id === effort)
   const demo = catalog?.paidCalls === false
+  // The answer being made now (not one that is only waiting): the composer offers Stop for it.
+  const active = turns.find((t) => t.role === "assistant" && "research" in t && ["starting", "running"].includes(statuses[t.research.id] ?? "starting"))
+  const activeId = active && "research" in active ? active.research.id : undefined
+  const stop = () => { if (activeId) void cancelResearch(activeId).then((message) => setStopNote(message)) }
+  const firstQuestion = turns.find((t) => t.role === "user")?.content ?? sending ?? ""
   const cap = effort === "quick" || effort === "standard" ? catalog?.research?.[effort] : undefined
   const lastAnswer = turns.findLast((t) => t.role === "assistant")?.id
   /** Ask the question of this answer again. The earlier answer stays; the new one is added below it. */
@@ -157,10 +165,15 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           <PromptInputTools className="search-tools" onClick={(e) => e.stopPropagation()}>
             {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} onChange={pickEffort} name="home-effort" compact />}
           </PromptInputTools>
-          <PromptInputSubmit className="btn btn-primary" size="sm" aria-label={sending !== undefined ? "Sending…" : "Send"} status={sending !== undefined ? "submitted" : undefined}
-            disabled={sending !== undefined || !text.trim()}>{sending !== undefined ? "Sending…" : "Send"}</PromptInputSubmit>
+          <span className="search-send">
+            {activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
+            <PromptInputSubmit className="btn btn-primary" size="sm" aria-label={sending !== undefined ? "Sending…" : "Send"} status={sending !== undefined ? "submitted" : undefined}
+              disabled={sending !== undefined || !text.trim()} title={sending !== undefined ? "Your question is being sent." : !text.trim() ? "Type a question first." : activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
+              {sending !== undefined ? "Sending…" : activeId ? "Send (queued)" : "Send"}</PromptInputSubmit>
+          </span>
         </PromptInputFooter>
       </PromptInput>
+      {stopNote && activeId === undefined && <p className="muted small" role="status">{stopNote}</p>}
       {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
       {problem?.control === "model" && <p className="newrun-error" id="home-model-error" role="alert">{problem.message}</p>}
@@ -203,10 +216,12 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
               <p>Ask a question. Explore evidence and sources.</p>
             </header>
           ) : (
-            <header className="search-bar">
-              <h1>Search</h1>
-              <button type="button" className="btn" onClick={clear}>New search</button>
-            </header>
+            <>
+              {/* The shell's header row names the place; this view adds the conversation's title and its one action there. */}
+              <h1 className="sr-only">Research conversation</h1>
+              <HeaderSlot area="title"><span className="header-title" title={firstQuestion}>{firstQuestion}</span></HeaderSlot>
+              <HeaderSlot area="actions"><button type="button" className="btn search-new" onClick={clear}>New search</button></HeaderSlot>
+            </>
           )}
 
           {!empty && (
@@ -217,6 +232,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
                   <Message key={t.id} from="assistant" role="article" aria-label="Answer" className="answer">
                     <MessageContent>
                       <ResearchAnswer id={t.research.id} latest={t.id === lastAnswer}
+                        onStatus={(st) => setStatuses((old) => (old[t.research.id] === st ? old : { ...old, [t.research.id]: st }))}
+                        onRemove={() => setTurns((old) => { const at = old.findIndex((o) => o.id === t.id); return old.filter((_, i) => i !== at && !(i === at - 1 && old[i].role === "user")) })}
                         onAgain={sending === undefined ? () => void send(t.research.question) : undefined}
                         onReview={sending === undefined ? () => void send(t.research.question, "review") : undefined}
                         onDone={(done) => setTurns((old) => old.map((o) => (o.id === t.id && o.content !== done.markdown ? { ...o, content: done.markdown } : o)))} />

@@ -3,18 +3,7 @@
 import { useState } from "react"
 import { LabPanel } from "./LabPanel"
 import { LabScene, type LabSceneProps } from "./LabScene"
-import { CHARACTER_IDS, type CharacterId, type LabModel } from "./model"
-
-/** The teammate whose state changed last, among those doing something. The Scout when nobody is. */
-export function latestActive(model: LabModel): CharacterId {
-  let best: CharacterId = "scout", at = -Infinity
-  for (const id of CHARACTER_IDS) {
-    const a = model.characters[id]
-    if (!a.inRun || a.state === "idle" || a.since === undefined) continue
-    if (a.since >= at) { best = id; at = a.since }
-  }
-  return best
-}
+import { latestActive, type CharacterId } from "./model"
 
 export interface LabProps extends Omit<LabSceneProps, "selected" | "onSelect"> {
   /** Leave the panel out (the scene alone, for a narrow strip). */

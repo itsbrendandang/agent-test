@@ -66,12 +66,27 @@ Practice run: the ${title} is a method specialist, and in a practice run its rep
 
 CLAIMS`
 
+const KEY_QUESTION = "Is either candidate differentiated?"
+/** The scripted searches of round 1, in the order a member makes them. */
+const MOCK_SEARCHES: { name: string; args: (agent: AgentDef) => Record<string, unknown> }[] = [
+  { name: "exa_search", args: (agent) => ({ query: `KRAS G12C ${agent.title} evidence`, objective: "Find primary data that separates the two candidates; prefer research papers over news and pull potency, selectivity and safety figures.", key_question: KEY_QUESTION }) },
+  { name: "literature_search", args: () => ({ query: "KRAS G12C covalent inhibitor resistance", key_question: KEY_QUESTION }) },
+  { name: "database_search", args: () => ({ source: "clinicaltrials", query: "KRAS G12C non-small cell lung cancer", key_question: KEY_QUESTION }) },
+]
+
 export const mockMemberTurn = (agent: AgentDef) => (ctx: TranscriptContext): Step => {
   if (agent.specialist) return { text: MOCK_SPECIALIST_REPLY(agent.title) }
   const last = ctx.messages.at(-1)
   const round = Number(/Round (\d+)/.exec(ctx.messages.filter((m) => m.role === "user").map(text).at(-1) ?? "")?.[1] ?? 1)
-  if (last?.role === "user" && agent.tools.includes("exa_search") && round === 1) {
-    return { text: "Searching.", tool: { name: "exa_search", args: { query: `KRAS G12C ${agent.title} evidence`, objective: "Find primary data that separates the two candidates; prefer research papers over news and pull potency, selectivity and safety figures.", key_question: "Is either candidate differentiated?" } } }
+  // Round 1: a member that searches uses the search tools it holds, one after another, in the board's order (the web
+  // search first, then the literature, then the databases), and only then replies. A practice run reaches no network:
+  // each of these returns the example sources above.
+  const held = MOCK_SEARCHES.filter((search) => agent.tools.includes(search.name))
+  const lastUser = ctx.messages.findLastIndex((m) => m.role === "user")
+  const searched = ctx.messages.slice(lastUser + 1).filter((m) => m.role === "toolResult").length
+  if (round === 1 && searched < held.length && (last?.role === "user" || last?.role === "toolResult")) {
+    const next = held[searched]
+    return { text: searched === 0 ? "Searching." : "Searching further.", tool: { name: next.name, args: next.args(agent) } }
   }
   if (last?.role === "user" && /final positions/i.test(text(last))) {
     const position = agent.name === "critic" ? "No-Go: no advantage over the approved drugs is established yet." : "Go with CMP-0423, conditional on a resistance-mutant panel by month 3."

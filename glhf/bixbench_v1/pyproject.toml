@@ -36,7 +36,7 @@ files = ["src/bixbench_v1"]
 
 [[tool.mypy.overrides]]
 # bixbench3 ships no py.typed marker; its own mypy run checks it.
-module = ["inspect_ai.*", "huggingface_hub.*", "bixbench3.*"]
+module = ["inspect_ai.*", "huggingface_hub.*", "bixbench3.*", "modal.*", "inspect_sandboxes.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -45,3 +45,9 @@ addopts = "-ra"
 
 [dependency-groups]
 dev = ["mypy", "pytest", "ruff", "types-pyyaml"]
+# Opt-in: only `--sandbox modal` needs these (`uv run --group modal ...`). Pinned exactly: the
+# provider in modal_sandbox.py subclasses inspect-sandboxes' Modal provider and calls two of its
+# private helpers. inspect-sandboxes 0.6.1 does not import with modal 1.6.2 or later (it reads
+# modal.sandbox.ARG_MAX_BYTES, which moved), so the client here is 1.6.1, not the 1.6.4 of the
+# `modal` command line tool. Both talk to the same Modal account.
+modal = ["inspect-sandboxes==0.6.1", "modal==1.6.1"]

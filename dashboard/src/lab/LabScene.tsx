@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
 import { LabMap } from "./LabMap"
 import { Mascot } from "./Mascot"
-import { CHARACTERS, MAP, NOT_IN_RUN, STATE_GLYPH, STATE_WORD, type Activity, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
+import { CHARACTERS, FRESH_MS, MAP, ROOMS, STATE_GLYPH, STATE_WORD, describeActivity, type CharacterId, type LabModel, type Shape, type Trip } from "./model"
 import { active, advance, createSim, moving, settle, syncTrips, visitorPoint, type Sim } from "./motion"
 import "./lab.css"
 
@@ -31,8 +31,6 @@ export interface LabSceneProps {
   className?: string
 }
 
-/** A trip that came back longer ago than this is not walked when the scene first sees it. */
-export const FRESH_MS = 20_000
 const PAUSED = "lab.paused"
 
 const STATUS: Record<LabModel["status"], string> = { empty: "Team idle", waiting: "Waiting to start", running: "Team at work", done: "Run finished", failed: "Run failed", cancelled: "Run cancelled" }
@@ -54,9 +52,6 @@ function useReducedMotion(): boolean {
   return reduced
 }
 
-/** What a screen reader hears for one teammate. */
-export const describe = (name: string, a: Activity): string => (a.inRun ? `${name}: ${STATE_WORD[a.state]}. ${a.doing}`.trim() : `${name}: ${NOT_IN_RUN}.`)
-
 interface Nodes { button: HTMLButtonElement | null; art: HTMLSpanElement | null; feet: SVGGElement | null; tag: HTMLSpanElement | null }
 
 export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKey, compact = false, className = "" }: LabSceneProps) {
@@ -64,10 +59,10 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
   const canAnimate = typeof requestAnimationFrame === "function"
   const [paused, setPaused] = useState(() => { try { return localStorage.getItem(PAUSED) === "true" } catch { return false } })
   const still = reduced || !canAnimate // no walking at all; states still show
-  const simRef = useRef<Sim | null>(null)
-  if (!simRef.current) simRef.current = createSim()
+  const [sim] = useState<Sim>(createSim) // one simulation for the life of the scene; it is changed in place, outside React
   const nodes = useRef<Partial<Record<CharacterId, Nodes>>>({})
-  const node = (id: CharacterId): Nodes => (nodes.current[id] ??= { button: null, art: null, feet: null, tag: null })
+  /** A ref callback that files one element of one teammate. */
+  const keep = <K extends keyof Nodes>(id: CharacterId, part: K) => (el: Nodes[K]) => { (nodes.current[id] ??= { button: null, art: null, feet: null, tag: null })[part] = el }
   const frame = useRef(0)
   const previous = useRef<number | null>(null)
   // What the frame loop reads: always the latest props, without restarting the loop.
@@ -76,7 +71,6 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
 
   /** Write every teammate's place and pose to the page. Done outside React so a frame costs twelve style writes. */
   const paint = useCallback(() => {
-    const sim = simRef.current!
     const { model: m, still: stand, paused: held } = live.current
     for (const w of Object.values(sim.walkers)) {
       const n = nodes.current[w.id]
@@ -98,7 +92,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       n.feet?.setAttribute("transform", `translate(${stride * 1.5} 0)`)
       if (n.tag && n.tag.textContent !== tag) n.tag.textContent = tag
     }
-  }, [])
+  }, [sim])
 
   const stop = useCallback(() => { if (frame.current && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame.current); frame.current = 0; previous.current = null }, [])
   /** Ask for frames, but only while there is something to move. The loop ends itself when everyone is home. */
@@ -109,27 +103,26 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       if (now.still || now.paused || document.hidden) { previous.current = null; return }
       const dt = previous.current === null ? 0 : Math.min((timestamp - previous.current) / 1000, 0.05)
       previous.current = timestamp
-      const more = advance(simRef.current!, dt, Math.max(1, now.speed))
+      const more = advance(sim, dt, Math.max(1, now.speed))
       paint()
       if (more) frame.current = requestAnimationFrame(tick)
       else previous.current = null
     }
     const now = live.current
-    if (frame.current || now.still || now.paused || document.hidden || !active(simRef.current!)) return
+    if (frame.current || now.still || now.paused || document.hidden || !active(sim)) return
     frame.current = requestAnimationFrame(tick)
-  }, [paint])
+  }, [paint, sim])
 
   // Take the model in: new trips are queued (or only noted, without motion), then the page is painted.
   const settled = useRef<string | number | undefined>(settleKey)
   useLayoutEffect(() => {
-    const sim = simRef.current!
     live.current = { model, speed, paused, still }
     if (settled.current !== settleKey || (still && active(sim))) { settled.current = settleKey; settle(sim, model) }
     const present = clock ?? Date.now()
     syncTrips(sim, model, (trip) => !still && (trip.kind === "fetch" && trip.back === undefined ? true : present - (trip.back ?? trip.at) <= FRESH_MS))
     paint()
-    if (still || paused) stop(); else kick()
-  }, [model, clock, speed, paused, still, settleKey, paint, kick, stop])
+    if (still || paused || !active(sim)) stop(); else kick()
+  }, [model, clock, speed, paused, still, settleKey, paint, kick, stop, sim])
 
   // A hidden tab gets no frames. Every frame and listener is gone when the scene is.
   useEffect(() => {
@@ -153,16 +146,17 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       <div className="lab-viewport" tabIndex={compact ? undefined : 0} role="group" aria-label="The six rooms of the lab. Scroll sideways on a small screen.">
         <div className="lab" data-still={still || undefined} data-paused={paused || undefined}>
           <LabMap />
+          {ROOMS.map((r) => <span key={r.id} className="lab-room-name" style={{ left: `${((r.x + 46) / MAP.width) * 100}%`, top: `${((r.y + 31) / MAP.height) * 100}%` }}>{r.name}</span>)}
           {CHARACTERS.map((c) => {
             const a = model.characters[c.id]
             const word = !a.inRun ? "not in this run" : a.state === "failed" ? "failed" : a.state === "cancelled" ? "cancelled" : ""
             return (
-              <button key={c.id} type="button" className="lab-agent" ref={(el) => { node(c.id).button = el }}
+              <button key={c.id} type="button" className="lab-agent" ref={keep(c.id, "button")}
                 data-agent={c.id} data-state={a.state} data-in-run={a.inRun} data-problem={a.problem ? true : undefined}
-                aria-pressed={selected === c.id} aria-label={`Inspect ${describe(c.name, a)}`} title={describe(c.name, a)} onClick={() => onSelect?.(c.id)}>
-                <span className="lab-cargo" aria-hidden="true"><span className="lab-cargo-tag" ref={(el) => { node(c.id).tag = el }} /></span>
+                aria-pressed={selected === c.id} aria-label={`Inspect ${describeActivity(c.name, a)}`} title={describeActivity(c.name, a)} onClick={() => onSelect?.(c.id)}>
+                <span className="lab-cargo" aria-hidden="true"><span className="lab-cargo-tag" ref={keep(c.id, "tag")} /></span>
                 {a.problem && <span className="lab-alert" aria-hidden="true">!</span>}
-                <span className="lab-art" ref={(el) => { node(c.id).art = el }}><Mascot shape={c.shape} color={c.color} feetRef={(el) => { node(c.id).feet = el }} /></span>
+                <span className="lab-art" ref={keep(c.id, "art")}><Mascot shape={c.shape} color={c.color} feetRef={keep(c.id, "feet")} /></span>
                 <span className="lab-name">
                   {a.inRun && STATE_GLYPH[a.state] && <span className="lab-glyph" aria-hidden="true">{STATE_GLYPH[a.state]} </span>}
                   {c.name}
@@ -187,6 +181,7 @@ export function LabScene({ model, selected, onSelect, clock, speed = 1, settleKe
       </div>
       {!compact && (
         <p className="lab-legend">
+          <span className="lab-scroll-hint">Scroll the lab sideways to see every room.</span>
           <span>… working</span><span>⇄ fetching</span><span>→ handed off</span><span>✓ done</span><span>✕ failed</span><span>■ cancelled</span><span className="lab-legend-off">faded: not in this run</span>
         </p>
       )}

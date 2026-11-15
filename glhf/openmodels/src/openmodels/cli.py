@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -189,6 +190,36 @@ def cmd_preflight(arguments: argparse.Namespace) -> int:
     return 1 if unknown else 0
 
 
+def cmd_toolcheck(arguments: argparse.Namespace) -> int:
+    """One real tool-call round trip and one speed request against a HOSTED model (Tinker,
+    Moonshot). A paid call of well under a cent: refused unless NO_PAID_CALLS=0. The key is read
+    from the environment or the repository's .env, as the adapter does, and never printed."""
+    from bixbench_v1.cli import REPO
+    from bixbench_v1.runner import load_env
+
+    model = registry.load().get(arguments.model)
+    if not (model.kind == "api" and model.base_url_env and model.api_key_env):
+        sys.exit(f"openmodels: {model.name} is not a hosted OpenAI-compatible model")
+    paid.refuse_models(str(model.inspect_model))  # NO_PAID_CALLS
+    load_env(REPO / ".env")
+    key = os.environ.get(model.api_key_env, "")
+    if not key:
+        sys.exit(f"openmodels: {model.api_key_env} is not set")
+    url = (
+        (os.environ.get(model.base_url_env) or str(model.base_url))
+        .removesuffix("/")
+        .removesuffix("/v1")
+    )
+    name = str(model.inspect_model).split("/", 2)[2]
+    result = {
+        "model": name,
+        "tool_check": checks.tool_check(url, key, name),
+        "speed": checks.speed(url, key, name),
+    }
+    print(json.dumps(result, indent=2))
+    return 0 if result["tool_check"]["ok"] else 1
+
+
 def cmd_authcheck(arguments: argparse.Namespace) -> int:
     """Deploy the CPU stand-in (apps/authcheck.py), test the lock on its endpoint, stop it."""
     loaded = registry.load()
@@ -319,6 +350,9 @@ def main() -> int:
     sub.add_argument("--model", required=True)
     sub.add_argument("--cap", type=float, default=ledger.CAP_USD)
     sub.set_defaults(run=cmd_weights)
+    sub = commands.add_parser("toolcheck")
+    sub.add_argument("--model", required=True)
+    sub.set_defaults(run=cmd_toolcheck)
     sub = commands.add_parser("authcheck")
     sub.add_argument("--cap", type=float, default=ledger.CAP_USD)
     sub.set_defaults(run=cmd_authcheck)

@@ -88,6 +88,22 @@ def write_compose(path: Path, image: str, data_dir: Path, outputs_dir: Path) -> 
     return path
 
 
+def _sandbox(compose_file: str | None, modal_config: dict[str, Any] | None) -> Any:
+    """The sandbox of the task: local Docker from this run's compose file (the default), or a
+    Modal sandbox. The Modal provider and the `modal` package are imported only when asked for,
+    so a Docker run needs neither."""
+    if modal_config is None:
+        return ("docker", compose_file) if compose_file else None
+    if compose_file:
+        raise ValueError("give compose_file (Docker) or modal_config (Modal), not both")
+    from inspect_ai.util import SandboxEnvironmentSpec
+
+    from .modal_boundary import BixModalConfig
+    from .modal_sandbox import PROVIDER  # registers the provider
+
+    return SandboxEnvironmentSpec(PROVIDER, BixModalConfig(**modal_config))
+
+
 @task
 def bixbench_v1(
     questions: list[dict[str, Any]],
@@ -104,10 +120,12 @@ def bixbench_v1(
     swarm_budget: str = "equal",
     budget_policy: dict[str, Any] | None = None,
     compose_file: str | None = None,
+    modal_config: dict[str, Any] | None = None,
 ) -> Task:
     """`questions` are `PublicQuestion` dicts; anything with another field is refused.
     `compose_file` is this run's sandbox (`write_compose`); without one the task can be
-    inspected but not run.
+    inspected but not run. `modal_config` (a `modal_boundary.BixModalConfig` as a dict) runs
+    the sandbox on Modal instead (`--sandbox modal`); it and `compose_file` exclude each other.
 
     `max_tokens` is the single agent's budget. For the swarm, `swarm_budget` ("equal" or
     "extended") sets its total from that; a total that cannot hold the swarm's role floors
@@ -142,7 +160,7 @@ def bixbench_v1(
             mode,
             budget_policy,
         ),
-        sandbox=("docker", compose_file) if compose_file else None,
+        sandbox=_sandbox(compose_file, modal_config),
         message_limit=MESSAGE_LIMIT,
         time_limit=time_limit_seconds + TIME_BACKSTOP_SECONDS,
         token_limit=backstop_tokens(max_tokens, solver, mode) if max_tokens else None,

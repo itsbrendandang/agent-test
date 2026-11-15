@@ -1,0 +1,347 @@
+{
+ "apt": {
+  "modal_count": 268,
+  "official_count": 268,
+  "only_in_modal": {
+   "libquadmath0": "12.2.0-14"
+  },
+  "only_in_official": {
+   "libhwasan0": "12.2.0-14"
+  },
+  "same_version": 266,
+  "version_differs": {
+   "wget": {
+    "modal": "1.21.3-1+b2",
+    "official": "1.21.3-1+b1"
+   }
+  }
+ },
+ "conda": {
+  "modal_count": 843,
+  "official_count": 843,
+  "only_in_modal": {},
+  "only_in_official": {},
+  "same_version": 840,
+  "version_differs": {
+   "kernel-headers_linux-64": {
+    "modal": "3.10.0",
+    "official": "4.18.0"
+   },
+   "reproc": {
+    "modal": "14.2.5.post0",
+    "official": "14.2.4"
+   },
+   "reproc-cpp": {
+    "modal": "14.2.5.post0",
+    "official": "14.2.4"
+   }
+  }
+ },
+ "conda_build_string_differs": 453,
+ "conda_identical_files": 387,
+ "env": {
+  "DEBIAN_FRONTEND": {
+   "modal": "noninteractive",
+   "official": "noninteractive"
+  },
+  "LANG": {
+   "modal": "C.UTF-8",
+   "official": "C.UTF-8"
+  },
+  "LC_ALL": {
+   "modal": "C.UTF-8",
+   "official": "C.UTF-8"
+  },
+  "PATH": {
+   "modal": "/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+   "official": "/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  }
+ },
+ "env_left_after_the_provider": [],
+ "env_only_in_modal": {
+  "CFLAGS": "-g0",
+  "MODAL_CONTAINER_ARGUMENTS_PATH": "/__modal/.container-arguments/data.bin",
+  "MODAL_IMAGE_ID": "im-zg5ZfAWty2xmm26139CpOY",
+  "PIP_DEFAULT_TIMEOUT": "30",
+  "PIP_NO_CACHE_DIR": "off",
+  "PIP_ROOT_USER_ACTION": "ignore",
+  "PYTHONHASHSEED": "0",
+  "PYTHONPATH": "/pkg/:/root/",
+  "SOURCE_DATE_EPOCH": "1641013200",
+  "SSL_CERT_DIR": "/etc/ssl/certs",
+  "TERM": "xterm",
+  "UV_BREAK_SYSTEM_PACKAGES": "1"
+ },
+ "env_only_in_official": {},
+ "env_removed_by_the_provider": [
+  "CFLAGS",
+  "MODAL_CONTAINER_ARGUMENTS_PATH",
+  "MODAL_IMAGE_ID",
+  "PIP_DEFAULT_TIMEOUT",
+  "PIP_NO_CACHE_DIR",
+  "PIP_ROOT_USER_ACTION",
+  "PYTHONHASHSEED",
+  "PYTHONPATH",
+  "SOURCE_DATE_EPOCH",
+  "SSL_CERT_DIR",
+  "TERM",
+  "UV_BREAK_SYSTEM_PACKAGES"
+ ],
+ "kernelspecs": {
+  "modal": "Available kernels:\n  python3    /root/.local/share/jupyter/kernels/python3\n  r          /root/.local/share/jupyter/kernels/r\n  ir         /opt/conda/share/jupyter/kernels/ir",
+  "official": "Available kernels:\n  python3    /root/.local/share/jupyter/kernels/python3\n  r          /root/.local/share/jupyter/kernels/r\n  ir         /opt/conda/share/jupyter/kernels/ir"
+ },
+ "modal": {
+  "debian_version": "12.7",
+  "image": {
+   "id": "im-zg5ZfAWty2xmm26139CpOY",
+   "name": "bixbench-v1-env:amd64-1"
+  },
+  "machine": "x86_64",
+  "os": "\"Debian GNU/Linux 12 (bookworm)\""
+ },
+ "official": {
+  "debian_version": "12.7",
+  "image": "futurehouse/bixbench:aviary-notebook-env",
+  "machine": "aarch64",
+  "os": "\"Debian GNU/Linux 12 (bookworm)\""
+ },
+ "pip": {
+  "modal_count": 255,
+  "official_count": 254,
+  "only_in_modal": {
+   "PyQt5": "5.15.9"
+  },
+  "only_in_official": {},
+  "same_version": 254,
+  "version_differs": {}
+ },
+ "python": {
+  "modal": "3.12.2",
+  "official": "3.12.2"
+ },
+ "python_sys_path": {
+  "modal_raw": [
+   "/pkg",
+   "/root",
+   "/opt/conda/lib/python312.zip",
+   "/opt/conda/lib/python3.12",
+   "/opt/conda/lib/python3.12/lib-dynload",
+   "/opt/conda/lib/python3.12/site-packages"
+  ],
+  "official": [
+   "/opt/conda/lib/python312.zip",
+   "/opt/conda/lib/python3.12",
+   "/opt/conda/lib/python3.12/lib-dynload",
+   "/opt/conda/lib/python3.12/site-packages"
+  ]
+ },
+ "r": {
+  "blas_modal": "/opt/conda/lib/libopenblasp-r0.3.28.so",
+  "blas_official": "/opt/conda/lib/libopenblasp-r0.3.28.so",
+  "modal": "R version 4.3.3 (2024-02-29)",
+  "official": "R version 4.3.3 (2024-02-29)"
+ },
+ "r_packages": {
+  "modal_count": 333,
+  "official_count": 333,
+  "only_in_modal": {},
+  "only_in_official": {},
+  "same_version": 333,
+  "version_differs": {}
+ },
+ "requirements_txt_same": true,
+ "tools": {
+  "R": {
+   "modal": "R version 4.3.3 (2024-02-29) -- \"Angel Food Cake\"",
+   "official": "R version 4.3.3 (2024-02-29) -- \"Angel Food Cake\"",
+   "same": true
+  },
+  "blastn": {
+   "modal": "blastn: 2.16.0+",
+   "official": "blastn: 2.16.0+",
+   "same": true
+  },
+  "busco_host": {
+   "modal": "",
+   "official": "",
+   "same": true
+  },
+  "bwa": {
+   "modal": "",
+   "official": "",
+   "same": true
+  },
+  "clipkit": {
+   "modal": "clipkit 2.3.0",
+   "official": "clipkit 2.3.0",
+   "same": true
+  },
+  "conda": {
+   "modal": "conda 24.11.2",
+   "official": "conda 24.11.2",
+   "same": true
+  },
+  "curl": {
+   "modal": "curl 8.11.1 (x86_64-conda-linux-gnu) libcurl/8.11.1 OpenSSL/3.4.0 zlib/1.3.1 zstd/1.5.6 libssh2/1.11.1 nghttp2/1.64.0",
+   "official": "curl 8.11.1 (aarch64-conda-linux-gnu) libcurl/8.11.1 OpenSSL/3.4.0 zlib/1.3.1 zstd/1.5.6 libssh2/1.11.1 nghttp2/1.64.0",
+   "same": false
+  },
+  "cutadapt": {
+   "modal": "5.0",
+   "official": "5.0",
+   "same": true
+  },
+  "fastqc": {
+   "modal": "FastQC v0.12.1",
+   "official": "FastQC v0.12.1",
+   "same": true
+  },
+  "gcc": {
+   "modal": "gcc (Debian 12.2.0-14) 12.2.0",
+   "official": "gcc (Debian 12.2.0-14) 12.2.0",
+   "same": true
+  },
+  "git": {
+   "modal": "git version 2.39.5",
+   "official": "git version 2.39.5",
+   "same": true
+  },
+  "glibc": {
+   "modal": "ldd (Debian GLIBC 2.36-9+deb12u9) 2.36",
+   "official": "ldd (Debian GLIBC 2.36-9+deb12u9) 2.36",
+   "same": true
+  },
+  "hmmsearch": {
+   "modal": "bash: line 1: hmmsearch: command not found",
+   "official": "bash: line 1: hmmsearch: command not found",
+   "same": true
+  },
+  "ipcs": {
+   "modal": "/usr/bin/ipcs\n/usr/bin/ipcrm\n/usr/bin/ipcmk",
+   "official": "/usr/bin/ipcs\n/usr/bin/ipcrm\n/usr/bin/ipcmk",
+   "same": true
+  },
+  "iqtree": {
+   "modal": "IQ-TREE multicore version 2.3.6 for Linux x86 64-bit built Dec 11 2024",
+   "official": "IQ-TREE multicore version 2.3.6 for Linux ARM 64-bit built Dec 11 2024",
+   "same": false
+  },
+  "iqtree2": {
+   "modal": "IQ-TREE multicore version 2.3.6 for Linux x86 64-bit built Dec 11 2024",
+   "official": "IQ-TREE multicore version 2.3.6 for Linux ARM 64-bit built Dec 11 2024",
+   "same": false
+  },
+  "java": {
+   "modal": "openjdk version \"23.0.1-internal\" 2024-10-15",
+   "official": "openjdk version \"23.0.1-internal\" 2024-10-15",
+   "same": true
+  },
+  "jupyter": {
+   "modal": "Selected Jupyter core packages...\nIPython          : 8.31.0\nipykernel        : 6.29.5\nipywidgets       : 8.1.5\njupyter_client   : 8.6.3\njupyter_core     : 5.7.2\njupyter_server   : 2.15.0\njupyterlab       : 4.3.4\nnbclient         : 0.10.2\nnbconvert        : 7.16.4\nnbformat         : 5.10.4\nnotebook         : 7.3.2",
+   "official": "Selected Jupyter core packages...\nIPython          : 8.31.0\nipykernel        : 6.29.5\nipywidgets       : 8.1.5\njupyter_client   : 8.6.3\njupyter_core     : 5.7.2\njupyter_server   : 2.15.0\njupyterlab       : 4.3.4\nnbclient         : 0.10.2\nnbconvert        : 7.16.4\nnbformat         : 5.10.4\nnotebook         : 7.3.2",
+   "same": true
+  },
+  "kernelspecs": {
+   "modal": "Available kernels:\n  python3    /root/.local/share/jupyter/kernels/python3\n  r          /root/.local/share/jupyter/kernels/r\n  ir         /opt/conda/share/jupyter/kernels/ir",
+   "official": "Available kernels:\n  python3    /root/.local/share/jupyter/kernels/python3\n  r          /root/.local/share/jupyter/kernels/r\n  ir         /opt/conda/share/jupyter/kernels/ir",
+   "same": true
+  },
+  "mafft": {
+   "modal": "v7.526 (2024/Apr/26)",
+   "official": "v7.526 (2024/Apr/26)",
+   "same": true
+  },
+  "mamba": {
+   "modal": "2.0.5",
+   "official": "2.0.5",
+   "same": true
+  },
+  "metaeuk": {
+   "modal": "7.bba0d80",
+   "official": "7.bba0d80",
+   "same": true
+  },
+  "openssl": {
+   "modal": "OpenSSL 3.4.0 22 Oct 2024 (Library: OpenSSL 3.4.0 22 Oct 2024)",
+   "official": "OpenSSL 3.4.0 22 Oct 2024 (Library: OpenSSL 3.4.0 22 Oct 2024)",
+   "same": true
+  },
+  "perl": {
+   "modal": "v5.32.1",
+   "official": "v5.32.1",
+   "same": true
+  },
+  "phykit": {
+   "modal": "phykit: error: the following arguments are required: command",
+   "official": "phykit: error: the following arguments are required: command",
+   "same": true
+  },
+  "pip": {
+   "modal": "pip 24.2 from /opt/conda/lib/python3.12/site-packages/pip (python 3.12)",
+   "official": "pip 24.2 from /opt/conda/lib/python3.12/site-packages/pip (python 3.12)",
+   "same": true
+  },
+  "python": {
+   "modal": "Python 3.12.2",
+   "official": "Python 3.12.2",
+   "same": true
+  },
+  "samtools": {
+   "modal": "bash: line 1: samtools: command not found",
+   "official": "bash: line 1: samtools: command not found",
+   "same": true
+  },
+  "spades": {
+   "modal": "SPAdes genome assembler v4.0.0\n/opt/conda/share/spades/spades_pipeline/support.py:488: SyntaxWarning: invalid escape sequence '\\d'\n  return [atoi(c) for c in re.split(\"(\\d+)\", text)]",
+   "official": "SPAdes genome assembler v4.0.0\n/opt/conda/share/spades/spades_pipeline/support.py:488: SyntaxWarning: invalid escape sequence '\\d'\n  return [atoi(c) for c in re.split(\"(\\d+)\", text)]",
+   "same": true
+  },
+  "sqlite3": {
+   "modal": "3.47.2 2024-12-07 20:39:59 2aabe05e2e8cae4847a802ee2daddc1d7413d8fc560254d93ee3e72c14685b6c (64-bit)",
+   "official": "3.47.2 2024-12-07 20:39:59 2aabe05e2e8cae4847a802ee2daddc1d7413d8fc560254d93ee3e72c14685b6c (64-bit)",
+   "same": true
+  },
+  "su": {
+   "modal": "/usr/bin/su\n/usr/sbin/useradd\n/usr/bin/pkill",
+   "official": "/usr/bin/su\n/usr/sbin/useradd\n/usr/bin/pkill",
+   "same": true
+  },
+  "trim_galore": {
+   "modal": "version 0.6.10",
+   "official": "version 0.6.10",
+   "same": true
+  },
+  "udocker": {
+   "modal": "version: 1.3.17\ntarball: https://download.a.incd.pt/udocker/udocker-englib-1.2.11.tar.gz https://raw.githubusercontent.com/jorge-lip/udocker-builds/master/tarballs/udocker-englib-1.2.11.tar.gz\ntarball_release: 1.2.11",
+   "official": "version: 1.3.17\ntarball: https://download.a.incd.pt/udocker/udocker-englib-1.2.11.tar.gz https://raw.githubusercontent.com/jorge-lip/udocker-builds/master/tarballs/udocker-englib-1.2.11.tar.gz\ntarball_release: 1.2.11",
+   "same": true
+  },
+  "wget": {
+   "modal": "GNU Wget 1.21.4 built on linux-gnu.",
+   "official": "GNU Wget 1.21.4 built on linux-gnu.",
+   "same": true
+  },
+  "which_python": {
+   "modal": "/opt/conda/bin/python\n/opt/conda/bin/python3",
+   "official": "/opt/conda/bin/python\n/opt/conda/bin/python3",
+   "same": true
+  }
+ },
+ "tools_differ": [
+  "curl",
+  "iqtree",
+  "iqtree2"
+ ],
+ "udocker_images": {
+  "modal": [
+   "REPOSITORY",
+   "ezlabgva/busco:v5.8.0_cv1    ."
+  ],
+  "official": [
+   "REPOSITORY",
+   "ezlabgva/busco:v5.8.0_cv1    ."
+  ]
+ },
+ "udocker_layers_same": true
+}

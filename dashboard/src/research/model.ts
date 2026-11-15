@@ -16,6 +16,8 @@ export interface Searched { provider: Provider; query: string; ran?: boolean; fo
 /** One step of the work, as the engine reports it: started, maybe progress, then finished with how it ended. */
 export interface Step {
   step: string; kind: string; label: string; provider?: Provider; query?: string
+  /** A safe summary of what the step was given (never a key or a prompt), for a details view. */
+  input?: Record<string, string | number | boolean>
   status: "running" | "completed" | "empty" | "failed" | "cancelled"
   ms?: number; found?: number; kept?: number; done?: number; total?: number; summary?: string; error?: string; consequence?: string
 }
@@ -33,6 +35,8 @@ export interface AnswerState {
   /** The source numbers the final text cites, when the engine said. */
   cited?: number[]
   recommendations: Recommendation[]; artifacts: Artifact[]
+  /** "What is missing": plain sentences the engine's code wrote (searches that did not run, failed checks, open concerns). */
+  missing: string[]
   /** Why these sources were chosen, and what was found but left out. Written by the engine's code, not by a model. */
   selection?: Selection
   /** The engine restarted while this answer was being made, and went on with it. */
@@ -54,7 +58,7 @@ const VERDICTS = ["verified", "contradicted", "unsupported", "unchecked"]
 
 /** What the events so far add up to. Unknown event types and malformed fields are ignored, never guessed at. */
 export function foldAnswer(events: ResearchEvent[]): AnswerState {
-  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
+  const s: AnswerState = { searches: [], sources: [], steps: [], recommendations: [], artifacts: [], missing: [], markdown: "", complete: false, revised: false, statements: [], notes: [], reviewing: [], status: "starting" }
   let deltas = "", written: string | undefined, revised: string | undefined
   const draft: Statement[] = [], final: Statement[] = []
   // In order of seq, each seq once: a replay after a reconnect, or events that arrive out of order, change nothing.
@@ -71,7 +75,8 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       case "research.queued": s.status = "queued"; s.queuedAfter = str(e.after); break
       case "step.started":
-        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), status: "running" })
+        if (str(e.step) && !s.steps.some((x) => x.step === e.step)) s.steps.push({ step: str(e.step)!, kind: str(e.kind) ?? "", label: str(e.label) ?? "", provider: str(e.provider), query: str(e.query), status: "running",
+          input: e.input && typeof e.input === "object" ? Object.fromEntries(Object.entries(e.input as object).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v))) as Step["input"] : undefined })
         break
       case "step.progress": { const st = s.steps.find((x) => x.step === e.step); if (st) { st.done = num(e.done); st.total = num(e.total) } break }
       case "step.finished": {
@@ -99,6 +104,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "research.resumed": s.resumed = true; break
+      case "missing": if (Array.isArray(e.items)) s.missing = (e.items as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== ""); break
       case "research.cancelled": s.status = "cancelled"; s.spentUsd = num(e.spentUsd); s.seconds = num(e.seconds); break
       case "search.started": if (str(e.provider) && str(e.query) !== undefined) s.searches.push({ provider: str(e.provider)!, query: str(e.query)! }); break
       case "search.finished": {
@@ -255,6 +261,7 @@ export function fromRecord(record: unknown): AnswerState | undefined {
   const cited = (Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).filter((x) => x.cited === true).map((x) => x.n)
   if ((Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).some((x) => typeof x.cited === "boolean")) push("sources.cited", { n: cited })
   if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
+  if (Array.isArray(r.missing)) push("missing", { items: r.missing })
   for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })
   if (r.status === "done") push("research.finished", { usd: r.usd, seconds: r.seconds, counts: r.counts, searches: {}, review: r.review, stopped: r.stopped, note: r.note })
   else if (r.status === "failed") push("research.failed", { error: r.error, spentUsd: r.usd })

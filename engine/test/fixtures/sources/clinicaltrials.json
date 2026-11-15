@@ -1,0 +1,763 @@
+[
+ {
+  "name": "ct-search",
+  "url": "https://clinicaltrials.gov/api/v2/studies?query.term=sotorasib+KRAS+G12C&pageSize=8&countTotal=true&format=json&fields=NCTId%2CBriefTitle%2COfficialTitle%2COverallStatus%2CWhyStopped%2CStartDateStruct%2CPrimaryCompletionDateStruct%2CCompletionDateStruct%2CLastUpdatePostDateStruct%2CLeadSponsor%2CBriefSummary%2CCondition%2CStudyType%2CPhase%2CEnrollmentInfo%2CInterventionType%2CInterventionName%2CPrimaryOutcome%2CHasResults",
+  "method": "GET",
+  "status": 200,
+  "body": {
+   "totalCount": 51,
+   "studies": [
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT05815173",
+       "briefTitle": "Ladarixin With Sotorasib in Advanced NSCLC",
+       "officialTitle": "Phase I/II Study of Ladarixin and Sotorasib in Advanced KRAS G12C Mutant Non-Small Cell Lung Cancer (NSCLC)"
+      },
+      "statusModule": {
+       "overallStatus": "RECRUITING",
+       "startDateStruct": {
+        "date": "2023-08-01",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2027-08",
+        "type": "ESTIMATED"
+       },
+       "completionDateStruct": {
+        "date": "2027-08",
+        "type": "ESTIMATED"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2025-12-30",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "NYU Langone Health",
+        "class": "OTHER"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "This is a phase I/II, open-label, study of twice-daily oral ladarixin with sotorasib in participants with advanced KRASG12C mutant non-small cell lung cancer (NSCLC)."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Advanced Non-small Cell Lung Cancer With KRAS G12C Mutation"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE1"
+       ],
+       "enrollmentInfo": {
+        "count": 40,
+        "type": "ESTIMATED"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Sotorasib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Ladarixin"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Incidence of Dose-Limiting Toxicities (DLTs) during 1st Treatment Cycle among Phase I Participants",
+         "description": "DLTs are defined as side effects of a drug or other treatment that are serious enough to prevent an increase in dose or level of that treatment.",
+         "timeFrame": "Up to Day 21 (End Treatment Cycle 1, each cycle is 21 days)"
+        },
+        {
+         "measure": "Progression Free Survival (PFS)",
+         "description": "PFS is the amount of time (months) from initial treatment to disease progression or death from any cause.",
+         "timeFrame": "Up to End of Survival Follow-Up (Up to Month 36)"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT06582771",
+       "briefTitle": "A Study of Sotorasib in People With Non-Small Cell Lung Cancer",
+       "officialTitle": "A Phase 2 Study of First-line Sotorasib for Patients With Advanced KRAS G12C-mutant Non-small Cell Lung Cancer"
+      },
+      "statusModule": {
+       "overallStatus": "RECRUITING",
+       "startDateStruct": {
+        "date": "2024-08-30",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2027-08",
+        "type": "ESTIMATED"
+       },
+       "completionDateStruct": {
+        "date": "2027-08",
+        "type": "ESTIMATED"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2026-09-11",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Memorial Sloan Kettering Cancer Center",
+        "class": "OTHER"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "The researchers are doing this study to see if sotorasib is a safe and effective treatment for people with advanced non-small cell lung cancer (NSCLC) with a KRAS G12C mutation who have not received treatment for their cancer since it became advanced. (Participants have not received a \"first-line therapy\" since their cancer became advanced.)"
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Non Small Lung Cancer"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE2"
+       ],
+       "enrollmentInfo": {
+        "count": 39,
+        "type": "ESTIMATED"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Sotorasib"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Response to therapy",
+         "description": "will be assessed with serial CT chest/abdomen/pelvis every 2 cycles (6 weeks), with response evaluated by RECIST 1.1",
+         "timeFrame": "within 6 month of therapy"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT06314763",
+       "briefTitle": "Rivaroxaban Sotorasib Interaction Study",
+       "officialTitle": "Rivaroxaban Sotorasib Interaction Study"
+      },
+      "statusModule": {
+       "overallStatus": "COMPLETED",
+       "startDateStruct": {
+        "date": "2023-11-09",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2024-03-21",
+        "type": "ACTUAL"
+       },
+       "completionDateStruct": {
+        "date": "2024-03-21",
+        "type": "ACTUAL"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2024-04-30",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Radboud University Medical Center",
+        "class": "OTHER"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "Venous thromboembolic Events (VTEs) are common in lung cancer patients with an incidence of \\>15%, requiring anticoagulant treatment or prophylaxis. Although direct acting oral anticoagulants (DOACs) are the agents of first choice due to ease and patient friendliness, these drugs are often avoided in cancer patients due to suspected pharmacokinetic drug-drug interactions with oncolytic drugs. Sotorasib is the first KRASG12C inhibitor that has been approved by the US \\[FDA\\] and EU \\[EMA\\] for the treatment of adult patients with KRAS G12C-mutated locally advanced or metastatic NSCLC. Sotorasib has a potential to cause CYP3A-mediated drug-drug interactions due to induction of CYP3A and inhibition of P-GP. Rivaroxaban is the most frequently prescribed DOAC in the Netherlands. As rivaroxaban is a substrate for this enzyme and efflux pump, sotorasib may increase or decrease the exposure to rivaroxaban and, thus, impact its benefit-to-risk ratio. To enable safe combination of sotorasib and rivaroxaban, it is pivotal to investigate the magnitude of the pharmacokinetic interaction between these drugs."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Drug Drug Interaction Study"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE4"
+       ],
+       "enrollmentInfo": {
+        "count": 21,
+        "type": "ACTUAL"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Rivaroxaban 20mg"
+        },
+        {
+         "type": "DRUG",
+         "name": "Sotorasib 960mg"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "The pharmacokinetics (AUC) of single dose rivaroxaban in presence and absence of 960 mg sotorasib at pharmacokinetic steady-state.",
+         "description": "The geometric mean ratios of area under the concentration time curve (AUC) of rivaroxaban in absence and presence of sotorasib, and their corresponding 90% confidence intervals. The pharmacokinetics of rivaroxaban will be assessed with standard compartmental or non-compartmental pharmacokinetic methods.",
+         "timeFrame": "18 days"
+        },
+        {
+         "measure": "The pharmacokinetics (Cmax) of single dose rivaroxaban in presence and absence of 960 mg sotorasib at pharmacokinetic steady-state.",
+         "description": "Maximum concentration (Cmax) of rivaroxaban in absence and presence of sotorasib, and their corresponding 90% confidence intervals. The pharmacokinetics of rivaroxaban will be assessed with standard compartmental or non-compartmental pharmacokinetic methods.",
+         "timeFrame": "18 days"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT07124884",
+       "briefTitle": "5-fluorouracil Plus Panitumumab (Anti-EGFR) and Sotorasib (KRAS G12C Inhibitor) in First-line Treatment of Patients Non-eligible for a Doublet/Triplet Chemotherapy With Advanced Unresectab",
+       "officialTitle": "COLOSOTO: Single-arm Phase II Study Evaluating 5-fluorouracil Plus Panitumumab (Anti-EGFR) and Sotorasib (KRAS G12C Inhibitor) in First-line Treatment of Patients Non-eligible for a Doublet/Triplet Chemotherapy With Advanced Unresectab"
+      },
+      "statusModule": {
+       "overallStatus": "NOT_YET_RECRUITING",
+       "startDateStruct": {
+        "date": "2025-08-31",
+        "type": "ESTIMATED"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2030-06-30",
+        "type": "ESTIMATED"
+       },
+       "completionDateStruct": {
+        "date": "2030-12-30",
+        "type": "ESTIMATED"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2025-08-15",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Federation Francophone de Cancerologie Digestive",
+        "class": "OTHER"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "5-fluorouracil (5-FU) is a standard of care in frail/elderly patients with an unresectable colorectal adenocarcinoma (CRC) in first-line setting. Panitumumab plus Sotorasib are promising in advanced line in KRAS G12C mutated CRC. In this study, We assess the safety and efficacy of 5FU combination with Panitumumab and Sotorasib as first-line treatment in frail/elderly patients with unresectable KRAS G12C mutated CRC"
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Colorectal Carcinoma",
+        "KRAS G12C Mutation",
+        "Unresectable Colorectal Cancer"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE2"
+       ],
+       "enrollmentInfo": {
+        "count": 300,
+        "type": "ESTIMATED"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Administration of experimental treatment association (sotorasib, panitumumab 5FU)"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Percentage of patient alive or without progression 8 months after inclusion.",
+         "description": "Progression will be assessed by the investigator according to recist 1.1 based on images performed every 8 weeks even in case of deferred treatments.\n\nClinical progression will not be considered as an event.",
+         "timeFrame": "at 8 months after the inclusion."
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT06804824",
+       "briefTitle": "A First-in-Human (FIH) Study to Evaluate the Safety and Tolerability of VVD-159642 in Participants With Advanced Solid Tumors",
+       "officialTitle": "A Phase 1/1b, Open-Label, Multicenter, First-in-Human Dose Escalation and Dose Expansion Study to Evaluate the Safety, Tolerability, Pharmacokinetics, Pharmacodynamics, and Anti-Tumor Activity of VVD-159642, a RAS-PI3Kα Inhibitor, as a Single Agent and in Combination in Participants With Advanced Solid Tumors"
+      },
+      "statusModule": {
+       "overallStatus": "RECRUITING",
+       "startDateStruct": {
+        "date": "2025-02-25",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2027-08-01",
+        "type": "ESTIMATED"
+       },
+       "completionDateStruct": {
+        "date": "2027-08-01",
+        "type": "ESTIMATED"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2026-03-18",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Vividion Therapeutics, Inc.",
+        "class": "INDUSTRY"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "A FIH study to evaluate the safety, tolerability, pharmacokinetics (PK), pharmacodynamics (PD), and preliminary anti-tumor activity of VVD-159642, a rat sarcoma viral oncogene-phosphatidylinositol 3-kinase alpha (RAS-PI3Kα) inhibitor, as a single agent and in combination with either sotorasib or trametinib in participants with advanced solid tumors."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Advanced Solid Tumors"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE1"
+       ],
+       "enrollmentInfo": {
+        "count": 220,
+        "type": "ESTIMATED"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "VVD-159642"
+        },
+        {
+         "type": "DRUG",
+         "name": "Sotorasib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Trametinib"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Part 1: Incidence and Severity of Dose-limiting Toxicities (DLTs)",
+         "timeFrame": "From Day 1 to Day 21 of Cycle 1 [cycle length=21 days]"
+        },
+        {
+         "measure": "Part 2: Incidence and Severity of Adverse Events (AEs) and Serious Adverse Events (SAEs)",
+         "timeFrame": "Up to approximately 29 months"
+        },
+        {
+         "measure": "Part 2: Incidence and Severity of Clinically Significant Changes in Vital Signs",
+         "timeFrame": "Up to approximately 29 months"
+        },
+        {
+         "measure": "Part 2: Incidence and Severity of Clinically Significant Changes in Laboratory Evaluations",
+         "timeFrame": "Up to approximately 29 months"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT04720976",
+       "briefTitle": "JAB-3312 Based Combination Therapy in Adult Patients With Advanced Solid Tumors",
+       "officialTitle": "A Phase 1/2a, Multicenter, Open-Label Study to Evaluate the Safety, Tolerability, Pharmacokinetics, and Preliminary Evidence of Antitumor Activity of JAB-3312 Based Combination Therapies in Adult Patients With Advanced Solid Tumors"
+      },
+      "statusModule": {
+       "overallStatus": "COMPLETED",
+       "startDateStruct": {
+        "date": "2021-03-23",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2023-12-19",
+        "type": "ACTUAL"
+       },
+       "completionDateStruct": {
+        "date": "2023-12-19",
+        "type": "ACTUAL"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2025-04-11",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Allist Pharmaceuticals, Inc.",
+        "class": "INDUSTRY"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "To evaluate the safety and tolerability of JAB-3312 administered in investigational regimens in adult participants with advanced solid tumors."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Solid Tumor",
+        "NSCLC"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE1",
+        "PHASE2"
+       ],
+       "enrollmentInfo": {
+        "count": 58,
+        "type": "ACTUAL"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "JAB-3312"
+        },
+        {
+         "type": "DRUG",
+         "name": "Binimetinib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Pembrolizumab"
+        },
+        {
+         "type": "DRUG",
+         "name": "Sotorasib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Osimertinib"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Number of participants with dose limiting toxicities",
+         "description": "Incidence of dose limiting toxicities (DLTs) in the dose escalation phase. A DLT is defined as an adverse event or abnormal laboratory value assessed as unrelated to disease, disease progression, inter-current illness, or concomitant medications that occurs within the first treatment cycle. (Dose escalation phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Objective response rate (ORR)",
+         "description": "ORR is defined as the proportion of participants with complete response or partial response (CR+PR). (Dose expansion phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Duration of response (DOR)",
+         "description": "DOR is defined as the time from the participant's initial objective response (CR or PR) to study drug therapy, to disease progression or death due to any cause, whichever occurs first. (Dose expansion phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Duration of response (DCR)",
+         "description": "DCR is defined as proportion of participants with complete response, partial response, stable disease(CR+PR+SD). (Dose expansion phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Progression-free survival (PFS)",
+         "description": "PFS is defined as the interval of time between the date of first treatment to the earliest date of disease progression or death which occurs first. (Dose expansion phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Overall survival (OS)",
+         "description": "OS is defined as the interval of time between the date of first treatment until death, loss to follow up or termination of the study by the sponsor. (Dose expansion phase)",
+         "timeFrame": "24 months"
+        },
+        {
+         "measure": "Number of participants with adverse events",
+         "description": "All patients participating in this study will be assessed for incidence and severity of adverse events (AEs) and serious AEs, including changes in laboratory values, vital signs, electrocardiograms, cardiac imaging and ophthalmological assessments (Dose escalation phase)",
+         "timeFrame": "24 months"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT05920356",
+       "briefTitle": "A Study Evaluating Sotorasib Platinum Doublet Combination Versus Pembrolizumab Platinum Doublet Combination as a Front-Line Therapy in Participants With Stage IV or Advanced Stage IIIB/C Nonsquamous Non-Small Cell Lung Cancers (CodeBreaK 202)",
+       "officialTitle": "A Phase 3, Multicenter, Randomized, Open-label Study Evaluating Efficacy of Sotorasib Platinum Doublet Combination Versus Pembrolizumab Platinum Doublet Combination as a Front-Line Therapy in Subjects With Stage IV or Advanced Stage IIIB/C Nonsquamous Non-Small Cell Lung Cancers, Negative for PD-L1, and Positive for KRAS p.G12C (CodeBreaK 202)"
+      },
+      "statusModule": {
+       "overallStatus": "RECRUITING",
+       "startDateStruct": {
+        "date": "2023-11-16",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2027-06-30",
+        "type": "ESTIMATED"
+       },
+       "completionDateStruct": {
+        "date": "2032-06-29",
+        "type": "ESTIMATED"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2026-11-13",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Amgen",
+        "class": "INDUSTRY"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "The primary objectives are to compare progression-free survival (PFS) and overall survival (OS) in participants who receive sotorasib with platinum doublet chemotherapy versus participants who receive pembrolizumab with platinum doublet chemotherapy."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Non-Small Cell Lung Cancer (NSCLC)"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE3"
+       ],
+       "enrollmentInfo": {
+        "count": 750,
+        "type": "ESTIMATED"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Sotorasib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Pembrolizumab"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Progression-free Survival (PFS)",
+         "description": "PFS is defined as the time from randomization until the first documentation of radiologic disease progression or death due to any cause, whichever occurs first. Progression will be based on Response Evaluation Criteria in Solid Tumors (RECIST) v1.1, per Blinded Independent Central Review (BICR).",
+         "timeFrame": "Approximately 2.5 years"
+        },
+        {
+         "measure": "Overall Survival (OS)",
+         "description": "OS is defined as the time from randomization until death due to any cause.",
+         "timeFrame": "Approximately 2.5 years"
+        }
+       ]
+      }
+     },
+     "hasResults": false
+    },
+    {
+     "protocolSection": {
+      "identificationModule": {
+       "nctId": "NCT05313009",
+       "briefTitle": "Tarlox and Sotorasib in Patients With KRAS G12C Mutations",
+       "officialTitle": "A Phase Ib / II Trial of Tarloxotinib and Sotorasib in Patients With KRAS G12C Mutations"
+      },
+      "statusModule": {
+       "overallStatus": "TERMINATED",
+       "whyStopped": "Study drug was discontinued by manufacturer for business reasons.",
+       "startDateStruct": {
+        "date": "2022-03-07",
+        "type": "ACTUAL"
+       },
+       "primaryCompletionDateStruct": {
+        "date": "2023-07-07",
+        "type": "ACTUAL"
+       },
+       "completionDateStruct": {
+        "date": "2023-12-31",
+        "type": "ACTUAL"
+       },
+       "lastUpdatePostDateStruct": {
+        "date": "2025-12-16",
+        "type": "ACTUAL"
+       }
+      },
+      "sponsorCollaboratorsModule": {
+       "leadSponsor": {
+        "name": "Medical University of South Carolina",
+        "class": "OTHER"
+       }
+      },
+      "descriptionModule": {
+       "briefSummary": "This is a Phase IB dose expansion trial with safety lead-in evaluating the safety, clinical activity/efficacy of the combination of tarloxotinib and sotorasib in patients with KRAS G12C mutation who have progressed on any small molecule targeting KRAS G12C mutant Non-Small Cell lung cancer."
+      },
+      "conditionsModule": {
+       "conditions": [
+        "Non-Small Cell Lung Cancer"
+       ]
+      },
+      "designModule": {
+       "studyType": "INTERVENTIONAL",
+       "phases": [
+        "PHASE1",
+        "PHASE2"
+       ],
+       "enrollmentInfo": {
+        "count": 5,
+        "type": "ACTUAL"
+       }
+      },
+      "armsInterventionsModule": {
+       "interventions": [
+        {
+         "type": "DRUG",
+         "name": "Sotorasib and Tarloxotinib"
+        },
+        {
+         "type": "DRUG",
+         "name": "Sotorasib and Tarloxotinib"
+        }
+       ]
+      },
+      "outcomesModule": {
+       "primaryOutcomes": [
+        {
+         "measure": "Objective Response",
+         "description": "(OR = CR+PR) measured by CT and assessed per RECIST 1.1. Complete response (CR) and partial response (PR) require confirmatory CT",
+         "timeFrame": "There is no defined time frame for response assessment in the protocol. Presumably, patients are followed for response until the they stop taking study drug and/or have disease progression. The latest an assessment occurred for a patient was 40 weeks."
+        }
+       ]
+      }
+     },
+     "hasResults": true
+    }
+   ],
+   "nextPageToken": "ZVNj7o2Elu8o3lpyWc35o-32mpOQJJxoZPKj1PYW"
+  }
+ },
+ {
+  "name": "ct-one",
+  "url": "https://clinicaltrials.gov/api/v2/studies/NCT04303780?format=json&fields=NCTId%2CBriefTitle%2COfficialTitle%2COverallStatus%2CWhyStopped%2CStartDateStruct%2CPrimaryCompletionDateStruct%2CCompletionDateStruct%2CLastUpdatePostDateStruct%2CLeadSponsor%2CBriefSummary%2CCondition%2CStudyType%2CPhase%2CEnrollmentInfo%2CInterventionType%2CInterventionName%2CPrimaryOutcome%2CHasResults",
+  "method": "GET",
+  "status": 200,
+  "body": {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT04303780",
+     "briefTitle": "Study to Compare AMG 510 \"Proposed INN Sotorasib\" With Docetaxel in Non Small Cell Lung Cancer (NSCLC) (CodeBreak 200).",
+     "officialTitle": "A Phase 3 Multicenter, Randomized, Open Label, Active-controlled, Study of AMG 510 Versus Docetaxel for the Treatment of Previously Treated Locally Advanced and Unresectable or Metastatic NSCLC Subjects With Mutated KRAS p.G12C"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "startDateStruct": {
+      "date": "2020-06-04",
+      "type": "ACTUAL"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2022-08-02",
+      "type": "ACTUAL"
+     },
+     "completionDateStruct": {
+      "date": "2026-06-24",
+      "type": "ACTUAL"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-07-22",
+      "type": "ACTUAL"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "Amgen",
+      "class": "INDUSTRY"
+     }
+    },
+    "descriptionModule": {
+     "briefSummary": "A Phase 3 Study to Compare AMG 510 with Docetaxel in Non Small Cell Lung Cancer (NSCLC) subjects with KRAS p. G12c mutation"
+    },
+    "conditionsModule": {
+     "conditions": [
+      "KRAS p, G12c Mutated /Advanced Metastatic NSCLC"
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 345,
+      "type": "ACTUAL"
+     }
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "type": "DRUG",
+       "name": "AMG 510"
+      },
+      {
+       "type": "DRUG",
+       "name": "Docetaxel"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "Progression-free Survival (PFS)",
+       "description": "PFS was defined as the time from randomization (baseline) until disease progression or death from any cause, whichever occurred first for all participants. Progression was based on blinded independent central review (BICR) of disease response per Response Evaluation Criteria in Solid Tumors version 1.1 (RECIST v1.1).\n\nAs pre-specified in the statistical analysis plan, for participants who crossed over from docetaxel to AMG 510, the participant's response post first progression or post crossover was not used for the primary analyses. Data are presented per original treatment randomized.",
+       "timeFrame": "Baseline up to primary analysis data cut-off date (02 August 2022); max time on study as of primary analysis data cut off was 24.3 months"
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  }
+ },
+ {
+  "name": "ct-none",
+  "url": "https://clinicaltrials.gov/api/v2/studies/NCT00000000?format=json&fields=NCTId%2CBriefTitle%2COfficialTitle%2COverallStatus%2CWhyStopped%2CStartDateStruct%2CPrimaryCompletionDateStruct%2CCompletionDateStruct%2CLastUpdatePostDateStruct%2CLeadSponsor%2CBriefSummary%2CCondition%2CStudyType%2CPhase%2CEnrollmentInfo%2CInterventionType%2CInterventionName%2CPrimaryOutcome%2CHasResults",
+  "method": "GET",
+  "status": 400,
+  "body": "Parameter `nctId` has incorrect format"
+ }
+]

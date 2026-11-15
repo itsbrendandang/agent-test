@@ -1,14 +1,16 @@
-// Board room. By default a plain summary: is the board working, and what did it decide and why can you trust it.
-// "Show details" opens the full room: roster, every reply with per-claim verdicts, the ledger, evidence and memo.
+// Team review (the board). By default a plain summary: is the team working, what did it decide, and what did the
+// checks find. "See how each statement was checked" opens the counts, the written decision and the team.
 import { lastRun, linkTo, setOpen, showing, takeOpen } from "@/lib/open"
 import { useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { get, memo as fetchMemo, post, type BoardEvent, type RosterMember, type RunSummary, type SearchProvider, type Status, useRunEvents, type Verdict } from "@/board/api"
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation"
 import { Loading } from "@/components/Crew"
-import { EngineOffline, ModeLabel, PageHead, SearchCredit, StatusPill, Verdict as VerdictChip } from "@/components/Shared"
+import { Provenance } from "@/components/Provenance"
+import { EngineOffline, MarkChip, MarksLegend, PageHead, SearchCredit, StatusPill } from "@/components/Shared"
 import { TeamMessage, type Checked } from "@/components/Thread"
-import { BOARD_JOB, safeUrl, verdictCount } from "@/lib/words"
+import { provenanceOf } from "@/lib/provenance"
+import { BOARD_JOB, checkedOf, MARK_WORD, markCounts, markOf, runLimit, safeUrl, spent as spentWords } from "@/lib/words"
 import { boardScriptedWhy } from "@/home/chat"
 import { problemOf, type Problem } from "@/lib/engine"
 import { runState } from "@/lib/status"
@@ -16,7 +18,7 @@ import { plainCost, plainDuration, plainTitle, plainWhen } from "@/lib/format"
 import "@/board/board.css"
 
 type Of<T extends BoardEvent["type"]> = Extract<BoardEvent, { type: T }>
-const VERDICTS: Verdict[] = ["verified", "unsupported", "contradicted", "unchecked"]
+const VERDICTS: Verdict[] = ["verified", "contradicted", "unsupported", "unchecked"]
 
 /** "## Heading" sections of the memo, keyed by lowercase heading. */
 function sections(md: string): Record<string, string> {
@@ -29,12 +31,11 @@ function sections(md: string): Record<string, string> {
 }
 const bullets = (s = "") => s.split("\n").map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim()).filter(Boolean)
 const plain = (s = "") => s.replace(/[*_`]+/g, "").trim()
-const ABOUT = "A team of AI agents discusses a research brief. A separate check tests each statement they make against sources, and the lead writes the decision."
+const ABOUT = "A team of AI agents discusses a research brief. A separate check tests their statements against sources, and the lead writes the decision."
 
 // The cheap model's ruling settled the claim ("jev" is the same thing in runs made before the checker changed).
 const firstPass = (c: { checker?: string }) => c.checker === "first-pass" || c.checker === "jev"
 
-const VERDICT_DETAIL: Record<string, string> = { verified: "held up", contradicted: "proven wrong", unsupported: "no supporting source", unchecked: "not checked" }
 /** "Scout (Data Inspector)" -> the name and the plain job. */
 const nameAndJob = (title: string) => { const m = /^(.*?)\s*\((.+)\)\s*$/.exec(title); return m ? { name: m[1], job: m[2] } : { name: title, job: undefined } }
 /** Who ruled on a statement, in plain words. The model id, when the run recorded one, is kept. */
@@ -130,18 +131,19 @@ export function BoardView() {
 
   if (problem) return (
     <div className="page board">
-      <PageHead title="Board review" about={ABOUT} />
+      <PageHead title="Team review" about={ABOUT} />
       <EngineOffline needs="Reviews run in the engine." said={problem.said} onRetry={load} />
     </div>
   )
 
   // One plain sentence about where the run is, and when it is over, what happened in it.
   const spoke = new Set(events.flatMap((e) => (e.type === "member.replied" ? [e.member] : []))).size
-  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}: ${verdictCount("holds", count("verified"))}, ${verdictCount("fails", count("contradicted"))}, ${verdictCount("unknown", count("unsupported") + count("unchecked"))}.`
+  const marks = { supported: count("verified"), contradicted: count("contradicted"), insufficient: count("unsupported"), unchecked: count("unchecked") }
+  const said = `${spoke} team member${spoke === 1 ? "" : "s"} made ${claims.length} statement${claims.length === 1 ? "" : "s"}${claims.length ? `: ${markCounts(marks)}` : ""}.`
   const lead = roster.find((m) => m.role === "lead")
   const known = runs.some((r) => r.id === runId)
   const headline = !status ? "Loading the review…"
-    : !runId ? "No reviews yet. Pick a brief and press Start a review. In Demo mode this is a practice run: fixed text, free, not real research."
+    : !runId ? "No reviews yet. Pick a brief and press Start a review. With Demo chosen it is a practice run: fixed example answers, free."
     : runs.length > 0 && !known && events.length === 0 ? "That review could not be found. It may have been deleted. Pick another one from the list above."
     : failed ? "The run stopped with an error."
     : done ? `The team has decided. ${said}`
@@ -182,7 +184,7 @@ export function BoardView() {
 
   return (
     <div className="page board">
-      <PageHead title="Board review" about={ABOUT} />
+      <PageHead title="Team review" about={ABOUT} />
       <div className="board-bar">
         <label className="board-pick">
           <span className="small muted">Showing</span>
@@ -211,22 +213,19 @@ export function BoardView() {
             <p className="story-facts">
               <StatusPill state={state} />
               {startedAs !== undefined && (
-                <span data-testid="run-mode" className="story-mode">
-                  <ModeLabel scripted={startedAs} />
-                  {startedAs === false && <span className="muted small"> This review ran with real models.</span>}
-                </span>
+                <span data-testid="run-mode" className="story-mode"><Provenance kind={provenanceOf({ scripted: startedAs })} /></span>
               )}
               <span className="muted small">
                 {runRow && <>Started {plainWhen(runRow.startedAt)}</>}
-                {done && <> · took {plainDuration(done.minutes * 60_000)} · {plainCost(done.usd, startedAs === true)}</>}
-                {!done && startedAs === false && status && <> · spent so far ${spent.toFixed(2)} of ${status.meeting.max_usd.toFixed(2)}</>}
+                {done && <> · took {plainDuration(done.minutes * 60_000)} · {startedAs === true ? plainCost(done.usd, true) : spentWords(done.usd)}</>}
+                {!done && startedAs === false && status && <> · <span data-testid="spent">{spentWords(spent)} so far · {runLimit(status.meeting.max_usd)}</span></>}
                 {webSearches + litSearches > 0 && <> · <span data-testid="search-count">{live ? "Searching: " : "Searched: "}{webSearches}{cap(status?.meeting.max_searches)} web searches, {litSearches}{cap(status?.meeting.max_literature_searches)} literature searches</span></>}
               </span>
             </p>
           </>
         )}
         <p className="story-headline" role="status">{headline}</p>
-        {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was proven wrong." : `${wrong} statements were proven wrong.`} Look for the marked messages below.</p>}
+        {wrong > 0 && <p className="thread-flag story-flag"><span aria-hidden="true">✕</span> {wrong === 1 ? "One statement was contradicted." : `${wrong} statements were contradicted.`} Look for the marked messages below.</p>}
         {failed && <p className="newrun-error" role="alert">{failed.error} Nothing more was spent. If it names a model or a key, check them in Settings (or ask the person who runs the engine). After the problem is fixed, the review can be continued{runRow?.status === "failed" || runRow?.status === "paused" ? ": press Resume above." : "."}</p>}
         {runId && status && !done && !failed && (known || events.length > 0) && <div className="progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>}
         {memoText && (
@@ -235,12 +234,13 @@ export function BoardView() {
             <p className="decision-text">{plain(bullets(memo["decision"])[0]) || "See the written decision below."}</p>
             {memo["rationale"] && <p>{plain(memo["rationale"])}</p>}
             <p className="trust">
-              <VerdictChip verdict="verified" count={count("verified")} />
-              <VerdictChip verdict="contradicted" count={count("contradicted")} />
-              <VerdictChip verdict="unsupported" count={count("unsupported") + count("unchecked")} />
-              <span className="muted small">of {claims.length} statements checked</span>
+              <MarkChip verdict="verified" count={marks.supported} />
+              <MarkChip verdict="contradicted" count={marks.contradicted} />
+              <MarkChip verdict="unsupported" count={marks.insufficient} />
+              {marks.unchecked > 0 && <MarkChip verdict="unchecked" count={marks.unchecked} />}
+              <span className="muted small" data-testid="checked-count">{checkedOf(claims.length - marks.unchecked, claims.length)}</span>
             </p>
-            <p className="muted small">Holds up: a source supports the statement. Proven wrong: a source goes against it. Not enough evidence: no source was found, or nothing checked it. A separate checker decides each one; the team does not grade itself.</p>
+            <MarksLegend who="A separate checker decides each mark; the team does not grade itself." />
           </div>
         )}
       </section>
@@ -258,7 +258,7 @@ export function BoardView() {
 
       <section className="talk" aria-label="Discussion">
         <h2 className="talk-title">The discussion {live && <span className="pill" data-kind="info">live</span>}</h2>
-        <p className="muted small">Who said what, in order. Each message shows one sentence; the chips under it show what a separate check found about each statement in it.</p>
+        <p className="muted small">Who said what, in order. The chips under a message show what a separate check found for each statement in it.</p>
         {rounds.length === 0 && <p className="empty-note">{runId && (known || events.length > 0) ? "Nobody has spoken yet." : <>Nothing to show yet. Press <b>Start a review</b> above, or <a href="#Home">ask your own question on Search</a>.</>}</p>}
         <Conversation className="thread-inline" aria-label="Discussion, round by round">
           <ConversationContent className="thread-list">
@@ -302,7 +302,7 @@ export function BoardView() {
                     <ul className="source-rests" aria-label="Statements that rest on this source">
                       {resting.map((c) => (
                         <li key={c.key}>
-                          <VerdictChip verdict={c.verdict} /> <span>{c.claim}</span>
+                          <MarkChip verdict={c.verdict} /> <span>{c.claim}</span>
                           {c.quoteFound !== undefined && <span className="muted small" data-found={c.quoteFound}>{c.quoteFound ? "The quoted passage was found in this source." : "The quoted passage was not found in the source."}</span>}
                         </li>
                       ))}
@@ -321,7 +321,7 @@ export function BoardView() {
           <p className="story-eyebrow">{finished ? "What next?" : "While you wait"}</p>
           <a className="btn btn-primary" href="#Home">Ask a follow-up</a>
           <button type="button" className="btn" aria-pressed={details} onClick={() => setDetails(!details)}>{details ? "Hide the checks, sources and written decision" : "See how each statement was checked"}</button>
-          <a className="btn" href="#Graph" onClick={() => setOpen("board", runId)}>Watch it as a graph</a>
+          <a className="btn" href="#Graph" onClick={() => setOpen("board", runId)}>See this run as a graph</a>
           <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(linkTo("board", runId)).then(() => setCopied(true), () => setCopied(false)) }}>{copied ? "Link copied" : "Copy a link to this review"}</button>
         </nav>
       )}
@@ -331,7 +331,7 @@ export function BoardView() {
           <section className="card-surface" aria-label="Checks, sources and the written decision">
             <h2>Every check, counted</h2>
             <div className="ledger-stats">
-              {VERDICTS.map((v) => <div key={v} title={`The check's own word: ${v}`}><strong>{count(v)}</strong><span>{VERDICT_DETAIL[v]}</span><span className="muted small">{v}</span></div>)}
+              {VERDICTS.map((v) => <div key={v} title={`The check's own word: ${v}`}><strong>{count(v)}</strong><span>{MARK_WORD[markOf(v)]}</span><span className="muted small">{v}</span></div>)}
             </div>
             <p className="muted small">
               A quick first check settled {claims.filter(firstPass).length} of {claims.length} statements;

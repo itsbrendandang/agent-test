@@ -7,6 +7,7 @@ import { type BoardConfig, path, type Tier } from "./config.ts"
 import type { Brief } from "./brief.ts"
 import { SEARCH_GUIDANCE } from "./exa.ts"
 import { LITERATURE_GUIDANCE } from "./literature.ts"
+import { DATABASE_GUIDANCE } from "./sources/index.ts"
 
 export interface AgentDef {
   name: string
@@ -98,6 +99,7 @@ export function instructionsFor(config: BoardConfig, agent: AgentDef, brief: Bri
     searchOrder(agent.tools), // before the tools' own guidance: the web search opens every review
     agent.tools.includes("exa_search") && SEARCH_GUIDANCE,
     agent.tools.includes("literature_search") && LITERATURE_GUIDANCE,
+    agent.tools.includes("database_search") && DATABASE_GUIDANCE,
     `# Shared context\n${sharedContext(config)}`,
     expertise && `# Your expertise (notes from earlier runs)\n${expertise}`,
     `# The brief\n${brief.markdown}`,

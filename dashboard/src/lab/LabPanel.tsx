@@ -2,15 +2,8 @@
 // it stands for, what it is doing now, since when, what it last fetched) and the activity log. Both are read from
 // the same activity model the scene draws, so the words and the picture cannot disagree about what was reported.
 import { Mascot } from "./Mascot"
-import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, characterOf, roomOf, type CharacterId, type LabModel } from "./model"
+import { NOT_IN_RUN, STATE_GLYPH, STATE_WORD, characterOf, clockTime, roomOf, type CharacterId, type LabModel } from "./model"
 import "./lab.css"
-
-/** A time of day with seconds: "4:51:07 pm". Engine time, shown in the reader's time zone. */
-export function clockTime(at: number | undefined): string {
-  if (at === undefined || !Number.isFinite(at)) return ""
-  const d = new Date(at), h = d.getHours()
-  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`
-}
 
 const IDLE_HINT = "Teammates stay at their desks until the engine reports work. Each search, screening, check and hand-off the engine reports sends one of them to a room and back."
 
