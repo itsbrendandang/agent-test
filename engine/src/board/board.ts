@@ -59,9 +59,7 @@ export interface RunState {
   ledger: { key?: string; round: number; member: string; claim: string; kind: string; verdict: Verdict; checker: Checker; p?: number; note?: string; checkedBy?: string; source?: string; quoteFound?: boolean }[]
   escalations: number
   checkerUsd: number
-  failed?: string // set when the run stopped because a model id or key was refused, or the lead wrote no memo: the plain message. Cleared when the run is resumed.
-  /** How many times the lead ended without a memo and was asked again (MemoMissing). Each resume asks under a new request id. */
-  memoAsks?: number
+  failed?: string // set when the run stopped because a model id or key was refused, the lead wrote no memo, or overrides.json cannot be read: the plain message. Cleared when the run is resumed.
   firstPassUsd?: number // first-pass checker spend, kept here because the checker's own counter restarts with the process
   jevUsd?: number // the same figure in runs recorded before Jev was removed; read as a fallback, never written
   /** Exa searches this run made, by tool call id: what came back and what it cost. A replayed call reads this and does not search (or pay) again. Scripted runs store nothing here. */
@@ -87,12 +85,10 @@ export class BudgetReached extends Error {}
 
 export class RunBusy extends Error {}
 
-/** The lead ended its turn without calling write_memo, also when asked again. The run is failed, not finished. */
+/** The lead ended its turn without calling write_memo. The run is failed, not finished. */
 export class MemoMissing extends Error {
-  constructor() { super("The lead ended without writing the memo (write_memo), also when asked again. The run is not finished; resume it to ask once more.") }
+  constructor() { super("The lead ended without writing the memo (write_memo). The run is not finished. A resume replays the same lead turn and does not ask again: start a new run.") }
 }
-/** Sent to a lead that ended its turn with no memo. */
-export const MEMO_REMINDER = "You ended your turn without calling write_memo, so the board has no memo and the run is not finished. Call write_memo now, with the decision and the full memo written from the board's record. Do not start a new round."
 
 /**
  * Refuse to continue a run that was started with real models while paid calls are off. Continuing it would
@@ -597,7 +593,17 @@ export function applyOverrides(config: BoardConfig, runId: string): BoardConfig 
 }
 
 async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?: (log: EventLog) => void, makeModels = buildModels): Promise<void> {
-  const config = applyOverrides(base, runId)
+  let config: BoardConfig
+  try { config = applyOverrides(base, runId) } catch (error) {
+    if (!(error instanceof OverridesUnreadable)) throw error
+    // Recorded on the run, so it is listed as failed with the reason and not continued by itself at the next start.
+    const state = loadState(base, runId)
+    if (state.finished) return
+    state.failed = error.message
+    saveState(base, state)
+    new EventLog(`${runDir(base, runId)}/events.jsonl`).emit(`failed:${Date.now()}`, { type: "run.failed", error: error.message })
+    throw error
+  }
   const state = loadState(config, runId) // read under the lock
   if (state.finished) return
   refusePaidRun(state)
@@ -836,15 +842,8 @@ async function runLocked(base: BoardConfig, runId: string, mock: boolean, onLog?
     const kickoff = await leadConversation.submit({ type: "input", content: "Begin. Frame the decision in one paragraph, then run the board.", requestId: `${runId}:begin` }, ctx)
     const settled = await Promise.race([kickoff.wait(ctx), fatal])
     if (settled.status !== "done") throw new Error(`Lead stopped: ${settled.reason}`)
-    // A lead can end its turn in plain text without calling write_memo: that is not a finished run. Ask once more, under
-    // a request id of its own (a replay does not ask twice; a resume after MemoMissing asks under the next id).
-    const memoFile = `${runDir(config, runId)}/memo.md`
-    if (!existsSync(memoFile)) {
-      const ask = await leadConversation.submit({ type: "input", content: MEMO_REMINDER, requestId: `${runId}:memo:${state.memoAsks ?? 0}` }, ctx)
-      const again = await Promise.race([ask.wait(ctx), fatal])
-      if (again.status !== "done") throw new Error(`Lead stopped: ${again.reason}`)
-      if (!existsSync(memoFile)) { state.memoAsks = (state.memoAsks ?? 0) + 1; throw new MemoMissing() }
-    }
+    // A lead can end its turn in plain text without calling write_memo: that is not a finished run.
+    if (!existsSync(`${runDir(config, runId)}/memo.md`)) throw new MemoMissing()
     // Spend, memory and the closing event are written before the run is marked finished. A crash in
     // between repeats these three steps on resume, and each is safe to repeat.
     const usd = await spend()

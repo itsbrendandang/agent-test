@@ -10,7 +10,7 @@
 import { existsSync } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { buildIndex, keywordAnswer, parseReply, renderIndex } from "../search/ask.ts"
-import { BudgetReached, checkDailyBudget, RunBusy, runDir } from "../board/board.ts"
+import { BudgetReached, checkDailyBudget, OverridesUnreadable, RunBusy, runDir } from "../board/board.ts"
 import { BriefRejected } from "../brief.ts"
 import { writeWhole } from "../fsx.ts"
 import type { BoardConfig } from "../config.ts"
@@ -299,7 +299,7 @@ export async function handleChat(req: IncomingMessage, res: ServerResponse, part
     json(404, { error: "not found" })
   } catch (error) {
     if (res.headersSent) return void res.end()
-    const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
+    const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy || error instanceof OverridesUnreadable ? 409 : error instanceof PaidCallsOff ? 403 : 500
     const field = (error as { field?: unknown }).field
     json(code, { error: code === 500 ? "the chat route failed" : String(error instanceof Error ? error.message : error), ...(typeof field === "string" ? { field } : {}), ...(error instanceof FieldError ? error.extra : {}) })
     if (code === 500) console.error("chat route failed:", error)

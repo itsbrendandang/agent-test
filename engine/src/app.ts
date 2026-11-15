@@ -28,7 +28,7 @@ import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, 
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./board/agents.ts"
-import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
+import { BudgetReached, checkDailyBudget, loadState, lockHolder, OverridesUnreadable, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
@@ -51,7 +51,7 @@ export const MAX_STREAMS_PER_RUN = 8
 export const MAX_STREAMS = 32
 
 /** The HTTP status for an error a route threw: a known refusal keeps its own, anything else is a 500. */
-const statusOf = (error: unknown) => error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
+const statusOf = (error: unknown) => error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy || error instanceof OverridesUnreadable ? 409 : error instanceof PaidCallsOff ? 403 : 500
 
 export interface AppOptions {
   config?: BoardConfig
@@ -81,7 +81,7 @@ export function createApp(options: AppOptions = {}) {
     if (active.has(runId)) return
     active.add(runId)
     run(runId)
-      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff || e instanceof FatalModelError ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
+      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff || e instanceof FatalModelError || e instanceof OverridesUnreadable ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
       .finally(() => active.delete(runId))
   }
 

@@ -382,8 +382,9 @@ The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)).
 saved as it happens. A review that is interrupted, for example by a crash or a restart, continues
 where it stopped and does not repeat (or pay again for) finished work. We tested this by stopping
 a practice review in the middle. A review counts as finished only when the lead has written its
-memo. If the lead stops without one, it is asked once more; then the review is marked failed, and
-resuming it asks again.
+memo. If the lead stops without one, the review is marked failed, not finished. A resume does not
+ask the lead again, so start a new review. A review whose `overrides.json` (the limits its chat plan
+set) cannot be read is also marked failed and does not start.
 
 ## Words
 
