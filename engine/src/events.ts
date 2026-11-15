@@ -36,9 +36,10 @@ export const SEARCH_PROVIDERS: readonly SearchProvider[] = ["exa", "europepmc", 
  * One source in the evidence pool. `provider` and `query` say which search found it and with which query; they are set
  * when the source enters the pool and stay on it in every saved record (run.json `evidence`, the `evidence.triaged`
  * event), so a reader can show "found through Exa" per source. A source found again by a later search keeps the
- * search that found it first. `query` is absent in runs recorded before the field.
+ * search that found it first. `query` is absent in runs recorded before the field. `image`: the page's own picture, as
+ * the search returned it (Exa gives one for some pages, at no extra cost); absent when there is none.
  */
-export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider; query?: string }
+export interface EvidenceItem { url: string; title: string; text: string; studyType?: string; relevance?: number; provider?: SearchProvider; query?: string; image?: string }
 
 /** One member of a run. `source`: "board" (a file in board/agents) or "specialist" (a method specialist a plan added for this run: `why` it was chosen and the `methods` whose notes it reads). */
 export interface RosterEntry { name: string; title: string; role: "lead" | "member"; source: "board" | "specialist"; room?: SpecialistRoom; why?: string; methods?: { name: string; title: string }[] }

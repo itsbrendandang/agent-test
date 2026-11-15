@@ -27,7 +27,8 @@ export interface SearchResult {
 }
 
 interface ExaResponse {
-  results: { url: string; title?: string | null; highlights?: string[]; publishedDate?: string }[]
+  /** `image`: a picture of the page (its og:image), which Exa returns with some results in the same response. */
+  results: { url: string; title?: string | null; highlights?: string[]; publishedDate?: string; image?: string | null }[]
   notices?: { code: string; message: string }[]
   costDollars?: unknown
   warnings?: { code: string; message: string }[]
@@ -47,7 +48,7 @@ export async function exaLive(query: string, objective: string, apiKey: string, 
   // Warnings are about our request and are for developers; they never go to a model.
   for (const w of body.warnings ?? []) console.warn(`exa warning ${w.code}: ${w.message}`)
   return {
-    items: body.results.map((r) => ({ url: r.url, title: r.title || r.url, text: (r.highlights ?? []).join("\n") })),
+    items: body.results.map((r) => ({ url: r.url, title: r.title || r.url, text: (r.highlights ?? []).join("\n"), ...(typeof r.image === "string" && r.image ? { image: r.image } : {}) })),
     notices: (body.notices ?? []).map((n) => n.message),
     costUsd: reportedCost(body.costDollars),
   }

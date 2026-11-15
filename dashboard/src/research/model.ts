@@ -7,7 +7,7 @@ import type { Verdict } from "@/board/api"
 import { PROVIDERS } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
-export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[] }
+export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[]; /** A picture of the page (https), as the search returned it. Absent in answers recorded before pictures. */ image?: string }
 export interface Statement {
   stage: "draft" | "final"; index: number; text: string; sources: number[]; verdict: Verdict
   quote?: string; quoteFound: boolean; quoteSource?: number; checker: string; note?: string; carried?: boolean
@@ -74,6 +74,17 @@ export interface AnswerState {
 }
 
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined)
+/** A source's picture as it may be shown: an https address and nothing else (the engine keeps only those too). */
+export const imageOf = (v: unknown): string | undefined => {
+  if (typeof v !== "string" || v.length > 1_000 || !v.startsWith("https://")) return undefined
+  try { const u = new URL(v); return u.protocol === "https:" && !u.username && !u.password ? u.href : undefined } catch { return undefined }
+}
+/** The pictures to show beside an answer: one per source that has one, a picture used twice once, at most `max`, the order of the sources. */
+export function answerImages(sources: Source[], max = 6): (Source & { image: string })[] {
+  const seen = new Set<string>(), out: (Source & { image: string })[] = []
+  for (const s of sources) if (s.image && !seen.has(s.image) && out.length < max) { seen.add(s.image); out.push(s as Source & { image: string }) }
+  return out
+}
 const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined)
 const VERDICTS = ["verified", "contradicted", "unsupported", "unchecked"]
 
@@ -141,7 +152,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "sources":
-        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20), hypotheses: Array.isArray(i.hypotheses) ? (i.hypotheses as unknown[]).filter((h): h is string => typeof h === "string") : undefined }] : []))
+        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20), hypotheses: Array.isArray(i.hypotheses) ? (i.hypotheses as unknown[]).filter((h): h is string => typeof h === "string") : undefined, image: imageOf(i.image) }] : []))
         break
       case "answer.delta": deltas += str(e.text) ?? ""; break
       case "answer.written": written = str(e.markdown); break

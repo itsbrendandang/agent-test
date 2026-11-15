@@ -10,6 +10,7 @@ import { plainDuration } from "@/lib/format"
 import { runLimit, safeUrl, spent } from "@/lib/words"
 import { Activity } from "./Activity"
 import { AgentsWorking } from "./AgentsWorking"
+import { AnswerImages } from "./AnswerImages"
 import { Hypotheses } from "./Hypotheses"
 import { ProviderCredit } from "./ProviderCredit"
 import { identifierOf, MARK_GLYPH, MARK_WORD, markCount, markOf } from "./marks"
@@ -135,6 +136,7 @@ export function ResearchAnswer({ id, latest, onAgain, onReview, onDone, onStatus
       )}
 
       {s.markdown && <SafeMarkdown className="answer-text" inline={inline}>{marked.text}</SafeMarkdown>}
+      {s.markdown && <AnswerImages sources={s.sources} onSource={setLit} />}
       {!s.complete && s.markdown && <p className="muted small">Still being written. It has not been checked yet.</p>}
 
       <div id={`${uid}-check`}>
