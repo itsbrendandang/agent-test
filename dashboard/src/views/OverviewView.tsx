@@ -26,7 +26,7 @@ function useRuns() {
   const [again, setAgain] = useState(0)
   useEffect(() => {
     let stopped = false
-    void Promise.allSettled([readEngine<unknown>("/api/runs"), readEngine<unknown>("/api/research"), readEngine<unknown>("/api/glhf/runs")]).then(([board, answers, swarm]) => {
+    void Promise.allSettled([readEngine<unknown>("/api/runs"), readEngine<unknown>("/api/research?all=1"), readEngine<unknown>("/api/glhf/runs")]).then(([board, answers, swarm]) => {
       if (stopped) return
       if (board.status === "rejected" && answers.status === "rejected" && swarm.status === "rejected") { setProblem(problemOf(board.reason)); return }
       setProblem(undefined)

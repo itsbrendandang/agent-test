@@ -91,7 +91,7 @@ function YourProfile() {
   )
 }
 
-interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean> }
+interface EngineFacts { tools: Record<string, boolean>; keys: Record<string, boolean>; tokenFile?: string }
 /** What the engine says it found: tools, and which keys are set (never a value). Read again after a switch. */
 function useEngineFacts() {
   const [facts, setFacts] = useState<EngineFacts | null>()
@@ -99,9 +99,9 @@ function useEngineFacts() {
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let stale = false
-    const read = (path: string) => readEngine<{ tools?: Record<string, boolean>; keys?: Record<string, boolean> }>(path)
+    const read = (path: string) => readEngine<{ tools?: Record<string, boolean>; keys?: Record<string, boolean>; tokenFile?: string }>(path)
     Promise.all([read("/api/glhf/status"), read("/api/status")])
-      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys } }) })
+      .then(([swarm, board]) => { if (!stale) setFacts({ tools: swarm.tools ?? {}, keys: { ...board.keys, ...swarm.keys }, tokenFile: board.tokenFile }) })
       .catch((e: unknown) => { if (!stale) { setFacts(null); setProblem(problemOf(e)) } })
     return () => { stale = true }
   }, [retry])
@@ -152,7 +152,7 @@ function Technical() {
     <details className="set-section technical">
       <summary><h2>Technical</h2></summary>
       <CatalogPanel catalog={catalog} why={why} onRetry={() => { setCatalog(undefined); setReread((n) => n + 1) }} />
-      <p className="muted small">For the person who runs the app. Engine address: <code>{ENGINE}</code>. Settings file: <code>.env</code> in the project folder. Session token file: <code>{TOKEN_FILE}</code>.</p>
+      <p className="muted small">For the person who runs the app. Engine address: <code>{ENGINE}</code>. Settings file: <code>.env</code> in the project folder. Session token file: <code>{facts?.tokenFile ?? TOKEN_FILE}</code>.</p>
       {facts === undefined && <p className="muted small" role="status">Checking the engine…</p>}
       {facts === null && <EngineOffline needs="The tools and keys the engine found cannot be listed." said={problem.said} onRetry={again} />}
       {facts && (

@@ -24,7 +24,7 @@
 // Every request first passes the checks in http.ts: Host must be this machine, an Origin must be the
 // dashboard's, POST bodies must be JSON. An Origin is not a credential (any local program can send one): what
 // can spend needs the session token, by the one rule in http.ts (`gate`).
-import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, watch } from "node:fs"
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, statSync, watch } from "node:fs"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./board/agents.ts"
@@ -81,15 +81,24 @@ export function createApp(options: AppOptions = {}) {
       .finally(() => active.delete(runId))
   }
 
+  const runCache = new Map<string, { stamp: string; state: ReturnType<typeof loadState>; summary: ReturnType<typeof summarize> }>()
   const listRuns = () => {
     const dir = path(config, "runs")
     if (!existsSync(dir)) return []
     return readdirSync(dir).filter((d) => isSafeId(d) && existsSync(`${dir}/${d}/run.json`)).sort().reverse().flatMap((id) => {
-      let s: ReturnType<typeof loadState>
-      try { s = loadState(config, id) } catch { return [] } // an unreadable run.json hides that run, not the list
+      // Both files are read again only when one of them changed: this list is built for every /api/runs, search and chat request.
+      const stamp = [`${dir}/${id}/run.json`, `${dir}/${id}/events.jsonl`].map((f) => { const st = statSync(f, { throwIfNoEntry: false }); return st ? `${st.mtimeMs}:${st.size}` : "-" }).join("|")
+      let read = runCache.get(id)
+      if (read?.stamp !== stamp) {
+        let s: ReturnType<typeof loadState>
+        try { s = loadState(config, id) } catch { runCache.delete(id); return [] } // an unreadable run.json hides that run, not the list
+        read = { stamp, state: s, summary: summarize(`${dir}/${id}`, s) }
+        runCache.set(id, read)
+      }
+      const s = read.state
       // "running" also when another process (the CLI) holds the run's lock, so it is not resumed twice.
       const status = s.finished ? "done" : active.has(id) || lockHolder(`${dir}/${id}`) !== undefined ? "running" : s.failed ? "failed" : "paused"
-      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...summarize(`${dir}/${id}`, s) }]
+      return [{ id, brief: s.briefFile.split("/").pop(), startedAt: s.startedAt, status, ...(s.failed && !s.finished ? { error: s.failed } : {}), ...read.summary }]
     })
   }
 
@@ -164,6 +173,7 @@ export function createApp(options: AppOptions = {}) {
         paidCalls: !paidCallsOff(),
         paidSource: paidState().source,
         paidLocked: paidSwitchLocked(),
+        tokenFile: TOKEN_FILE,
         keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
       })
