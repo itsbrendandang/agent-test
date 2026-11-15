@@ -113,6 +113,14 @@ To add or bench a member, add or remove a line under `board:` in `board/config.y
 
 Every key of `board/config.yaml` is listed in [configuration.md](configuration.md#drug-board-boardconfigyaml).
 
+What a run records about its cost and its code, in `run.json`: `usd` (the total the caps count), `firstPassUsd`,
+`checkerUsd`, `costEstimated`, and `usage`: per model (`provider/id`), the tokens of the harness models (the lead and
+the members) as the harness counts them (input, output, cache reads, cache writes, total, and the cost of each part).
+The first-pass checker and the escalation checkers are kept as dollars only (`firstPassUsd`, `checkerUsd`), with no
+token counts, so `usage` does not add up to `usd`. `usage` is written with each update of the total. `manifest` is written when the run is created: the commit (`commit`, `dirty`), hashes of `board/config.yaml`,
+the agent files and the research prompts, and the versions of Node, pi-ai and pi-durable (`engine/src/manifest.ts`).
+Runs created before these fields have neither.
+
 ## Memory
 
 With `memory.enabled: true`, each member's verified and contradicted claims are added to `board/expertise/<member>.md` after a run, under the heading `## From earlier runs`. The file is read into that member's instructions in the next run. Text above the heading is yours and is kept. Scripted runs write to the run folder, so made-up claims never reach `board/expertise/`.
@@ -248,7 +256,11 @@ How a record is turned into a source:
 - The URL is built only from an id that passed a strict pattern (an NCT number, a ChEMBL id, an accession ...), never
   from free text.
 - Limits: at most 8 items per lookup, 3000 characters per item (cut at a sentence or a word, with `[...]`), at most 4
-  requests per lookup, a 15-second timeout, no retries, and at most one request every 1.5 seconds to a host.
+  requests per lookup, a 15-second timeout per request and 45 seconds per lookup, no retries, and at most one request
+  every 1.5 seconds to a host.
+- The engine keeps each good answer in memory for 10 minutes (at most 200 answers, `engine/src/sources/shared.ts`). The
+  same request made again in that time, by another lookup or another run, sends nothing and waits no gap. A failure is
+  not kept. Open Targets finds a gene symbol and reads its target in one request.
 - `meeting.max_database_searches` lookups per run (default 20). A lookup is free, but its records are screened by the
   first pass, so it is refused at the spend cap and when paid calls are switched off. A database that does not answer
   does not stop the run: the scout is told, and the lookup is not counted. A crash replay reads the stored result.

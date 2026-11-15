@@ -16,6 +16,7 @@
 //                                MAX_STREAMS_PER_RUN streams on one run or MAX_STREAMS in total)
 //   GET  /api/runs/:id/memo      the memo (Markdown)
 //   GET  /api/search?q=          keyword search over all runs and saved research answers
+//   GET  /api/trending           "Try asking": biology questions from Google's trending searches (search/trending.ts; free, kept an hour)
 //   /api/research/*              a direct, sourced answer to one question (see research/routes.ts)
 //   POST /api/ask {question}     a small model answers from the run records (see ask.ts). Needs the dashboard's
 //                                Origin or the token; the model is asked only for a token holder
@@ -28,7 +29,7 @@ import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, 
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { basename, resolve } from "node:path"
 import { loadAgent, loadRoster } from "./board/agents.ts"
-import { BudgetReached, checkDailyBudget, loadState, lockHolder, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
+import { BudgetReached, checkDailyBudget, loadState, lockHolder, OverridesUnreadable, refusePaidRun, RunBusy, runBoard, runDir, startRun, summarize } from "./board/board.ts"
 import { BriefRejected } from "./brief.ts"
 import { handleChat } from "./chat/routes.ts"
 import { type BoardConfig, loadConfig, LOCAL, MOCK, path } from "./config.ts"
@@ -39,7 +40,9 @@ import { PaidCallsOff, paidCallsOff, paidState, paidSwitchLocked } from "./paid/
 import { handlePaid } from "./paid/paidswitch.ts"
 import { FatalModelError } from "./providers.ts"
 import { createResearch } from "./research/routes.ts"
+import { directAnswers, previewOn } from "./research/preview.ts"
 import { search } from "./search/search.ts"
+import { createTrending } from "./search/trending.ts"
 import { exampleBoards, exampleHits, handleExample } from "./examples.ts"
 
 /** The address the server listens on unless HOST says otherwise: this machine only. */
@@ -49,6 +52,9 @@ export const bindHost = (env: NodeJS.ProcessEnv = process.env): string => env.HO
 /** Event streams open at once: on one run, and on all runs. Past either, a new one is answered 429. */
 export const MAX_STREAMS_PER_RUN = 8
 export const MAX_STREAMS = 32
+
+/** The HTTP status for an error a route threw: a known refusal keeps its own, anything else is a 500. */
+const statusOf = (error: unknown) => error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy || error instanceof OverridesUnreadable ? 409 : error instanceof PaidCallsOff ? 403 : 500
 
 export interface AppOptions {
   config?: BoardConfig
@@ -62,6 +68,8 @@ export interface AppOptions {
   env?: NodeJS.ProcessEnv
   /** Options for POST /api/ask (tests: a fake fetch and key). */
   ask?: import("./search/ask.ts").AskOptions
+  /** Options for GET /api/trending (tests: a fake fetch). */
+  trending?: import("./search/trending.ts").TrendingOptions
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -78,7 +86,7 @@ export function createApp(options: AppOptions = {}) {
     if (active.has(runId)) return
     active.add(runId)
     run(runId)
-      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff || e instanceof FatalModelError ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
+      .catch((e) => (e instanceof RunBusy || e instanceof BudgetReached || e instanceof PaidCallsOff || e instanceof FatalModelError || e instanceof OverridesUnreadable ? console.log(`run ${runId} not continued: ${e.message}`) : console.error(`run ${runId} failed:`, e)))
       .finally(() => active.delete(runId))
   }
 
@@ -110,6 +118,7 @@ export function createApp(options: AppOptions = {}) {
 
   const trust = { hasToken, env, tokenFile: TOKEN_FILE }
   const research = createResearch({ config, env, hasToken, tokenFile: TOKEN_FILE, mock: mockNow }) // the direct, sourced answer (research/routes.ts)
+  const trending = createTrending(options.trending) // "Try asking" questions; read on first use, not at startup
   /**
    * May this request start or resume a board run? With scripted models anyone local may (it costs nothing). With
    * real models only a holder of the token: false, with 403 or the 401 that asks for the token sent, otherwise.
@@ -159,9 +168,23 @@ export function createApp(options: AppOptions = {}) {
     res.on("close", close)
   }
 
+  /**
+   * Every request goes through here. An error no route caught (a bad URL, an unreadable example file) is answered with
+   * its status, never left to reject: server.ts does not await the handler, and an unhandled rejection stops the engine
+   * and every run in it.
+   */
   async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try { await route(req, res) } catch (error) {
+      console.error(`request failed: ${req.method} ${req.url}:`, error)
+      if (res.headersSent) return void res.end()
+      json(res, statusOf(error), { error: String(error instanceof Error ? error.message : error) })
+    }
+  }
+
+  async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!guard(req, res, env)) return // foreign Host or Origin: refused; preflight: answered
-    const url = new URL(req.url ?? "/", "http://x")
+    let url: URL
+    try { url = new URL(req.url ?? "/", "http://x") } catch { throw new HttpError(400, "invalid URL") }
     const parts = url.pathname.split("/").filter(Boolean) // api, runs, :id, events
     if (parts[0] === "api" && handleExample(req, res, url, config, env)) return
     if (parts[0] === "api" && parts[1] === "glhf") return handleGlhf(req, res, parts)
@@ -178,7 +201,11 @@ export function createApp(options: AppOptions = {}) {
         tokenFile: TOKEN_FILE,
         keys: Object.fromEntries(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY"].map((k) => [k, Boolean(env[k])])),
         meeting: config.meeting, models: config.models,
+        // Direct answers on the Research screen: in Real mode only with RESEARCH_PREVIEW=1 (research/preview.ts).
+        researchPreview: previewOn(env), directAnswers: directAnswers(mockNow(), env),
+        manifest: research.manifest(), // what this engine runs: commit, hashes, versions (npm start compares the commit)
       })
+      if (url.pathname === "/api/trending" && req.method === "GET") return json(res, 200, await trending.get())
       if (url.pathname === "/api/search") return json(res, 200, [...search(url.searchParams.get("q") ?? "", listRuns()), ...research.hits(url.searchParams.get("q") ?? ""), ...exampleHits(url.searchParams.get("q") ?? "", env)].sort((a, b) => b.startedAt - a.startedAt)) // runs, and saved answers (kind "answer")
       if (url.pathname === "/api/token") return hasToken(req) ? json(res, 200, { ok: true }) : json(res, 401, tokenNeeded("this", TOKEN_FILE))
       if (url.pathname === "/api/ask") { // AI search over experiments
@@ -228,8 +255,7 @@ export function createApp(options: AppOptions = {}) {
       json(res, 404, { error: "not found" })
     } catch (error) {
       if (res.headersSent) return void res.end()
-      const code = error instanceof HttpError ? error.status : error instanceof BriefRejected ? 400 : error instanceof BudgetReached ? 429 : error instanceof RunBusy ? 409 : error instanceof PaidCallsOff ? 403 : 500
-      json(res, code, { error: String(error instanceof Error ? error.message : error) })
+      json(res, statusOf(error), { error: String(error instanceof Error ? error.message : error) })
     }
   }
 

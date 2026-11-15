@@ -13,13 +13,15 @@ import { routes, to } from "@/test/engine"
 import { CATALOG_OFF, CATALOG_ON, reply, PLAN } from "@/test/home"
 import { ExperimentsView } from "@/views/ExperimentsView"
 import { HomeView } from "@/views/HomeView"
+import { OverviewView } from "@/views/OverviewView"
 import { Activity } from "./Activity"
+import { searchPlace } from "./providers"
 import { ResearchAnswer } from "./Answer"
 import { AskBox } from "./AskBox"
 import { identifierOf, markOf } from "./marks"
 import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
-import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
+import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, providerPlace, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
@@ -73,7 +75,7 @@ describe("what the events add up to", () => {
     expect(progressLine(foldAnswer([]))).toBe("Starting…")
     expect(at(1)).toBe("Searching the web…")
     expect(at(2)).toBe("Found 10 in the web, kept 2.")
-    expect(at(3)).toBe("Searching PubMed and preprints…")
+    expect(at(3)).toBe("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)…")
     expect(at(5)).toBe("Kept 4 sources. Writing…")
     expect(at(8)).toBe("Writing…")
     expect(at(10)).toBe("Two reviewers are checking the answer…")
@@ -142,7 +144,7 @@ describe("the answer on the page", () => {
   })
   it("while it works: an honest progress line, and a draft is not shown as checked", async () => {
     const { container } = await show(REAL.filter((e) => (e.seq ?? 0) <= 3))
-    expect(screen.getByRole("status")).toHaveTextContent("Searching PubMed and preprints…")
+    expect(screen.getByRole("status")).toHaveTextContent("Searching the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)…")
     await feed(REAL.filter((e) => (e.seq ?? 0) > 3 && (e.seq ?? 0) <= 7))
     expect(screen.getByRole("status")).toHaveTextContent("Writing…")
     expect(container).toHaveTextContent("Still being written. It has not been checked yet.")
@@ -442,6 +444,8 @@ describe("the adapter, contract v2", () => {
     expect(await screen.findByRole("region", { name: PLAN.briefTitle })).toBeInTheDocument()
     expect(screen.queryByRole("alert")).toBeNull(); expect(screen.queryByRole("dialog")).toBeNull()
     expect(to(sent, "POST", "/api/chat")).toHaveLength(1)
+    // ...but it says why, so the plan is not mistaken for an answer
+    expect(screen.getByText(/Direct answers are switched off on this engine\. In Real mode they need the engine started with RESEARCH_PREVIEW=1\./)).toHaveAttribute("role", "status")
   })
 })
 
@@ -473,7 +477,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   const STEPS = foldAnswer(EVENTS).steps
   it("is one quiet line until asked: the step count and the engine's total, then the rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} totalSeconds={41} />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} totalSeconds={41} />)
     expect(screen.getByText(new RegExp(`^${STEPS.length} steps · 41s$`))).toBeInTheDocument()
     expect(screen.queryByRole("list", { name: "Activity" })).toBeNull()
     await user.click(screen.getByRole("button", { name: "View activity" }))
@@ -490,10 +494,11 @@ describe("activity, selection and sources (checkpoint B)", () => {
       { step: "write", kind: "write", label: "Writing the answer", status: "running" as const },
       { step: "check", kind: "check", label: "Checking 6 statements", status: "running" as const, done: 2, total: 6 },
     ]
-    render(<Activity steps={steps} working defaultOpen />)
+    render(<Activity steps={steps} working place={searchPlace} defaultOpen />)
     const [failed, empty, writing, checking] = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")
     expect(failed).toHaveTextContent("✕"); expect(failed).toHaveTextContent("failed"); expect(failed).toHaveTextContent("0.1s") // never shown as done
     expect(empty).toHaveTextContent("○"); expect(empty).toHaveTextContent("found nothing"); expect(empty).toHaveTextContent("0.8s")
+    expect(empty).toHaveTextContent("the literature (Europe PMC, OpenAlex, Semantic Scholar, arXiv)") // one literature step asks all four indexes
     expect(writing).toHaveTextContent("…"); expect(checking).toHaveTextContent("2/6") // a count only where the engine has one
     expect(screen.queryByText("Expand all")).toBeNull() // fewer than six rows
     await user.click(within(failed).getByRole("button", { name: /Searching the web/ }))
@@ -505,7 +510,7 @@ describe("activity, selection and sources (checkpoint B)", () => {
   })
   it("offers Expand all from six rows", async () => {
     const user = userEvent.setup()
-    render(<Activity steps={STEPS} working={false} defaultOpen />)
+    render(<Activity steps={STEPS} working={false} place={searchPlace} defaultOpen />)
     expect(STEPS.length).toBeGreaterThanOrEqual(6)
     await user.click(screen.getByRole("button", { name: "Expand all" }))
     expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(STEPS.length)
@@ -652,6 +657,13 @@ describe("a team review as the same activity (Deep)", () => {
     const broke = reviewActivity([...events, ev(9500, { type: "run.failed", error: "The provider refused the model." })])
     expect(broke.steps.at(-1)).toMatchObject({ status: "failed", error: "The provider refused the model." }); expect(broke.failed).toBe("The provider refused the model.")
     expect(reviewActivity([])).toEqual({ steps: [], working: false, seconds: undefined, failed: undefined })
+  })
+  it("a team review's literature search asked Europe PMC only, so its activity row says so", () => {
+    const review = reviewActivity([ev(1000, { type: "run.started", runId: "r", brief: "b", title: "T", mock: false }), ev(1600, { type: "evidence.triaged", member: "scout", query: "q", kept: 1, dropped: 0, provider: "europepmc", items: [] })])
+    render(<Activity steps={review.steps} working={false} place={providerPlace} defaultOpen />)
+    const row = within(screen.getByRole("list", { name: "Activity" })).getAllByRole("listitem")[0]
+    expect(row).toHaveTextContent("PubMed and preprints")
+    expect(row).not.toHaveTextContent("OpenAlex")
   })
 })
 
@@ -820,6 +832,44 @@ describe("a question handed over from the Overview", () => {
     sessionStorage.setItem("open.answer", JSON.stringify({ id: "a-2", question: "Saved question" })); setAsk("Handed over")
     render(<HomeView onOpen={() => {}} />)
     expect(screen.getByRole("textbox", { name: "Ask a research question" })).toHaveValue("")
+  })
+})
+
+describe("a question answered on the Overview is Research's conversation", () => {
+  const THREAD = { items: [{ id: "a-1", thread: "t-1", question: "Does drug A protect the heart?", status: "running" }] }
+  const engine = () => routes({
+    "GET /api/chat/catalog": { status: 200, body: CATALOG_ON }, "GET /api/runs": { status: 200, body: [] }, "GET /api/glhf/runs": { status: 200, body: [] },
+    "GET /api/paid": { status: 200, body: { paid: false, caps: {} } },
+    "GET /api/research": (r) => (r.query.includes("thread=t-1") ? { status: 200, body: THREAD } : { status: 200, body: { items: [] } }),
+    "POST /api/research": (r) => ({ status: 202, body: { id: (r.body as { thread?: string }).thread ? "a-2" : "a-1", thread: "t-1", mode: "demo" } }),
+  })
+  it("opening Research shows it while it is still being written, and a follow-up there continues its thread", async () => {
+    const sent = engine()
+    // An earlier conversation in Research: the Overview's question starts a new one, as it did before.
+    sessionStorage.setItem("home.chat", JSON.stringify([{ id: 1, role: "user", content: "Earlier question" }, { id: 2, role: "assistant", content: "", research: { id: "a-0", question: "Earlier question", thread: "t-0" } }]))
+    const user = userEvent.setup()
+    const overview = render(<OverviewView onOpen={() => {}} />)
+    await screen.findByText("Let's research together!")
+    await user.type(screen.getByLabelText("Ask a research question"), "Does drug A protect the heart?")
+    await user.click(screen.getByRole("button", { name: /^Send/ }))
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(1))
+    expect(to(sent, "POST", "/api/research")[0].body).toEqual({ question: "Does drug A protect the heart?", effort: "standard" })
+    await screen.findByRole("heading", { name: "Does drug A protect the heart?" }) // the inline answer stays on the Overview
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true))
+    await feed([{ seq: 1, at: 1, run: "a-1", type: "research.started", id: "a-1", question: "Does drug A protect the heart?", mode: "demo" } as unknown as ResearchEvent])
+    overview.unmount()
+
+    // Research, opened from the menu: the Overview's question and its answer, still running, are the conversation.
+    streams.length = 0
+    render(<HomeView onOpen={() => {}} />)
+    await waitFor(() => expect(screen.getAllByRole("article", { name: "Answer" })).toHaveLength(1))
+    expect(screen.getAllByText("Does drug A protect the heart?").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Earlier question")).toBeNull()
+    await waitFor(() => expect(streams.some((s) => s.url.endsWith("/api/research/a-1/events"))).toBe(true)) // it follows the same answer
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument()) // still being written
+    await user.type(screen.getByRole("textbox", { name: "Ask a research question" }), "And the kidneys?{Enter}")
+    await waitFor(() => expect(to(sent, "POST", "/api/research")).toHaveLength(2))
+    expect(to(sent, "POST", "/api/research")[1].body).toMatchObject({ question: "And the kidneys?", thread: "t-1" })
   })
 })
 

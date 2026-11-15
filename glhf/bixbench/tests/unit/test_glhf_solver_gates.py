@@ -93,7 +93,9 @@ class World:
 
         async def save_ledger(_: Ledger) -> None: ...
 
-        async def check_contract(outputs: object, root: str | None = None) -> list[dict[str, Any]]:
+        async def check_contract(
+            outputs: object, root: str | None = None, columns: object = None
+        ) -> list[dict[str, Any]]:
             return OK if root else world.contract
 
         async def background_processes(kill: bool = False) -> list[dict[str, Any]]:

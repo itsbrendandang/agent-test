@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readdirSync } from "node:fs"
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -99,4 +99,15 @@ test("examples can be hidden without making their ids writable", async () => {
     assert.equal((await fetch(base + path)).status, 404)
     assert.equal((await fetch(base + path + "/cancel", { method: "POST", headers: { origin: "http://127.0.0.1:5317" } })).status, 403)
   } finally { server.closeAllConnections(); await new Promise<void>((r) => server.close(() => r())) }
+})
+
+test("a manifest that cannot be read shows no examples instead of throwing on every API request", () => {
+  // handleExample reads the manifest before every /api route: a throw there used to stop the whole engine.
+  const dir = mkdtempSync(join(tmpdir(), "example-manifest-"))
+  writeFileSync(join(dir, "manifest.json"), '[{"id": "half-writ')
+  assert.deepEqual(exampleEntries({}, dir), [])
+  writeFileSync(join(dir, "manifest.json"), '{"id": "not a list"}')
+  assert.deepEqual(exampleEntries({}, dir), [])
+  writeFileSync(join(dir, "manifest.json"), '[{"id": "ok", "kind": "board", "title": "t", "startedAt": 1, "status": "done"}]')
+  assert.equal(exampleEntries({}, dir).length, 1)
 })

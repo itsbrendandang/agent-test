@@ -170,8 +170,11 @@ jobs:
           cache-dependency-glob: |
             glhf/bixbench_v1/uv.lock
             glhf/bixbench/pyproject.toml
-      - name: Install (uv sync --locked)
-        run: uv sync --locked
+      # The modal group (modal, inspect-sandboxes; pinned in uv.lock) is installed so the Modal
+      # provider tests run against fakes and mypy sees Modal's types. No Modal token, no secret,
+      # NO_PAID_CALLS=1: nothing reaches Modal.
+      - name: Install (uv sync --locked --group modal)
+        run: uv sync --locked --group modal
       - name: Lint (ruff check)
         run: uv run --no-sync ruff check src tests
       - name: Format check (ruff format --check)

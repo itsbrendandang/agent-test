@@ -43,7 +43,10 @@ npm run dashboard
 ```
 
 Open http://localhost:5317. Press Ctrl+C in both terminals to stop. Restart after `git pull`.
-You can also use `npm start` to start both parts and open the browser.
+You can also use `npm start` to start both parts and open the browser. It prints the engine's mode, the paid switch,
+which keys are set (yes or no) and whether direct answers are on. When an engine was already running on port 8787, it
+uses that engine and says so, with a warning when that engine runs other code than this folder or cannot say which
+code it runs.
 
 A new copy starts in **Demo mode**. Demo mode is free and needs no account. Its answers are fixed
 examples that show how the app works. They are not research.
@@ -100,19 +103,22 @@ Good to know:
 The limits in `board/config.yaml` are **$0.15 per Quick answer**, **$0.60 per Standard answer**,
 **$5 per team review**, and **$20 per day** across answers and reviews. Exa also has a **$40
 lifetime limit** in the engine's search record. These are limits, not price quotes.
+The engine checks the team review limits (the `meeting:` section) when it reads the file. A limit
+that is not a number (for example `$5`) stops the engine, or the run, with a message that names
+the key, so a typo cannot switch the limit off.
 
 ## What is in the app
 
 | Screen | What it is for |
 |---|---|
-| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. Totals and charts separate practice from research. |
+| Overview | Ask in the "Let's research together!" question box. Follow the six-room Agent Lab and its activity panel. The answer is written below. It is also the conversation in Research, so a follow-up there continues it. Totals and charts separate practice from research. |
 | Research | The chat. Ask a question and read the answer with its sources and its hypotheses. |
 | Saved research | Search past runs and open any result. The Examples tab has six read-only practice runs. |
 | Compare | A team of nine agents against one agent alone, on the same task. |
 | Team review | One review in detail: what each agent said, and how each statement was checked. |
 | Agents | The agents and what each one does. |
 | Graph | One run as a picture of who said what. |
-| Agent Log | Every event of the selected run. Filter by agent or kind of step, search, follow live events, and download the shown log as JSON or CSV. No room picture here; the Lab stays on Overview. |
+| Agent Log | Every event of the selected run, shown as a group chat. Each agent turn is a message beside the agent's picture and name. Longer reasoning opens with "Show thinking"; other long text, such as an answer draft, opens with "Show more". Tool calls, searches and system steps are small notes between the messages. While a run is live, the log stays on the newest message. Filter by agent or kind of step, search, follow live events, and download the shown log as JSON or CSV. No room picture here; the Lab stays on Overview. |
 | Benchmarks | Our benchmark results set out as an evaluation: model, accuracy with its interval, tokens, time and cost, beside the record to beat. |
 | Settings | Demo or Real, spending limits, and Appearance: Light, Dark, or Match system. |
 
@@ -128,6 +134,24 @@ model tier. Standard can add two on the strong tier. If the cheap model is from 
 company than the writer, the specialist uses the writer's model instead. This keeps its
 statement checker independent. A question with no match gets none. See
 [docs/research-answer.md](docs/research-answer.md#method-specialists).
+
+A **plain factual question**, such as "What is the powerhouse of the cell?", takes a short path
+at both levels. The planner marks it simple; health questions never take it. The short path
+uses one search, at most 3 sources and a short answer written with little thinking. Each cited
+statement is still checked once. It has no hypotheses, specialists, critic or revision. See
+[docs/research-answer.md](docs/research-answer.md#the-short-path-for-a-plain-factual-question).
+
+**Try asking** shows biology questions under the question box on Overview and Research. They
+come from searches trending on Google now (Google Trends' free feed, no key, read at most once an
+hour). A word rule keeps the biology and health searches; no model is called. A question names
+only the biology word, never a person in the search. When none is about biology, or the feed
+cannot be read, curated biology questions are shown. On Overview a click fills the box; on
+Research it sends the question. If the engine cannot be reached, the older example questions stay.
+
+Research answers search the literature in four free sources at once: Europe PMC (PubMed and
+preprints), OpenAlex, Semantic Scholar and arXiv. A source that fails is skipped and named; a
+paper found twice is listed once. No key is needed. See
+[docs/research-answer.md](docs/research-answer.md#the-flow).
 
 Headings use **Bricolage Grotesque**. Cards have rounded corners and offset sticker shadows.
 Body text stays Geist. Fonts ship with the dashboard; none are loaded from an outside font
@@ -170,7 +194,7 @@ models produced.
 ![The Overview screen: totals, runs per day and the latest runs](docs/images/overview.png)
 
 **Research.** You ask; the answer is split into hypotheses, each with the sources for and against
-it.
+it. A mark that rests on one source only says so ("one source only").
 
 ![The Research screen with a practice answer split into two hypotheses](docs/images/research.png)
 
@@ -281,7 +305,8 @@ it is not a benchmark result.
 - **No answers in reach.** The answer key never enters the sandbox or the prompt. Only data
   files are copied in; solution notebooks and write-ups are left out.
 - **What was rejected is reported.** Each swarm run lists the answers it threw out and why,
-  next to the answers it kept.
+  next to the answers it kept. In the nine-role swarm, a claim that a test rejects also sends the
+  files it rests on back for a fix (tested with the scripted model only).
 - **Honest statistics.** Each report says how it was graded and whether its numbers can be
   compared with published ones. Today the answer is "no", with the reasons: for example, our
   sandbox has no network and the official one does. Questions that share a dataset are not
@@ -341,7 +366,7 @@ flowchart TB
     sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
     store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
     paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
-    free["<b>Free public sources</b><br/>Europe PMC: papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
+    free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv:<br/>papers and preprints<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
 
     you --> app
     app -- "questions, starts, cancels" --> gate
@@ -378,7 +403,14 @@ by real models is built but still switched off (see "Where things stand").
 The engine is built on a durable agent harness ([Pi Durable](docs/pi-setup.md)). Every step is
 saved as it happens. A review that is interrupted, for example by a crash or a restart, continues
 where it stopped and does not repeat (or pay again for) finished work. We tested this by stopping
-a practice review in the middle.
+a practice review in the middle. A review counts as finished only when the lead has written its
+memo. If the lead stops without one, the review is marked failed, not finished. A resume does not
+ask the lead again, so start a new review. A review whose `overrides.json` (the limits its chat plan
+set) cannot be read is also marked failed and does not start.
+
+The saved research is kept as files on your machine. The engine can also keep a copy in a
+Supabase database: set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`, and run
+`npm run db:backfill` once. It is off by default. See [docs/database.md](docs/database.md).
 
 ## Words
 
@@ -420,6 +452,7 @@ model account; it is separate from the app's free Demo mode. See [docs/pi-setup.
 | Understand the folders and where new code goes | [docs/codebase.md](docs/codebase.md) |
 | See every command, the two parts of the project, the tests and the limits | [docs/developers.md](docs/developers.md) |
 | Know exactly what was tested | [docs/status.md](docs/status.md) |
+| Keep a copy of the records in Supabase | [docs/database.md](docs/database.md) |
 | Understand a team review and what "supported" means | [docs/drug-board.md](docs/drug-board.md) |
 | Read results and compare fairly | [docs/reading-results.md](docs/reading-results.md) |
 | Use a coding agent on this repository | [AGENTS.md](AGENTS.md) |

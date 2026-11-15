@@ -4,10 +4,10 @@
 //  - a statement's mark comes only from a statement.checked event (the final stage when there is one);
 //  - a search that did not run is never shown as done: its reason is shown instead.
 import type { Verdict } from "@/board/api"
-import { PROVIDERS } from "./providers"
+import { PROVIDERS, searchPlace } from "./providers"
 
 export type Provider = string // "exa" | "europepmc" | "fixture" | a database name
-export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[] }
+export interface Source { n: number; url: string; title: string; provider: Provider; note?: string; /** The year (or date) the search gave for it, when it gave one. */ published?: string; /** The hypotheses whose searches found it. */ hypotheses?: string[]; /** A picture of the page (https), as the search returned it. Absent in answers recorded before pictures. */ image?: string }
 export interface Statement {
   stage: "draft" | "final"; index: number; text: string; sources: number[]; verdict: Verdict
   quote?: string; quoteFound: boolean; quoteSource?: number; checker: string; note?: string; carried?: boolean
@@ -21,7 +21,7 @@ export interface Hypothesis {
   id: string; text: string; supportIf: string; contradictIf: string; origin?: "planner" | "user"
   /** The investigator that works on this hypothesis ("investigator-1"). */
   agent?: string
-  result?: { /** What it was tested with: "sources" today; a kind this page does not know is shown as text. */ testedBy?: { kind: string; run?: string }; verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; note?: string }
+  result?: { /** What it was tested with: "sources" today; a kind this page does not know is shown as text. */ testedBy?: { kind: string; run?: string }; verdict: Verdict; for: number[]; against: number[]; forStatements: number[]; againstStatements: number[]; mixed: boolean; /** The mark rests on one source only. */ thin?: boolean; note?: string }
 }
 export interface Note { index: number; reviewer: string; severity: "blocking" | "major" | "minor"; text: string; statement: number | null; resolved?: boolean; how?: string
   /** Who says so: the critic re-reading the revision ("reviewer"), the engine's code ("code"), or only the writer's own report ("writer"). */
@@ -74,6 +74,17 @@ export interface AnswerState {
 }
 
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined)
+/** A source's picture as it may be shown: an https address and nothing else (the engine keeps only those too). */
+export const imageOf = (v: unknown): string | undefined => {
+  if (typeof v !== "string" || v.length > 1_000 || !v.startsWith("https://")) return undefined
+  try { const u = new URL(v); return u.protocol === "https:" && !u.username && !u.password ? u.href : undefined } catch { return undefined }
+}
+/** The pictures to show beside an answer: one per source that has one, a picture used twice once, at most `max`, the order of the sources. */
+export function answerImages(sources: Source[], max = 6): (Source & { image: string })[] {
+  const seen = new Set<string>(), out: (Source & { image: string })[] = []
+  for (const s of sources) if (s.image && !seen.has(s.image) && out.length < max) { seen.add(s.image); out.push(s as Source & { image: string }) }
+  return out
+}
 const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined)
 const VERDICTS = ["verified", "contradicted", "unsupported", "unchecked"]
 
@@ -141,7 +152,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
         break
       }
       case "sources":
-        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20), hypotheses: Array.isArray(i.hypotheses) ? (i.hypotheses as unknown[]).filter((h): h is string => typeof h === "string") : undefined }] : []))
+        if (Array.isArray(e.items)) s.sources = (e.items as Record<string, unknown>[]).flatMap((i) => (num(i?.n) !== undefined && str(i.url) !== undefined ? [{ n: num(i.n)!, url: str(i.url)!, title: plainTitle(str(i.title) ?? ""), provider: str(i.provider) ?? "", note: str(i.note), published: str(i.published)?.slice(0, 20), hypotheses: Array.isArray(i.hypotheses) ? (i.hypotheses as unknown[]).filter((h): h is string => typeof h === "string") : undefined, image: imageOf(i.image) }] : []))
         break
       case "answer.delta": deltas += str(e.text) ?? ""; break
       case "answer.written": written = str(e.markdown); break
@@ -161,7 +172,7 @@ export function foldAnswer(events: ResearchEvent[]): AnswerState {
       // The result of testing one hypothesis, computed by the engine's code from the checked statements. The only place a hypothesis's mark comes from.
       case "hypothesis.checked": {
         if (!str(e.id) || !VERDICTS.includes(e.verdict as string)) break
-        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, note: str(e.note),
+        const result: Hypothesis["result"] = { verdict: e.verdict as Verdict, for: nums(e.for), against: nums(e.against), forStatements: nums(e.forStatements), againstStatements: nums(e.againstStatements), mixed: e.mixed === true, ...(e.thin === true ? { thin: true } : {}), note: str(e.note),
           testedBy: ((t) => (t && str(t.kind) ? { kind: str(t.kind)!.slice(0, 40), run: str(t.run) && /^[\w.-]{1,120}$/.test(str(t.run)!) ? str(t.run) : undefined } : undefined))(e.testedBy as Record<string, unknown> | undefined) }
         results.set(str(e.id)!, result)
         const hit = s.hypotheses.find((h) => h.id === e.id); if (hit) hit.result = result
@@ -230,9 +241,9 @@ export function progressLine(s: AnswerState): string {
   if (s.sources.length) return `Kept ${s.sources.length} source${s.sources.length === 1 ? "" : "s"}. Writing…`
   const last = s.searches.at(-1)
   if (!last) return "Started. Waiting for the first step…"
-  if (last.ran === undefined) return `Searching ${providerPlace(last.provider)}…`
-  if (!last.ran) return `The search of ${providerPlace(last.provider)} did not run${last.reason ? `: ${last.reason}` : "."}`
-  return `Found ${last.found ?? 0} in ${providerPlace(last.provider)}, kept ${last.kept ?? 0}.`
+  if (last.ran === undefined) return `Searching ${searchPlace(last.provider)}…`
+  if (!last.ran) return `The search of ${searchPlace(last.provider)} did not run${last.reason ? `: ${last.reason}` : "."}`
+  return `Found ${last.found ?? 0} in ${searchPlace(last.provider)}, kept ${last.kept ?? 0}.`
 }
 
 /** Markdown read as plain text: emphasis marks, code ticks and "[n]" citation markers left out. `at[i]` is where plain character i sits in the Markdown. */

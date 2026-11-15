@@ -76,8 +76,10 @@ Set these in `.env` or in your shell. All are optional.
 | `ENGINE_HOSTS` | none | Extra host names the engine answers to, separated by commas. The defaults are `localhost`, `127.0.0.1`, `[::1]`. | `engine/src/http.ts` |
 | `ASK_MODEL` | `claude-haiku-5-5` | Model for the Ask box. | `engine/src/search/ask.ts` |
 | `DRUG_BOARD_MOCK` | not set | `1` forces scripted models for the drug board, also when keys are set. The board is also scripted while paid calls are off (`NO_PAID_CALLS`). A missing key does **not** make it scripted: with paid calls on, the run is refused instead. | `mockMode` in `engine/src/config.ts` |
+| `RESEARCH_PREVIEW` | not set, which means **off** | `1` turns on direct answers on the Research screen in Real mode (`POST /api/research`). Off: in Real mode the request answers 503 `{preview: false}`, and the Research screen makes a team-review plan instead and says that direct answers are off. Demo answers need no switch. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say whether it is on. | `engine/src/research/preview.ts` |
 | `PAID_SWITCH_LOCKED` | not set | `1` locks the engine's runtime paid switch: `POST /api/paid` answers 403 and `GET /api/paid` reports `locked: true`. `npm test`, CI and every `node --test` process are locked by default (`PAID_SWITCH_LOCKED=0` opens it, for the switch's own tests). | `paidSwitchLocked` in `engine/src/paid/paid.ts` |
 | `DRUG_BOARD_MOCK_TPS` | `400` | Speed of the scripted board models, in tokens per second. | `engine/src/models.ts` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | not set | Both set: the engine also writes its records to a Supabase database, in the background. See [database.md](database.md). Never commit the key. | `engine/src/db/supabase.ts` |
 
 ### Run tracker
 
@@ -151,3 +153,9 @@ It is enough for the demo case. Real BixBench3 tasks need the benchmark's runtim
 | `checkers.timeout_seconds` | 180 | Time limit for one second check. A check that times out records the claim as unsupported. |
 | (warning for the two keys above) | | The checker is not in a container. It runs as your user. If you remove `--restricted` or add `Bash(python3:*)` to the tools, code that it writes can read any file you can read (also `.env`) and use the network. Do that only inside a container. The `--restricted` mode was not tested with a live call. |
 | `board` | 8 member names | Members and their speaking order. Remove a line to leave a member out. |
+
+The engine checks this file each time it reads it (`checkConfig` in `engine/src/config.ts`). `max_minutes`,
+`max_usd`, `max_rounds` and `daily_usd` must be numbers of 0 or more. The other `meeting` limits may be left out,
+but when present they must be numbers of 0 or more too. `board` must be a list of names that includes `scout`.
+Otherwise the engine stops with an error that names the file and the key (`$5` or `20 dollars` is refused, not
+read as no limit).

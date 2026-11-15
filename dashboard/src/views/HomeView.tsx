@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import "@/design/research.css"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { SafeMarkdown } from "@/components/SafeMarkdown"
 import { HeaderSlot } from "@/components/HeaderSlot"
 import { Provenance } from "@/components/Provenance"
@@ -17,9 +16,10 @@ import { ChatRefused, getCatalog, sendChat, type Catalog, type ChatReply, type E
 import { chatRequest, effortFacts, effortInEffect, EXAMPLES, loadEffort, loadTurns, MODE_KIND, MODE_LABEL, MODE_MEANS, refuseText, sourcesWords, replanRequest, saveEffort, saveTurns, type Choice, type PlanState, type Turn } from "@/home/chat"
 import { PlanCard } from "@/home/PlanCard"
 import { plainWhen, runTitle } from "@/lib/format"
-import { cancelResearch, ResearchRefused, startResearch } from "@/research/api"
+import { cancelResearch, DIRECT_ANSWERS_OFF, DirectAnswersOff, ResearchRefused, startResearch } from "@/research/api"
 import { AgentsWorking } from "@/research/AgentsWorking"
 import { AskBox } from "@/research/AskBox"
+import { TryAsking } from "@/research/TryAsking"
 import { ResearchAnswer } from "@/research/Answer"
 import { answerLimitLine, DEMO_LINE } from "@/research/limitLine"
 import { threadAnswers, threadOf, useSeenEvents } from "@/research/api"
@@ -41,6 +41,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   // What this visit starts from, read once: a saved answer opened from Saved research (shown as its question and the
   // answer), else this session's conversation; and a question typed on the Overview, which arrives in the box
   // UNSENT (sending is done here, where the limits are shown). A saved answer being opened wins over that question.
+  // A direct answer the Overview started is already this session's conversation (startConversation in home/chat).
   const [start] = useState(() => { const saved = takeOpenAnswer(); return { saved, ask: saved ? undefined : takeAsk() } })
   // A question the Overview asked to be SENT starts a new search: it is not added to an older conversation.
   const [turns, setTurns] = useState<Turn[]>(() => (start.saved ? [{ id: 1, role: "user", content: start.saved.question }, { id: 2, role: "assistant", content: "", research: start.saved }] : start.ask?.send ? [] : loadTurns()))
@@ -65,6 +66,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
   const loadedTurns = useRef(turns) // what the page started with
   const thread = useRef<string | undefined>(undefined) // the engine's id for this conversation of direct answers
   const [canAnswer, setCanAnswer] = useState<"unknown" | "here" | "missing">("unknown") // whether this engine can answer directly
+  const [answersOff, setAnswersOff] = useState(false) // the engine said direct answers are switched off (Real mode without RESEARCH_PREVIEW=1)
 
   useEffect(() => {
     let stale = false
@@ -129,7 +131,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
           return
         } catch (error) {
           if (!(error instanceof ResearchRefused) || error.status !== 404 || error.field) throw error
-          setCanAnswer("missing") // an older engine: it can plan a review but not answer directly
+          setCanAnswer("missing") // an older engine, or direct answers switched off: it can plan a review but not answer directly
+          if (error instanceof DirectAnswersOff) setAnswersOff(true) // said under the box, so the plan is not mistaken for an answer
         }
       }
       const request = chatRequest(turns, asked, how === "review" ? { ...choice, effort: choice.effort } : choice)
@@ -204,6 +207,7 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
       invalid={problem?.control === "box"} describedBy={`home-box-help${problem?.control === "box" ? " home-box-error" : ""}`}
       beforeSend={activeId && <button type="button" className="btn" onClick={stop}>Stop</button>}
       sendLabel={activeId ? "Send (queued)" : undefined} sendTitle={activeId ? "This question will wait in a queue until the answer being written is finished." : undefined}>
+      {answersOff && <p className="muted small" role="status" id="home-direct-off">{DIRECT_ANSWERS_OFF}</p>}
       {stopNote && activeId === undefined && <p className="muted small" role="status">{stopNote}</p>}
       {problem?.control === "box" && <p className="newrun-error" id="home-box-error" role="alert">{problem.message}</p>}
       {problem?.control === "effort" && <p className="newrun-error" role="alert">{problem.message}</p>}
@@ -346,9 +350,8 @@ export function HomeView({ onOpen }: { onOpen: (view: "Compare" | "Board") => vo
 
           {empty && (
             <div className="search-start">
-              <Suggestions className="search-examples" role="group" aria-label="Example questions">
-                {EXAMPLES.map((q) => <Suggestion key={q} suggestion={q} className="btn" onClick={(question) => void send(question)} />)}
-              </Suggestions>
+              {/* One row: biology questions trending on Google (or curated) from the engine, else the fixed examples. */}
+              <TryAsking onPick={(question) => void send(question)} disabled={sending !== undefined} fallback={EXAMPLES} />
               {catalog === null && (
                 <p className="search-demo" role="alert">
                   {whyNone

@@ -40,7 +40,7 @@ export const plannerUser = (question: string, thread: ThreadTurn[]): string =>
   `${threadBlock(thread)}<question>\n${escapeData(question)}\n</question>`
 
 const PROVIDER_NAME: Record<string, string> = {
-  exa: "Web search (Exa)", europepmc: "Literature search (Europe PMC: PubMed abstracts and preprints)", fixture: "Example sources (demo)",
+  exa: "Web search (Exa)", europepmc: "Literature search (PubMed, OpenAlex, Semantic Scholar, arXiv: abstracts)", openalex: "OpenAlex (paper abstract)", semanticscholar: "Semantic Scholar (paper abstract)", arxiv: "arXiv (preprint abstract)", fixture: "Example sources (demo)",
   chembl: "ChEMBL database", clinicaltrials: "ClinicalTrials.gov database", openfda: "openFDA database", opentargets: "Open Targets database", uniprot: "UniProt database", pubchem: "PubChem database",
 }
 export const providerName = (provider: string): string => PROVIDER_NAME[provider] ?? provider

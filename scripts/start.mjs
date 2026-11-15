@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // One command to use the app: starts the engine and the dashboard, waits until both answer,
 // opens the browser, and stops both when you press Ctrl+C. Paid calls stay off unless .env says otherwise.
-import { spawn } from "node:child_process"
+// Before it says "ready", it prints the engine's mode, the paid switch, which keys are set, whether the Research screen
+// gives direct answers, and a warning when an engine that was already running is not this folder's code.
+import { execFileSync, spawn } from "node:child_process"
 import { existsSync } from "node:fs"
+import { engineSummary } from "../engine/src/startinfo.ts"
 
 const ENGINE = "http://127.0.0.1:8787/api/glhf/status"
+const STATUS = "http://127.0.0.1:8787/api/status"
 const DASHBOARD = "http://127.0.0.1:5317/"
 const up = async (url) => { try { return (await fetch(url, { signal: AbortSignal.timeout(1500) })).ok } catch { return false } }
 const wait = async (url, name) => {
@@ -21,10 +25,19 @@ const run = (name, args) => { const c = spawn("npm", ["run", "--silent", ...args
 const stop = () => { for (const c of children) c.kill("SIGTERM"); process.exit(0) }
 process.on("SIGINT", stop); process.on("SIGTERM", stop)
 
+let reused = false
 try {
-  if (await up(ENGINE)) console.log("Engine is already running."); else { run("engine", ["engine"]); await wait(ENGINE, "engine") }
+  if (await up(ENGINE)) { reused = true; console.log("Engine is already running: using it.") } else { run("engine", ["engine"]); await wait(ENGINE, "engine") }
   if (await up(DASHBOARD)) console.log("Dashboard is already running."); else { run("dashboard", ["dashboard"]); await wait(DASHBOARD, "dashboard") }
 } catch (e) { console.error(String(e.message ?? e)); stop() }
+
+// What the engine in use is: read from the engine itself, so a reused engine is described as it is, not as .env says.
+const status = await fetch(STATUS, { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : undefined)).catch(() => undefined)
+let here = null
+try { here = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 }).trim() } catch { /* not a git checkout */ }
+const { lines, warnings } = engineSummary(status, here, reused)
+if (lines.length) console.log(`\n${lines.join("\n")}`)
+for (const w of warnings) console.warn(`\nWARNING: ${w}`)
 
 console.log(`\nAI Scientist Bot is ready:  ${DASHBOARD}\nPress Ctrl+C here to stop it.\n`)
 if (!process.env.NO_OPEN) spawn(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "win32" ? ["/c", "start", DASHBOARD] : [DASHBOARD], { stdio: "ignore", detached: true }).on("error", () => {})

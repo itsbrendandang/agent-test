@@ -23,11 +23,24 @@ export interface EventRow {
   usd?: number
   costScope?: "step" | "total"
   sources: LogSource[]
+  /** A tool call, a search or a system step: the chat shows it as a small note, not as an agent's message. */
+  note?: boolean
+  /** The text after the first line is the agent's reasoning, so the chat labels it "Show thinking" (else "Show more"). */
+  thought?: boolean
 }
 export interface LogFilter { agent: string; kind: string; query: string }
 const objects = (value: unknown): LabEvent[] => Array.isArray(value) ? value.filter((v): v is LabEvent => !!v && typeof v === "object" && !Array.isArray(v)) : []
 const texts = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
 const join = (...values: unknown[]) => values.filter((v) => typeof v === "string" && v).join(" ")
+/** Event types that are tool calls, searches or bookkeeping rather than an agent speaking. */
+const NOTE_TYPES = new Set([
+  "run.started", "run.resumed", "run.finished", "run.failed", "research.started", "research.resumed", "research.queued", "research.finished", "research.failed", "research.cancelled",
+  "run.roster", "specialists", "evidence.triaged", "constraint", "step.started", "step.progress", "sources", "sources.cited", "artifact.created",
+  "phase.started", "phase.finished", "claim.transition", "claim.illegal_transition", "test.executed", "test.recorded", "budget.allocated", "budget.spent", "flags", "triage.uncovered",
+])
+const NOTE_KINDS = new Set(["search", "fetch", "sources"])
+/** Event types whose text is an agent's reasoning or plan, not a draft, a list or a record. */
+const THOUGHT_TYPES = new Set(["opening", "lead.framed", "round.started", "member.replied", "claim.checked", "hypothesis.checked", "statement.checked", "review.note", "issue.raised"])
 const STEP_AGENT: Record<string, string> = { prepare: "planner", hypothesize: "planner", search: "searcher", fetch: "searcher", evaluate: "relevance", write: "writer", check: "checker", review: "critic", revise: "writer", save: "engine" }
 export function sourceLink(url: unknown, title?: unknown): LogSource[] {
   if (typeof url !== "string") return []
@@ -91,8 +104,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
       case "hypotheses": kind = "hypothesize"; text = join(e.reason, objects(e.items).map((s) => join(s.id, s.text)).join("\n")) || "No hypothesis was needed."; break
       case "hypothesis.checked": kind = "check"; text = join(`Checked hypothesis ${str(e.id) ?? ""}.`, e.verdict, e.note); break
       case "answer.delta": agentId = "writer"; kind = "write"; text = str(e.text) ?? ""; break
-      case "answer.written": agentId = "writer"; kind = "write"; text = join("Wrote the draft.", e.markdown); break
-      case "answer.revised": agentId = "writer"; kind = "revise"; text = join("Revised the answer.", e.markdown); break
+      case "answer.written": agentId = "writer"; kind = "write"; text = ["Wrote the draft.", str(e.markdown)].filter(Boolean).join("\n"); break
+      case "answer.revised": agentId = "writer"; kind = "revise"; text = ["Revised the answer.", str(e.markdown)].filter(Boolean).join("\n"); break
       case "review.started": agentId = str(e.reviewer) ?? "checker"; kind = "review"; text = `Started reviewing the answer${str(e.model) ? ` with ${str(e.model)}` : ""}.`; break
       case "statement.checked": agentId = "checker"; kind = "check"; text = join("Checked a statement:", e.text, e.verdict, e.note); break
       case "review.note": agentId = "critic"; kind = "review"; text = join(`Raised a ${str(e.severity) ?? "review"} note:`, e.text); break
@@ -130,7 +143,8 @@ export function eventRows(events: readonly LabEvent[], run: RunKind): EventRow[]
     const total = /^(run|research)\.(finished|failed|cancelled)$/.test(type)
     const usd = num(e.usd) ?? num(e.spentUsd)
     links = [...new Map(links.map((s) => [s.url, s])).values()]
-    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links }]
+    const note = agentId === "engine" || NOTE_TYPES.has(type) || NOTE_KINDS.has(kind)
+    return [{ id: `${index}:${str(e.key) ?? num(e.seq) ?? type}`, at: num(e.at) ?? (num(e.ts) !== undefined ? num(e.ts)! * 1000 : undefined), agentId, agent, kind, text, usd, costScope: usd === undefined ? undefined : total ? "total" : "step", sources: links, ...(note ? { note } : {}), ...(!note && THOUGHT_TYPES.has(type) ? { thought: true } : {}) }]
   })
 }
 

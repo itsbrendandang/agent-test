@@ -91,9 +91,13 @@ test("the mark of a hypothesis is given by code: a statement counts only when it
   const forIt = [st({ index: 0, sources: [1] }), st({ index: 1, sources: [2, 1] })]
   assert.deepEqual(markOf("h1", forIt), { for: [1, 2], against: [], forStatements: [0, 1], againstStatements: [], verdict: "verified", note: "2 checked statements from 2 sources for it; none against it." })
   const againstIt = [st({ index: 3, side: "against", stance: "contradicts", sources: [4] })]
-  assert.deepEqual(markOf("h1", againstIt), { for: [], against: [4], forStatements: [], againstStatements: [3], verdict: "contradicted", note: "1 checked statement from 1 source against it; none for it." })
+  assert.deepEqual(markOf("h1", againstIt), { for: [], against: [4], forStatements: [], againstStatements: [3], verdict: "contradicted", thin: true, note: "1 checked statement from 1 source against it; none for it. It rests on one source only: a thin mark." })
+  // A mark that rests on one source only is flagged thin, however many statements cite it; two sources are not thin.
+  const oneSource = markOf("h1", [st({ index: 0, sources: [5] }), st({ index: 1, sources: [5] })])
+  assert.deepEqual([oneSource.verdict, oneSource.thin, oneSource.note], ["verified", true, "2 checked statements from 1 source for it; none against it. It rests on one source only: a thin mark."])
+  assert.equal(markOf("h1", forIt).thin, undefined)
   const mixed = markOf("h1", [...forIt, ...againstIt])
-  assert.deepEqual([mixed.verdict, mixed.mixed, mixed.note], ["unsupported", true, "The sources disagree: 2 checked statements from 2 sources for it, 1 checked statement from 1 source against it."])
+  assert.deepEqual([mixed.verdict, mixed.mixed, mixed.thin, mixed.note], ["unsupported", true, undefined, "The sources disagree: 2 checked statements from 2 sources for it, 1 checked statement from 1 source against it."])
   // What does not count: not verified by the quote check; the second model disagrees or says neither; filed under another hypothesis; no side.
   const not = [st({ verdict: "unsupported" }), st({ verdict: "unchecked" }), st({ verdict: "contradicted" }), st({ stance: "neither" }), st({ stance: "contradicts" }), st({ side: "against", stance: "supports" }), st({ hypothesis: "h2" }), st({ side: undefined }), st({ hypothesis: undefined, side: undefined })]
   const empty = markOf("h1", not)
@@ -148,8 +152,8 @@ test("numbered sources: every hypothesis gets its turn, a source two searches fo
   assert.ok(!planner.includes("{{") && !planner.includes("clinicaltrials"))
   assert.ok(hypothesesSystem({ max: 4, databases: true }).includes("\"clinicaltrials\""))
   const hyp = (over: Partial<Hypothesis>): Hypothesis => ({ id: "h1", text: "X causes Y.", supportIf: "s", contradictIf: "c", origin: "planner", ...over })
-  assert.deepEqual(missingOf({ searches: [], steps: [], sources: [{ n: 1, url: "u", title: "t", provider: "exa", text: "x" }], statements: [], review: { checker: "c", critic: "k", revised: false, notes: [] }, hypotheses: [hyp({ verdict: "verified" }), hyp({ id: "h2", verdict: "unsupported" }), hyp({ id: "h3", verdict: "unsupported", mixed: true }), hyp({ id: "h4", verdict: "unchecked" })] }, [{ text: "Z causes Y.", reason: "the level has 3 web searches" }]), [
-    "No checked evidence for or against H2: \"X causes Y.\"", "The sources disagree on H3: \"X causes Y.\"", "H4 was not checked: \"X causes Y.\"", "A hypothesis that was proposed and not tested, because the level has 3 web searches: \"Z causes Y.\"",
+  assert.deepEqual(missingOf({ searches: [], steps: [], sources: [{ n: 1, url: "u", title: "t", provider: "exa", text: "x" }], statements: [], review: { checker: "c", critic: "k", revised: false, notes: [] }, hypotheses: [hyp({ verdict: "verified" }), hyp({ id: "h2", verdict: "unsupported" }), hyp({ id: "h3", verdict: "unsupported", mixed: true }), hyp({ id: "h4", verdict: "unchecked" }), hyp({ id: "h5", verdict: "contradicted", thin: true })] }, [{ text: "Z causes Y.", reason: "the level has 3 web searches" }]), [
+    "No checked evidence for or against H2: \"X causes Y.\"", "The sources disagree on H3: \"X causes Y.\"", "H4 was not checked: \"X causes Y.\"", "H5 rests on one source only (a second, independent source would make its mark stronger): \"X causes Y.\"", "A hypothesis that was proposed and not tested, because the level has 3 web searches: \"Z causes Y.\"",
   ])
 })
 

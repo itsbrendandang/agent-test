@@ -1,0 +1,18 @@
+{
+ "about": "What a sandbox of our image must hold, as hashes. Made by `python -m bixbench_v1.modal_image fingerprint` from image/amd64-modal.inventory.json; do not edit. Every Modal run checks it (modal_boundary.fingerprint_problems).",
+ "image": "bixbench-v1-env:amd64-1",
+ "image_id_when_made": "im-zg5ZfAWty2xmm26139CpOY",
+ "conda": {
+  "count": 843,
+  "sha256": "6516faeca8b68d3b0ad423c0e2570e8f4cb305f2eaf926361137f3477e832fae"
+ },
+ "r": {
+  "count": 333,
+  "sha256": "64974deb5e44f7906c0b200c0fe86b1f63c7556561120c6e82b0399761b40f98",
+  "version": "R version 4.3.3 (2024-02-29)"
+ },
+ "busco_layers": {
+  "count": 7,
+  "sha256": "58b28fa8ebc7e41cfb50afb9920458f4adbd4b388df76f1dc028526a08dc2683"
+ }
+}

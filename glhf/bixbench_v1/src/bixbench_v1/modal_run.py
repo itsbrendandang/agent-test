@@ -77,9 +77,20 @@ class ModalRun:
             if probes and not any(p.get("reached") for p in probes)
             else "not run",
             "data_probe": "passed" if probes else "not run",
+            # Every sandbox of our image: its conda and R packages and BUSCO layers, hashed,
+            # equal modal_env/expected-env.json, or the run was refused.
+            "environment_check": _environment_check(probes),
+            "environment": next((p["environment"] for p in probes if p.get("environment")), None),
             "machines": sorted({f"{p.get('machine')} {p.get('kernel')}" for p in probes}),
             "left_over_terminated": leftover or [],
         }
+
+
+def _environment_check(probes: list[dict[str, Any]]) -> str:
+    checks = {str((p.get("environment") or {}).get("check", "not run")) for p in probes}
+    if not checks:
+        return "not run"
+    return checks.pop() if len(checks) == 1 else "mixed: " + ", ".join(sorted(checks))
 
 
 def prepare(

@@ -13,6 +13,7 @@ import { boardFacts } from "@/lib/verdict"
 import { markCount } from "@/lib/words"
 import { ChatRefused, startPlan, type Effort, type EffortId, type Plan } from "./api"
 import { Activity } from "@/research/Activity"
+import { providerPlace } from "@/research/model"
 import { reviewActivity } from "@/research/boardAdapter"
 import { EffortPicker } from "./EffortPicker"
 import { controlOf, editsOf, estimateText, startBlock, startRequest, type Edits, type PlanState, type StartControl, type StartErrors } from "./chat"
@@ -270,7 +271,7 @@ export function RunFollow({ runId, onOpen, maxRounds }: { runId: string; onOpen:
         </>
       )}
       {f.error && <p className="newrun-error" role="alert">{f.error}</p>}
-      <Activity steps={review.steps} working={review.working} totalSeconds={review.seconds} />
+      <Activity steps={review.steps} working={review.working} place={providerPlace} totalSeconds={review.seconds} />
       <p className="muted small">Run id: <RunId id={runId} /></p>
       <span className="home-run-open">
         {f.state === "done" && <Mascots mood="happy" size={32} />}

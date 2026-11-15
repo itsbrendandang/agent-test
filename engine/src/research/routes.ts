@@ -29,7 +29,7 @@ import { spentToday } from "../board/board.ts"
 import type { BoardConfig } from "../config.ts"
 import { exaSearch, type SearchResult } from "../search/exa.ts"
 import { gate, HttpError, linesFrom, readJson } from "../http.ts"
-import { literatureLive } from "../search/literature.ts"
+import { scholarlyLive } from "../search/scholarly.ts"
 import { checkTierPrices, gateProvider } from "../models.ts"
 import { PaidCallsOff, paidCallsOff, refusePaid } from "../paid/paid.ts"
 import { missingKeys } from "../providers.ts"
@@ -42,6 +42,8 @@ import { type AnswerHit, answerDir, answerHits, eventsFile, isAnswerId, isThread
 import { plainBlock, scrub } from "./text.ts"
 import { type Effort, isEffort, limitsOf, type ResearchRecord } from "./types.ts"
 import { exampleEntries } from "../examples.ts"
+import { configHash, runManifest } from "../manifest.ts"
+import { previewOn } from "./preview.ts"
 
 export const MAX_QUEUED_PER_THREAD = 3
 export const MAX_STREAMS_PER_ANSWER = 8
@@ -56,7 +58,7 @@ export interface ResearchDeps {
   mock: () => boolean
   /** Tests: the models of a real answer (fakes). Default: the gated Anthropic and OpenAI providers of models.ts. */
   models?: () => Models
-  /** Tests: stand-ins for the searches. Defaults: exa.ts, literature.ts, and sources/ when it is there. */
+  /** Tests: stand-ins for the searches. Defaults: exa.ts, scholarly.ts (literature), and sources/ when it is there. */
   exa?: (query: string, objective: string) => Promise<SearchResult>
   literature?: (query: string) => Promise<SearchResult>
   database?: (source: Database, query: string) => Promise<SearchResult>
@@ -84,10 +86,11 @@ async function databaseLookup(): Promise<ResearchDeps["database"]> {
 
 const ctx = BACKGROUND_CONTEXT
 
-// THE PREVIEW SWITCH. A real (paid) answer is refused unless the engine was started with RESEARCH_PREVIEW=1: the
-// pipeline has not yet written a real answer, so the Search screen must not offer one by default. Demo answers and
-// every GET work without it. The dashboard reads `preview: false` in the 503 and falls back to the plan path.
-export const previewOn = (env: NodeJS.ProcessEnv = process.env): boolean => (env.RESEARCH_PREVIEW ?? "").trim() === "1"
+// THE PREVIEW SWITCH (preview.ts). A real (paid) answer is refused unless the engine was started with RESEARCH_PREVIEW=1:
+// the pipeline has not yet written a real answer, so the Search screen must not offer one by default. Demo answers and
+// every GET work without it. The dashboard reads `preview: false` in the 503, says that direct answers are off, and
+// falls back to the plan path. The start-up lines and GET /api/status show the switch.
+export { previewOn }
 export const PREVIEW_OFF = { error: "Direct answers are being built. Use Deep for a team review.", preview: false } as const
 export const TASK_NAME = "research.answer"
 /** How often a queued question looks whether its turn has come. The wait is a stored sleep (Pi Durable), so it holds across a restart. */
@@ -98,6 +101,8 @@ const ended = (status: string) => status === "done" || status === "failed" || st
 
 export function createResearch(deps: ResearchDeps) {
   const { config, env } = deps
+  const loadedConfig = configHash()
+  const manifest = () => runManifest(config, loadedConfig)
   const now = deps.now ?? Date.now
   const trust = { hasToken: deps.hasToken, env, tokenFile: deps.tokenFile }
   /** Answers this process holds open: each has its own Pi Durable session (session.sqlite in its folder) and its lock. */
@@ -201,7 +206,7 @@ export function createResearch(deps: ResearchDeps) {
             pipeline = {
               ...shared, brain, firstPass: () => new FirstPass(models, config, false), writerModel: brain.names.writer,
               exa: deps.exa ?? ((query, objective) => exaSearch(query, objective, false, env, config.meeting.exa_highlight_chars)),
-              literature: deps.literature ?? ((query) => literatureLive(query)),
+              literature: deps.literature ?? ((query) => scholarlyLive(query, { env })), // Europe PMC, OpenAlex, Semantic Scholar, arXiv: free, no key needed
               database: deps.database ?? (limits.levels[record.effort].databaseLookups ? await databaseLookup() : undefined),
               paidOff: () => paidCallsOff(env),
             }
@@ -350,6 +355,7 @@ export function createResearch(deps: ResearchDeps) {
       caps: { maxUsd: demo ? 0 : level.maxUsd, maxSeconds: limits.maxSeconds }, models: names,
       steps: [], searches: [], sources: [], statements: [], recommendations: [], usd: 0,
       review: { checker: names.checker, critic: names.critic, revised: false, notes: [] },
+      manifest: manifest(),
       ...(ahead.length ? { after: ahead.at(-1)!.id } : {}),
     }
     saveRecord(config, record) // the record first: a question that was accepted is on disk before anything else happens
@@ -474,6 +480,8 @@ export function createResearch(deps: ResearchDeps) {
     handle,
     /** Saved answers for GET /api/search. */
     hits: (query: string): AnswerHit[] => answerHits(config, query, now()),
+    /** What an answer started now records: the config hash is the one of the config this engine loaded. */
+    manifest,
     /** Continue the answers and queued questions an earlier process left unfinished. Returns the ids taken up. */
     resume,
     /** Stop as a stopping engine does: close every open session, mark nothing. */

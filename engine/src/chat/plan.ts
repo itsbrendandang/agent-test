@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import * as board from "../board/board.ts"
 import { BriefRejected, loadBrief } from "../brief.ts"
 import { type BoardConfig, path } from "../config.ts"
+import { writeWhole } from "../fsx.ts"
 import { HttpError, isSafeId } from "../http.ts"
 import { clean, loadSpecialists, matchSpecialists, MAX_METHODS, methodsFor, namesOrigin, type Specialist, SPECIALIST_TIER } from "../specialists.ts"
 import { boardMembers, type CatalogSkill, loadSkills, type Member } from "./catalog.ts"
@@ -191,14 +192,14 @@ export const briefFile = (config: BoardConfig, plan: Pick<Plan, "id" | "briefTit
 export function checkBrief(config: BoardConfig, plan: Pick<Plan, "id" | "briefTitle">, markdown: string): string {
   mkdirSync(plansDir(config), { recursive: true })
   const file = briefFile(config, plan)
-  writeFileSync(file, markdown)
+  writeWhole(file, markdown)
   loadBrief(file, config.brief.required_sections)
   return file
 }
 
 export function savePlan(config: BoardConfig, record: PlanRecord): void {
   mkdirSync(plansDir(config), { recursive: true })
-  writeFileSync(planFile(config, record.plan.id), JSON.stringify(record, null, 2))
+  writeWhole(planFile(config, record.plan.id), JSON.stringify(record, null, 2))
 }
 
 /** The stored plan, or undefined when there is none or it expired unstarted. */

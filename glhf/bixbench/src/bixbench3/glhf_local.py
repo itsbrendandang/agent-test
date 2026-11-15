@@ -29,6 +29,7 @@ import platform
 import re
 import shutil
 import stat
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from importlib.metadata import version
@@ -121,7 +122,8 @@ def role_script(
     Story: the first pass leaves the first artifact with a header and no rows; the critic
     raises that and registers a test script for the claim that the first pass was complete; the
     relevance judge passes the test and the harness runs it: it contradicts, the claim is
-    refuted; the reviser fixes the artifact; in the second review the critic registers a test
+    refuted, and code raises a major issue for the refutation; the reviser fixes the artifact
+    and resolves both issues; in the second review the critic registers a test
     for the other claim, the judge passes it, the harness runs it and the claim is supported;
     the reporter writes METHODS.md. No role types a p-value. `relevance_scores` are the judge's
     scores in rounds 1 and 2 (a score under 0.8 in round 2 leaves the claim unsupported).
@@ -246,6 +248,13 @@ def role_script(
                 issue_id="I1",
                 status="fixed",
                 resolution="Reran the counting script; rows present.",
+            ),
+            # I2: raised by code because the row-count test refuted C2 (the same empty file).
+            _call(
+                "resolve_issue",
+                issue_id="I2",
+                status="fixed",
+                resolution="The refutation was right: the first pass had no rows. Rows restored.",
             ),
             _done("fixed"),
         ],
@@ -613,6 +622,59 @@ def trusted_ledger(out_dir: Path, sample_store: dict[str, Any] | None) -> dict[s
     return loaded
 
 
+# Token counts Inspect may report besides input, output and total. Kept only when reported (not None), so a run.json
+# from a provider without them has the same shape as before. Cache reads count fully in `total_tokens` (and in
+# Inspect's token limit) but cost a tenth of an input token, so the split is needed to turn tokens into dollars.
+USAGE_EXTRAS = (
+    "input_tokens_cache_read",
+    "input_tokens_cache_write",
+    "reasoning_tokens",
+    "total_cost",
+)
+
+
+def usage_summary(model_usage: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Token use per model for run.json, from Inspect's ``log.stats.model_usage``."""
+    summary: dict[str, dict[str, Any]] = {}
+    for name, u in model_usage.items():
+        row: dict[str, Any] = {
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "total_tokens": u.total_tokens,
+        }
+        for key in USAGE_EXTRAS:
+            value = getattr(u, key, None)
+            if value is not None:
+                row[key] = value
+        summary[name] = row
+    return summary
+
+
+def git_state(cwd: Path | None = None) -> dict[str, Any]:
+    """The commit of the code that ran, and whether tracked files differed from it. None values without git."""
+    where = cwd or Path(__file__).parent
+
+    def git(*args: str) -> str | None:
+        try:
+            done = subprocess.run(
+                ["git", *args],
+                cwd=where,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout.strip()
+
+    commit = git("rev-parse", "HEAD")
+    if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        return {"git_commit": None, "git_dirty": None}
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return {"git_commit": commit, "git_dirty": None if status is None else bool(status)}
+
+
 def load_case(case_dir: Path) -> RuntimeCase:
     first = (case_dir / "cases.jsonl").read_text(encoding="utf-8").splitlines()[0]
     return RuntimeCase.model_validate(json.loads(first))
@@ -739,7 +801,11 @@ def run_local(
         "memory_dir": str(memory_dir) if memory_dir else None,
         "seed": seed,
         "settings": settings,
-        "versions": {"inspect_ai": version("inspect_ai"), "python": platform.python_version()},
+        "versions": {
+            "inspect_ai": version("inspect_ai"),
+            "python": platform.python_version(),
+            **git_state(),
+        },
         "started_at": started,
         "status": "running",
     }
@@ -792,14 +858,7 @@ def run_local(
     else:
         result = dict(grade(grading_spec, graded))
         (out_dir / "grade.json").write_text(json.dumps(result, indent=2, default=str))
-    usage = {
-        name: {
-            "input_tokens": u.input_tokens,
-            "output_tokens": u.output_tokens,
-            "total_tokens": u.total_tokens,
-        }
-        for name, u in (log.stats.model_usage or {}).items()
-    }
+    usage = usage_summary(log.stats.model_usage or {})
     ledger = trusted_ledger(out_dir, dict(sample.store) if sample else None) if swarm else None
     if ledger is not None:
         if refused:

@@ -10,7 +10,7 @@ Each local run has a folder `glhf/runs/<run-id>/`. Run folders are not in git.
 | File | Written by | Content |
 |---|---|---|
 | `record.json` | Run tracker | The run as the CLI and the dashboard show it: phase, score, settings. |
-| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. |
+| `run.json` | `glhf_local.py` | Settings, status, score, score per artifact, token use per model, versions, seed. Token use has input, output and total, plus cache reads and writes, reasoning tokens and cost (`total_cost`) when Inspect reports them. `versions` has the git commit (`git_commit`) and whether tracked files had changes (`git_dirty`). |
 | `grade.json` | The benchmark's grader | The full grade. |
 | `runner.log`, `tracker.log` | Runner, run tracker | Logs. Read `runner.log` first when a run fails. |
 | `logs/` | Inspect | Every model call of the run. |
@@ -53,7 +53,7 @@ not a benchmark score.
 | Supported findings | Claims with the verdict supported. |
 | Rejected claims | Claims with the verdict refuted. |
 | Not established | Claims with the verdict insufficient or untested. They are not findings. |
-| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. |
+| Rejected analyses | Issues that a reviewer raised and the Reviser fixed. A fix is marked when the Critic did not check it again. An issue raised by `harness` comes from a refuted claim: code raises it so that the Reviser checks the claim's artifacts. |
 | Unresolved issues | Issues that are still open or were not fixed. |
 
 ## Verdict rules
@@ -232,7 +232,7 @@ time limits end phases at different points.
 
 Fixed or recorded: the order of roles and their budgets (code), the verdicts (code), every model
 call (`logs/`), every search query and claim (ledger), the analysis scripts, and the settings,
-seed and versions (`run.json`).
+seed, versions and git commit (`run.json`).
 
 Report the mean and the range of several runs, not one run.
 

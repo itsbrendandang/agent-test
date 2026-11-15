@@ -680,3 +680,133 @@ def test_an_unknown_sandbox_name_is_refused_before_anything_is_staged(
             out_dir=tmp_path / "run", solver="single", model="mock", sandbox="e2b",
         )  # fmt: skip
     assert not (tmp_path / "run" / "run.json").exists()
+
+
+# --- The analysis environment: the fingerprint ---------------------------------------------------
+
+R_CODE = (
+    'ip <- installed.packages(); cat("RVERSION\\t", R.version.string, "\\n", sep=""); '
+    'for (i in seq_len(nrow(ip))) cat("PKG\\t", ip[i, "Package"], "\\t", ip[i, "Version"], '
+    '"\\n", sep="")'
+)
+TINY_INVENTORY: dict[str, Any] = {
+    "conda": [
+        {"name": "r-base", "version": "4.3.3", "build": "h1_0"},
+        {"name": "python", "version": "3.12.2", "build": "h2_0"},
+    ],
+    "r": {
+        "rversion": "R version 4.3.3 (2024-02-29)",
+        "packages": [
+            {"name": "DESeq2", "version": "1.42.0"},
+            {"name": "abind", "version": "1.4-5"},
+        ],
+    },
+    "udocker_layers": ["sha256:aa", "sha256:bb"],
+}
+
+
+def _shims(folder: Path) -> Path:
+    """Stand-ins for conda and Rscript that print what the real ones print for TINY_INVENTORY.
+    Rscript writes the R code it was given to a file, so the quoting can be checked."""
+    folder.mkdir()
+    conda = [
+        {"name": p["name"], "version": p["version"], "build_string": p["build"]}
+        for p in TINY_INVENTORY["conda"]
+    ]
+    (folder / "conda").write_text(f"#!/bin/sh\ncat <<'J'\n{json.dumps(conda)}\nJ\n")
+    lines = "RVERSION\tR version 4.3.3 (2024-02-29)\nPKG\tabind\t1.4-5\nPKG\tDESeq2\t1.42.0\n"
+    (folder / "Rscript").write_text(
+        f'#!/bin/sh\nprintf "%s" "$2" > "{folder}/r_code.txt"\nprintf "{lines}"\n'
+    )
+    for name in ("conda", "Rscript"):
+        (folder / name).chmod(0o755)
+    return folder
+
+
+def test_the_fingerprint_script_runs_and_hashes_like_the_inventory(tmp_path: Path) -> None:
+    shims = _shims(tmp_path / "bin")
+    env = {"PATH": f"{shims}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    run = subprocess.run(
+        [sys.executable, "-c", boundary.FINGERPRINT], capture_output=True, text=True, env=env
+    )
+    assert run.returncode == 0, run.stderr
+    printed = boundary.parse_probe(run.stdout)
+    assert printed["errors"] == []
+    # R received exactly this code (the three layers of quoting: Python, bash, R).
+    assert (shims / "r_code.txt").read_text() == R_CODE
+    assert printed["r_version"] == "R version 4.3.3 (2024-02-29)"
+    # The same packages hash the same, whether read from an inventory or from a sandbox, and
+    # in any order. No udocker here, so only the BUSCO layers differ.
+    expected = boundary.fingerprint_of_inventory(TINY_INVENTORY)
+    problems = boundary.fingerprint_problems(printed, expected)
+    assert problems == [
+        "BUSCO image layers differ from modal_env/expected-env.json (0 found, 2 expected)"
+    ]
+    printed["busco_layers"] = ["sha256:bb", "sha256:aa"]
+    assert boundary.fingerprint_problems(printed, expected) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "says"),
+    [
+        (lambda p: p["conda"].pop(), "conda packages differ"),
+        (lambda p: p["conda"][0].__setitem__(2, "h9_0"), "conda packages differ"),  # a build
+        (lambda p: p["r"][0].__setitem__(1, "1.42.1"), "R packages differ"),
+        (lambda p: p.__setitem__("r_version", "R version 4.4.0"), "R packages differ"),
+        (lambda p: p["busco_layers"].append("sha256:cc"), "BUSCO image layers differ"),
+        (lambda p: p["errors"].append("Rscript: exit 1"), "could not be read"),
+    ],
+)
+def test_any_change_to_the_environment_is_a_problem(change: Any, says: str) -> None:
+    printed = {
+        "errors": [],
+        "conda": [[p["name"], p["version"], p["build"]] for p in TINY_INVENTORY["conda"]],
+        "r": [[p["name"], p["version"]] for p in TINY_INVENTORY["r"]["packages"]],
+        "r_version": TINY_INVENTORY["r"]["rversion"],
+        "busco_layers": list(TINY_INVENTORY["udocker_layers"]),
+    }
+    expected = boundary.fingerprint_of_inventory(TINY_INVENTORY)
+    assert boundary.fingerprint_problems(printed, expected) == []
+    change(printed)
+    problems = boundary.fingerprint_problems(printed, expected)
+    assert problems and says in " ".join(problems)
+
+
+def test_the_committed_fingerprint_is_the_committed_inventorys() -> None:
+    """expected-env.json is derived from image/amd64-modal.inventory.json, never edited by hand:
+    regenerate it with `python -m bixbench_v1.modal_image fingerprint`."""
+    inventory = json.loads(
+        (Path(boundary.__file__).parents[2] / "image" / "amd64-modal.inventory.json").read_text()
+    )
+    expected = boundary.expected_env()
+    derived = boundary.fingerprint_of_inventory(inventory)
+    assert {k: expected[k] for k in derived} == derived
+    assert expected["conda"]["count"] == len(inventory["conda"]) == 843
+    assert expected["image"] == inventory["modal_image"]["name"]
+
+
+def test_the_committed_fingerprint_agrees_with_the_build_recipe() -> None:
+    """Every package of the explicit list (what a build installs) is in the fingerprint's conda
+    list, with the same version and build."""
+    folder = Path(boundary.__file__).parent / "modal_env"
+    inventory = json.loads(
+        (Path(boundary.__file__).parents[2] / "image" / "amd64-modal.inventory.json").read_text()
+    )
+    installed = {(p["name"], p["version"], p["build"]) for p in inventory["conda"]}
+    urls = [
+        line
+        for line in (folder / "explicit-linux-64.txt").read_text().splitlines()
+        if line.startswith("http")
+    ]
+    listed = set()
+    for url in urls:
+        file = url.rsplit("/", 1)[1].split("#")[0].removesuffix(".conda").removesuffix(".tar.bz2")
+        name, version, build = file.rsplit("-", 2)
+        listed.add((name, version, build))
+    assert len(urls) == len(listed) == 843
+    assert listed == installed
+
+
+def test_only_our_image_is_checked() -> None:
+    assert boundary.checks_environment("bixbench-v1-env:amd64-1")
+    assert not boundary.checks_environment("python:3.12-slim")

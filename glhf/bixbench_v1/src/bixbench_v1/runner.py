@@ -46,6 +46,7 @@ from .dataset import (
     public_view,
 )
 from .grading import PROFILES, Judge, Profile, grade_answers, judge_record
+from .jobs import write_json
 from .solvers import (
     COMPACTION_THRESHOLD_TOKENS,
     DERIVATION_SHARE,
@@ -220,6 +221,24 @@ def _collect_outputs(mount: Path, outputs: Path) -> None:
     shutil.rmtree(mount, ignore_errors=True)
 
 
+def stage(capsule: Capsule, hub_dir: Path, staged_root: Path) -> tuple[Path, staging.Manifest]:
+    """Stage the capsule's data (once; later calls only verify it) and scan it for secrets.
+    With --jobs the parent calls this for every capsule before any run starts: staging the
+    same capsule twice at the same time would race."""
+    staged = staged_root.resolve() / capsule.uuid
+    data_dir = staging.stage_capsule(
+        hub_dir / capsule.zip_name,
+        staged,
+        data_folder=staging.DATA_FOLDER_PREFIX + capsule.uuid,  # exactly the dataset's uuid
+    )
+    manifest = staging.verify_staged(staged)
+    secrets = [s for q in capsule.questions for s in q.long_secrets()]
+    leaks = staging.leak_scan(data_dir, secrets)
+    if leaks:
+        raise staging.IntegrityError(f"{capsule.key}: staged files contain a secret field: {leaks}")
+    return data_dir, manifest
+
+
 def run_capsule(
     capsule: Capsule,
     *,
@@ -246,6 +265,7 @@ def run_capsule(
     modal_memory_mib: int = 16384,
     modal_ledgers: list[Path] | None = None,
     modal_usd_cap: float | None = None,
+    jobs: int = 1,
 ) -> dict[str, Any]:
     """Run the solver. Does not grade and never touches the key beyond building the public view.
     `sandbox` is "docker" (local, the default) or "modal" (a Modal Sandbox made from our amd64
@@ -258,7 +278,9 @@ def run_capsule(
     gets the same total; "extended": the analyst gets all of it and the swarm's total is larger;
     default $BIXBENCH_V1_SWARM_BUDGET, else "equal") says what the swarm gets. A swarm budget
     that cannot hold the role floors raises `BudgetError` here, before staging or any container.
-    `critic_hints` is accepted for the command line and ignored: the critic is always blind."""
+    `critic_hints` is accepted for the command line and ignored: the critic is always blind.
+    `jobs` is how many runs the command ran at once; it is recorded, because time spent waiting
+    on a provider's rate limit comes out of the run's own time."""
     out_dir = out_dir.resolve()
     outputs = out_dir / "outputs"
     asked = [q for q in capsule.questions if question_ids is None or q.question_id in question_ids]
@@ -273,17 +295,7 @@ def run_capsule(
     )
 
     # 1. Stage and verify the data the sandbox will see.
-    staged = staged_root.resolve() / capsule.uuid
-    data_dir = staging.stage_capsule(
-        hub_dir / capsule.zip_name,
-        staged,
-        data_folder=staging.DATA_FOLDER_PREFIX + capsule.uuid,  # exactly the dataset's uuid
-    )
-    manifest = staging.verify_staged(staged)
-    secrets = [s for q in capsule.questions for s in q.long_secrets()]
-    leaks = staging.leak_scan(data_dir, secrets)
-    if leaks:
-        raise staging.IntegrityError(f"{capsule.key}: staged files contain a secret field: {leaks}")
+    data_dir, manifest = stage(capsule, hub_dir, staged_root)
 
     # 2. Public view for the solver; the key stays here and is not used until grading.
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -339,6 +351,7 @@ def run_capsule(
             "critic_hints_requested": critic_hints if swarm else None,
             "seed": seed,
             "repeat": repeat,
+            "jobs": jobs,
             "option_shuffle": None if answer_mode == "open" else f"host-only salt ({SALT_FILE})",
             "sandbox": sandbox,
             "image": image,
@@ -365,7 +378,7 @@ def run_capsule(
         "started_at": started,
         "status": "running",
     }
-    (out_dir / "run.json").write_text(json.dumps(summary, indent=2))
+    write_json(out_dir / "run.json", summary)
 
     # 3. Solve. The task receives public questions only; the sandbox mounts neutral paths.
     role_args: dict[str, Any] = {"budget_policy": budget_policy}
@@ -486,7 +499,7 @@ def run_capsule(
         answer_statuses=statuses,
         phases=phases,
     )
-    (out_dir / "run.json").write_text(json.dumps(summary, indent=2))
+    write_json(out_dir / "run.json", summary)
     return summary
 
 
