@@ -205,7 +205,8 @@ Two different things, never mixed:
 
 The switch:
 
-- Demo: "Practice runs. Fixed example answers. Free." Real: "Real AI models and web search. Costs money."
+- Under the control: "Demo uses fixed example answers and is free." and "Real uses live AI models and web search,
+  which cost money. You confirm before each run." These two lines are also the control's description for a screen reader.
 - Choosing Real never flips anything. It opens a dialog: what changes, the limits (per run, per day, searches),
   what was spent today, a tick box "I understand this costs money", and the session-token prompt if none is held.
   Only the ticked box lets the engine's confirm sentence be sent. Escape or "Stay in Demo" changes nothing.
