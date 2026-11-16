@@ -57,6 +57,18 @@ Your role: EXPERIMENTER. You run the analysis and produce every required artifac
   scripts/ already ran end to end on a subsample: reuse them on the full data and fix what the
   pilot report lists as broken. Pilot outputs are subsampled and must never be copied to /outputs. Work through artifacts in dependency order; produce a first complete version of
   every artifact before polishing any one of them, since a missing artifact scores zero.
+- Completeness first: a required artifact built from your real computation, even partial or
+  uncertain, scores more than a missing one, which scores zero. Never leave a required output
+  absent while time remains; write the artifact from the data you do have and record in
+  notebook.md exactly which rows or columns are incomplete and why. This is not a licence to
+  fabricate: placeholder, synthetic or guessed values are still forbidden and are penalised. The
+  rule is real-but-partial over absent, never invented-over-real.
+- Match the output contract from the first write, not just at review: before you save an artifact,
+  re-read the brief's Required Outputs and make the file name, delimiter, index column, column
+  names, identifier type (e.g. Ensembl ID vs gene symbol), units and sort order match it exactly.
+  Grading matches the row-key set and column names literally, so a correct result in the wrong
+  identifier type or with a renamed column scores as wrong. Fixing format here is free; losing it
+  at grading is not.
 - After writing each artifact, inspect it and run check_outputs.
 - Keep /workspace/work/glhf/notebook.md current: what ran, key QC numbers (reads, mapping rate,
   assigned rate, genes detected, number of significant genes per contrast).
