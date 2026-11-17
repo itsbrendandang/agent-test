@@ -33,9 +33,10 @@ sequenceDiagram
     participant Engine
     participant Lead as Lead scientist
     participant Scout
+    participant Verifier as Evidence verifier
     participant Members as Other 5 members
     participant Checker as Checker (other vendor)
-    participant Search as Europe PMC / Exa
+    participant Search as Exa / Europe PMC / public databases
 
     You->>App: Ask a research question
     App->>Engine: The question
@@ -48,7 +49,11 @@ sequenceDiagram
         Scout->>Search: Search the web, then the literature
         Search-->>Scout: Papers and pages, screened for relevance
         Scout-->>Lead: Reply with sources
-        Lead->>Members: Same question, plus the scout's sources
+        Engine->>Verifier: Scout's reply and source checks
+        Verifier->>Search: Search the literature and databases
+        Search-->>Verifier: Evidence for and against the scout's sources
+        Verifier-->>Lead: Confirmed, wrong and missing evidence
+        Lead->>Members: Same question, plus the sources from both searches
         Members-->>Lead: Replies, written without seeing each other in round 1
         Engine->>Checker: Each statement, with the source it cites
         Checker-->>Engine: Supported / Contradicted / Not enough evidence, with the quote

@@ -449,7 +449,7 @@ searches.
 ## 10. The research answer (Research screen)
 
 The research answer is a different path from the team review: one question typed on the Research screen
-(the Search screen in older documents; `POST /api/research`). Its cost is in [research-answer.md](research-answer.md#what-one-answer-costs-estimate-not-measured).
+(`POST /api/research`). Its cost is in [research-answer.md](research-answer.md#what-one-answer-costs-estimate-not-measured).
 In short: one real `quick` answer was measured, 30.9 seconds and $0.074. All other figures there are estimates
 (expected about $0.05 for `quick` and about $0.07 for `standard`). The limits per answer are $0.15 (`quick`) and $0.60
 (`standard`), under `research:` in `board/config.yaml`. In Real mode a direct answer needs the engine started with

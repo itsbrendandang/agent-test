@@ -635,7 +635,7 @@ flowchart TB
         check["<b>Statement checker</b><br/>the quoted passage must be<br/>in the source"]
     end
 
-    sandbox["<b>Docker sandbox</b>, no network<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
+    sandbox["<b>Analysis sandbox</b>, no network<br/>Docker (default) or Modal (ANALYSIS_BACKEND=modal)<br/>the swarm (9 roles) or one agent alone,<br/>then the benchmark's own grader"]
     store[("<b>Saved research</b><br/>one folder per run: events,<br/>every check, the written result")]
     paid["<b>Paid services</b> · refused in Demo mode<br/>Anthropic: writing, first check<br/>OpenAI: critic, second check<br/>Exa: web search"]
     free["<b>Free public sources</b><br/>Europe PMC · OpenAlex · Semantic Scholar · arXiv<br/>Crossref · bioRxiv/medRxiv:<br/>papers and preprints<br/>protocol journals · protocols.io (Crossref):<br/>lab protocols<br/>ChEMBL · ClinicalTrials.gov · openFDA<br/>Open Targets · UniProt · PubChem"]
