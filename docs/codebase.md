@@ -27,16 +27,16 @@ you ──▶ dashboard/ (the app, port 5317) ──▶ engine/ (port 8787) ─�
 | `engine/src/search/exa.ts`, `exaledger.ts`, `literature.ts` | The scout's searches: Exa (paid, with a spend record and a ceiling) and Europe PMC (free). | In use. |
 | `engine/src/search/scholarly.ts` | The research answer's literature search: Europe PMC, OpenAlex, Semantic Scholar, arXiv, Crossref and bioRxiv/medRxiv (free), merged. | In use. |
 | `engine/src/search/protocols.ts` | The research answer's lab protocol search: protocol journals (Europe PMC, OpenAlex) and protocols.io (Crossref), free, merged. | In use. |
-| `engine/src/chat/` | The chat on the Search screen: catalogue, plans, routes. | In use. |
-| `engine/src/research/`, `engine/src/sources/` | A direct answer with numbered sources, and searches of public databases. | Being built. Not complete in `main`. |
+| `engine/src/chat/` | The chat on the Research screen: catalogue, plans, routes. | In use. |
+| `engine/src/research/`, `engine/src/sources/` | A direct answer with numbered sources, and searches of public databases. | Built. Real direct answers need `RESEARCH_PREVIEW=1`; Demo answers need no switch. |
 | `engine/src/glhf/` | The run tracker for swarm runs: start, follow, cancel, grade. | In use. |
 | `engine/src/bixv1/` | Read-only results of the BixBench v1 adapter. | In use. |
 | `engine/src/paid/paid.ts`, `paidswitch.ts`, `preflight.ts` | The paid-calls switch, the in-app Demo/Real switch, the free pre-check. | In use. |
 | `engine/src/db/`, `supabase/migrations/` | The optional copy of the records in Supabase, and its schema ([database.md](database.md)). | Off by default. |
 | `engine/src/http.ts`, `app.ts`, `server.ts` | Request checks, the request handler, the listener. | In use. |
 | `engine/test/` | One `*.test.ts` file per area. They use fakes and never reach the network. | In use. |
-| `dashboard/src/views/` | One file per view. `HomeView.tsx` is Search, `ExperimentsView.tsx` is Saved research, `SwarmView.tsx` is Compare, `WorldsView.tsx` is Graph. | In use. |
-| `dashboard/src/home/`, `research/`, `board/`, `swarm/`, `graph/` | The parts of each view. | In use; `research/` is being built. |
+| `dashboard/src/views/` | One file per view. `HomeView.tsx` is Research, `ExperimentsView.tsx` is Saved research, `SwarmView.tsx` is Compare, `WorldsView.tsx` is Graph. | In use. |
+| `dashboard/src/home/`, `research/`, `board/`, `swarm/`, `graph/` | The parts of each view. | In use. |
 | `dashboard/src/components/` | Shared parts. `ui/` is shadcn/ui, `ai-elements/` is Vercel AI Elements. | In use. |
 | `board/config.yaml` | Limits, models and the team list of a review. | In use. Shared file: edit with care. |
 | `board/agents/` | One instruction file per team member. | In use. |
@@ -66,7 +66,7 @@ were kept so that saved runs still open.
 |---|---|
 | Bit Crew | The repository is `agent-test`; some scripts and variables say `glhf` or `drug-board`. |
 | Team review | `board` (`board/`, `engine/src/board/board.ts`, `/api/runs`, `BoardView.tsx`, `DRUG_BOARD_*` variables). |
-| Search | `HomeView.tsx`, `dashboard/src/home/`, `/api/chat`. |
+| Research | `HomeView.tsx`, `dashboard/src/home/`, `/api/chat`, `/api/research`. |
 | Saved research | `ExperimentsView.tsx`, "runs". |
 | Demo mode, practice run | `mock`, `scripted`, `NO_PAID_CALLS` not `0`. |
 | Holds up / Proven wrong / Not enough evidence | `verified` / `contradicted` / `unsupported`. |

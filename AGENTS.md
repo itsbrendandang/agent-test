@@ -132,10 +132,10 @@ documents are in `docs/`.
 - Drug board (the team review): `engine/src/board/board.ts`, `board/config.yaml` (limits, models, the
   team list), `board/agents/` (one file per member). The scout's searches: `engine/src/search/exa.ts`,
   `engine/src/paid/exaledger.ts` (spend record and ceiling), `engine/src/search/literature.ts` (free).
-- The chat on the Search screen: `engine/src/chat/` (catalogue, plans, routes),
+- The chat on the Research screen: `engine/src/chat/` (catalogue, plans, routes),
   `dashboard/src/views/HomeView.tsx`, `dashboard/src/home/`.
 - Health report: `scripts/check.mjs` (`npm run check`).
-- Swarm view: `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/` (New run form:
+- Compare (`#Compare`, not in the sidebar): `dashboard/src/views/SwarmView.tsx`, `dashboard/src/swarm/` (New run form:
   `NewRun.tsx`).
 - Exa search tool (drug board): `engine/src/search/exa.ts`. Exa's own guidance is the installed skill
   at `.agents/skills/build-with-exa/`.

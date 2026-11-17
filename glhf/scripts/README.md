@@ -22,12 +22,14 @@ Sources (all free, no API key):
 
 | Source | Covers |
 |---|---|
-| Europe PMC | PubMed / NIH (`ncbi.nlm.nih.gov`) + preprints — the source the app uses |
+| Europe PMC | PubMed / NIH (`ncbi.nlm.nih.gov`) + preprints |
 | OpenAlex | open scholarly catalog, ~all disciplines |
 | Crossref | official DOI registry (every publisher) |
 | Semantic Scholar | broad corpus with abstracts (set `S2_API_KEY` to avoid rate limits) |
 | ClinicalTrials.gov | NIH clinical-trial records (`.gov`) |
 | bioRxiv / medRxiv | biology & medicine preprints |
+| DOAJ | Peer-reviewed open-access articles |
+| DataCite | Research datasets and software |
 | arXiv | preprints (physics / CS / quant bio) |
 
 If a source is temporarily unavailable (e.g. Semantic Scholar returns 429), the
@@ -58,7 +60,12 @@ newest — so the most trusted sources are at the top. All sources are queried *
 parallel**, so one query finishes in a few seconds.
 
 > Tip: use 3–6 PubMed-style keywords, not full sentences.
-> Note: the app already does this live during a run — this is a cache/offline backup.
+
+The script queries all nine sources by default. It saves a cache for offline use; the app does not read it.
+The app's research answers search six literature sources: Europe PMC, OpenAlex, Semantic Scholar,
+arXiv, Crossref and bioRxiv/medRxiv (`engine/src/search/scholarly.ts`). A team review's
+`literature_search` uses Europe PMC (`engine/src/search/literature.ts`). These are separate searches,
+not the script's nine-source search or its citation ranking.
 
 ---
 

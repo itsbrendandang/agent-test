@@ -1,15 +1,15 @@
 # The research answer
 
-You type a question on the Search screen. The engine searches, writes a short answer from what it found, has
+You type a question on the Research screen. The engine searches, writes a short answer from what it found, has
 the answer reviewed, and shows you the answer with its numbered sources. This page says what happens, what it
 costs, and what the marks mean.
 
 > **Status.** Built and tested with fake models and a fake network (`engine/test/research-*.test.ts`). One real
 > answer has been written so far (a `quick` one: 30.9 seconds, $0.074, 14 cited sentences). That is one run, not a
 > measurement of quality. A real answer needs the engine to be started with `RESEARCH_PREVIEW=1`; without it, in
-> Real mode, `POST /api/research` answers 503 and the Search screen makes a team-review plan instead. Demo mode works
+> Real mode, `POST /api/research` answers 503 and the Research screen makes a team-review plan instead. Demo mode works
 > without it. The engine's start-up lines, `npm start` and `GET /api/status` (`researchPreview`, `directAnswers`) say
-> whether it is on, and the Search screen says so under the question box when it is off.
+> whether it is on, and the Research screen says so under the question box when it is off.
 
 The two levels on this page are `quick` and `standard`. The third level, `deep`, is the team review
 ([drug-board.md](drug-board.md)): it gives you a plan that you confirm. This page does not change it.
@@ -52,11 +52,15 @@ flowchart LR
 
 The prompts are plain files you can read and edit: `engine/src/research/prompts/`.
 
+OpenAlex results marked `is_retracted: true` are dropped before screening
+(`parseOpenAlex` in `engine/src/search/scholarly.ts`). This filters OpenAlex results only.
+It does not guarantee that retracted papers cannot enter through another source.
+
 ### Pictures
 
 Exa returns a picture (`image`) with some web pages, in the same response. The answer keeps it on its source
 (`image` in the record, the `sources` event and `sources.json`). No extra request is made and nothing more is paid.
-Only an `https` address of at most 1,000 characters is kept (`imageUrl` in `engine/src/research/text.ts`). The Search
+Only an `https` address of at most 1,000 characters is kept (`imageUrl` in `engine/src/research/text.ts`). The Research
 screen and the Overview show the pictures in a strip under the answer text. Each picture links to its source page and
 shows its number and site. A picture that does not load is left out. An answer with no picture, also one saved before
 this field, shows no strip. Europe PMC and the databases give no pictures.
@@ -72,7 +76,7 @@ at least 30 capitals inside a sentence); and a test
 protein, when the question is that test protein's own question (its chip). Other questions never get a test protein. At most 8 are listed. An answer saved before the field gets them worked out when it is read.
 Nothing is fetched while the answer is made.
 
-On the Search screen the inspector then has a **Structure** tab. Opening a protein calls
+On the Research screen the inspector then has a **Structure** tab. Opening a protein calls
 `GET /api/structure` (`engine/src/structure/fold.ts`). ESMFold (Meta AI) predicts the structure through the free
 ESM Atlas API when the sequence has at most 400 amino acids. A longer protein, or one ESMFold fails on, gets AlphaFold
 DB's model when it has a UniProt accession. The reply always names the model, and the tab says it is a prediction.

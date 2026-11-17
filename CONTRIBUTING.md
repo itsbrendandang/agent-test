@@ -187,7 +187,8 @@ npm run scoreboard
 
 - The scoreboard compares two runs only when task, case, model, mode (local or cloud), effort,
   time limit and token budget are the same. Use the same values for both solvers.
-- You can also start a local run on the demo case from the dashboard (Swarm view, **New run**).
+- You can also start a local run on the demo case from the dashboard (Compare, **New run**).
+  Open `#Compare`; it is not in the sidebar.
   "Both, to compare" starts a swarm run and a single-agent run with the same settings.
 - Each run is saved in `glhf/runs/<run-id>/`. This folder is not in git. To share a result, send
   the output of `npm run glhf -- show <run-id>` or the file `run.json`.

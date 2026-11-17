@@ -555,7 +555,7 @@ This check comes first.
 
 ### Starting a run from the dashboard
 
-The Swarm view has a **New run** button. It opens a form (`dashboard/src/swarm/NewRun.tsx`)
+Open `#Compare` (not in the sidebar). Compare has a **New run** button. It opens a form (`dashboard/src/swarm/NewRun.tsx`)
 that starts a local run on the demo case.
 
 | Field | Values | Notes |

@@ -220,7 +220,7 @@ Only if you have spare time and checked it off stage. We did not click through t
 Before the demo, in a third terminal: `npm run dashboard` (port 5317). After step 4, in T1:
 `npm run engine` (port 8787; first lines show `mock models` and `Paid calls: OFF`).
 
-1. Open `http://localhost:5317`. The Swarm view is the first view.
+1. Open `http://localhost:5317/#Compare` (Compare is not in the sidebar).
 2. Look at the card "Scoreboard: single agent against swarm". It should show the pair from
    step 2.
 3. Scroll to "Claims" and "Findings and rejections" for the latest swarm run.

@@ -271,7 +271,7 @@ Notes:
 
 ## 10. Direct answers on the Research screen
 
-The Research screen (`Home` in `dashboard/src/nav.ts`; older documents call it the Search screen) first asks the engine
+The Research screen (`Home` in `dashboard/src/nav.ts`) first asks the engine
 for a direct answer (`POST /api/research`, [research-answer.md](research-answer.md)). In Real mode the engine refuses it
 with 503 unless the engine was started with `RESEARCH_PREVIEW=1` (`previewOn` in `engine/src/research/preview.ts`, used
 in `engine/src/research/routes.ts`). The screen then asks for a team-review plan instead (`dashboard/src/views/HomeView.tsx`).
