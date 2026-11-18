@@ -184,11 +184,10 @@ but is not imported by the app. (F)
 |---|---|---|---|
 | `@fontsource-variable/fredoka`, `@fontsource-variable/geist` | 5.3.0 | OFL-1.1 | bundled fonts |
 | `@streamdown/cjk`, `/code`, `/math`, `/mermaid`, `streamdown` | 1.0.4, 2.0.0, 1.0.3, 1.0.3, 2.7.1 | Apache-2.0 | linked |
-| `@ui-sdk/core`, `@ui-sdk/react` | 0.1.0-beta.1 | Apache-2.0 | linked |
 | `ai` | 7.0.173 | Apache-2.0 | linked |
 | `class-variance-authority` | 0.7.1 | Apache-2.0 | linked |
 | `lucide-react` | 1.72.0 | ISC | linked |
-| `cmdk`, `cn`, `nanoid`, `radix-ui`, `react`, `react-dom`, `recharts`, `tw-animate-css`, `use-stick-to-bottom` | installed versions | MIT | linked |
+| `cmdk`, `cn`, `nanoid`, `radix-ui`, `react`, `react-dom`, `tw-animate-css`, `use-stick-to-bottom` | installed versions | MIT | linked |
 | `shadcn` | 4.23.0 | MIT | command-line tool listed under `dependencies` |
 | `@tailwindcss/vite`, `tailwindcss`, `@types/*`, `@vitejs/plugin-react`, `oxlint`, `vite` | installed versions | MIT | dev |
 | `typescript` | 7.0.2 | Apache-2.0 | dev |
