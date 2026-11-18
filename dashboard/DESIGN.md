@@ -118,8 +118,8 @@ characters roles and skills, which made decoration look like agents). Settings u
 
 Brought back from git history (commit `e071754^`), by the owner's decision: the loading screen
 (`Splash.tsx`), and AI Elements with the shadcn pieces it needs. `message.tsx` differs from history in one way:
-its Markdown renderer moved to `ai-elements/message-response.tsx`, which nothing imports, so its code-highlight,
-maths and diagram plugins (about 740 kB) stay out of the first load. `sources.tsx`, `loader.tsx` and
+its unused Markdown renderer and its code-highlight, maths and diagram plugins were removed.
+`sources.tsx`, `loader.tsx` and
 `ui/collapsible.tsx` were added from the public registries with the shadcn CLI. `reasoning.tsx` (the Agent Log's
 "Show thinking") was copied from AI Elements with three changes, listed at the top of the file.
 
@@ -256,7 +256,7 @@ The switch:
 - Model and search text is untrusted. A team member's reply in a discussion is plain text. An answer on Research
   and the reasoning under a team's decision are Markdown through `src/components/SafeMarkdown.tsx` only: headings,
   lists, tables, code, and links for `http(s)` addresses (`safeUrl`); no raw HTML, no image, no script address.
-  Run documents (memo, findings, methods) go through `streamdown`. Do not use `MessageResponse` for model text.
+  Run documents (memo, findings, methods) go through `streamdown`.
 - The page never calls a model. The `ai` package is installed for AI Elements' types only; replies come from the
   engine's `/api/chat`.
 - When the engine answers with an error, show its own text (`EngineOffline said=…`). "Engine not running" is only

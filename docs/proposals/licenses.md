@@ -183,7 +183,7 @@ but is not imported by the app. (F)
 | Direct dependency | Version | Licence | Use |
 |---|---|---|---|
 | `@fontsource-variable/fredoka`, `@fontsource-variable/geist` | 5.3.0 | OFL-1.1 | bundled fonts |
-| `@streamdown/cjk`, `/code`, `/math`, `/mermaid`, `streamdown` | 1.0.4, 2.0.0, 1.0.3, 1.0.3, 2.7.1 | Apache-2.0 | linked |
+| `streamdown` | 2.7.1 | Apache-2.0 | linked |
 | `@ui-sdk/core`, `@ui-sdk/react` | 0.1.0-beta.1 | Apache-2.0 | linked |
 | `ai` | 7.0.173 | Apache-2.0 | linked |
 | `class-variance-authority` | 0.7.1 | Apache-2.0 | linked |

@@ -1,8 +1,6 @@
 "use client";
 
-// Restored from git history as it was, with one change: MessageResponse (the Markdown renderer and its four
-// plugins: code highlighting, maths, diagrams, CJK) moved to ./message-response.tsx, so that showing a message does
-// not pull about 740 kB of renderers into the first load. Import it from there, lazily, if it is ever needed.
+// Restored from git history as it was, except that its unused Markdown renderer (MessageResponse) was removed.
 
 import { Button } from "@/components/ui/button";
 import {
