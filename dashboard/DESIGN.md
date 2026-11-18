@@ -208,7 +208,7 @@ Two different things, never mixed:
 
 - **How the next run will be made** is the engine's mode: Demo or Real. A person switches it in Settings only
   (`ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, engine calls in `src/lib/paidSwitch.ts`).
-  The header has no switch: the owner removed it. `NextRun` in the same file is the old header control, kept unused.
+  The header has no switch.
 - **How a result on screen was made** is its provenance: Practice, Live research or Local model. It comes from the
   record itself (`provenanceOf` in `src/lib/provenance.ts`) and is drawn by one badge
   (`src/components/Provenance.tsx`). It never follows the mode. A practice result seen in Real mode still says Practice.

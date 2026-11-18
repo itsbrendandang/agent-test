@@ -1,9 +1,9 @@
 // Saved research: one list of the shared row; runs of the same brief together; and the rule the owner asked for by
-// name: a result keeps its own provenance whatever the "Next run" selector says.
+// name: a result keeps its own provenance whatever the run mode selector says.
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { NextRun } from "@/components/PaidSwitch"
+import { ModeSwitch } from "@/components/PaidSwitch"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { takeOpenAnswer } from "@/lib/open"
 import { forgetScripted } from "@/lib/scripted"
@@ -39,7 +39,7 @@ function show(paidCalls: boolean, extra: Parameters<typeof routes>[0] = {}) {
     return m ? Promise.resolve(new Response(sse({ type: "run.started", runId: m[1], brief: "kras", title: "", mock: !LIVE.has(m[1]) }), { status: 200 })) : plain(url, init)
   }))
   const onOpen = vi.fn()
-  function Page() { const shell = useShell(1000); return <TooltipProvider><NextRun paid={shell.paid} /><ExperimentsView onOpen={onOpen} /></TooltipProvider> }
+  function Page() { const shell = useShell(1000); return <TooltipProvider><ModeSwitch paid={shell.paid} /><ExperimentsView onOpen={onOpen} /></TooltipProvider> }
   render(<Page />)
   return { sent, onOpen }
 }
@@ -47,7 +47,7 @@ const rowOf = async (id: string) => await waitFor(() => { const row = document.q
 const badge = (row: HTMLElement) => row.querySelector(":scope > .record-main > .record-meta [data-provenance]")
 
 describe("provenance is the record's, not the mode's", () => {
-  it.each([[true, "Real"], [false, "Demo"]] as const)("with Next run on %s (%s) a practice result says Practice and a live one says Live research", async (paidCalls, chosen) => {
+  it.each([[true, "Real"], [false, "Demo"]] as const)("with run mode on %s (%s) a practice result says Practice and a live one says Live research", async (paidCalls, chosen) => {
     show(paidCalls)
     await waitFor(() => expect(screen.getByRole("radio", { name: chosen })).toBeChecked())
     expect(badge(await rowOf("a-demo"))).toHaveTextContent(/^Practice$/)

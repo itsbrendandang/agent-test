@@ -470,7 +470,7 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
 .nav-item[data-quiet] { color: var(--text-muted); font-size: 13px !important; }
 .nav-item:hover { background: var(--hover) !important; color: var(--text) !important; }
 .nav-item[aria-current="page"] { background: var(--brand) !important; color: var(--text) !important; font-weight: 600 !important; }
-.nav-item:focus-visible, .header-btn:focus-visible, .skip-link:focus-visible, .next-run-label:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: none !important; }
+.nav-item:focus-visible, .header-btn:focus-visible, .skip-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: none !important; }
 [data-collapsible="icon"] .nav-item { width: 32px !important; height: 32px !important; padding: 0 !important; justify-content: center; }
 [data-collapsible="icon"] .nav-item > span { display: none; }
 [data-mobile="true"] .nav-item { height: 44px !important; font-size: 15px !important; }
@@ -507,14 +507,6 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
 @media (max-width: 767px) { .profile-item { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .profile-switch, .profile-switch::after { transition: none; } }
 
-/* "Next run  Demo | Real": how the next run will be made (never how a result on screen was made) */
-.next-run { position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; }
-.next-run-label { border: 0; background: none; padding: 4px 2px; font: inherit; font-size: 12px; color: var(--text-muted); cursor: help; border-radius: 4px; white-space: nowrap; text-decoration: underline dotted; text-underline-offset: 3px; }
-.next-run-tip { max-width: 260px; line-height: 1.4; }
-.next-run-short { display: none; }
-.mode[data-header] { flex-wrap: nowrap; gap: 0; }
-.mode[data-header] .mode-note { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: min(340px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid var(--edge); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-pop); font-size: 13px; font-weight: 500; line-height: 1.45; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-
 /* the engine cannot be reached: said once, in the page, with one action */
 .engine-notice { flex: none; display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; margin: var(--space-3) var(--space-5) 0; padding: 10px 14px; border: 1px solid var(--danger); border-radius: var(--radius-card); background: var(--danger-bg); color: var(--danger); font-size: 13px; }
 .engine-notice b { font-weight: 650; }
@@ -540,7 +532,7 @@ details.technical code { font-family: var(--font-mono); font-size: 12px; }
   .page:not(.search) summary, dialog summary { padding-block: 11px; }
   .page:not(.search) .link-btn { min-height: 44px; display: inline-flex; align-items: center; }
   .newrun-check { min-height: 44px; display: flex; align-items: center; gap: var(--space-2); }
-  .mode:not([data-header]) .mode-switch label { padding: 12px 16px; }
+  .mode .mode-switch label { padding: 12px 16px; }
   .thread-chip .pill, .swarm-cell { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { [data-slot^="sidebar"], [data-slot^="sheet"], [data-slot^="tooltip"], .nav-item { transition-duration: 0s !important; animation-duration: 0s !important; } }
@@ -880,7 +872,6 @@ dialog.how { margin: auto; }
 .mode-switch label[data-on] { background: var(--ink); color: var(--on-ink); }
 .mode-switch[data-state="on"] label[data-on] { background: var(--paid); color: var(--dark-text, #fff); }
 .mode-switch:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (max-width: 767px) { .mode[data-header] .mode-switch label { padding: 11px 11px; } .next-run-label { padding: 12px 2px; } }
 .mode-switch:has(input:disabled) label:not([data-on]) { color: var(--text-muted); }
 .mode-switch:has(input:disabled) label, .mode-switch:has(input:disabled) input { cursor: not-allowed; }
 .mode-words { font-size: 12px; color: var(--text-muted); }
@@ -916,13 +907,9 @@ dialog.how { margin: auto; }
 .decision-why > summary:hover { color: var(--text); }
 .decision-why > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .decision-whyb { margin-top: var(--space-2); max-width: 75ch; line-height: 1.6; overflow-x: auto; }
-/* a narrow header keeps every control inside the window: the conversation title gives up its place, "Next run"
-   shortens to "Next:" (the whole name stays for screen readers and in the tooltip), and the buttons get tighter */
+/* a narrow header keeps every control inside the window: the conversation title gives up its place and the buttons get tighter */
 @media (max-width: 479px) {
   .app-header-title { display: none; }
   .app-place { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .app-header .next-run-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .app-header .next-run-short { display: inline; }
-  .app-header .next-run { gap: 4px; }
   .app-header-actions .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
 }
