@@ -321,12 +321,6 @@ def build_gcs_release_manifest(
     )
 
 
-def sha256_bytes(content: bytes) -> str:
-    """Return a lowercase SHA-256 digest."""
-
-    return hashlib.sha256(content).hexdigest()
-
-
 def sha256_file(path: Path) -> str:
     """Hash a file without changing it."""
 
