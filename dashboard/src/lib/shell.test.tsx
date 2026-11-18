@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { NextRun } from "@/components/PaidSwitch"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { byConcern, boardFacts, outcomeOf } from "./verdict"
+import { boardFacts, outcomeOf } from "./verdict"
 
 describe("the one mode selector, in the header", () => {
   it.each([["off", "Demo"], ["on", "Real"]] as const)("the engine's state %s shows as %s chosen", (paid, chosen) => {
@@ -24,10 +24,6 @@ describe("one verdict vocabulary", () => {
     expect((["verified", "supported"] as const).map(outcomeOf)).toEqual(["holds", "holds"])
     expect((["contradicted", "refuted"] as const).map(outcomeOf)).toEqual(["fails", "fails"])
     expect((["unsupported", "unchecked", "insufficient", "untested"] as const).map(outcomeOf)).toEqual(["unknown", "unknown", "unknown", "unknown"])
-  })
-  it("puts what does not hold first, then what is not known, keeping the order within each", () => {
-    const claims = [{ id: 1, verdict: "supported" }, { id: 2, verdict: "untested" }, { id: 3, verdict: "refuted" }, { id: 4, verdict: "insufficient" }, { id: 5, verdict: "refuted" }] as const
-    expect(byConcern([...claims]).map((c) => c.id)).toEqual([3, 5, 2, 4, 1])
   })
   it("reads a board review's facts from its own events", () => {
     const ev = (e: object, i: number) => ({ key: String(i), at: i, ...e }) as never

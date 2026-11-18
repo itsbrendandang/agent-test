@@ -59,4 +59,3 @@ export function runOfLabHash(hash: string): { kind: RunKind; id: string } | unde
   const named = logOfHash(hash)
   return named?.kind && named.id ? { kind: named.kind, id: named.id } : undefined
 }
-export const labHash = (kind: RunKind, id: string) => `#Lab/${kind}/${encodeURIComponent(id)}`

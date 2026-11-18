@@ -2,7 +2,7 @@
 // run the Lab shows.
 import { describe, expect, it } from "vitest"
 import { EVEN_GAP_MS, SHORT_RUN_MS, countAt, defaultPace, lengthOf, timelineOf } from "./replay"
-import { answerRuns, boardRuns, labHash, mergeRuns, pickRun, runOfLabHash, swarmRuns } from "./runs"
+import { answerRuns, boardRuns, mergeRuns, pickRun, runOfLabHash, swarmRuns } from "./runs"
 
 describe("replay timing", () => {
   const t = timelineOf([1000, 1000, 1500, undefined, 4000, 3000, 9000])
@@ -54,7 +54,7 @@ describe("which run the Lab shows", () => {
 
   it("reads a run from the address and nothing else", () => {
     expect(runOfLabHash("#Lab/board/202611150251-kras-g12c-hit-to-lead")).toEqual({ kind: "board", id: "202611150251-kras-g12c-hit-to-lead" })
-    expect(runOfLabHash(labHash("answer", "a-1"))).toEqual({ kind: "answer", id: "a-1" })
+    expect(runOfLabHash("#Lab/answer/a-1")).toEqual({ kind: "answer", id: "a-1" })
     for (const bad of ["#Lab", "#Lab/board/", "#Lab/other/x", "#Lab/board/../../etc", "#Lab/board/a b", "#Board/x", "#Lab/board/%E0%A4%A"]) expect(runOfLabHash(bad)).toBeUndefined()
   })
 })
