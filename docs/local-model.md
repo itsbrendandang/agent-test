@@ -89,26 +89,12 @@ host.
 
 ### GLHF, engine and dashboard
 
-`engine/src/local.ts` finds local models by asking Ollama (`/api/tags`, 1.5 second limit, cached 15 seconds). It
-lists only models that support tools, and no cloud models. When Ollama is not running the list is empty.
-`modelCatalogue()` in `engine/src/glhf/types.ts` returns three classes of entry: scripted, local
-(`{id, local: true, cost: "free", sizeGb, contextWindow, label}`) and paid.
+The engine and dashboard do not offer local-model GLHF runs. The status endpoint does not discover local models.
+The run tracker treats every model except `mock` as paid. It refuses local models while paid calls are off.
+Use the Python command above for local-model GLHF runs.
 
-**Not wired yet.** The run tracker (`engine/src/glhf/tracker.ts`, `task.ts`) and the status endpoint
-(`doctor.ts`) are being changed by other work and still treat every model except `mock` as paid. Until the small
-change described in the hand-over is applied, the dashboard does not list local models and
-`POST /api/glhf/runs` refuses them while paid calls are off. Use the Python command above.
-
-After that change:
-
-- `GET /api/glhf/status` has `models` (ids, local ones included) and `catalogue` (the entries above).
-- A run record has `modelClass` (`"scripted" | "local" | "paid"`) and `modelLabel`
-  (`"local model (qwen2.5:14b)"`). The dashboard should show `modelLabel` next to every score.
-  `run.json` written by the Python runner has `model_class` and `model_label`.
-- `maxTokens` is still required for a local model. Nothing is billed, but it is the guard against a model that
-  never stops. The cost estimate is 0 and reads `local, free`. Local runs do not count against the daily token cap.
-- Starting a local-model run still needs the session token, like every run that is not the scripted demo: it
-  holds the machine for many minutes.
+Run records may still have `modelClass` and `modelLabel`. The dashboard can read those fields, but the engine
+does not compute them. The Python runner writes `model_class` and `model_label` in its own `run.json`.
 
 ### Drug board
 

@@ -45,7 +45,7 @@ const local = await import("../src/local.ts")
 const paid = await import("../src/paid/paid.ts")
 const config = await import("../src/config.ts")
 const { buildModels, modelFor, localModelFor, LOCAL_PROVIDER } = await import("../src/models.ts")
-const { costEstimate, modelCatalogue, modelsFor } = await import("../src/glhf/types.ts")
+const { modelsFor } = await import("../src/glhf/types.ts")
 
 const LOCAL = "ollama/qwen2.5:14b"
 const REAL = "anthropic/claude-sonnet-5-5"
@@ -61,17 +61,11 @@ const ELSEWHERE = ["http://192.168.1.20:11434", "http://0.0.0.0:11434", "http://
 test("a local model is an ollama id on a loopback address, and nothing that looks like one", () => {
   for (const model of [LOCAL, "ollama/qwen3:32b", "ollama/user/model:q4_K_M", "ollama/phi4-mini"]) {
     assert.equal(local.isLocalModel(model, {}), true, model)
-    assert.equal(local.modelClass(model, {}), "local")
     assert.equal(paid.modelSpends(model, ON), false)
   }
-  assert.equal(local.modelLabel(LOCAL, {}), "local model (qwen2.5:14b)")
-  assert.equal(local.modelLabel("mock", {}), "scripted model")
-  assert.equal(local.modelLabel(REAL, {}), `paid model (${REAL})`)
-  assert.equal(local.costNote(LOCAL, {}), "local, free")
   for (const model of LOOKALIKES) {
     assert.equal(local.localName(model), undefined, model)
     assert.equal(local.isLocalModel(model, {}), false, model)
-    assert.equal(local.modelClass(model, {}), "paid", model)
     assert.equal(paid.modelSpends(model, ON), true, model)
     assert.match(paid.paidModelRefusal([model], ON) ?? "", /refused\. Paid calls are off \(NO_PAID_CALLS\)|refused\. Only the scripted/, model)
   }
@@ -79,7 +73,6 @@ test("a local model is an ollama id on a loopback address, and nothing that look
   assert.deepEqual(local.localServer({ OLLAMA_BASE_URL: "http://localhost:9/v1/" }), { url: "http://localhost:9", remote: false, host: "localhost" })
   for (const url of ELSEWHERE) for (const name of ["LOCAL_MODEL_URL", "OLLAMA_BASE_URL"]) {
     assert.equal(local.isLocalModel(LOCAL, { [name]: url }), false, url)
-    assert.equal(local.modelClass(LOCAL, { [name]: url }), "paid", url)
     assert.throws(() => local.localServer({ [name]: url }), local.LocalModelRefused, url)
     assert.equal(paid.modelSpends(LOCAL, { ...ON, [name]: url }), true, url)
     assert.ok(paid.paidModelRefusal([LOCAL], { ...ON, [name]: url }), url)
@@ -88,13 +81,12 @@ test("a local model is an ollama id on a loopback address, and nothing that look
   assert.equal(local.isLocalModel(LOCAL, { LOCAL_MODEL_URL: "http://10.0.0.5:11434", OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1" }), false)
 })
 
-test("a server on another machine needs LOCAL_MODEL_ALLOW_REMOTE=1, and the label then names it", () => {
+test("a server on another machine needs LOCAL_MODEL_ALLOW_REMOTE=1", () => {
   const remote = { LOCAL_MODEL_URL: "http://100.64.0.7:11434" }
   assert.throws(() => local.localServer(remote), /100\.64\.0\.7.*not this machine.*LOCAL_MODEL_ALLOW_REMOTE=1/)
   for (const value of ["", "0", "true", "yes"]) assert.equal(local.isLocalModel(LOCAL, { ...remote, LOCAL_MODEL_ALLOW_REMOTE: value }), false, value)
   const allowed = { ...remote, LOCAL_MODEL_ALLOW_REMOTE: "1" }
   assert.deepEqual(local.localServer(allowed), { url: "http://100.64.0.7:11434", remote: true, host: "100.64.0.7" })
-  assert.equal(local.modelLabel(LOCAL, allowed), "local model (qwen2.5:14b at 100.64.0.7)")
   assert.equal(local.isLocalModel("ollama/qwen3:cloud", allowed), false, "the setting does not make a cloud model local")
   assert.equal(local.isLocalModel(LOCAL, { LOCAL_MODEL_URL: "ftp://x", LOCAL_MODEL_ALLOW_REMOTE: "1" }), false)
   assert.equal(local.isLocalModel(LOCAL, { LOCAL_MODEL_URL: "http://user:pw@10.0.0.5:11434", LOCAL_MODEL_ALLOW_REMOTE: "1" }), false)
@@ -102,10 +94,7 @@ test("a server on another machine needs LOCAL_MODEL_ALLOW_REMOTE=1, and the labe
 
 test("the paid switch: local and scripted models pass, paid ones and remote look-alikes do not, and the keys stay blank", () => {
   assert.equal(paid.paidModelRefusal(["mock", LOCAL, "ollama/qwen2.5:7b"], ON), undefined)
-  assert.doesNotThrow(() => paid.refusePaidModels([LOCAL], ON))
   assert.match(paid.paidModelRefusal([LOCAL, REAL], ON) ?? "", /a run with a paid model \(anthropic\/claude-sonnet-5-5\): refused.*NO_PAID_CALLS/)
-  assert.throws(() => paid.refusePaidModels([REAL], ON), (e: unknown) => e instanceof paid.PaidCallsOff && /NO_PAID_CALLS/.test(e.message))
-  assert.throws(() => paid.refusePaidModels([LOCAL], { ...ON, OLLAMA_BASE_URL: "https://api.example.com/v1" }), (e: unknown) => e instanceof paid.PaidCallsOff && /api\.example\.com.*not this machine/.test(e.message))
   assert.match(paid.paidModelRefusal(["ollama/../openai/gpt-5.5"], ON) ?? "", /not a local model id.*NO_PAID_CALLS/)
   assert.equal(paid.paidModelRefusal([REAL], { NO_PAID_CALLS: "0" }), undefined, "with paid calls allowed nothing is refused here")
   // Exa, the checkers and the cloud are refused as before, whatever the model.
@@ -116,74 +105,8 @@ test("the paid switch: local and scripted models pass, paid ones and remote look
   assert.match(paid.paidCallsLine(ON), /local models/)
 })
 
-// What Ollama 0.40 answers, cut down: a tools model, a larger one, one without tools, a cloud model, and an old-style entry.
-const TAGS = { models: [
-  { name: "qwen2.5:7b", size: 4_683_087_332, details: { parameter_size: "7.6B", quantization_level: "Q4_K_M", context_length: 32768 }, capabilities: ["completion", "tools"] },
-  { name: "qwen2.5:14b", size: 8_988_124_069, details: { parameter_size: "14.8B", quantization_level: "Q4_K_M", context_length: 32768 }, capabilities: ["completion", "tools"] },
-  { name: "gemma3:4b", size: 3_350_272_403, details: { context_length: 131072 }, capabilities: ["completion", "vision"] },
-  { name: "qwen3-coder:480b-cloud", size: 384, remote_host: "https://ollama.com:443", remote_model: "qwen3-coder:480b", capabilities: ["completion", "tools"] },
-  { name: "sneaky:latest", size: 400, remote_host: "https://ollama.com:443", capabilities: ["completion", "tools"] },
-  { name: "mistral:latest", size: 4_372_824_384 },
-] }
-function ollama(counts: Record<string, number>, down = false): typeof fetch {
-  return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const url = String(input)
-    const path = new URL(url).pathname
-    counts[path] = (counts[path] ?? 0) + 1
-    if (down) throw new Error("ECONNREFUSED")
-    if (path === "/api/tags") return Response.json(TAGS)
-    if (path === "/api/ps") return Response.json({ models: [{ name: "qwen2.5:14b", context_length: 16384 }] })
-    if (path === "/api/show") return Response.json(JSON.parse(String(init?.body)).model === "mistral:latest" ? { capabilities: ["completion", "tools"], model_info: { "llama.context_length": 32768 } } : {})
-    return new Response("no", { status: 404 })
-  }) as typeof fetch
-}
-
-test("the model list is what the Ollama server lists now: tools models only, no cloud models, none when it is down", async () => {
-  local.forgetLocalModels()
-  const counts: Record<string, number> = {}
-  const found = await local.discoverLocalModels({}, ollama(counts), 1_000)
-  assert.deepEqual(found.map((m) => m.id), ["ollama/qwen2.5:14b", "ollama/qwen2.5:7b", "ollama/mistral"])
-  assert.deepEqual(found[0], { id: "ollama/qwen2.5:14b", local: true, cost: "free", sizeGb: 9, contextWindow: 32768, loadedContext: 16384, parameters: "14.8B", quantization: "Q4_K_M", label: "local model (qwen2.5:14b)" })
-  assert.deepEqual(found[2], { id: "ollama/mistral", local: true, cost: "free", sizeGb: 4.4, contextWindow: 32768, label: "local model (mistral)" })
-  for (const m of found) assert.equal(local.isLocalModel(m.id, {}), true, "every listed id passes the local test")
-  // Cached briefly: asked again within 15 s, the server is not called; after that it is.
-  await local.discoverLocalModels({}, ollama(counts), 10_000)
-  assert.equal(counts["/api/tags"], 1)
-  await local.discoverLocalModels({}, ollama(counts), 17_000)
-  assert.equal(counts["/api/tags"], 2)
-  // A server that is down gives an empty list, is not cached, and nothing throws.
-  local.forgetLocalModels()
-  assert.deepEqual(await local.discoverLocalModels({}, ollama(counts, true), 20_000), [])
-  assert.equal((await local.discoverLocalModels({}, ollama(counts), 20_001)).length, 3)
-  // A server on another machine is not asked at all.
-  local.forgetLocalModels()
-  const before = { ...counts }
-  assert.deepEqual(await local.discoverLocalModels({ LOCAL_MODEL_URL: "http://192.168.1.20:11434" }, ollama(counts)), [])
-  assert.deepEqual(counts, before)
-})
-
-test("the catalogue has three classes, and local models stay while paid calls are off", async () => {
-  local.forgetLocalModels()
-  const keys = { ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }
-  const off = await modelCatalogue({ ...ON, ...keys }, ollama({}))
-  assert.deepEqual(off.map((m) => [m.id, m.class, m.cost]), [["mock", "scripted", "free"], ["ollama/qwen2.5:14b", "local", "free"], ["ollama/qwen2.5:7b", "local", "free"], ["ollama/mistral", "local", "free"]])
-  assert.deepEqual(modelsFor({ ...ON, ...keys }), ["mock"], "the old list is unchanged")
-  const on = await modelCatalogue({ NO_PAID_CALLS: "0", ...keys }, ollama({}))
-  assert.deepEqual(on.filter((m) => m.class === "paid").map((m) => m.id), ["anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5", "openai/gpt-5.5"])
-  assert.equal(on.filter((m) => m.local).length, 3)
-  local.forgetLocalModels()
-  assert.deepEqual((await modelCatalogue(ON, ollama({}, true))).map((m) => m.id), ["mock"], "Ollama down: only the scripted model")
-  assert.deepEqual(costEstimate("local"), { usd: 0, note: "local, free" })
-  assert.equal(costEstimate("paid").usd, null)
-  local.forgetLocalModels()
-})
-
-test("a run's class is the costliest of its models", () => {
-  assert.deepEqual(local.runModelClass({ model: "mock" }, {}), { modelClass: "scripted", modelLabel: "scripted model" })
-  assert.deepEqual(local.runModelClass({ model: LOCAL, roleModels: {} }, {}), { modelClass: "local", modelLabel: "local model (qwen2.5:14b)" })
-  assert.deepEqual(local.runModelClass({ model: LOCAL, roleModels: { critic: "ollama/qwen2.5:7b" } }, {}), { modelClass: "local", modelLabel: "local model (qwen2.5:14b) and 1 other" })
-  assert.deepEqual(local.runModelClass({ model: LOCAL, roleModels: { critic: REAL } }, {}), { modelClass: "paid", modelLabel: `paid model (${REAL}) and 1 other` })
-  assert.equal(local.runModelClass({ model: LOCAL }, { OLLAMA_BASE_URL: "https://api.example.com/v1" }).modelClass, "paid")
+test("the engine offers only mock while paid calls are off, even with provider keys", () => {
+  assert.deepEqual(modelsFor({ ...ON, ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }), ["mock"])
 })
 
 test("board: with DRUG_BOARD_LOCAL_MODEL every agent is the local model, reached only at the checked address, with no key", async () => {

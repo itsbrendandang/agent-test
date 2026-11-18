@@ -92,12 +92,6 @@ export function paidModelRefusal(models: string[], env: NodeJS.ProcessEnv = proc
   return paid.length ? `a run with a paid model (${paid.join(", ")}): refused. Only the scripted model "mock" and local models (ollama/<name> on this machine) may run. ${HOW_TO_ALLOW}` : undefined
 }
 
-/** Throws PaidCallsOff when paidModelRefusal has a reason. Call before a run with these models is started. */
-export function refusePaidModels(models: string[], env: NodeJS.ProcessEnv = process.env): void {
-  const why = paidModelRefusal(models, env)
-  if (why) throw new PaidCallsOff(why, true)
-}
-
 /** For `npm run doctor` and the server's first line. */
 export const paidCallsLine = (env: NodeJS.ProcessEnv = process.env): string => paidCallsOff(env)
   ? "Paid calls: OFF (NO_PAID_CALLS). Paid models, Exa, the checkers and cloud runs are refused; scripted (mock) runs and local models (ollama/<name> on this machine) work. To allow the rest, set NO_PAID_CALLS=0 in .env."
