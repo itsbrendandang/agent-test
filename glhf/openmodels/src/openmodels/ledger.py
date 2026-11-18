@@ -25,7 +25,6 @@ CUMULATIVE = RUNS / "modal_ledger.jsonl"
 OPEN_SESSIONS = RUNS / "modal_open_sessions.json"
 WHO = "modal-bench"
 CAP_USD = 20.0  # this job's hard limit
-REPORT_AT_USD = 15.0
 
 
 class CapExceeded(RuntimeError):
