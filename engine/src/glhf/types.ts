@@ -1,5 +1,5 @@
 // The GLHF run-tracker contract. The dashboard's Swarm view is built against these shapes; do not rename.
-import { discoverLocalModels, type LocalModel, type ModelClass } from "../local.ts"
+import type { ModelClass } from "../local.ts"
 import { paidCallsOff } from "../paid/paid.ts"
 
 // "cancelled": stopped on request (POST /api/glhf/runs/:id/cancel). It is settled like done and failed, but it is
@@ -46,8 +46,8 @@ export interface GlhfRun {
   remoteId?: string
   /**
    * "scripted", "local" (a real model on this machine: free, nothing leaves it) or "paid"; over the model and the
-   * role models, the costliest class wins. From runModelClass in ../local.ts when the run is created. Records
-   * written before this field existed do not have it: read `model` then ("mock" is scripted).
+   * role models, the costliest class wins. Optional provenance from a stored run. When absent, read `model`
+   * instead ("mock" is scripted). The engine does not compute this field.
    */
   modelClass?: ModelClass
   /** The same for a reader: "scripted model", "local model (qwen2.5:14b)", "paid model (openai/gpt-5.5)". Show this, not `model`, next to a score. */
@@ -135,36 +135,8 @@ export const MODEL_CHOICES = [
 
 /**
  * "mock" first, then the models whose key is set. Only "mock" while paid calls are off (NO_PAID_CALLS, ../paid.ts).
- * Local models are not in this list: they are found by asking the server (modelCatalogue below).
+ * Local models are not offered by the engine.
  */
 export const modelsFor = (env: NodeJS.ProcessEnv = process.env): string[] => ["mock", ...(paidCallsOff(env) ? [] : MODEL_CHOICES.filter((m) => Boolean(env[m.key])).map((m) => m.id))]
-
-/** One model the New-run form can offer. `cost` is what to print next to the token budget. */
-export type CatalogueEntry =
-  | { id: string; class: "scripted"; local: false; cost: "free"; label: string }
-  | { id: string; class: "paid"; local: false; cost: "paid"; label: string; key: string }
-  | (LocalModel & { class: "local" })
-
-/**
- * Every model a run can be started with now, in three classes: the scripted one, the local ones the Ollama server
- * on this machine lists at this moment (none when it is down; see discoverLocalModels), and the paid ones whose key
- * is set, which are absent while paid calls are off. Local models stay while paid calls are off.
- */
-export async function modelCatalogue(env: NodeJS.ProcessEnv = process.env, fetcher: typeof fetch = fetch): Promise<CatalogueEntry[]> {
-  const local = await discoverLocalModels(env, fetcher)
-  return [
-    { id: "mock", class: "scripted", local: false, cost: "free", label: "scripted model" },
-    ...local.map((m) => ({ ...m, class: "local" as const })),
-    ...modelsFor(env).slice(1).map((id) => ({ id, class: "paid" as const, local: false as const, cost: "paid" as const, label: `paid model (${id})`, key: MODEL_CHOICES.find((m) => m.id === id)!.key })),
-  ]
-}
-
-/**
- * The token budget of a local run. maxTokens is required for a local model as for a paid one: nothing is billed,
- * but a model that loops would hold the machine until the time limit, and the budget is what the solvers plan by.
- * The estimate of its cost is zero and reads "local, free".
- */
-export const costEstimate = (modelClass: ModelClass): { usd: number | null; note: string } =>
-  modelClass === "paid" ? { usd: null, note: "paid: billed by the provider" } : { usd: 0, note: modelClass === "local" ? "local, free" : "scripted, free" }
 
 export const RECORD = 0.523 // BixBench3 best published score (the bar to beat)
