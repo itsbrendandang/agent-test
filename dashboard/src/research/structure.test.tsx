@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import S_REAL from "@/test/research/stream-real.jsonl?raw"
 import { Inspector } from "./Inspector"
 import { tabsOf, type InspectorTab } from "./inspectorState"
-import { foldAnswer, fromRecord, proteinsOf, type Protein, type ResearchEvent } from "./model"
+import { foldAnswer, proteinsOf, type Protein, type ResearchEvent } from "./model"
 import { readStructure, structureQuery } from "./structure/api"
 import StructureTab from "./structure/StructureTab"
 import { TestProteinChips } from "./structure/TestProteins"
@@ -42,14 +42,12 @@ function engine(structures: (() => Response | Promise<Response>)[]) {
 beforeEach(() => { vi.unstubAllGlobals() })
 
 describe("the answer's proteins", () => {
-  it("come from the proteins event and from a stored record; a malformed one is dropped", () => {
+  it("come from the proteins event; a malformed one is dropped", () => {
     const events: ResearchEvent[] = [{ type: "research.started", seq: 1, mode: "real" }, { type: "proteins", seq: 2, items: [KRAS, { key: "x" }, { ...THIO, accession: "not-one", sequence: "abc<script>" }, null] }]
     const s = foldAnswer(events)
     expect(s.proteins.map((p) => p.key)).toEqual([KRAS.key, THIO.key])
     expect(s.proteins[1].accession).toBeUndefined()
     expect(s.proteins[1].sequence).toBeUndefined()
-    expect(fromRecord({ id: "a-1", status: "done", steps: [], sources: [], statements: [], proteins: [KRAS] })!.proteins).toEqual([KRAS])
-    expect(fromRecord({ id: "a-1", status: "done", steps: [], sources: [], statements: [] })!.proteins).toEqual([])
     expect(proteinsOf(Array.from({ length: 12 }, (_, i) => ({ ...KRAS, key: `k${i}` })))).toHaveLength(8)
   })
   it("make the Structure tab appear; without them there is none", () => {

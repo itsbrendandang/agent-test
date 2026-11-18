@@ -3,7 +3,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ResearchAnswer } from "./Answer"
-import { answerImages, foldAnswer, fromRecord, imageOf, type ResearchEvent } from "./model"
+import { answerImages, foldAnswer, imageOf, type ResearchEvent } from "./model"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
 
 const REAL = REAL_LINES.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ResearchEvent)
@@ -53,8 +53,4 @@ describe("pictures from the sources", () => {
     expect(screen.getByRole("region", { name: "Sources" })).toBeInTheDocument()
   })
 
-  it("a reopened record keeps its pictures", () => {
-    const s = fromRecord({ id: "r-1", question: "Q?", mode: "real", status: "done", answer: { markdown: "Text [1].", direct: "Text." }, sources: [{ n: 1, url: "https://example.org/page", title: "Page", provider: "exa", image: PICTURE, cited: true }], statements: [], steps: [], searches: [] })
-    expect(s?.sources[0].image).toBe(PICTURE)
-  })
 })

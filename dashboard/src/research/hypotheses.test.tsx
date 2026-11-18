@@ -9,7 +9,7 @@ import { Hypotheses, HypothesesTable } from "./Hypotheses"
 import { agentName, HYPOTHESES_NOTE, testedWith } from "./hypothesisWords"
 import { Inspector } from "./Inspector"
 import { tabsOf } from "./inspectorState"
-import { foldAnswer, fromRecord, hypothesisDoing, hypothesisWork, withMarks, type ResearchEvent } from "./model"
+import { foldAnswer, hypothesisDoing, hypothesisWork, withMarks, type ResearchEvent } from "./model"
 
 let seq = 0
 const ev = (type: string, rest: object = {}): ResearchEvent => ({ seq: ++seq, at: seq, run: "a-1", type, ...rest } as ResearchEvent)
@@ -111,17 +111,10 @@ describe("the hypotheses map", () => {
   })
 })
 
-describe("no hypotheses needed, and the record", () => {
+describe("no hypotheses needed", () => {
   it("keeps the engine's reason when a question needed none", () => {
     const s = foldAnswer([START()[0], ev("hypotheses", { items: [], needed: false, reason: "A plain factual question." })])
     expect(s.hypotheses).toEqual([]); expect(s.hypothesesNote).toBe("A plain factual question.")
-  })
-  it("a saved record gives the same map as its events", () => {
-    const fromEvents = foldAnswer([...START(), SOURCES, ...CHECKED, DONE]).hypotheses
-    const record = { id: "a-1", thread: "t-1", question: "Does drug A protect the heart?", mode: "real", status: "done", usd: 0.2, seconds: 40,
-      hypotheses: H.map((h, i) => ({ ...h, ...(CHECKED[i] as object), id: h.id })) }
-    expect(fromRecord(record)?.hypotheses.map((h) => ({ id: h.id, verdict: h.result?.verdict, for: h.result?.for, mixed: h.result?.mixed })))
-      .toEqual(fromEvents.map((h) => ({ id: h.id, verdict: h.result?.verdict, for: h.result?.for, mixed: h.result?.mixed })))
   })
 })
 

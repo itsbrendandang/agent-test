@@ -399,47 +399,6 @@ export const sourceCounts = (s: AnswerState): { found?: number; selected: number
   return { found: searches.length ? searches.reduce((n, x) => n + (x.found ?? 0), 0) : s.selection ? s.selection.selected.length + s.selection.notSelected.length : undefined, selected: s.sources.length, cited: s.cited?.length }
 }
 
-/**
- * A stored record (GET /api/research/:id, or an item of GET /api/research?thread=) as the same state the events
- * give. This is how a reload shows a finished answer at once, before or without its event stream.
- */
-export function fromRecord(record: unknown): AnswerState | undefined {
-  const r = record as Record<string, unknown> | null
-  if (!r || typeof r.id !== "string") return undefined
-  const events: ResearchEvent[] = []
-  let seq = 0
-  const push = (type: string, rest: object) => events.push({ ...rest, type, seq: ++seq }) // a record field named "type" or "seq" cannot displace these
-  push("research.started", { id: r.id, thread: r.thread, question: r.question, effort: r.effort, mode: r.mode, example: r.example, caps: r.caps, models: r.models })
-  if (r.status === "queued") push("research.queued", { after: r.after })
-  for (const st of Array.isArray(r.steps) ? (r.steps as Record<string, unknown>[]) : []) { push("step.started", st); if (st.status !== "running") push("step.finished", st) }
-  if (typeof r.opening === "string") push("opening", { text: r.opening })
-  if (Array.isArray(r.sources) && r.sources.length) push("sources", { items: r.sources })
-  if (r.selection) push("selection", r.selection as object)
-  const answer = r.answer as { markdown?: unknown } | undefined
-  if (typeof r.draft === "string") push("answer.written", { markdown: r.draft })
-  else if (typeof answer?.markdown === "string") push("answer.written", { markdown: answer.markdown })
-  const review = r.review as { notes?: unknown[]; revised?: unknown } | undefined
-  for (const n of Array.isArray(review?.notes) ? (review!.notes as object[]) : []) push("review.note", n)
-  const statements = Array.isArray(r.statements) ? (r.statements as Record<string, unknown>[]) : []
-  const revised = review?.revised === true && typeof r.draft === "string" && typeof answer?.markdown === "string" && answer.markdown !== r.draft
-  if (revised) push("answer.revised", { markdown: answer!.markdown, notes: Array.isArray(review?.notes) ? review!.notes : [] })
-  for (const st of statements) push("statement.checked", { ...st, stage: revised ? "final" : st.stage ?? "draft" })
-  const cited = (Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).filter((x) => x.cited === true).map((x) => x.n)
-  if ((Array.isArray(r.sources) ? (r.sources as Record<string, unknown>[]) : []).some((x) => typeof x.cited === "boolean")) push("sources.cited", { n: cited })
-  if (Array.isArray(r.hypotheses)) {
-    push("hypotheses", { items: r.hypotheses, ...(r.hypotheses.length === 0 && typeof r.hypothesesNote === "string" ? { needed: false, reason: r.hypothesesNote } : {}) })
-    for (const h of r.hypotheses as Record<string, unknown>[]) if (h && typeof h.verdict === "string") push("hypothesis.checked", h)
-  }
-  if (Array.isArray(r.recommendations)) push("recommendations", { items: r.recommendations })
-  if (Array.isArray(r.missing)) push("missing", { items: r.missing })
-  if (Array.isArray(r.proteins) && r.proteins.length) push("proteins", { items: r.proteins })
-  for (const a of Array.isArray(r.artifacts) ? (r.artifacts as object[]) : []) push("artifact.created", { artifact: a })
-  if (r.status === "done") push("research.finished", { usd: r.usd, seconds: r.seconds, counts: r.counts, searches: {}, review: r.review, stopped: r.stopped, note: r.note })
-  else if (r.status === "failed") push("research.failed", { error: r.error, spentUsd: r.usd })
-  else if (r.status === "cancelled") push("research.cancelled", { spentUsd: r.usd, seconds: r.seconds })
-  return foldAnswer(events)
-}
-
 /** A duration the engine measured, short, for a label: "0.3s", "2s", "41s", "2m 5s". */
 export function seconds(ms: number | undefined): string {
   if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "–"
