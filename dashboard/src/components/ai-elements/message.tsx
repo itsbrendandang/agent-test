@@ -1,6 +1,6 @@
 "use client";
 
-// Model replies are plain text. Markdown is rendered separately by SafeMarkdown.
+// Restored from git history as it was, except that its unused Markdown renderer (MessageResponse) was removed.
 
 import { Button } from "@/components/ui/button";
 import {
