@@ -9,7 +9,6 @@ import type { Manifest } from "../manifest.ts"
 import type { Protein } from "../structure/proteins.ts"
 
 export type Effort = "quick" | "standard"
-export const EFFORTS: Effort[] = ["quick", "standard"]
 export const isEffort = (value: unknown): value is Effort => value === "quick" || value === "standard"
 
 /** Where a source came from. "fixture" is a demo answer's example source. The six database names come from sources/.
