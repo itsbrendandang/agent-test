@@ -4,11 +4,6 @@
 /** "unknown": the engine cannot be reached, or it is an older engine that does not report the switch. */
 export type PaidState = "off" | "on" | "unknown"
 
-export const PAID_LABEL: Record<PaidState, string> = {
-  off: "Demo: practice runs only",
-  on: "Real: costs money",
-  unknown: "Demo or Real: not known",
-}
 /** The plain words under the switch. */
 export const MODE_WORDS = { off: "Practice runs. Fixed example answers. Free.", on: "Real AI models and web search. Costs money." } as const
 /** The tooltip of the "Next run" selector. */

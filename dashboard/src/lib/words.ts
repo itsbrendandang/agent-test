@@ -3,7 +3,6 @@
 
 /** A run made with fixed, scripted text instead of a model. The badge itself is the Provenance component ("Practice"). */
 export const PRACTICE = "Practice: fixed example answers, not real research"
-export const PRACTICE_SHORT = "practice run"
 export const REAL = "Live research: real AI models"
 
 // ---- who does the work, and on what. On screen these are the only words: the mode is Demo or Real, a run's label
