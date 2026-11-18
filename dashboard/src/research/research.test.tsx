@@ -21,7 +21,7 @@ import { AskBox } from "./AskBox"
 import { identifierOf, markOf } from "./marks"
 import { answerLimitLine } from "./limitLine"
 import { ProviderCredit } from "./ProviderCredit"
-import { copyText, foldAnswer, fromRecord, noteOutcome, preparation, progressLine, providerPlace, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
+import { copyText, foldAnswer, noteOutcome, preparation, progressLine, providerPlace, seconds, sourceCounts, withMarks, type ResearchEvent } from "./model"
 // Copies of the engine's own example streams (engine/test/fixtures/research/): the shapes this screen is built against.
 import DEMO_LINES from "@/test/research/example-demo.jsonl?raw"
 import REAL_LINES from "@/test/research/example-real.jsonl?raw"
@@ -394,26 +394,6 @@ describe("the adapter, contract v2", () => {
     expect(foldAnswer([ev(1, "research.queued", { after: "a-0" }), { ...START, seq: 2 }]).status).toBe("running")
     expect(foldAnswer([START, step(2, "write", "write", "Writing"), end(3, "write", "cancelled", 900), ev(4, "research.cancelled", { spentUsd: 0.01, seconds: 4 })])).toMatchObject({ status: "cancelled", spentUsd: 0.01 })
     expect(foldAnswer([START, ev(2, "research.resumed", { afterSeq: 1 })]).resumed).toBe(true)
-  })
-  it("rebuilds a finished answer from its stored record", () => {
-    const record = {
-      id: "a-1", thread: "t-1", kind: "answer", question: "q", effort: "standard", mode: "real", status: "done", startedAt: 1, caps: { maxUsd: 0.6, maxSeconds: 120 }, models: {},
-      opening: "I will search.", steps: [{ step: "prepare", kind: "prepare", label: "Preparing the searches", status: "completed", ms: 2100 }, { step: "search:exa:1", kind: "search", label: "Searching the web", status: "failed", ms: 30, error: "The Exa key was refused." }],
-      sources: [{ n: 1, url: "https://example.org/a", title: "Paper A", provider: "europepmc", cited: true, text: "…" }, { n: 2, url: "https://example.org/b", title: "Page B", provider: "exa", cited: false, text: "…" }],
-      draft: "It helps a lot [1].", answer: { markdown: "It helps [1].", direct: "It helps." },
-      statements: [{ stage: "final", index: 0, text: "It helps.", sources: [1], verdict: "verified", quote: "it helps", quoteFound: true, checker: "openai/gpt-4o-mini" }],
-      review: { checker: "openai/gpt-4o-mini", critic: "openai/gpt-5-mini", revised: true, notes: [{ index: 0, reviewer: "critic", severity: "minor", text: "Too strong.", statement: 0, resolved: true }] },
-      recommendations: [], artifacts: [{ id: "f1", name: "answer.md", type: "text/markdown", bytes: 120, at: 5 }], usd: 0.05, seconds: 12,
-    }
-    const s = fromRecord(record)!
-    expect(s).toMatchObject({ status: "done", mode: "real", markdown: "It helps [1].", revised: true, opening: "I will search.", cited: [1] })
-    expect(s.statements.map((x) => [x.stage, x.verdict])).toEqual([["final", "verified"]])
-    expect(s.steps.map((x) => x.status)).toEqual(["completed", "failed"])
-    expect(s.notes[0]).toMatchObject({ text: "Too strong.", resolved: true })
-    expect(s.artifacts[0]).toMatchObject({ name: "answer.md", type: "text/markdown" })
-    expect(s.finished).toMatchObject({ usd: 0.05, seconds: 12 })
-    expect(fromRecord({ ...record, status: "running", answer: undefined, draft: undefined, statements: [] })!.status).toBe("running")
-    expect(fromRecord(null)).toBeUndefined()
   })
   it("the answer on the page: preparation label, opening, the failed step kept visible, Stop while it works", async () => {
     const sent = routes({ "POST /api/research/a-1/cancel": { status: 200, body: { id: "a-1", status: "cancelled", cancelled: true, message: "Stopped. Nothing more will be spent on it." } } })

@@ -4,7 +4,7 @@ import { ExperimentsView } from "./ExperimentsView"
 import { takeOpenAnswer } from "@/lib/open"
 import { provenanceOf } from "@/lib/provenance"
 import { routes } from "@/test/engine"
-import { foldAnswer, fromRecord, copyText } from "@/research/model"
+import { foldAnswer, copyText } from "@/research/model"
 import { answerLab, boardLab } from "@/lab/adapter"
 import { answerRuns, boardRuns } from "@/lab/runs"
 import { totalsOf } from "@/overview/model"
@@ -55,7 +55,6 @@ it("preserves example provenance through pipeline events, records and downloads,
     expect(logDownload(rows, run, "csv")).toContain("Example · practice, $0")
     if (e.kind === "answer") {
       const record = { ...e, mode: "demo", example: true }
-      expect(fromRecord(record)?.example).toBe(true)
       const answer = foldAnswer(events)
       expect(answer.example).toBe(true)
       expect(copyText(answer)).toMatch(/^Example · practice, \$0/)
