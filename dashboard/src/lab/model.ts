@@ -35,8 +35,6 @@ export const GRID: LabLayout = {
   id: "grid", width: 1540, height: 530, corridorX: 500, corridorY: 266,
   at: Object.fromEntries(ROOMS.map((room, i) => [room.id, { x: 20 + i % 3 * 510, y: i < 3 ? 16 : 300, door: "right" }])) as LabLayout["at"],
 }
-/** Anh's map, for code that asks for "the" map. */
-export const MAP = WIDE
 /** Where a room's doorway is: 30 in from its corridor side, 34 up from its bottom edge (as in 2.0). */
 export const doorOf = (layout: LabLayout, room: RoomId) => { const r = layout.at[room]; return { x: r.door === "right" ? r.x + ROOM.width - 30 : r.x + 30, y: r.y + ROOM.height - 34 } }
 

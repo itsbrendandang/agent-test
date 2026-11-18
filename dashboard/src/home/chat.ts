@@ -1,9 +1,7 @@
 // The rules of the Home chat, apart from its markup so they can be tested: the labels, what is sent, what a person
 // must do before a plan may start, and where an engine refusal is shown.
 import { HOW_TO_TURN_ON } from "@/lib/paid"
-import type { RunSummary } from "@/board/api"
 import { plainDuration } from "@/lib/format"
-import type { ScoreRow } from "@/swarm/api"
 import type { Catalog, CatalogAgent, CatalogSkill, ChatMessage, ChatMode, ChatReply, ChatRequest, Effort, EffortId, Plan, PlanLimits, ProviderId, StartRequest } from "./api"
 
 /** The plain label on every assistant reply: did a model write this? */
@@ -172,17 +170,6 @@ export const saveTurns = (turns: Turn[]) => {
 export const startConversation = (question: string, answer: { id: string; thread: string }) =>
   saveTurns([{ id: 1, role: "user", content: question }, { id: 2, role: "assistant", content: "", research: { id: answer.id, question, thread: answer.thread } }])
 
-// ---- "What was checked"
-/** The newest row where both solvers ran with the same settings and both were graded. */
-export const pairedRow = (rows: unknown): ScoreRow | undefined =>
-  (Array.isArray(rows) ? (rows as ScoreRow[]) : []).find((r) => r && r.diff !== undefined && r.single?.score !== undefined && r.swarm?.score !== undefined)
-/** The newest finished review, else the newest. */
-export const latestReview = (runs: unknown): RunSummary | undefined => {
-  const list = Array.isArray(runs) ? (runs as RunSummary[]).filter((r) => r && typeof r.id === "string") : []
-  return list.find((r) => r.status === "done") ?? list[0]
-}
-
-
 // ---- can a board review use real models?
 const KEY_FOR: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" }
 const KEY_NAME: Record<string, string> = { ANTHROPIC_API_KEY: "Anthropic", OPENAI_API_KEY: "OpenAI" }
@@ -207,4 +194,3 @@ export function boardScriptedWhy(status: { mock?: unknown; paidCalls?: unknown; 
 // ---- the words the Agents view filter looks in
 export const agentText = (a: CatalogAgent) => [a.name, a.title, a.role, a.trigger, a.deliverable, a.tools.join(" ")].join(" ")
 export const skillText = (s: CatalogSkill) => `${s.title ?? ""} ${s.name} ${s.description} ${s.installed ? "installed" : "index only not installed"}`
-
