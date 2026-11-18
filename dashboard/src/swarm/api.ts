@@ -133,11 +133,8 @@ export const analysesWhere = (r: GlhfRun) => (r.mode === "cloud" ? "on the cloud
 /** Demo case or scripted model: never a benchmark result. */
 export const isDemo = (r: GlhfRun) => r.task === "demo" || r.model === "mock"
 
-/** Status, the run list, the scoreboard and the selected run, polled every 2 s while a run is live and every 15 s otherwise. */
-/** The newest swarm run, for views that show the swarm's roles. Module-level, so its identity is stable. */
-export const latestSwarmRun = (runs: GlhfRun[]) => runs.find((r) => r.solver === "glhf")?.id
-
-/** `choose` picks the run to load when none is selected; by default the newest run. It must be a stable function. */
+/** Status, runs and the selected run, polled every 2 s while live and every 15 s otherwise.
+ * `choose` picks the run to load when none is selected; by default the newest run. It must be a stable function. */
 export function useSwarm(selected: string | undefined, nudge: number, choose?: (runs: GlhfRun[]) => string | undefined) {
   const [status, setStatus] = useState<GlhfStatus>()
   const [runs, setRuns] = useState<GlhfRun[]>()

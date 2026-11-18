@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { engine } from "@/test/engine"
-import { cancelRun, isDemo, isLive, latestSwarmRun, Refused, settled, startRun, type GlhfPhase, type GlhfRun } from "./api"
+import { cancelRun, isDemo, isLive, Refused, settled, startRun, type GlhfPhase, type GlhfRun } from "./api"
 
 const run = (over: Partial<GlhfRun>): GlhfRun => ({ id: "r", mode: "local", task: "demo", solver: "glhf", model: "mock", roleModels: {}, phase: "done", startedAt: 0, ...over })
 
@@ -22,13 +22,6 @@ describe("isDemo", () => {
     expect(isDemo(run({ task: "demo", model: "anthropic/claude-sonnet-5-5" }))).toBe(true)
     expect(isDemo(run({ task: "bix-12", model: "mock" }))).toBe(true)
     expect(isDemo(run({ task: "bix-12", model: "anthropic/claude-sonnet-5-5" }))).toBe(false)
-  })
-})
-
-describe("latestSwarmRun", () => {
-  it("picks the newest swarm run, not the newest run", () => {
-    expect(latestSwarmRun([run({ id: "a", solver: "single" }), run({ id: "b" }), run({ id: "c" })])).toBe("b")
-    expect(latestSwarmRun([run({ id: "a", solver: "single" })])).toBeUndefined()
   })
 })
 

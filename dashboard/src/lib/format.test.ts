@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fmtDuration, fmtMetric, fmtScore, fmtTokens } from "./format"
+import { fmtDuration, fmtScore, fmtTokens } from "./format"
 
 describe("fmtScore", () => {
   it("writes three decimals", () => {
@@ -50,13 +50,5 @@ describe("fmtDuration", () => {
     expect(fmtDuration(undefined)).toBe("–")
     expect(fmtDuration(-5)).toBe("–")
     expect(fmtDuration(Number.NaN)).toBe("–")
-  })
-})
-
-describe("fmtMetric", () => {
-  it("keeps whole numbers whole and gives others two decimals", () => {
-    expect(fmtMetric(3)).toBe("3")
-    expect(fmtMetric(0.456)).toBe("0.46")
-    expect(fmtMetric(undefined)).toBe("—")
   })
 })

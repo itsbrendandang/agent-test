@@ -1,7 +1,4 @@
 import { benchmarkTitle } from "./words"
-export const fmtMetric = (v: number | undefined) =>
-  v === undefined ? "—" : Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
-
 // One way to write each kind of number, used by every view.
 /** A grader score: three decimals. */
 export const fmtScore = (x: number | undefined) => (x === undefined || Number.isNaN(x) ? "–" : x.toFixed(3))

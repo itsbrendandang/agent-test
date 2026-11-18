@@ -80,7 +80,7 @@ The Graph view loads only when it is opened. When the engine cannot be reached, 
 | The one loading look (`Loading`) and the decorative characters (`Mascots`) | `src/components/Crew.tsx` |
 | The session-token prompt | `src/components/TokenPrompt.tsx`, `src/lib/token.ts` |
 | Number, time and cost formats | `src/lib/format.ts` |
-| Status words and colours; verdict words, glyphs and order | `src/lib/status.ts`, `src/lib/verdict.ts` |
+| Status words and colours; verdict words and glyphs | `src/lib/status.ts`, `src/lib/verdict.ts` |
 | How a run is known to be scripted or real | `src/lib/scripted.ts` |
 | Paid-calls wording | `src/lib/paid.ts` |
 | Opening a run in another view | `src/lib/open.ts` |
