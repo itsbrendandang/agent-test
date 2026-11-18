@@ -6,9 +6,8 @@
 // when a key is missing; both are said plainly. Nothing here asks for or shows an API key, and the page never
 // keeps the state: it is read from the engine.
 import { useEffect, useId, useRef, useState } from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { EngineError } from "@/lib/engine"
-import { MODE_TIP, MODE_WORDS, type PaidState } from "@/lib/paid"
+import { MODE_WORDS, type PaidState } from "@/lib/paid"
 import { CONFIRM_TEXT, readPaid, setPaid, SwitchRefused, type PaidFacts } from "@/lib/paidSwitch"
 import { Loading } from "./Crew"
 
@@ -22,12 +21,9 @@ const why = (e: unknown): string => {
     : `${no.message} Nothing was changed.`
 }
 
-/**
- * The control: "Demo" | "Real", with the plain words for the current state beside it. `header`: the compact form in
- * the header row (the words are kept for screen readers, and a message appears under the control).
- */
-export function ModeSwitch({ paid, locked, compact, header, label = "Next run: Demo or Real", describedBy }: {
-  paid: PaidState; locked?: boolean; compact?: boolean; header?: boolean
+/** The control: "Demo" | "Real", with the plain words for the current state beside it. */
+export function ModeSwitch({ paid, locked, compact, label = "Next run: Demo or Real", describedBy }: {
+  paid: PaidState; locked?: boolean; compact?: boolean
   /** The control's accessible name. */
   label?: string
   /** Ids of text on the page that already says what Demo and Real mean. The control then does not repeat it: it only adds "not known" or "locked". */
@@ -47,7 +43,7 @@ export function ModeSwitch({ paid, locked, compact, header, label = "Next run: D
     finally { setBusy(false) }
   }
   return (
-    <span className="mode" data-compact={compact || undefined} data-header={header || undefined}>
+    <span className="mode" data-compact={compact || undefined}>
       <span className="mode-switch" role="radiogroup" aria-label={label} aria-describedby={describedBy ? `${describedBy} ${name}-words` : `${name}-words`} data-state={paid}>
         <label data-on={paid === "off" || undefined}>
           <input type="radio" name={name} checked={paid === "off"} disabled={off} onChange={() => void toDemo()} /> Demo
@@ -56,11 +52,11 @@ export function ModeSwitch({ paid, locked, compact, header, label = "Next run: D
           <input type="radio" name={name} checked={paid === "on"} disabled={off} onChange={() => { setNote(undefined); setAsking(true) }} /> Real
         </label>
       </span>
-      <span className={header ? "mode-words sr-only" : "mode-words"} id={`${name}-words`}>
+      <span className="mode-words" id={`${name}-words`}>
         {paid === "unknown" ? "Not known: the engine did not say." : describedBy ? "" : MODE_WORDS[paid]}
         {locked && " Locked by the person running the engine."}
       </span>
-      {note && <span className="mode-note" role="status">{note}{header && <button type="button" className="link-btn" onClick={() => setNote(undefined)}>Dismiss</button>}</span>}
+      {note && <span className="mode-note" role="status">{note}</span>}
       <RealDialog open={asking} onClose={(text) => { setAsking(false); if (text) setNote(text) }} />
     </span>
   )
@@ -132,31 +128,5 @@ export function RealDialog({ open, onClose }: { open: boolean; onClose: (done?: 
         {facts && !blocked && <button type="button" className="btn btn-danger" disabled={busy || !agreed} onClick={() => void turnOn()}>{busy ? "Switching…" : "Switch to Real"}</button>}
       </div>
     </dialog>
-  )
-}
-
-/**
- * A compact selector with its label: "Next run  Demo | Real". It says how the next run will be made, never how a
- * result on screen was made. The label opens a short explanation (hover, focus or press). It used to sit in the
- * header row of every view. The owner took it out of the header: the app now switches in Settings only (ModeSwitch).
- * The component is kept, with its tests, so it can be placed again.
- */
-export function NextRun({ paid, locked }: { paid: PaidState; locked?: boolean }) {
-  const [tip, setTip] = useState(false)
-  return (
-    <span className="next-run" data-state={paid}>
-      <Tooltip open={tip} onOpenChange={setTip}>
-        <TooltipTrigger asChild>
-          {/* Hover and keyboard focus open it (Radix). A press toggles it, so it also works by touch. */}
-          <button type="button" className="next-run-label" aria-label="Next run: what Demo and Real mean"
-            onPointerDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); setTip((on) => !on) }}>
-            {/* A narrow header has no room for both words: it shows "Next:" so the switch still says what it sets. */}
-            <span className="next-run-long">Next run</span><span className="next-run-short" aria-hidden="true">Next:</span>
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="next-run-tip">{MODE_TIP}</TooltipContent>
-      </Tooltip>
-      <ModeSwitch paid={paid} locked={locked} header />
-    </span>
   )
 }

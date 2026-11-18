@@ -85,7 +85,7 @@ Two different things, never mixed:
   needs the engine's session token; choosing Demo is one click. The state is read from the engine
   (`GET /api/glhf/status`, `GET /api/paid`), again every few seconds and right after a switch, and is never stored
   in the browser. Code: `ModeSwitch` and `RealDialog` in `src/components/PaidSwitch.tsx`, `src/lib/paidSwitch.ts`,
-  `src/lib/shell.ts`. (`NextRun` in the same file is the old header control, kept unused.)
+  `src/lib/shell.ts`.
 - **How an existing result was made**: the `Provenance` badge (`src/components/Provenance.tsx`): "Practice" or
   "Live research" (or "Local model"), an icon and the word. It is read from the record's own data
   (`provenanceOf` in `src/lib/provenance.ts`) and never from the run mode: a practice result seen while Real is

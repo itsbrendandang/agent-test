@@ -1,14 +1,13 @@
 // The Demo / Real switch. Every request here goes to a stand-in engine; no test (and no person testing) turns Real
 // on against a real engine.
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ModeLabel } from "@/components/Shared"
 import { useShell } from "@/lib/shell"
 import { keepToken } from "@/lib/token"
 import { routes, to } from "@/test/engine"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import { ModeSwitch, NextRun } from "./PaidSwitch"
+import { ModeSwitch } from "./PaidSwitch"
 
 const CAPS = { maxUsd: 5, dailyUsd: 20, spentTodayUsd: 1.5, exaUsedUsd: 0, exaCeilingUsd: 40 }
 const DEMO = { paid: false, source: "env", locked: false, board: "scripted", missingKeys: [], missing: [], caps: CAPS }
@@ -22,30 +21,9 @@ const show = (table: Parameters<typeof routes>[0], paid: "off" | "on" = "off", l
 afterEach(() => vi.useRealTimers())
 
 describe("the control", () => {
-  it("the selector in the header is labelled Next run: a radio group that shows the state, and its label explains Demo and Real", async () => {
-    routes({})
-    render(<TooltipProvider><NextRun paid="off" /></TooltipProvider>)
-    const group = screen.getByRole("radiogroup", { name: "Next run: Demo or Real" })
-    expect(within(group).getByRole("radio", { name: "Demo" })).toBeChecked()
-    expect(within(group).getByRole("radio", { name: "Real" })).not.toBeChecked()
-    expect(group).toHaveAccessibleDescription("Practice runs. Fixed example answers. Free.")
-    const label = screen.getByRole("button", { name: "Next run: what Demo and Real mean" })
-    expect(label).toHaveTextContent("Next run")
-    // A phone header has no room for the words: it shows the short cue instead (index.css, under 480 px), and the name read aloud stays whole.
-    const cue = label.querySelector(".next-run-short")!
-    expect(cue).toHaveTextContent("Next:"); expect(cue).toHaveAttribute("aria-hidden", "true")
-    expect(label.querySelector(".next-run-long")).toHaveTextContent("Next run")
-    fireEvent.click(label) // a press (touch has no hover); keyboard focus and hover open it too
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Demo: fixed example answers, free. Real: real models and searches, costs money.")
-    fireEvent.click(label)
-    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
-    await userEvent.setup().tab() // the label is the first thing in the selector the keyboard reaches
-    expect(label).toHaveFocus()
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Demo: fixed example answers, free.")
-  })
-  it("choosing Real in the header opens the same confirm dialog and sends nothing", async () => {
+  it("choosing Real opens the confirm dialog and sends nothing", async () => {
     const sent = routes({ "GET /api/paid": { status: 200, body: DEMO } })
-    render(<TooltipProvider><NextRun paid="off" /></TooltipProvider>)
+    render(<ModeSwitch paid="off" />)
     await userEvent.setup().click(screen.getByRole("radio", { name: "Real" }))
     expect(await screen.findByRole("dialog", { name: "Switch to Real?" })).toBeInTheDocument()
     expect(await screen.findByRole("checkbox", { name: "I understand this costs money" })).not.toBeChecked()
@@ -168,7 +146,7 @@ describe("switching to Demo is immediate", () => {
 })
 
 describe("the state is the engine's, read again and again", () => {
-  function Line() { const shell = useShell(1000); return <TooltipProvider><NextRun paid={shell.paid} locked={shell.locked} /></TooltipProvider> }
+  function Line() { const shell = useShell(1000); return <ModeSwitch paid={shell.paid} locked={shell.locked} /> }
   const real = () => screen.getByRole("radio", { name: "Real" }), demo = () => screen.getByRole("radio", { name: "Demo" })
   it("a change made elsewhere shows up on the next poll, and nothing is stored in the browser", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
