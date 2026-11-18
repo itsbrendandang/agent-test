@@ -553,15 +553,6 @@ def get_json(url: str, **kwargs: Any) -> Tuple[Any, Fetched]:
     return got.json(), got
 
 
-def post_json(url: str, payload: Any, **kwargs: Any) -> Tuple[Any, Fetched]:
-    headers = dict(kwargs.pop("headers", None) or {})
-    headers.setdefault("Accept", "application/json")
-    headers.setdefault("Content-Type", "application/json")
-    body = json.dumps(payload, sort_keys=True).encode("utf-8")
-    got = fetch(url, method="POST", data=body, headers=headers, **kwargs)
-    return got.json(), got
-
-
 # ---------------------------------------------------------------------------------------------
 # Records
 # ---------------------------------------------------------------------------------------------
